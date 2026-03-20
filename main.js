@@ -37,7 +37,11 @@ function getSyncDataPath() {
 }
 
 function getSyncPDFDir() {
-  // PDFs are stored locally — too large for sync
+  if (settings.syncDir) {
+    const dir = path.join(settings.syncDir, 'AcademiQ', 'pdfs');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    return dir;
+  }
   return LOCAL_PDF_DIR;
 }
 
@@ -103,35 +107,77 @@ ipcMain.handle('data:save', async (_ev, json) => {
   } catch (e) { return { ok: false, error: e.message }; }
 });
 
-// ── IPC: PDF FILES ───────────────────────────────────────────────────────────
+// ── IPC: PDF FILES (dual-write: local cache + sync folder) ──────────────────
 ipcMain.handle('pdf:save', async (_ev, refId, buffer) => {
   try {
-    const fp = path.join(getSyncPDFDir(), refId + '.pdf');
-    fs.writeFileSync(fp, Buffer.from(buffer));
+    const buf = Buffer.from(buffer);
+    const localFp = path.join(LOCAL_PDF_DIR, refId + '.pdf');
+    fs.writeFileSync(localFp, buf);
+    if (settings.syncDir) {
+      const syncFp = path.join(getSyncPDFDir(), refId + '.pdf');
+      try { fs.writeFileSync(syncFp, buf); } catch (e) { console.warn('Sync PDF write failed:', e.message); }
+    }
     return { ok: true };
   } catch (e) { return { ok: false, error: e.message }; }
 });
 
 ipcMain.handle('pdf:load', async (_ev, refId) => {
   try {
-    const fp = path.join(getSyncPDFDir(), refId + '.pdf');
-    if (!fs.existsSync(fp)) return { ok: false, error: 'not found' };
-    const buf = fs.readFileSync(fp);
-    return { ok: true, buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
+    const localFp = path.join(LOCAL_PDF_DIR, refId + '.pdf');
+    if (fs.existsSync(localFp)) {
+      const buf = fs.readFileSync(localFp);
+      return { ok: true, buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
+    }
+    // Fallback: sync folder → lazy copy to local
+    if (settings.syncDir) {
+      const syncFp = path.join(getSyncPDFDir(), refId + '.pdf');
+      if (fs.existsSync(syncFp)) {
+        const buf = fs.readFileSync(syncFp);
+        try { fs.writeFileSync(localFp, buf); } catch (e) {}
+        return { ok: true, buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
+      }
+    }
+    return { ok: false, error: 'not found' };
   } catch (e) { return { ok: false, error: e.message }; }
 });
 
 ipcMain.handle('pdf:exists', async (_ev, refId) => {
-  const fp = path.join(getSyncPDFDir(), refId + '.pdf');
-  return fs.existsSync(fp);
+  const localFp = path.join(LOCAL_PDF_DIR, refId + '.pdf');
+  if (fs.existsSync(localFp)) return true;
+  if (settings.syncDir) {
+    const syncFp = path.join(getSyncPDFDir(), refId + '.pdf');
+    return fs.existsSync(syncFp);
+  }
+  return false;
 });
 
 ipcMain.handle('pdf:delete', async (_ev, refId) => {
   try {
-    const fp = path.join(getSyncPDFDir(), refId + '.pdf');
-    if (fs.existsSync(fp)) fs.unlinkSync(fp);
+    const localFp = path.join(LOCAL_PDF_DIR, refId + '.pdf');
+    if (fs.existsSync(localFp)) fs.unlinkSync(localFp);
+    if (settings.syncDir) {
+      const syncFp = path.join(getSyncPDFDir(), refId + '.pdf');
+      if (fs.existsSync(syncFp)) fs.unlinkSync(syncFp);
+    }
     return { ok: true };
   } catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('pdf:syncAll', async () => {
+  if (!settings.syncDir) return { ok: false, error: 'No sync dir' };
+  const syncDir = getSyncPDFDir();
+  let copied = 0;
+  const syncFiles = fs.existsSync(syncDir) ? fs.readdirSync(syncDir).filter(f => f.endsWith('.pdf')) : [];
+  for (const f of syncFiles) {
+    const localFp = path.join(LOCAL_PDF_DIR, f);
+    if (!fs.existsSync(localFp)) { fs.copyFileSync(path.join(syncDir, f), localFp); copied++; }
+  }
+  const localFiles = fs.readdirSync(LOCAL_PDF_DIR).filter(f => f.endsWith('.pdf'));
+  for (const f of localFiles) {
+    const syncFp = path.join(syncDir, f);
+    if (!fs.existsSync(syncFp)) { fs.copyFileSync(path.join(LOCAL_PDF_DIR, f), syncFp); copied++; }
+  }
+  return { ok: true, copied };
 });
 
 // ── IPC: PDF DOWNLOAD (CORS BYPASS) ─────────────────────────────────────────
@@ -139,8 +185,8 @@ function followRedirects(url, maxRedirects = 5) {
   return new Promise((resolve, reject) => {
     if (maxRedirects <= 0) return reject(new Error('Too many redirects'));
     const mod = url.startsWith('https') ? https : http;
-    const req = mod.get(url, { 
-      headers: { 
+    const req = mod.get(url, {
+      headers: {
         'User-Agent': 'AcademiQ/1.0 (academic research tool)',
         'Accept': 'application/pdf,*/*'
       },
@@ -171,18 +217,21 @@ ipcMain.handle('pdf:download', async (_ev, url, refId) => {
   try {
     const buf = await followRedirects(url);
     if (buf.length < 100) return { ok: false, error: 'Too small: ' + buf.length + ' bytes' };
-    // PDF header check - some PDFs have whitespace before %PDF-
     const headerStr = buf.slice(0, 1024).toString('ascii');
     const pdfIdx = headerStr.indexOf('%PDF-');
     if (pdfIdx < 0 || pdfIdx > 64) {
-      // Check content type hints
       const isHTML = headerStr.toLowerCase().includes('<html') || headerStr.toLowerCase().includes('<!doctype');
       return { ok: false, error: isHTML ? 'HTML page, not PDF' : 'No PDF header in first 64 bytes' };
     }
-    // Save to local storage (trim any pre-header bytes)
     const pdfBuf = pdfIdx > 0 ? buf.slice(pdfIdx) : buf;
-    const fp = path.join(getSyncPDFDir(), refId + '.pdf');
-    fs.writeFileSync(fp, pdfBuf);
+    // Write to local cache
+    const localFp = path.join(LOCAL_PDF_DIR, refId + '.pdf');
+    fs.writeFileSync(localFp, pdfBuf);
+    // Also write to sync folder
+    if (settings.syncDir) {
+      const syncFp = path.join(getSyncPDFDir(), refId + '.pdf');
+      try { fs.writeFileSync(syncFp, pdfBuf); } catch (e) { console.warn('Sync PDF write failed:', e.message); }
+    }
     return { ok: true, size: pdfBuf.length };
   } catch (e) { return { ok: false, error: e.message }; }
 });
@@ -190,7 +239,7 @@ ipcMain.handle('pdf:download', async (_ev, url, refId) => {
 // ── IPC: DIALOG ──────────────────────────────────────────────────────────────
 ipcMain.handle('dialog:openPDF', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'PDF Dosyası Seç',
+    title: 'PDF Dosyasi Sec',
     filters: [{ name: 'PDF', extensions: ['pdf'] }],
     properties: ['openFile', 'multiSelections']
   });
@@ -213,22 +262,22 @@ ipcMain.handle('sync:getSettings', async () => {
 
 ipcMain.handle('sync:setSyncDir', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'Sync Klasörü Seç (OneDrive, Proton Drive, Google Drive vb.)',
+    title: 'Sync Klasoru Sec (OneDrive, Proton Drive, Google Drive vb.)',
     properties: ['openDirectory']
   });
   if (result.canceled || !result.filePaths.length) return { ok: false };
-  
+
   // Migrate existing data to new sync folder
   const oldPath = getSyncDataPath();
   settings.syncDir = result.filePaths[0];
   saveSettings();
   const newPath = getSyncDataPath();
-  
+
   // Copy existing data if present
   if (fs.existsSync(oldPath) && oldPath !== newPath) {
     try { fs.copyFileSync(oldPath, newPath); } catch (e) {}
   }
-  
+
   return { ok: true, dir: settings.syncDir };
 });
 
@@ -239,7 +288,7 @@ ipcMain.handle('sync:clearSyncDir', async () => {
 });
 
 // ── IPC: APP INFO ────────────────────────────────────────────────────────────
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '2.0.0';
 const UPDATE_URL = 'https://api.github.com/repos/cyrenard/academiq-research/releases/latest';
 
 ipcMain.handle('app:getInfo', async () => {
@@ -254,14 +303,12 @@ ipcMain.handle('app:getInfo', async () => {
 
 // ── IPC: AUTO-UPDATE ────────────────────────────────────────────────────────
 ipcMain.handle('update:check', async () => {
-  // Check custom update URL from settings, or default
   const checkUrl = settings.updateUrl || UPDATE_URL;
   try {
     const data = await fetchJSON(checkUrl);
     if (!data || !data.tag_name) return { available: false, current: APP_VERSION };
     const remote = data.tag_name.replace(/^v/, '');
     const available = compareVersions(remote, APP_VERSION) > 0;
-    // Find the HTML asset
     let htmlAsset = null;
     if (data.assets && data.assets.length) {
       htmlAsset = data.assets.find(a => a.name && a.name.endsWith('.html'));
@@ -287,16 +334,16 @@ ipcMain.handle('update:download', async (_ev, url) => {
     if (!buf || buf.length < 100) return { ok: false, error: 'Empty download' };
 
     const fileName = url.split('/').pop() || 'update';
-    
+
     if (fileName.endsWith('.html')) {
-      // Direct HTML update: replace src/index.html
       const target = path.join(APP_DIR, 'src', 'index.html');
       const backup = target + '.bak';
+      const targetDir = path.dirname(target);
+      if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
       if (fs.existsSync(target)) fs.copyFileSync(target, backup);
       fs.writeFileSync(target, buf);
       return { ok: true, type: 'html', restart: true };
     } else if (fileName.endsWith('.zip')) {
-      // ZIP update: extract to temp, replace files
       const zipPath = path.join(APP_DIR, 'update.zip');
       fs.writeFileSync(zipPath, buf);
       return { ok: true, type: 'zip', path: zipPath, restart: true };

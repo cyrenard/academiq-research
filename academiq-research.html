@@ -310,7 +310,8 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
   </div>
   <div id="dst"></div>
   <input class="srch" id="libsrch" placeholder="Filtrele..." oninput="rLib()"/>
-  <button class="pdfupbtn" onclick="document.getElementById('lfinp').click()">+ PDF Yükle</button>
+  <button class="pdfupbtn" onclick="document.getElementById('lfinp').click()">+ PDF Yukle</button>
+  <button class="pdfupbtn" onclick="batchDownloadOA()" title="DOI'si olan tum kaynaklarin OA PDF'lerini indir" style="background:var(--bg3);color:var(--blue);border:1px solid var(--b);">&#8595; Tum OA PDF'leri Indir</button>
   <input type="file" id="lfinp" accept=".pdf" multiple style="display:none" onchange="hPDFs(event)"/>
   <div id="liblist"></div>
 </div>
@@ -328,9 +329,29 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
     <button class="efmt" onclick="ec('formatBlock','h2')">H2</button>
     <button class="efmt" onclick="ec('formatBlock','h3')">H3</button>
     <button class="efmt" onclick="ec('formatBlock','p')">¶</button>
-    <button class="efmt" onclick="insBlkQ()">❝</button>
+    <button class="efmt" onclick="insBlkQ()">&#10077;</button>
     <span class="sep"></span>
-    <button class="efmt" style="color:var(--acc);border:1px solid var(--acc-d);padding:2px 8px;" onclick="doTrigRef()">/r Atıf</button>
+    <select class="efmt" id="fontsel" onchange="ec('fontName',this.value)" style="padding:2px 4px;font-size:10px;background:var(--bg);color:var(--txt2);border:1px solid var(--b);border-radius:3px;cursor:pointer;">
+      <option value="Times New Roman">Times New Roman</option>
+      <option value="Arial">Arial</option>
+      <option value="Calibri">Calibri</option>
+      <option value="Georgia">Georgia</option>
+      <option value="Verdana">Verdana</option>
+      <option value="Courier New">Courier New</option>
+    </select>
+    <select class="efmt" id="sizesel" onchange="applyFontSize(this.value)" style="padding:2px 4px;font-size:10px;background:var(--bg);color:var(--txt2);border:1px solid var(--b);border-radius:3px;width:52px;cursor:pointer;">
+      <option value="8">8</option>
+      <option value="10">10</option>
+      <option value="11">11</option>
+      <option value="12" selected>12</option>
+      <option value="14">14</option>
+      <option value="16">16</option>
+      <option value="18">18</option>
+      <option value="24">24</option>
+      <option value="36">36</option>
+    </select>
+    <span class="sep"></span>
+    <button class="efmt" style="color:var(--acc);border:1px solid var(--acc-d);padding:2px 8px;" onclick="doTrigRef()">/r Atif</button>
   </div>
   <div id="escroll">
     <div id="apapage">
@@ -392,6 +413,8 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
     <button class="ppb" onclick="pZI()" title="Yakinlastir (Ctrl++)">+</button>
     <span class="sep"></span>
     <button class="ppb" onclick="togglePdfSearch()" title="Ara (Ctrl+F)">Ara</button>
+    <button class="ppb" onclick="toggleThumbs()" title="Kucuk resimler">&#9783;</button>
+    <button class="ppb" onclick="toggleOutline()" title="Icerik tablosu">&#8801;</button>
     <button class="ppb" onclick="document.getElementById('lfinp').click()">+PDF</button>
     <button id="pdfclosebtn" onclick="togglePDF()">x</button>
   </div>
@@ -411,11 +434,15 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
     <div class="hlc" style="background:#fca5a5" data-c="#fca5a5" title="Kirmizi" onclick="setHLC(this)"></div>
     <span style="margin-left:auto;font-family:var(--fm);font-size:9px;color:var(--txt3)">Ctrl+F ara | Ctrl+G sayfa</span>
   </div>
-  <div id="pdfscroll" ondragover="event.preventDefault()" ondrop="hDrop(event)">
-    <div id="pdfempty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;gap:10px;text-align:center;width:100%;">
-      <div style="font-size:28px">&#128196;</div>
-      <div style="font-size:12px;color:var(--txt2)">PDF yukle veya kutuphaneden sec</div>
-      <button onclick="document.getElementById('lfinp').click()" style="background:var(--acc);color:#0d1117;border:none;border-radius:6px;padding:10px 20px;cursor:pointer;font-size:12px;font-weight:600;font-family:var(--f);">+ PDF Yukle</button>
+  <div id="pdfbody" style="display:flex;flex:1;overflow:hidden;">
+    <div id="pdfthumbs" style="display:none;width:120px;background:var(--bg);border-right:1px solid var(--b);overflow-y:auto;flex-shrink:0;padding:4px;"></div>
+    <div id="pdfoutline" style="display:none;width:200px;background:var(--bg);border-right:1px solid var(--b);overflow-y:auto;flex-shrink:0;padding:6px;"></div>
+    <div id="pdfscroll" ondragover="event.preventDefault()" ondrop="hDrop(event)">
+      <div id="pdfempty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;gap:10px;text-align:center;width:100%;">
+        <div style="font-size:28px">&#128196;</div>
+        <div style="font-size:12px;color:var(--txt2)">PDF yukle veya kutuphaneden sec</div>
+        <button onclick="document.getElementById('lfinp').click()" style="background:var(--acc);color:#0d1117;border:none;border-radius:6px;padding:10px 20px;cursor:pointer;font-size:12px;font-weight:600;font-family:var(--f);">+ PDF Yukle</button>
+      </div>
     </div>
   </div>
 </div>
@@ -479,6 +506,14 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
     <button class="mbtn p" onclick="doSetSyncDir()" style="flex:1;min-width:120px;">Klasor Sec</button>
     <button class="mbtn s" onclick="doClearSyncDir()" style="flex:1;min-width:100px;">Yerel Moda Gec</button>
     <button class="mbtn s" onclick="hideM('syncmodal')" style="flex:1;min-width:60px;">Kapat</button>
+  </div>
+  <!-- PDF SYNC SECTION -->
+  <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b);">
+    <div style="font-family:var(--fm);font-size:9.5px;color:var(--acc);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;">PDF SENKRONIZASYON</div>
+    <div id="pdfsyncstatus" style="padding:8px;background:var(--bg);border:1px solid var(--b);border-radius:4px;margin-bottom:8px;font-size:11px;color:var(--txt2);line-height:1.6;">
+      Kontrol edilmedi.
+    </div>
+    <button class="mbtn s" onclick="doPdfSync()" style="font-size:11px;width:100%;">PDF'leri Senkronize Et</button>
   </div>
   <!-- UPDATE SECTION -->
   <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b);">
@@ -719,19 +754,30 @@ function addDOI(){
   // Timeout: 15 saniye sonra hata
   var timedOut=false;
   var timer=setTimeout(function(){timedOut=true;setDst('⚠ Bağlantı zaman aşımı — ağ erişimi engellenmiş olabilir.','er');},15000);
-  fetchCR(doi,function(err,ref){
+  fetchCR(doi,async function(err,ref){
     clearTimeout(timer);
     if(timedOut)return;
-    if(err){setDst('⚠ CrossRef hatası: '+err.message,'er');return;}
+    if(err){setDst('CrossRef hatasi: '+err.message,'er');return;}
     addToLib(ref);
     document.getElementById('doiinp').value='';
-    setDst('✓ '+shortRef(ref)+(ref.pdfUrl?' · OA PDF bulundu':'· OA PDF yok'),'ok');
     document.getElementById('pdfpanel').classList.add('open');
     document.getElementById('pdftitle').textContent=(ref.title||ref.doi).substring(0,55);
-    if(ref.pdfUrl){
-      setTimeout(function(){setDst('📥 OA PDF indiriliyor...','ld');},1500);
-      tryFetch(ref.pdfUrl, ref.id);
-    } else {
+    // Multi-source OA arama
+    var oaUrls=[];
+    if(ref.pdfUrl)oaUrls.push(ref.pdfUrl);
+    setDst('OA PDF araniyor (coklu kaynak)...','ld');
+    try{
+      var moreUrls=await fetchOAUrls(doi);
+      moreUrls.forEach(function(u){if(oaUrls.indexOf(u)<0)oaUrls.push(u);});
+    }catch(e){}
+    if(oaUrls.length>0){
+      ref.pdfUrl=oaUrls[0];save();rLib();
+      setDst('OA PDF bulundu ('+oaUrls.length+' kaynak), indiriliyor...','ld');
+      var allUrls=[];
+      oaUrls.forEach(function(u){buildPDFUrls(u).forEach(function(v){if(allUrls.indexOf(v)<0)allUrls.push(v);});});
+      tryFetch(allUrls[0],ref.id);
+    }else{
+      setDst(shortRef(ref)+' · OA PDF bulunamadi','er');
       showNoPDF(ref);
       setTimeout(function(){setDst('','');},5000);
     }
@@ -1127,78 +1173,121 @@ function getScale(){
   return Math.max(0.6,Math.min((w-28)/595,2.2)); // 595 = A4 width points
 }
 
+var renderedPages={};
+var lazyObserver=null;
+
 function renderPDF(buf){
   clearPDFView();
-  loadHLData();  // Restore highlights for current ref
-  var safeBuf = buf.slice ? buf.slice(0) : buf;
+  loadHLData();
+  var safeBuf=buf.slice?buf.slice(0):buf;
   pdfjsLib.getDocument({data:safeBuf}).promise.then(function(pdf){
-    pdfDoc=pdf; pdfTotal=pdf.numPages; pdfPg=1;
+    pdfDoc=pdf;pdfTotal=pdf.numPages;pdfPg=1;
+    renderedPages={};
     updPgLabel();
     var sc=document.getElementById('pdfscroll');
     pdfTextCache={};
-    function renderNext(n){
-      if(n>pdf.numPages){setupPageTracking();return;}
-      pdf.getPage(n).then(function(page){
-        var scale=getScale();
-        var vp=page.getViewport({scale:scale});
+    // Get first page dimensions for placeholders
+    pdf.getPage(1).then(function(firstPage){
+      var scale=getScale();
+      var vp=firstPage.getViewport({scale:scale});
+      for(var n=1;n<=pdf.numPages;n++){
         var wrap=document.createElement('div');
         wrap.className='pdf-page-wrap';
         wrap.dataset.page=String(n);
-        wrap.style.cssText='position:relative;flex-shrink:0;width:'+vp.width+'px;height:'+vp.height+'px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.4);';
-        var canvas=document.createElement('canvas');
-        canvas.width=vp.width; canvas.height=vp.height;
-        canvas.style.cssText='display:block;position:absolute;top:0;left:0;z-index:0;';
-        wrap.appendChild(canvas);
-        var textDiv=document.createElement('div');
-        textDiv.className='textLayer';
-        textDiv.style.cssText='position:absolute;top:0;left:0;width:'+vp.width+'px;height:'+vp.height+'px;';
-        wrap.appendChild(textDiv);
-        var hlc=document.createElement('canvas');
-        hlc.className='hl-overlay';
-        hlc.width=vp.width; hlc.height=vp.height;
-        wrap.appendChild(hlc);
+        wrap.style.cssText='position:relative;flex-shrink:0;width:'+vp.width+'px;height:'+vp.height+'px;background:#e8e8e8;box-shadow:0 2px 12px rgba(0,0,0,.4);';
+        var label=document.createElement('div');
+        label.className='page-placeholder';
+        label.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#999;font-size:16px;';
+        label.textContent=n;
+        wrap.appendChild(label);
         sc.appendChild(wrap);
-        page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise.then(function(){
-          page.getTextContent({normalizeWhitespace:true}).then(function(tc){
-            if(!tc||!tc.items||!tc.items.length){paintHL(hlc,n);renderNext(n+1);return;}
-            // Cache text for search
-            pdfTextCache[n]=tc.items;
-            var done=false;
-            if(typeof pdfjsLib.renderTextLayer==='function'){
-              try{
-                // PDF.js 3.x: textContentSource replaces textContent; --scale-factor required for font sizing
-                textDiv.style.setProperty('--scale-factor',String(vp.scale));
-                var params={container:textDiv,viewport:vp,textDivs:[]};
-                params.textContentSource=tc;
-                var task=pdfjsLib.renderTextLayer(params);
-                if(task&&task.promise){
-                  done=true;
-                  task.promise.then(function(){
-                    textDiv.querySelectorAll('span').forEach(function(s){
-                      if(!s.style.position) s.style.position='absolute';
-                      s.style.color='transparent';s.style.cursor='text';
-                    });
-                    paintHL(hlc,n);renderNext(n+1);
-                  }).catch(function(){
-                    textDiv.innerHTML='';manualTextLayer(tc,textDiv,vp);
-                    paintHL(hlc,n);renderNext(n+1);
-                  });
-                }
-              }catch(e){}
-            }
-            if(!done){manualTextLayer(tc,textDiv,vp);paintHL(hlc,n);renderNext(n+1);}
-          }).catch(function(){paintHL(hlc,n);renderNext(n+1);});
-        }).catch(function(){renderNext(n+1);});
-      }).catch(function(){renderNext(n+1);});
-    }
-    renderNext(1);
+      }
+      setupLazyRendering();
+      setupPageTracking();
+      // Render thumbnails if visible
+      if(document.getElementById('pdfthumbs').style.display!=='none')renderThumbnails();
+      loadOutline();
+    });
   }).catch(function(e){setDst('PDF acilamadi: '+e.message,'er');});
+}
+
+function setupLazyRendering(){
+  if(lazyObserver)lazyObserver.disconnect();
+  var sc=document.getElementById('pdfscroll');
+  lazyObserver=new IntersectionObserver(function(entries){
+    entries.forEach(function(entry){
+      if(entry.isIntersecting){
+        var pgNum=parseInt(entry.target.dataset.page);
+        if(pgNum&&!renderedPages[pgNum]){
+          renderSinglePage(pgNum);
+          if(pgNum>1&&!renderedPages[pgNum-1])renderSinglePage(pgNum-1);
+          if(pgNum<pdfTotal&&!renderedPages[pgNum+1])renderSinglePage(pgNum+1);
+        }
+      }
+    });
+  },{root:sc,rootMargin:'300px 0px'});
+  sc.querySelectorAll('.pdf-page-wrap').forEach(function(w){lazyObserver.observe(w);});
+}
+
+function renderSinglePage(n){
+  if(!pdfDoc||renderedPages[n])return;
+  renderedPages[n]=true;
+  pdfDoc.getPage(n).then(function(page){
+    var scale=getScale();
+    var vp=page.getViewport({scale:scale});
+    var wrap=document.querySelector('.pdf-page-wrap[data-page="'+n+'"]');
+    if(!wrap)return;
+    wrap.style.width=vp.width+'px';wrap.style.height=vp.height+'px';wrap.style.background='#fff';
+    var ph=wrap.querySelector('.page-placeholder');if(ph)ph.remove();
+    var canvas=document.createElement('canvas');
+    canvas.width=vp.width;canvas.height=vp.height;
+    canvas.style.cssText='display:block;position:absolute;top:0;left:0;z-index:0;';
+    wrap.appendChild(canvas);
+    var textDiv=document.createElement('div');
+    textDiv.className='textLayer';
+    textDiv.style.cssText='position:absolute;top:0;left:0;width:'+vp.width+'px;height:'+vp.height+'px;';
+    wrap.appendChild(textDiv);
+    var hlc=document.createElement('canvas');
+    hlc.className='hl-overlay';
+    hlc.width=vp.width;hlc.height=vp.height;
+    wrap.appendChild(hlc);
+    page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise.then(function(){
+      page.getTextContent({normalizeWhitespace:true}).then(function(tc){
+        if(!tc||!tc.items||!tc.items.length){paintHL(hlc,n);return;}
+        pdfTextCache[n]=tc.items;
+        var done=false;
+        if(typeof pdfjsLib.renderTextLayer==='function'){
+          try{
+            textDiv.style.setProperty('--scale-factor',String(vp.scale));
+            var params={container:textDiv,viewport:vp,textDivs:[]};
+            params.textContentSource=tc;
+            var task=pdfjsLib.renderTextLayer(params);
+            if(task&&task.promise){
+              done=true;
+              task.promise.then(function(){
+                textDiv.querySelectorAll('span').forEach(function(s){
+                  if(!s.style.position)s.style.position='absolute';
+                  s.style.color='transparent';s.style.cursor='text';
+                });
+                paintHL(hlc,n);
+              }).catch(function(){
+                textDiv.innerHTML='';manualTextLayer(tc,textDiv,vp);
+                paintHL(hlc,n);
+              });
+            }
+          }catch(e){}
+        }
+        if(!done){manualTextLayer(tc,textDiv,vp);paintHL(hlc,n);}
+      }).catch(function(){paintHL(hlc,n);});
+    }).catch(function(){});
+  }).catch(function(){});
 }
 
 function clearPDFView(){
   if(pageObserver)pageObserver.disconnect();
+  if(lazyObserver)lazyObserver.disconnect();
   pdfDoc=null;pdfPg=1;pdfTotal=0;
-  pdfTextCache={};
+  pdfTextCache={};renderedPages={};
   pdfSearchResults=[];pdfSearchIdx=-1;
   var pgEl=document.getElementById('pdfpg');if(pgEl)pgEl.textContent='--';
   var zmEl=document.getElementById('pdfzoom');if(zmEl)zmEl.textContent='--';
@@ -1250,7 +1339,7 @@ function setupPageTracking(){
     });
     if(best&&best.dataset&&best.dataset.page){
       var pg=parseInt(best.dataset.page);
-      if(pg&&pg!==pdfPg){pdfPg=pg;updPgLabel();}
+      if(pg&&pg!==pdfPg){pdfPg=pg;updPgLabel();updateThumbHL();}
     }
   },{root:sc,threshold:[0,0.25,0.5,0.75,1]});
   sc.querySelectorAll('.pdf-page-wrap').forEach(function(w){pageObserver.observe(w);});
@@ -1297,13 +1386,24 @@ function togglePdfSearch(){
   }
 }
 
-function pdfSearchExec(){
+async function pdfSearchExec(){
   var inp=document.getElementById('pdfsearchinp');
   var q=inp?(inp.value||'').toLowerCase().trim():'';
   clearSearchHL();
   pdfSearchResults=[];pdfSearchIdx=-1;
   var cnt=document.getElementById('pdfsearchcount');
   if(!q||!pdfDoc){if(cnt)cnt.textContent='--';return;}
+  if(cnt)cnt.textContent='...';
+  // Pre-fetch text content for all pages not yet cached
+  for(var p=1;p<=pdfTotal;p++){
+    if(!pdfTextCache[p]){
+      try{
+        var page=await pdfDoc.getPage(p);
+        var tc=await page.getTextContent({normalizeWhitespace:true});
+        if(tc&&tc.items)pdfTextCache[p]=tc.items;
+      }catch(e){}
+    }
+  }
   var keys=Object.keys(pdfTextCache).map(Number).sort(function(a,b){return a-b;});
   keys.forEach(function(pgNum){
     var items=pdfTextCache[pgNum]||[];
@@ -1335,8 +1435,9 @@ function pdfSearchGoTo(idx){
   if(cnt) cnt.textContent=(idx+1)+'/'+pdfSearchResults.length;
   var r=pdfSearchResults[idx];
   if(!r) return;
-  highlightSearchOnPage(r.page,r.pos,r.len,true);
-  scrollToPage(r.page);
+  // Ensure page is rendered for search highlight
+  if(!renderedPages[r.page])renderSinglePage(r.page);
+  setTimeout(function(){highlightSearchOnPage(r.page,r.pos,r.len,true);scrollToPage(r.page);},100);
 }
 
 function highlightSearchOnPage(pgNum,pos,len,isActive){
@@ -1403,6 +1504,12 @@ document.addEventListener('keydown',function(e){
   // PageUp/PageDown for PDF
   if(e.key==='PageUp'&&pdfOpen){e.preventDefault();pPrev();}
   if(e.key==='PageDown'&&pdfOpen){e.preventDefault();pNext();}
+  // Arrow keys for PDF scroll
+  if(e.key==='ArrowUp'&&pdfOpen){e.preventDefault();document.getElementById('pdfscroll').scrollBy(0,-100);}
+  if(e.key==='ArrowDown'&&pdfOpen){e.preventDefault();document.getElementById('pdfscroll').scrollBy(0,100);}
+  // Home/End for first/last page
+  if(e.key==='Home'&&pdfOpen){e.preventDefault();pdfPg=1;scrollToPage(1);}
+  if(e.key==='End'&&pdfOpen&&pdfTotal){e.preventDefault();pdfPg=pdfTotal;scrollToPage(pdfTotal);}
 });
 
 // Ctrl+scroll zoom in PDF
@@ -1497,7 +1604,7 @@ function showHLtip(top,left,mode){
   // Butonlari moda gore ayarla
   tip.innerHTML='';
   if(mode==='selection'){
-    tip.innerHTML='<button class="htb" onclick="doHL(true)">Nota Kaydet</button><button class="htb" onclick="doHL(false)">Highlight</button><button class="htb" onclick="hideHLtip()">x</button>';
+    tip.innerHTML='<button class="htb" onclick="cpSelText()">Kopyala</button><button class="htb" onclick="doHL(true)">Nota Kaydet</button><button class="htb" onclick="doHL(false)">Highlight</button><button class="htb" onclick="hideHLtip()">x</button>';
   } else {
     tip.innerHTML='<button class="htb" onclick="hlToNote()">Nota Ekle</button><button class="htb" onclick="hlRemove()">Sil</button><button class="htb" onclick="hideHLtip()">x</button>';
   }
@@ -1649,8 +1756,8 @@ function updateRefSection(){
 }
 
 // ── EDITOR ────────────────────────────────────────────────────────────────────
-function ec(cmd,val){document.getElementById('apaed').focus();document.execCommand(cmd,false,val||null);uSt();}
-function iHTML(html){document.getElementById('apaed').focus();document.execCommand('insertHTML',false,html);uSt();save();}
+function ec(cmd,val){restoreEditorSelection();document.getElementById('apaed').focus();document.execCommand(cmd,false,val||null);uSt();}
+function iHTML(html){restoreEditorSelection();document.getElementById('apaed').focus();document.execCommand('insertHTML',false,html);uSt();save();}
 function uSt(){var ed=document.getElementById('apaed');var txt=ed.innerText||'';var words=txt.trim().split(/\s+/).filter(function(w){return w.length>0;}).length;var cites=ed.querySelectorAll('.cit').length;var refs=getUsedRefs().length;document.getElementById('tbinfo').textContent=words+' kelime';document.getElementById('sbw').textContent=words+' kelime';document.getElementById('sbc').textContent=cites+' atıf';document.getElementById('sbr2').textContent=refs+' kaynak';}
 document.getElementById('apaed').addEventListener('input',function(){uSt();save();});
 
@@ -1824,7 +1931,7 @@ function tSB(side){var el=document.getElementById(side);var btn=document.getElem
 function swR(name,btn){document.querySelectorAll('.rtab').forEach(function(t){t.classList.remove('on');});document.querySelectorAll('.rpnl').forEach(function(p){p.classList.remove('on');});if(btn)btn.classList.add('on');var el=document.getElementById('rp'+name);if(el)el.classList.add('on');}
 function showM(id){document.getElementById(id).classList.add('show');}
 function hideM(id){document.getElementById(id).classList.remove('show');var inp=document.querySelector('#'+id+' .minp');if(inp)inp.value='';}
-function opdd(id,btn){cdd();var m=document.getElementById(id);var r=btn.getBoundingClientRect();m.style.top=(r.bottom+4)+'px';m.style.left=r.left+'px';m.classList.add('open');}
+function opdd(id,btn){saveEditorSelection();cdd();var m=document.getElementById(id);var r=btn.getBoundingClientRect();m.style.top=(r.bottom+4)+'px';m.style.left=r.left+'px';m.classList.add('open');}
 function cdd(){document.querySelectorAll('.ddm').forEach(function(m){m.classList.remove('open');});}
 function cpStr(s){var ta=document.createElement('textarea');ta.value=s;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);}
 // Close modals on bg click
@@ -1927,6 +2034,228 @@ async function saveUpdateUrl(){
   if(typeof window.electronAPI!=='undefined'){
     await window.electronAPI.setUpdateUrl(url);
     document.getElementById('updatestatus').innerHTML='<span style="color:var(--green)">URL kaydedildi.</span>';
+  }
+}
+
+// ── PDF SYNC ──────────────────────────────────────────────────────────────────
+async function doPdfSync(){
+  if(typeof window.electronAPI==='undefined'){document.getElementById('pdfsyncstatus').innerHTML='<span style="color:var(--txt3)">Electron gerekli.</span>';return;}
+  document.getElementById('pdfsyncstatus').innerHTML='<span style="color:var(--acc)">Senkronize ediliyor...</span>';
+  try{
+    var res=await window.electronAPI.pdfSyncAll();
+    if(res.ok){
+      document.getElementById('pdfsyncstatus').innerHTML='<span style="color:var(--green)">Tamamlandi! '+res.copied+' PDF kopyalandi.</span>';
+      // Reload PDFs that were synced
+      if(res.copied>0){
+        for(var wi=0;wi<S.wss.length;wi++){
+          var lib=S.wss[wi].lib||[];
+          for(var ri=0;ri<lib.length;ri++){
+            var r=lib[ri];
+            if(!r.pdfData){try{var pr=await window.electronAPI.loadPDF(r.id);if(pr.ok)r.pdfData=pr.buffer;}catch(e){}}
+          }
+        }
+        rLib();
+      }
+    }else{
+      document.getElementById('pdfsyncstatus').innerHTML='<span style="color:var(--red)">Hata: '+(res.error||'bilinmeyen')+'</span>';
+    }
+  }catch(e){document.getElementById('pdfsyncstatus').innerHTML='<span style="color:var(--red)">Hata: '+e.message+'</span>';}
+}
+
+// ── MULTI-SOURCE OA PDF FETCH ────────────────────────────────────────────────
+async function fetchOAUrls(doi){
+  var urls=[];
+  var clean=doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i,'').trim();
+  var promises=[];
+  // Unpaywall
+  promises.push(fetch('https://api.unpaywall.org/v2/'+encodeURIComponent(clean)+'?email=academiq@example.com').then(function(r){return r.ok?r.json():null;}).then(function(ua){
+    if(ua){
+      if(ua.best_oa_location&&ua.best_oa_location.url_for_pdf)urls.push(ua.best_oa_location.url_for_pdf);
+      if(ua.best_oa_location&&ua.best_oa_location.url)urls.push(ua.best_oa_location.url);
+      (ua.oa_locations||[]).forEach(function(loc){if(loc.url_for_pdf)urls.push(loc.url_for_pdf);if(loc.url)urls.push(loc.url);});
+    }
+  }).catch(function(){}));
+  // Semantic Scholar
+  promises.push(fetch('https://api.semanticscholar.org/graph/v1/paper/DOI:'+encodeURIComponent(clean)+'?fields=openAccessPdf').then(function(r){return r.ok?r.json():null;}).then(function(s2){
+    if(s2&&s2.openAccessPdf&&s2.openAccessPdf.url)urls.push(s2.openAccessPdf.url);
+  }).catch(function(){}));
+  // OpenAlex
+  promises.push(fetch('https://api.openalex.org/works/doi:'+clean,{headers:{'Accept':'application/json'}}).then(function(r){return r.ok?r.json():null;}).then(function(oa){
+    if(oa){
+      if(oa.open_access&&oa.open_access.oa_url)urls.push(oa.open_access.oa_url);
+      (oa.locations||[]).forEach(function(loc){if(loc.pdf_url)urls.push(loc.pdf_url);});
+    }
+  }).catch(function(){}));
+  await Promise.allSettled(promises);
+  var seen={};
+  return urls.filter(function(u){if(!u||seen[u])return false;seen[u]=true;return true;});
+}
+
+async function batchDownloadOA(){
+  if(typeof window.electronAPI==='undefined'){setDst('Electron gerekli.','er');return;}
+  var allRefs=[];
+  S.wss.forEach(function(ws){allRefs=allRefs.concat(ws.lib||[]);});
+  var queue=allRefs.filter(function(r){return r.doi&&!r.pdfData;});
+  if(!queue.length){setDst('Tum kaynaklarda PDF mevcut veya DOI yok.','ok');setTimeout(function(){setDst('','');},4000);return;}
+  setDst('Toplu indirme: 0/'+queue.length,'ld');
+  var done=0;
+  for(var i=0;i<queue.length;i++){
+    var r=queue[i];
+    setDst('Indiriliyor '+(i+1)+'/'+queue.length+': '+shortRef(r),'ld');
+    try{
+      var oaUrls=await fetchOAUrls(r.doi);
+      if(r.pdfUrl&&oaUrls.indexOf(r.pdfUrl)<0)oaUrls.unshift(r.pdfUrl);
+      if(oaUrls.length>0){
+        var allUrls=[];
+        oaUrls.forEach(function(u){buildPDFUrls(u).forEach(function(v){if(allUrls.indexOf(v)<0)allUrls.push(v);});});
+        for(var j=0;j<allUrls.length;j++){
+          try{
+            var res=await window.electronAPI.downloadPDFfromURL(allUrls[j],r.id);
+            if(res.ok){var pr=await window.electronAPI.loadPDF(r.id);if(pr.ok){r.pdfData=pr.buffer;done++;break;}}
+          }catch(e){}
+        }
+      }
+    }catch(e){}
+    // Rate limit: 500ms between refs
+    await new Promise(function(resolve){setTimeout(resolve,500);});
+  }
+  save();rLib();
+  setDst('Toplu indirme: '+done+'/'+queue.length+' basarili',done>0?'ok':'er');
+  setTimeout(function(){setDst('','');},5000);
+}
+
+// ── THUMBNAIL SIDEBAR ────────────────────────────────────────────────────────
+function toggleThumbs(){
+  var el=document.getElementById('pdfthumbs');
+  var vis=el.style.display==='none';
+  el.style.display=vis?'block':'none';
+  if(vis&&pdfDoc)renderThumbnails();
+}
+
+function renderThumbnails(){
+  if(!pdfDoc)return;
+  var container=document.getElementById('pdfthumbs');
+  container.innerHTML='';
+  for(var i=1;i<=pdfTotal;i++){
+    (function(n){
+      var thumbWrap=document.createElement('div');
+      thumbWrap.style.cssText='padding:3px;cursor:pointer;border:2px solid transparent;margin:2px;border-radius:3px;';
+      thumbWrap.dataset.thumbpage=n;
+      thumbWrap.onclick=function(){pdfPg=n;scrollToPage(n);updateThumbHL();};
+      var thumbCanvas=document.createElement('canvas');
+      thumbCanvas.style.cssText='width:100%;display:block;border-radius:2px;';
+      thumbWrap.appendChild(thumbCanvas);
+      var label=document.createElement('div');
+      label.style.cssText='text-align:center;font-size:9px;color:var(--txt3);margin-top:2px;';
+      label.textContent=n;
+      thumbWrap.appendChild(label);
+      container.appendChild(thumbWrap);
+      pdfDoc.getPage(n).then(function(page){
+        var scale=0.2;
+        var vp=page.getViewport({scale:scale});
+        thumbCanvas.width=vp.width;thumbCanvas.height=vp.height;
+        page.render({canvasContext:thumbCanvas.getContext('2d'),viewport:vp});
+      });
+    })(i);
+  }
+  updateThumbHL();
+}
+
+function updateThumbHL(){
+  document.querySelectorAll('#pdfthumbs [data-thumbpage]').forEach(function(el){
+    el.style.borderColor=parseInt(el.dataset.thumbpage)===pdfPg?'var(--acc)':'transparent';
+  });
+}
+
+// ── OUTLINE / TOC ────────────────────────────────────────────────────────────
+function toggleOutline(){
+  var el=document.getElementById('pdfoutline');
+  el.style.display=el.style.display==='none'?'block':'none';
+}
+
+function loadOutline(){
+  if(!pdfDoc)return;
+  var container=document.getElementById('pdfoutline');
+  pdfDoc.getOutline().then(function(outline){
+    if(!outline||!outline.length){
+      container.innerHTML='<div style="color:var(--txt3);font-size:10px;padding:6px;">Icerik tablosu yok</div>';
+      return;
+    }
+    container.innerHTML='<div style="font-family:var(--fm);font-size:9px;color:var(--acc);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">ICERIK</div>';
+    renderOutlineItems(outline,container,0);
+  }).catch(function(){
+    container.innerHTML='<div style="color:var(--txt3);font-size:10px;padding:6px;">Icerik tablosu yok</div>';
+  });
+}
+
+function renderOutlineItems(items,container,depth){
+  items.forEach(function(item){
+    var div=document.createElement('div');
+    div.style.cssText='padding:3px 4px 3px '+(depth*12+4)+'px;font-size:11px;color:var(--txt2);cursor:pointer;border-radius:3px;line-height:1.4;';
+    div.textContent=item.title||'';
+    div.onmouseover=function(){div.style.background='var(--bg3)';};
+    div.onmouseout=function(){div.style.background='';};
+    div.onclick=function(){
+      if(item.dest){
+        var destPromise=typeof item.dest==='string'?pdfDoc.getDestination(item.dest):Promise.resolve(item.dest);
+        destPromise.then(function(dest){
+          if(!dest||!dest[0])return;
+          pdfDoc.getPageIndex(dest[0]).then(function(pageIdx){
+            pdfPg=pageIdx+1;scrollToPage(pdfPg);
+          });
+        }).catch(function(){});
+      }
+    };
+    container.appendChild(div);
+    if(item.items&&item.items.length)renderOutlineItems(item.items,container,depth+1);
+  });
+}
+
+// ── COPY TEXT ────────────────────────────────────────────────────────────────
+function cpSelText(){
+  if(selText){
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(selText).catch(function(){cpStr(selText);});
+    }else{cpStr(selText);}
+  }
+  hideHLtip();
+}
+
+// ── FONT SIZE APPLY ──────────────────────────────────────────────────────────
+function applyFontSize(pt){
+  var ed=document.getElementById('apaed');
+  ed.focus();
+  var sel=window.getSelection();
+  if(!sel||sel.isCollapsed)return;
+  // Use fontSize command (1-7) as base, then fix with span
+  document.execCommand('fontSize',false,'7');
+  ed.querySelectorAll('font[size="7"]').forEach(function(font){
+    var span=document.createElement('span');
+    span.style.fontSize=pt+'pt';
+    span.innerHTML=font.innerHTML;
+    font.parentNode.replaceChild(span,font);
+  });
+  uSt();save();
+}
+
+// ── EDITOR SELECTION PRESERVE (fix dropdown insert) ──────────────────────────
+var editorSavedRange=null;
+function saveEditorSelection(){
+  var sel=window.getSelection();
+  if(sel&&sel.rangeCount>0){
+    var range=sel.getRangeAt(0);
+    var ed=document.getElementById('apaed');
+    if(ed&&ed.contains(range.commonAncestorContainer)){
+      editorSavedRange=range.cloneRange();
+    }
+  }
+}
+function restoreEditorSelection(){
+  if(editorSavedRange){
+    var sel=window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(editorSavedRange);
+    editorSavedRange=null;
   }
 }
 
