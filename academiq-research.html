@@ -5,6 +5,7 @@
 <title>AcademiQ Research</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Playfair+Display:ital,wght@0,600;1,400&display=swap" rel="stylesheet"/>
 <!-- PDF text layer CSS (inline, uyumlu) -->
 <style>
@@ -292,6 +293,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
   </div>
   <span class="sp"></span>
   <span id="synclbl"></span>
+  <button class="btn" id="authbtn" style="font-size:11px;" onclick="showM('authmodal')" title="Hesap">👤 Giris Yap</button>
   <button class="btn" style="font-size:11px;" onclick="showSyncSettings()" title="Sync Ayarları">🔄 Sync</button>
   <button class="btn" style="border:1px solid var(--acc-d);color:var(--acc);" onclick="togglePDF()">📄 PDF</button>
   <button class="btn tog on" id="btnsbl" onclick="tSB('sbl')">☰ Kütüphane</button>
@@ -491,6 +493,48 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 
 <!-- SYNC SETTINGS MODAL -->
 </div></div>
+<!-- AUTH MODAL -->
+<div class="modal-bg" id="authmodal"><div class="modal" style="width:360px">
+  <div class="mt">Hesap</div>
+  <!-- Logged out view -->
+  <div id="authform">
+    <div style="margin-bottom:10px;">
+      <div style="display:flex;gap:0;margin-bottom:12px;">
+        <button class="mbtn p" id="authtab-login" onclick="switchAuthTab('login')" style="flex:1;border-radius:4px 0 0 4px;">Giris Yap</button>
+        <button class="mbtn s" id="authtab-register" onclick="switchAuthTab('register')" style="flex:1;border-radius:0 4px 4px 0;">Kayit Ol</button>
+      </div>
+      <input class="minp" id="authemail" type="email" placeholder="E-posta" style="margin-bottom:6px;"/>
+      <input class="minp" id="authpass" type="password" placeholder="Sifre (min 6 karakter)" style="margin-bottom:8px;" onkeydown="if(event.key==='Enter')doAuth()"/>
+      <div id="autherr" style="font-size:11px;color:var(--red);margin-bottom:6px;display:none;"></div>
+      <button class="mbtn p" id="authsubmit" onclick="doAuth()" style="width:100%;">Giris Yap</button>
+    </div>
+  </div>
+  <!-- Logged in view -->
+  <div id="authprofile" style="display:none;">
+    <div style="padding:12px;background:var(--bg);border:1px solid var(--b);border-radius:4px;margin-bottom:10px;">
+      <div style="font-family:var(--fm);font-size:10px;color:var(--txt3);">Giris yapan kullanici</div>
+      <div id="authuseremail" style="font-size:12px;color:var(--green);margin-top:4px;"></div>
+      <div id="authlastsync" style="font-family:var(--fm);font-size:10px;color:var(--txt3);margin-top:6px;"></div>
+    </div>
+    <div style="display:flex;gap:6px;">
+      <button class="mbtn p" onclick="supaCloudSync()" style="flex:1;">Simdi Senkronize Et</button>
+      <button class="mbtn s" onclick="doLogout()" style="flex:1;">Cikis Yap</button>
+    </div>
+  </div>
+  <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--b);">
+    <div style="font-family:var(--fm);font-size:9.5px;color:var(--acc);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;">SUPABASE AYARLARI</div>
+    <div style="font-size:10px;color:var(--txt3);margin-bottom:4px;">Supabase Project URL:</div>
+    <input class="minp" id="supaurl" placeholder="https://xxxxx.supabase.co" style="font-size:10px;font-family:var(--fm);margin-bottom:6px;"/>
+    <div style="font-size:10px;color:var(--txt3);margin-bottom:4px;">Anon (Public) Key:</div>
+    <input class="minp" id="supaanonkey" placeholder="eyJhbGciOiJIUzI1NiIs..." style="font-size:10px;font-family:var(--fm);margin-bottom:6px;"/>
+    <button class="mbtn s" onclick="saveSupaSettings()" style="font-size:10px;width:100%;">Kaydet ve Baglan</button>
+    <div id="supaconstat" style="font-family:var(--fm);font-size:10px;margin-top:6px;color:var(--txt3);"></div>
+  </div>
+  <div class="mb" style="margin-top:10px;">
+    <button class="mbtn s" onclick="hideM('authmodal')">Kapat</button>
+  </div>
+</div></div>
+
 <div class="modal-bg" id="syncmodal"><div class="modal" style="width:400px">
   <div class="mt">Sync Ayarları</div>
   <div id="syncinfo" style="font-size:12px;color:var(--txt2);line-height:1.7;margin-bottom:12px;">
@@ -569,6 +613,207 @@ var selText='',selPageNum=1,selRangeObj=null;
 var hlData=[]; // [{page,color,rects}] — highlight kalıcı veri
 var syncTimer=null,syncDirty=false;
 
+// ── SUPABASE ────────────────────────────────────────────────────────────────
+var supaClient=null;
+var supaUser=null;
+
+function getSupaSettings(){
+  try{
+    var s=localStorage.getItem('aq_supa');
+    return s?JSON.parse(s):{url:'',key:''};
+  }catch(e){return {url:'',key:''};}
+}
+
+function initSupabase(){
+  var cfg=getSupaSettings();
+  if(!cfg.url||!cfg.key){supaClient=null;return false;}
+  try{
+    supaClient=window.supabase.createClient(cfg.url,cfg.key,{
+      auth:{autoRefreshToken:true,persistSession:true,storage:localStorage}
+    });
+    return true;
+  }catch(e){console.warn('Supabase init error:',e);supaClient=null;return false;}
+}
+
+function saveSupaSettings(){
+  var url=(document.getElementById('supaurl').value||'').trim();
+  var key=(document.getElementById('supaanonkey').value||'').trim();
+  if(!url||!key){document.getElementById('supaconstat').textContent='URL ve Key gerekli!';document.getElementById('supaconstat').style.color='var(--red)';return;}
+  localStorage.setItem('aq_supa',JSON.stringify({url:url,key:key}));
+  var ok=initSupabase();
+  var el=document.getElementById('supaconstat');
+  if(ok){el.textContent='Baglanti kuruldu.';el.style.color='var(--green)';checkSupaSession();}
+  else{el.textContent='Baglanti basarisiz!';el.style.color='var(--red)';}
+}
+
+function switchAuthTab(tab){
+  var loginBtn=document.getElementById('authtab-login');
+  var regBtn=document.getElementById('authtab-register');
+  var submitBtn=document.getElementById('authsubmit');
+  if(tab==='login'){
+    loginBtn.className='mbtn p';regBtn.className='mbtn s';
+    submitBtn.textContent='Giris Yap';submitBtn.setAttribute('data-mode','login');
+  } else {
+    loginBtn.className='mbtn s';regBtn.className='mbtn p';
+    submitBtn.textContent='Kayit Ol';submitBtn.setAttribute('data-mode','register');
+  }
+  document.getElementById('autherr').style.display='none';
+}
+
+async function doAuth(){
+  if(!supaClient){
+    showAuthErr('Once Supabase ayarlarini yapin (asagida URL ve Key girin).');return;
+  }
+  var email=(document.getElementById('authemail').value||'').trim();
+  var pass=(document.getElementById('authpass').value||'').trim();
+  if(!email||!pass){showAuthErr('E-posta ve sifre girin.');return;}
+  if(pass.length<6){showAuthErr('Sifre en az 6 karakter olmali.');return;}
+
+  var mode=document.getElementById('authsubmit').getAttribute('data-mode')||'login';
+  var submitBtn=document.getElementById('authsubmit');
+  submitBtn.disabled=true;submitBtn.textContent='Bekleyin...';
+
+  try{
+    var res;
+    if(mode==='register'){
+      res=await supaClient.auth.signUp({email:email,password:pass});
+    } else {
+      res=await supaClient.auth.signInWithPassword({email:email,password:pass});
+    }
+    if(res.error){showAuthErr(res.error.message);submitBtn.disabled=false;submitBtn.textContent=mode==='register'?'Kayit Ol':'Giris Yap';return;}
+
+    supaUser=res.data.user;
+    if(mode==='register'&&!supaUser){
+      showAuthErr('Kayit basarili! E-posta onay linki gonderildi.');
+      submitBtn.disabled=false;submitBtn.textContent='Kayit Ol';return;
+    }
+
+    onAuthSuccess(supaUser);
+  }catch(e){
+    showAuthErr('Hata: '+e.message);
+    submitBtn.disabled=false;submitBtn.textContent=mode==='register'?'Kayit Ol':'Giris Yap';
+  }
+}
+
+function showAuthErr(msg){
+  var el=document.getElementById('autherr');
+  el.textContent=msg;el.style.display='block';
+}
+
+async function onAuthSuccess(user){
+  supaUser=user;
+  // Update UI
+  document.getElementById('authform').style.display='none';
+  document.getElementById('authprofile').style.display='block';
+  document.getElementById('authuseremail').textContent=user.email;
+  document.getElementById('authbtn').textContent='👤 '+user.email.split('@')[0];
+  document.getElementById('authbtn').style.color='var(--green)';
+  // Pull cloud data
+  await supaCloudPull();
+  setSL('☁️ Bulut hesabi aktif','ok');
+  setTimeout(function(){setSL('','');},3000);
+}
+
+async function doLogout(){
+  if(!supaClient)return;
+  await supaClient.auth.signOut();
+  supaUser=null;
+  document.getElementById('authform').style.display='block';
+  document.getElementById('authprofile').style.display='none';
+  document.getElementById('autherr').style.display='none';
+  document.getElementById('authemail').value='';
+  document.getElementById('authpass').value='';
+  document.getElementById('authbtn').textContent='👤 Giris Yap';
+  document.getElementById('authbtn').style.color='';
+  setSL('Cikis yapildi','ok');
+  setTimeout(function(){setSL('','');},2000);
+}
+
+async function checkSupaSession(){
+  if(!supaClient)return;
+  try{
+    var res=await supaClient.auth.getSession();
+    if(res.data.session&&res.data.session.user){
+      onAuthSuccess(res.data.session.user);
+    }
+  }catch(e){}
+}
+
+// ── SUPABASE CLOUD SYNC ───────────────────────────────────────────────────
+async function supaCloudPush(){
+  if(!supaClient||!supaUser)return;
+  S.doc=document.getElementById('apaed').innerHTML;
+  var toSave={
+    wss:S.wss.map(function(ws){return {id:ws.id,name:ws.name,lib:(ws.lib||[]).map(function(r){var c=Object.assign({},r);delete c.pdfData;return c;})};}),
+    cur:S.cur,notebooks:S.notebooks,curNb:S.curNb,notes:S.notes,doc:S.doc,cm:S.cm
+  };
+  try{
+    var res=await supaClient.from('user_data').upsert({
+      user_id:supaUser.id,
+      data:toSave,
+      updated_at:new Date().toISOString()
+    },{onConflict:'user_id'});
+    if(res.error)console.warn('Cloud push error:',res.error.message);
+    else{
+      document.getElementById('authlastsync').textContent='Son sync: '+new Date().toLocaleTimeString('tr-TR');
+    }
+  }catch(e){console.warn('Cloud push error:',e);}
+}
+
+async function supaCloudPull(){
+  if(!supaClient||!supaUser)return;
+  try{
+    setSL('☁️ Bulut verisi indiriliyor...','ld');
+    var res=await supaClient.from('user_data').select('data,updated_at').eq('user_id',supaUser.id).single();
+    if(res.error){
+      if(res.error.code==='PGRST116'){
+        // No data yet — push current local data
+        setSL('☁️ Ilk sync — yukleniyor...','ld');
+        await supaCloudPush();
+        setSL('','');
+        return;
+      }
+      console.warn('Cloud pull error:',res.error.message);
+      setSL('','');return;
+    }
+    if(res.data&&res.data.data){
+      var cloud=res.data.data;
+      if(cloud.wss){
+        S.wss=cloud.wss;S.cur=cloud.cur||S.cur;
+        S.notebooks=cloud.notebooks||S.notebooks;
+        S.curNb=cloud.curNb||S.curNb;
+        S.notes=cloud.notes||[];
+        S.doc=cloud.doc||'';
+        S.cm=cloud.cm||'inline';
+        if(S.doc)document.getElementById('apaed').innerHTML=S.doc;
+        // Reload PDFs from local/sync cache
+        if(typeof window.electronAPI!=='undefined'){
+          for(var wi=0;wi<S.wss.length;wi++){
+            var lib=S.wss[wi].lib||[];
+            for(var ri=0;ri<lib.length;ri++){
+              try{var pr=await window.electronAPI.loadPDF(lib[ri].id);if(pr.ok)lib[ri].pdfData=pr.buffer;}catch(e){}
+            }
+          }
+        }
+        rWS();rNB();rLib();rNotes();rRefs();uSt();
+        // Also save to local file system
+        syncSaveLocal();
+      }
+      document.getElementById('authlastsync').textContent='Son sync: '+new Date(res.data.updated_at).toLocaleString('tr-TR');
+    }
+    setSL('☁️ Bulut verisi yuklendi','ok');
+    setTimeout(function(){setSL('','');},3000);
+  }catch(e){console.warn('Cloud pull error:',e);setSL('','');}
+}
+
+async function supaCloudSync(){
+  if(!supaClient||!supaUser){alert('Once giris yapin.');return;}
+  setSL('☁️ Senkronize ediliyor...','ld');
+  await supaCloudPush();
+  setSL('☁️ Senkronize edildi','ok');
+  setTimeout(function(){setSL('','');},2000);
+}
+
 // ── SYNC ─────────────────────────────────────────────────────────────────────
 function setSL(msg,cls){
   var e=document.getElementById('synclbl');
@@ -576,6 +821,27 @@ function setSL(msg,cls){
   e.textContent=msg;e.className=cls;
 }
 
+// Save to local only (file system / localStorage, no cloud)
+async function syncSaveLocal(){
+  S.doc=document.getElementById('apaed').innerHTML;
+  var toSave={
+    wss:S.wss.map(function(ws){return {id:ws.id,name:ws.name,lib:(ws.lib||[]).map(function(r){var c=Object.assign({},r);delete c.pdfData;return c;})};}),
+    cur:S.cur,notebooks:S.notebooks,curNb:S.curNb,notes:S.notes,doc:S.doc,cm:S.cm
+  };
+  var json=JSON.stringify(toSave);
+  if(typeof window.electronAPI!=='undefined'){
+    try{await window.electronAPI.saveData(json);}catch(e){}
+    return;
+  }
+  if(typeof window.storage!=='undefined'){
+    try{await window.storage.set('aq_v2',json);}catch(e){}
+    return;
+  }
+  try{localStorage.setItem('aqR2',json);}catch(e){}
+  try{var pm={};S.wss.forEach(function(ws){(ws.lib||[]).forEach(function(r){if(r.pdfData)pm[r.id]=r.pdfData;});});localStorage.setItem('aqPDF2',JSON.stringify(pm));}catch(e){}
+}
+
+var _supaDebounce=null;
 async function syncSave(){
   S.doc=document.getElementById('apaed').innerHTML;
   var toSave={
@@ -583,7 +849,7 @@ async function syncSave(){
     cur:S.cur,notebooks:S.notebooks,curNb:S.curNb,notes:S.notes,doc:S.doc,cm:S.cm
   };
   var json=JSON.stringify(toSave);
-  // Electron: dosya sistemine yaz (Proton Drive klasörü)
+  // Electron: dosya sistemine yaz
   if(typeof window.electronAPI!=='undefined'){
     try{
       setSL('↑ kaydediliyor...','ld');
@@ -591,18 +857,18 @@ async function syncSave(){
       setSL('✓ kaydedildi','ok');
       setTimeout(function(){setSL('','');},2000);
     }catch(e){setSL('⚠ kayıt hatası','er');}
-    return;
-  }
-  // Claude artifact: window.storage
-  if(typeof window.storage!=='undefined'){
+  } else if(typeof window.storage!=='undefined'){
     try{setSL('↑ sync...','ld');await window.storage.set('aq_v2',json);setSL('✓ sync','ok');setTimeout(function(){setSL('','');},3000);}
     catch(e){setSL('⚠ sync hatası','er');}
-    return;
+  } else {
+    try{localStorage.setItem('aqR2',json);}catch(e){}
+    try{var pm={};S.wss.forEach(function(ws){(ws.lib||[]).forEach(function(r){if(r.pdfData)pm[r.id]=r.pdfData;});});localStorage.setItem('aqPDF2',JSON.stringify(pm));}catch(e){}
   }
-  // Fallback: localStorage (yalnızca window.storage yoksa)
-  try{localStorage.setItem('aqR2',json);}catch(e){}
-  // PDF önbellek (tarayıcıda)
-  try{var pm={};S.wss.forEach(function(ws){(ws.lib||[]).forEach(function(r){if(r.pdfData)pm[r.id]=r.pdfData;});});localStorage.setItem('aqPDF2',JSON.stringify(pm));}catch(e){}
+  // Supabase cloud sync (debounced 10s)
+  if(supaClient&&supaUser){
+    clearTimeout(_supaDebounce);
+    _supaDebounce=setTimeout(function(){supaCloudPush();},10000);
+  }
 }
 
 async function syncLoad(){
@@ -2277,6 +2543,13 @@ function autoCheckUpdate(){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
+// Init Supabase (load saved settings + restore session)
+initSupabase();
+var _supaSettCfg=getSupaSettings();
+if(_supaSettCfg.url)document.getElementById('supaurl').value=_supaSettCfg.url;
+if(_supaSettCfg.key)document.getElementById('supaanonkey').value=_supaSettCfg.key;
+if(supaClient)checkSupaSession();
+
 syncLoad().then(function(){
   rWS();rNB();rLib();rNotes();rRefs();uSt();
   // Electron: sync durumunu göster
