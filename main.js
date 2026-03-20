@@ -1,0 +1,349 @@
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const path = require('path');
+const fs = require('fs');
+const https = require('https');
+const http = require('http');
+
+// ── PATHS ────────────────────────────────────────────────────────────────────
+const APP_DIR = path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'AcademiQ');
+const SETTINGS_FILE = path.join(APP_DIR, 'settings.json');
+const LOCAL_PDF_DIR = path.join(APP_DIR, 'pdfs');
+
+// Ensure dirs exist
+[APP_DIR, LOCAL_PDF_DIR].forEach(d => { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); });
+
+// ── SETTINGS ─────────────────────────────────────────────────────────────────
+let settings = { syncDir: '', theme: 'dark' };
+
+function loadSettings() {
+  try {
+    if (fs.existsSync(SETTINGS_FILE)) {
+      settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+    }
+  } catch (e) { console.warn('Settings load error:', e); }
+}
+
+function saveSettings() {
+  try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2)); } catch (e) {}
+}
+
+function getSyncDataPath() {
+  if (settings.syncDir) {
+    const dir = path.join(settings.syncDir, 'AcademiQ');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    return path.join(dir, 'academiq-data.json');
+  }
+  return path.join(APP_DIR, 'academiq-data.json');
+}
+
+function getSyncPDFDir() {
+  // PDFs are stored locally — too large for sync
+  return LOCAL_PDF_DIR;
+}
+
+// ── WINDOW ───────────────────────────────────────────────────────────────────
+let mainWindow;
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1440,
+    height: 900,
+    minWidth: 900,
+    minHeight: 600,
+    title: 'AcademiQ Research',
+    icon: path.join(__dirname, 'icon.ico'),
+    backgroundColor: '#0d1117',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      webSecurity: false   // PDF fetch CORS bypass
+    }
+  });
+
+  mainWindow.setMenuBarVisibility(false);
+  mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
+
+  // Open external links in browser
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+}
+
+app.whenReady().then(() => {
+  loadSettings();
+  createWindow();
+  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+});
+
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+
+// ── IPC: DATA ────────────────────────────────────────────────────────────────
+ipcMain.handle('data:load', async () => {
+  try {
+    const fp = getSyncDataPath();
+    if (fs.existsSync(fp)) {
+      const data = fs.readFileSync(fp, 'utf8');
+      return { ok: true, data, dir: settings.syncDir || 'Yerel' };
+    }
+    return { ok: true, data: null, dir: settings.syncDir || 'Yerel' };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('data:save', async (_ev, json) => {
+  try {
+    const fp = getSyncDataPath();
+    // Write atomic: temp → rename
+    const tmp = fp + '.tmp';
+    fs.writeFileSync(tmp, json, 'utf8');
+    fs.renameSync(tmp, fp);
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// ── IPC: PDF FILES ───────────────────────────────────────────────────────────
+ipcMain.handle('pdf:save', async (_ev, refId, buffer) => {
+  try {
+    const fp = path.join(getSyncPDFDir(), refId + '.pdf');
+    fs.writeFileSync(fp, Buffer.from(buffer));
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('pdf:load', async (_ev, refId) => {
+  try {
+    const fp = path.join(getSyncPDFDir(), refId + '.pdf');
+    if (!fs.existsSync(fp)) return { ok: false, error: 'not found' };
+    const buf = fs.readFileSync(fp);
+    return { ok: true, buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('pdf:exists', async (_ev, refId) => {
+  const fp = path.join(getSyncPDFDir(), refId + '.pdf');
+  return fs.existsSync(fp);
+});
+
+ipcMain.handle('pdf:delete', async (_ev, refId) => {
+  try {
+    const fp = path.join(getSyncPDFDir(), refId + '.pdf');
+    if (fs.existsSync(fp)) fs.unlinkSync(fp);
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// ── IPC: PDF DOWNLOAD (CORS BYPASS) ─────────────────────────────────────────
+function followRedirects(url, maxRedirects = 5) {
+  return new Promise((resolve, reject) => {
+    if (maxRedirects <= 0) return reject(new Error('Too many redirects'));
+    const mod = url.startsWith('https') ? https : http;
+    const req = mod.get(url, { 
+      headers: { 
+        'User-Agent': 'AcademiQ/1.0 (academic research tool)',
+        'Accept': 'application/pdf,*/*'
+      },
+      timeout: 30000
+    }, (res) => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
+        const loc = res.headers.location;
+        if (!loc) return reject(new Error('Redirect without location'));
+        const next = loc.startsWith('http') ? loc : new URL(loc, url).href;
+        followRedirects(next, maxRedirects - 1).then(resolve).catch(reject);
+        return;
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject(new Error('HTTP ' + res.statusCode));
+      }
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
+  });
+}
+
+ipcMain.handle('pdf:download', async (_ev, url, refId) => {
+  try {
+    const buf = await followRedirects(url);
+    if (buf.length < 100) return { ok: false, error: 'Too small: ' + buf.length + ' bytes' };
+    // PDF header check - some PDFs have whitespace before %PDF-
+    const headerStr = buf.slice(0, 1024).toString('ascii');
+    const pdfIdx = headerStr.indexOf('%PDF-');
+    if (pdfIdx < 0 || pdfIdx > 64) {
+      // Check content type hints
+      const isHTML = headerStr.toLowerCase().includes('<html') || headerStr.toLowerCase().includes('<!doctype');
+      return { ok: false, error: isHTML ? 'HTML page, not PDF' : 'No PDF header in first 64 bytes' };
+    }
+    // Save to local storage (trim any pre-header bytes)
+    const pdfBuf = pdfIdx > 0 ? buf.slice(pdfIdx) : buf;
+    const fp = path.join(getSyncPDFDir(), refId + '.pdf');
+    fs.writeFileSync(fp, pdfBuf);
+    return { ok: true, size: pdfBuf.length };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// ── IPC: DIALOG ──────────────────────────────────────────────────────────────
+ipcMain.handle('dialog:openPDF', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'PDF Dosyası Seç',
+    filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    properties: ['openFile', 'multiSelections']
+  });
+  if (result.canceled || !result.filePaths.length) return { ok: false };
+  const files = [];
+  for (const fp of result.filePaths) {
+    const buf = fs.readFileSync(fp);
+    files.push({
+      name: path.basename(fp),
+      buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
+    });
+  }
+  return { ok: true, files };
+});
+
+// ── IPC: SYNC SETTINGS ──────────────────────────────────────────────────────
+ipcMain.handle('sync:getSettings', async () => {
+  return { syncDir: settings.syncDir || '' };
+});
+
+ipcMain.handle('sync:setSyncDir', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Sync Klasörü Seç (OneDrive, Proton Drive, Google Drive vb.)',
+    properties: ['openDirectory']
+  });
+  if (result.canceled || !result.filePaths.length) return { ok: false };
+  
+  // Migrate existing data to new sync folder
+  const oldPath = getSyncDataPath();
+  settings.syncDir = result.filePaths[0];
+  saveSettings();
+  const newPath = getSyncDataPath();
+  
+  // Copy existing data if present
+  if (fs.existsSync(oldPath) && oldPath !== newPath) {
+    try { fs.copyFileSync(oldPath, newPath); } catch (e) {}
+  }
+  
+  return { ok: true, dir: settings.syncDir };
+});
+
+ipcMain.handle('sync:clearSyncDir', async () => {
+  settings.syncDir = '';
+  saveSettings();
+  return { ok: true };
+});
+
+// ── IPC: APP INFO ────────────────────────────────────────────────────────────
+const APP_VERSION = '1.1.0';
+const UPDATE_URL = 'https://api.github.com/repos/cyrenard/academiq-research/releases/latest';
+
+ipcMain.handle('app:getInfo', async () => {
+  return {
+    version: APP_VERSION,
+    appDir: APP_DIR,
+    syncDir: settings.syncDir || '',
+    pdfDir: LOCAL_PDF_DIR,
+    pdfCount: fs.readdirSync(LOCAL_PDF_DIR).filter(f => f.endsWith('.pdf')).length
+  };
+});
+
+// ── IPC: AUTO-UPDATE ────────────────────────────────────────────────────────
+ipcMain.handle('update:check', async () => {
+  // Check custom update URL from settings, or default
+  const checkUrl = settings.updateUrl || UPDATE_URL;
+  try {
+    const data = await fetchJSON(checkUrl);
+    if (!data || !data.tag_name) return { available: false, current: APP_VERSION };
+    const remote = data.tag_name.replace(/^v/, '');
+    const available = compareVersions(remote, APP_VERSION) > 0;
+    // Find the HTML asset
+    let htmlAsset = null;
+    if (data.assets && data.assets.length) {
+      htmlAsset = data.assets.find(a => a.name && a.name.endsWith('.html'));
+      if (!htmlAsset) htmlAsset = data.assets.find(a => a.name && a.name.endsWith('.zip'));
+    }
+    return {
+      available,
+      current: APP_VERSION,
+      remote,
+      notes: data.body || '',
+      downloadUrl: htmlAsset ? htmlAsset.browser_download_url : (data.html_url || ''),
+      publishedAt: data.published_at || ''
+    };
+  } catch (e) {
+    return { available: false, current: APP_VERSION, error: e.message };
+  }
+});
+
+ipcMain.handle('update:download', async (_ev, url) => {
+  try {
+    if (!url) return { ok: false, error: 'No URL' };
+    const buf = await followRedirects(url);
+    if (!buf || buf.length < 100) return { ok: false, error: 'Empty download' };
+
+    const fileName = url.split('/').pop() || 'update';
+    
+    if (fileName.endsWith('.html')) {
+      // Direct HTML update: replace src/index.html
+      const target = path.join(APP_DIR, 'src', 'index.html');
+      const backup = target + '.bak';
+      if (fs.existsSync(target)) fs.copyFileSync(target, backup);
+      fs.writeFileSync(target, buf);
+      return { ok: true, type: 'html', restart: true };
+    } else if (fileName.endsWith('.zip')) {
+      // ZIP update: extract to temp, replace files
+      const zipPath = path.join(APP_DIR, 'update.zip');
+      fs.writeFileSync(zipPath, buf);
+      return { ok: true, type: 'zip', path: zipPath, restart: true };
+    } else {
+      return { ok: false, error: 'Unknown file type: ' + fileName };
+    }
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('update:setUrl', async (_ev, url) => {
+  settings.updateUrl = url || '';
+  saveSettings();
+  return { ok: true };
+});
+
+ipcMain.handle('update:restart', async () => {
+  app.relaunch();
+  app.exit(0);
+});
+
+// Helper: fetch JSON
+function fetchJSON(url) {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith('https') ? https : http;
+    mod.get(url, {
+      headers: { 'User-Agent': 'AcademiQ-Updater/1.0', 'Accept': 'application/json' },
+      timeout: 15000
+    }, (res) => {
+      if ([301, 302, 307, 308].includes(res.statusCode)) {
+        const loc = res.headers.location;
+        if (loc) return fetchJSON(loc).then(resolve).catch(reject);
+      }
+      if (res.statusCode !== 200) { res.resume(); return reject(new Error('HTTP ' + res.statusCode)); }
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => { try { resolve(JSON.parse(data)); } catch (e) { reject(e); } });
+    }).on('error', reject);
+  });
+}
+
+// Helper: compare semver
+function compareVersions(a, b) {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+    if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+  }
+  return 0;
+}
