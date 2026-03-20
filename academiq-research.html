@@ -1,0 +1,1975 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8"/>
+<title>AcademiQ Research</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Playfair+Display:ital,wght@0,600;1,400&display=swap" rel="stylesheet"/>
+<!-- PDF text layer CSS (inline, uyumlu) -->
+<style>
+:root{
+  --bg:#0d1117;--bg2:#161b22;--bg3:#1e2530;--b:#2d3748;--b2:#3d4f6b;
+  --acc:#c8a96e;--acc-d:#8a6d3f;--acc-g:rgba(200,169,110,.12);
+  --txt:#e6e1d6;--txt2:#8b96a8;--txt3:#4a5568;
+  --green:#4caf82;--red:#e05c6a;--blue:#5b9bd5;
+  --f:'IBM Plex Sans',sans-serif;--fm:'IBM Plex Mono',monospace;--fd:'Playfair Display',serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;display:flex;flex-direction:column;}
+
+/* TOOLBAR */
+#tb{height:44px;background:var(--bg2);border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 10px;gap:4px;flex-shrink:0;z-index:10;}
+.logo{font-family:var(--fd);font-size:16px;color:var(--acc);font-style:italic;margin-right:4px;}
+.sep{width:1px;height:20px;background:var(--b);margin:0 2px;}
+.btn{background:none;border:none;color:var(--txt2);font-size:12px;padding:4px 8px;border-radius:3px;cursor:pointer;font-family:var(--f);white-space:nowrap;transition:background .1s;}
+.btn:hover{background:var(--bg3);color:var(--txt);}
+.btn.prim{background:var(--acc);color:#0d1117;font-weight:600;}
+.btn.tog{border:1px solid var(--b);font-family:var(--fm);font-size:11px;}
+.btn.tog.on{border-color:var(--acc-d);color:var(--acc);background:var(--acc-g);}
+.sp{flex:1;}
+#tbinfo{font-family:var(--fm);font-size:11px;color:var(--txt3);}
+#synclbl{font-family:var(--fm);font-size:10px;padding:2px 6px;border-radius:3px;transition:all .3s;}
+#synclbl.ok{color:var(--green);}#synclbl.ld{color:var(--acc);}#synclbl.er{color:var(--red);}
+.dd{position:relative;display:inline-block;}
+.ddm{display:none;position:fixed;z-index:999;background:var(--bg2);border:1px solid var(--b);border-radius:6px;padding:4px;min-width:165px;box-shadow:0 8px 24px rgba(0,0,0,.6);}
+.ddm.open{display:block;}
+.ddi{display:block;width:100%;background:none;border:none;color:var(--txt2);font-family:var(--f);font-size:12px;padding:7px 12px;border-radius:4px;cursor:pointer;text-align:left;}
+.ddi:hover{background:var(--bg3);color:var(--txt);}
+.dds{height:1px;background:var(--b);margin:3px 0;}
+
+/* LAYOUT */
+#lay{display:flex;flex:1;overflow:hidden;}
+
+/* LEFT SIDEBAR */
+#sbl{width:256px;background:var(--bg2);border-right:1px solid var(--b);display:flex;flex-direction:column;flex-shrink:0;transition:width .2s,opacity .2s;}
+#sbl.closed{width:0;opacity:0;pointer-events:none;}
+/* Workspace bar */
+#wsbar{padding:5px 8px;border-bottom:1px solid var(--b);flex-shrink:0;}
+#wsrow{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
+.wsbtn{background:var(--bg3);border:1px solid var(--b);color:var(--txt2);font-family:var(--fm);font-size:10px;padding:3px 8px;border-radius:4px;cursor:pointer;position:relative;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.wsbtn.on{border-color:var(--acc-d);color:var(--acc);background:var(--acc-g);}
+.wsdel{display:none;position:absolute;top:-5px;right:-5px;width:14px;height:14px;background:var(--red);color:#fff;border-radius:50%;font-size:9px;line-height:14px;text-align:center;cursor:pointer;z-index:2;}
+.wsbtn:hover .wsdel{display:block;}
+#wsadd{width:22px;height:22px;background:none;border:1px solid var(--b);color:var(--txt2);border-radius:4px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+#wsadd:hover{border-color:var(--acc);color:var(--acc);}
+/* Library */
+.addrow{display:flex;gap:5px;padding:6px 8px 2px;flex-shrink:0;}
+.doinp{flex:1;background:var(--bg);border:1px solid var(--b);border-radius:4px;color:var(--txt);font-family:var(--fm);font-size:11px;padding:5px 7px;outline:none;}
+.doinp:focus{border-color:var(--acc);}
+.doinp::placeholder{color:var(--txt3);}
+.addbtn{background:var(--acc);color:#0d1117;border:none;border-radius:4px;padding:5px 9px;font-size:11px;font-weight:600;cursor:pointer;}
+#dst{font-family:var(--fm);font-size:10px;padding:2px 10px 3px;min-height:15px;}
+#dst.ok{color:var(--green);}#dst.er{color:var(--red);}#dst.ld{color:var(--acc);}
+.srch{margin:0 8px 4px;padding:5px 8px;background:var(--bg);border:1px solid var(--b);border-radius:4px;color:var(--txt);font-size:12px;outline:none;font-family:var(--f);}
+.srch:focus{border-color:var(--acc);}
+.srch::placeholder{color:var(--txt3);}
+.pdfupbtn{margin:0 8px 5px;background:none;border:1px dashed var(--b);border-radius:4px;color:var(--txt2);font-size:11px;padding:5px;cursor:pointer;width:calc(100% - 16px);text-align:center;}
+.pdfupbtn:hover{border-color:var(--acc);color:var(--acc);}
+#liblist{flex:1;overflow-y:auto;padding:3px 7px 8px;}
+.lcard{background:var(--bg3);border:1px solid var(--b);border-radius:5px;padding:7px 9px;margin-bottom:5px;cursor:pointer;position:relative;}
+.lcard:hover{border-color:var(--b2);}
+.lcard.on{border-color:var(--acc);background:var(--acc-g);}
+.ltitle{font-size:11.5px;font-weight:500;color:var(--txt);line-height:1.4;margin-bottom:2px;padding-right:14px;}
+.lmeta{font-family:var(--fm);font-size:9.5px;color:var(--txt2);}
+.lbadges{display:flex;gap:3px;margin-top:4px;flex-wrap:wrap;}
+.lbadge{font-size:9px;padding:1px 5px;border-radius:8px;border:1px solid;font-family:var(--fm);}
+.lbadge.pdf{color:var(--green);border-color:var(--green);}
+.lbadge.doi{color:var(--blue);border-color:var(--blue);}
+.lbadge.oa{color:var(--acc);border-color:var(--acc-d);}
+.ldel{position:absolute;top:5px;right:7px;background:none;border:none;color:var(--txt3);font-size:13px;cursor:pointer;opacity:0;}
+.lcard:hover .ldel{opacity:1;}
+.ldel:hover{color:var(--red);}
+
+/* CENTER */
+#ctr{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#3a3a3a;}
+#etb{height:32px;background:var(--bg2);border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 8px;gap:3px;flex-shrink:0;}
+.efmt{background:none;border:none;color:var(--txt2);font-size:12px;padding:3px 7px;border-radius:3px;cursor:pointer;font-family:var(--f);}
+.efmt:hover{background:var(--bg3);color:var(--txt);}
+#escroll{flex:1;overflow-y:auto;padding:28px 20px;display:flex;flex-direction:column;align-items:center;}
+#apapage{width:816px;min-height:1056px;background:#fff;padding:96px;box-shadow:0 4px 28px rgba(0,0,0,.5);margin-bottom:28px;}
+#apaed{font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;color:#000;outline:none;min-height:800px;caret-color:#0044cc;}
+#apaed:empty::before{content:'Yazmaya başlayın. Atıf için /r yazın...';color:#bbb;font-style:italic;pointer-events:none;}
+#apaed p{margin:0;text-indent:.5in;}
+#apaed p.ni{text-indent:0;}
+#apaed h1{font-size:12pt;font-weight:bold;text-align:center;margin:0;text-indent:0;line-height:2;display:block;}
+#apaed h2{font-size:12pt;font-weight:bold;text-align:left;margin:0;text-indent:0;line-height:2;display:block;}
+#apaed h3{font-size:12pt;font-weight:bold;font-style:italic;text-align:left;margin:0;text-indent:0;line-height:2;display:block;}
+#apaed blockquote{margin:0;padding-left:.5in;text-indent:0;font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;}
+#apaed .cit{color:#000;cursor:default;white-space:nowrap;}
+#apaed .refe{margin:0;text-indent:-.5in;padding-left:.5in;font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;color:#000;display:block;}
+#apaed table{width:100%;border-collapse:collapse;font-size:12pt;font-family:'Times New Roman',Times,serif;margin:4px 0;}
+#apaed th{border-top:1.5px solid #000;border-bottom:1px solid #000;padding:4px 8px;font-weight:bold;}
+#apaed td{padding:4px 8px;}
+#sbar{height:24px;background:var(--bg2);border-top:1px solid var(--b);display:flex;align-items:center;padding:0 12px;gap:12px;font-family:var(--fm);font-size:10px;color:var(--txt3);flex-shrink:0;}
+.sv{color:var(--txt2);}.sh{color:var(--acc);}.ss{width:1px;height:12px;background:var(--b);}
+
+/* RIGHT SIDEBAR */
+#sbr{width:256px;background:var(--bg2);border-left:1px solid var(--b);display:flex;flex-direction:column;flex-shrink:0;transition:width .2s,opacity .2s;}
+#sbr.closed{width:0;opacity:0;pointer-events:none;}
+/* Notebook tabs bar */
+#nbtabs{height:36px;background:var(--bg3);border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 6px;gap:4px;flex-shrink:0;overflow-x:auto;}
+#nbtabs::-webkit-scrollbar{height:3px;}
+.nbtab{background:none;border:none;color:var(--txt3);font-family:var(--fm);font-size:10px;padding:3px 8px;border-radius:4px;cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;}
+.nbtab.on{color:var(--acc);border-bottom-color:var(--acc);background:var(--acc-g);}
+.nbtab:hover{color:var(--txt2);}
+#nb-add{width:20px;height:20px;background:none;border:1px solid var(--b);color:var(--txt2);border-radius:3px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+#nb-add:hover{border-color:var(--acc);color:var(--acc);}
+/* Tab type selector */
+#rtype{display:flex;border-bottom:1px solid var(--b);flex-shrink:0;}
+.rtab{flex:1;background:none;border:none;color:var(--txt3);font-size:11px;font-weight:500;padding:7px 4px;cursor:pointer;border-bottom:2px solid transparent;font-family:var(--f);}
+.rtab.on{color:var(--acc);border-bottom-color:var(--acc);}
+.rpnl{display:none;flex:1;flex-direction:column;overflow:hidden;}
+.rpnl.on{display:flex;}
+#notelist{flex:1;overflow-y:auto;padding:5px 7px;}
+.nc{background:var(--bg3);border:1px solid var(--b);border-radius:5px;padding:7px 8px;margin-bottom:5px;position:relative;}
+.ncsrc{font-family:var(--fm);font-size:9.5px;color:var(--acc);margin-bottom:3px;}
+.nctxt{font-size:11.5px;color:var(--txt);line-height:1.55;}
+.ncq{font-size:11px;color:var(--txt2);font-style:italic;border-left:3px solid #fef08a;padding-left:6px;margin-top:4px;line-height:1.5;}
+.ncacts{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap;}
+.ncb{background:none;border:1px solid var(--b);color:var(--txt2);border-radius:3px;font-family:var(--fm);font-size:9.5px;padding:2px 7px;cursor:pointer;}
+.ncb:hover{border-color:var(--acc);color:var(--acc);}
+.ncdel{position:absolute;top:5px;right:7px;background:none;border:none;color:var(--txt3);font-size:12px;cursor:pointer;}
+.ncdel:hover{color:var(--red);}
+#noteinp{border-top:1px solid var(--b);padding:7px;flex-shrink:0;}
+#noteta{width:100%;background:var(--bg);border:1px solid var(--b);border-radius:4px;color:var(--txt);font-family:var(--f);font-size:12px;padding:6px 8px;outline:none;resize:none;height:52px;line-height:1.5;}
+#noteta:focus{border-color:var(--acc);}
+#noteta::placeholder{color:var(--txt3);}
+.nirow{display:flex;gap:5px;margin-top:5px;}
+#notetag{flex:1;background:var(--bg);border:1px solid var(--b);border-radius:3px;color:var(--txt);font-family:var(--fm);font-size:11px;padding:4px 7px;outline:none;}
+#notetag::placeholder{color:var(--txt3);}
+#bsn{background:var(--acc);color:#0d1117;border:none;border-radius:3px;padding:4px 11px;font-size:11.5px;font-weight:600;cursor:pointer;}
+#refhead{display:flex;align-items:center;gap:5px;padding:7px 9px;border-bottom:1px solid var(--b);flex-shrink:0;}
+.plbl{font-family:var(--fm);font-size:9.5px;color:var(--acc);letter-spacing:.1em;text-transform:uppercase;flex:1;}
+#reflist{flex:1;overflow-y:auto;padding:5px 7px;}
+.ri{background:var(--bg3);border:1px solid var(--b);border-radius:5px;padding:7px 9px;margin-bottom:5px;}
+.ricite{font-family:var(--fm);font-size:9.5px;color:var(--acc);margin-bottom:3px;}
+.rifull{font-size:11px;color:var(--txt2);line-height:1.5;}
+.riacts{display:flex;gap:4px;margin-top:5px;}
+.rib{background:none;border:1px solid var(--b);color:var(--txt2);border-radius:3px;font-family:var(--fm);font-size:9.5px;padding:2px 7px;cursor:pointer;}
+.rib:hover{border-color:var(--acc);color:var(--acc);}
+
+/* PDF PANEL */
+#pdfpanel{position:fixed;top:44px;right:0;bottom:24px;width:600px;background:var(--bg2);border-left:2px solid var(--acc);z-index:500;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .25s ease;}
+#pdfpanel.open{transform:translateX(0);}
+/* Resize handle */
+#pdfresize{position:absolute;left:-4px;top:0;bottom:0;width:8px;cursor:col-resize;z-index:501;}
+#pdfresize:hover{background:rgba(200,169,110,.25);}
+#pdftb{height:40px;background:var(--bg3);border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 8px;gap:4px;flex-shrink:0;}
+#pdftitle{font-size:11px;color:var(--txt2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ppb{background:none;border:1px solid var(--b);color:var(--txt2);border-radius:3px;padding:3px 7px;font-size:11px;cursor:pointer;font-family:var(--fm);}
+.ppb:hover{border-color:var(--b2);color:var(--txt);}
+#pdfpg{font-family:var(--fm);font-size:10.5px;color:var(--txt2);min-width:48px;text-align:center;}
+#pdfclosebtn{background:none;border:none;color:var(--txt2);font-size:18px;cursor:pointer;padding:0 2px;line-height:1;}
+#pdfclosebtn:hover{color:var(--red);}
+/* Search bar */
+#pdfsearchbar{height:34px;background:var(--bg3);border-bottom:1px solid var(--b);display:none;align-items:center;padding:0 8px;gap:4px;flex-shrink:0;}
+#pdfsearchbar.open{display:flex;}
+#pdfsearchinp{flex:1;background:var(--bg);border:1px solid var(--b);border-radius:4px;color:var(--txt);font-family:var(--fm);font-size:12px;padding:4px 8px;outline:none;}
+#pdfsearchinp:focus{border-color:var(--acc);}
+/* Search highlight marks */
+.pdf-search-hl{background:rgba(255,165,0,.45);border-radius:1px;}
+.pdf-search-hl.active{background:rgba(255,100,0,.7);outline:2px solid #ff6400;}
+/* Highlight toolbar */
+#hlbar{height:32px;background:var(--bg3);border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 10px;gap:8px;flex-shrink:0;}
+#hlbar span{font-size:11px;color:var(--txt2);}
+.hlc{width:20px;height:20px;border-radius:3px;cursor:pointer;border:2px solid transparent;flex-shrink:0;}
+.hlc.on{border-color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.4);}
+/* PDF scroll area */
+#pdfscroll{flex:1;overflow-y:auto;overflow-x:hidden;background:#404040;display:flex;flex-direction:column;align-items:center;padding:12px;gap:10px;}
+/* Page container: canvas + text layer stacked */
+.pdf-page-wrap{position:relative;flex-shrink:0;background:#fff;}
+.pdf-page-wrap canvas{display:block;}
+/* PDF.js text layer */
+/* PDF.js 3.x text layer — düzgün seçim için */
+.pdf-page-wrap .textLayer{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  overflow:visible;opacity:1;line-height:1;z-index:3;
+  pointer-events:auto;
+}
+.pdf-page-wrap .textLayer span,
+.pdf-page-wrap .textLayer br{
+  color:transparent;
+  position:absolute;
+  white-space:pre;
+  cursor:text;
+  transform-origin:0% 0%;
+  -webkit-user-select:text;user-select:text;
+  pointer-events:auto;
+  line-height:1;
+}
+.pdf-page-wrap .textLayer span::selection,
+.pdf-page-wrap .textLayer span::-moz-selection{
+  background:rgba(37,99,235,.35);
+  color:transparent;
+}
+/* Highlight overlay: text layer ALTINDA, pointer-events kapalı */
+.hl-overlay{
+  position:absolute;top:0;left:0;
+  width:100%;height:100%;
+  pointer-events:none;z-index:2;
+}
+
+/* Highlight tooltip */
+#hltip{display:none;position:fixed;z-index:800;background:var(--bg2);border:1px solid var(--acc);border-radius:6px;padding:4px 6px;gap:5px;box-shadow:0 4px 16px rgba(0,0,0,.5);}
+#hltip.show{display:flex;}
+.htb{background:none;border:1px solid var(--b);color:var(--txt2);border-radius:3px;font-size:11px;padding:3px 9px;cursor:pointer;font-family:var(--fm);}
+.htb:hover{border-color:var(--acc);color:var(--acc);}
+
+/* /r TRIGGER */
+#trig{display:none;position:fixed;z-index:900;background:var(--bg2);border:1px solid var(--acc);border-radius:8px;width:380px;box-shadow:0 8px 32px rgba(0,0,0,.7);overflow:hidden;}
+#trig.show{display:block;}
+.tgh{background:var(--bg3);padding:7px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--b);}
+.tgtag{font-family:var(--fm);font-size:9.5px;color:var(--acc);letter-spacing:.1em;text-transform:uppercase;}
+#tgq{font-family:var(--fm);font-size:12px;color:var(--txt);}
+.tgmodes{display:flex;gap:4px;padding:5px 10px;border-bottom:1px solid var(--b);}
+.tgm{font-family:var(--fm);font-size:10px;padding:3px 9px;border-radius:3px;border:1px solid var(--b);background:none;color:var(--txt2);cursor:pointer;}
+.tgm.on{border-color:var(--acc);color:var(--acc);background:var(--acc-g);}
+#tgs{width:100%;background:var(--bg);border:none;border-bottom:1px solid var(--b);color:var(--txt);font-family:var(--fm);font-size:12px;padding:7px 12px;outline:none;}
+#tgl{max-height:220px;overflow-y:auto;}
+.tgi{padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--b);user-select:none;transition:background .1s,border-left .1s;}
+.tgi:hover,.tgi.on{background:var(--acc-g);}
+.tgi.sel{background:rgba(200,169,110,.18);border-left:3px solid var(--acc);padding-left:9px;}
+.tgia{font-size:12.5px;color:var(--txt);font-weight:500;}
+.tgit{font-size:10px;color:var(--txt2);margin-top:1px;}
+.tgic{font-family:var(--fm);font-size:10px;color:var(--acc);margin-top:2px;}
+.tge{padding:12px;color:var(--txt2);font-size:12px;text-align:center;}
+.tghint{padding:5px 12px;font-family:var(--fm);font-size:9.5px;color:var(--txt3);border-top:1px solid var(--b);text-align:center;}
+
+/* MODALS */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:850;}
+.modal-bg.show{display:flex;align-items:center;justify-content:center;}
+.modal{background:var(--bg2);border:1px solid var(--b);border-radius:8px;padding:18px;min-width:280px;box-shadow:0 8px 32px rgba(0,0,0,.6);}
+.mt{font-family:var(--fm);font-size:10px;color:var(--acc);letter-spacing:.1em;text-transform:uppercase;margin-bottom:12px;}
+.minp{width:100%;background:var(--bg);border:1px solid var(--b);border-radius:4px;color:var(--txt);font-family:var(--f);font-size:13px;padding:8px;outline:none;margin-bottom:10px;}
+.minp:focus{border-color:var(--acc);}
+.wr{display:flex;gap:8px;margin-bottom:9px;}
+.wf{flex:1;}.wf label{display:block;font-size:11px;color:var(--txt2);margin-bottom:3px;}
+.wf input{width:100%;background:var(--bg);border:1px solid var(--b);border-radius:4px;color:var(--txt);font-family:var(--f);font-size:12px;padding:5px 7px;outline:none;}
+.wf input:focus{border-color:var(--acc);}
+.mb{display:flex;gap:7px;margin-top:12px;}
+.mbtn{flex:1;padding:7px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:500;border:none;font-family:var(--f);}
+.mbtn.p{background:var(--acc);color:#0d1117;}.mbtn.s{background:var(--bg3);color:var(--txt2);border:1px solid var(--b);}
+
+::-webkit-scrollbar{width:5px;height:5px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--b);border-radius:3px;}
+@media print{#tb,#sbar,#sbl,#sbr,#pdfpanel,#trig,#hltip,.modal-bg{display:none!important;}#ctr{flex:1;}#escroll{padding:0;background:#fff;overflow:visible;}#apapage{box-shadow:none;margin:0;}}
+</style>
+</head>
+<body>
+<!-- TOOLBAR -->
+<div id="tb">
+  <span class="logo">AcademiQ</span><span class="sep"></span>
+  <button class="btn efmt" onclick="ec('bold')"><b>B</b></button>
+  <button class="btn efmt" onclick="ec('italic')"><i>I</i></button>
+  <button class="btn efmt" onclick="ec('underline')"><u>U</u></button>
+  <span class="sep"></span>
+  <button class="btn efmt" onclick="ec('formatBlock','h1')">H1</button>
+  <button class="btn efmt" onclick="ec('formatBlock','h2')">H2</button>
+  <button class="btn efmt" onclick="ec('formatBlock','h3')">H3</button>
+  <button class="btn efmt" onclick="ec('formatBlock','p')">¶</button>
+  <span class="sep"></span>
+  <div class="dd"><button class="btn" onclick="opdd('ddins',this)">Ekle ▾</button>
+    <div class="ddm" id="ddins">
+      <button class="ddi" onclick="doTrigRef();cdd()">/ Atıf Ekle</button>
+      <div class="dds"></div>
+      <button class="ddi" onclick="showM('wiz');cdd()">Tablo (APA 7)</button>
+      <button class="ddi" onclick="insBlkQ();cdd()">Blok Alıntı</button>
+      <button class="ddi" onclick="insFig();cdd()">Şekil Yeri</button>
+      <div class="dds"></div>
+      <button class="ddi" onclick="insCover();cdd()">Kapak Sayfası</button>
+      <button class="ddi" onclick="insAbstract();cdd()">Abstract / Özet</button>
+      <button class="ddi" onclick="insRefs();cdd()">Kaynakça Bölümü</button>
+    </div>
+  </div>
+  <div class="dd"><button class="btn prim" onclick="opdd('ddexp',this)">Dışa Aktar ▾</button>
+    <div class="ddm" id="ddexp">
+      <button class="ddi" onclick="window.print();cdd()">PDF (Yazdır)</button>
+      <button class="ddi" onclick="expDOC();cdd()">DOC (Word)</button>
+      <button class="ddi" onclick="expNotes();cdd()">Notlar TXT</button>
+      <button class="ddi" onclick="expLib();cdd()">Kütüphane JSON</button>
+    </div>
+  </div>
+  <span class="sp"></span>
+  <span id="synclbl"></span>
+  <button class="btn" style="font-size:11px;" onclick="showSyncSettings()" title="Sync Ayarları">🔄 Sync</button>
+  <button class="btn" style="border:1px solid var(--acc-d);color:var(--acc);" onclick="togglePDF()">📄 PDF</button>
+  <button class="btn tog on" id="btnsbl" onclick="tSB('sbl')">☰ Kütüphane</button>
+  <button class="btn tog on" id="btnsbr" onclick="tSB('sbr')">Not & Refs ☰</button>
+  <span class="sep"></span>
+  <span id="tbinfo">0 kelime</span>
+</div>
+
+<div id="lay">
+<!-- LEFT: Library -->
+<div id="sbl">
+  <div id="wsbar"><div id="wsrow"></div></div>
+  <div class="addrow">
+    <input class="doinp" id="doiinp" placeholder="DOI gir..." onkeydown="if(event.key==='Enter')addDOI()"/>
+    <button class="addbtn" onclick="addDOI()">Çek</button>
+  </div>
+  <div id="dst"></div>
+  <input class="srch" id="libsrch" placeholder="Filtrele..." oninput="rLib()"/>
+  <button class="pdfupbtn" onclick="document.getElementById('lfinp').click()">+ PDF Yükle</button>
+  <input type="file" id="lfinp" accept=".pdf" multiple style="display:none" onchange="hPDFs(event)"/>
+  <div id="liblist"></div>
+</div>
+
+<!-- CENTER: Editor -->
+<div id="ctr">
+  <div id="etb">
+    <span style="font-family:var(--fm);font-size:10px;color:var(--txt3);margin-right:3px">APA 7</span>
+    <span class="sep"></span>
+    <button class="efmt" onclick="ec('bold')"><b>B</b></button>
+    <button class="efmt" onclick="ec('italic')"><i>I</i></button>
+    <button class="efmt" onclick="ec('underline')"><u>U</u></button>
+    <span class="sep"></span>
+    <button class="efmt" onclick="ec('formatBlock','h1')">H1</button>
+    <button class="efmt" onclick="ec('formatBlock','h2')">H2</button>
+    <button class="efmt" onclick="ec('formatBlock','h3')">H3</button>
+    <button class="efmt" onclick="ec('formatBlock','p')">¶</button>
+    <button class="efmt" onclick="insBlkQ()">❝</button>
+    <span class="sep"></span>
+    <button class="efmt" style="color:var(--acc);border:1px solid var(--acc-d);padding:2px 8px;" onclick="doTrigRef()">/r Atıf</button>
+  </div>
+  <div id="escroll">
+    <div id="apapage">
+      <div id="apaed" contenteditable="true" spellcheck="true"></div>
+    </div>
+  </div>
+</div>
+
+<!-- RIGHT: Notes + Refs -->
+<div id="sbr">
+  <!-- Notebook tabs -->
+  <div id="nbtabs"></div>
+  <!-- Note / Refs type switch -->
+  <div id="rtype">
+    <button class="rtab on" onclick="swR('notes',this)">Notlar</button>
+    <button class="rtab" onclick="swR('refs',this)">Kaynakça</button>
+  </div>
+  <div class="rpnl on" id="rpnotes">
+    <div id="notelist"></div>
+    <div id="noteinp">
+      <textarea id="noteta" placeholder="Serbest not..."></textarea>
+      <div class="nirow">
+        <input id="notetag" placeholder="etiket..."/>
+        <button id="bsn" onclick="saveNote()">Kaydet</button>
+      </div>
+    </div>
+  </div>
+  <div class="rpnl" id="rprefs">
+    <div id="refhead">
+      <span class="plbl">Kullanılan Kaynaklar</span>
+      <button class="rib" onclick="insRefs()">Belgeye Ekle</button>
+    </div>
+    <div id="reflist"></div>
+  </div>
+</div>
+</div>
+
+<div id="sbar">
+  <span id="sbw" class="sv">0 kelime</span><div class="ss"></div>
+  <span id="sbc" class="sv">0 atıf</span><div class="ss"></div>
+  <span id="sbr2" class="sv">0 kaynak</span><div class="ss"></div>
+  <span class="sh">/r → atıf</span>
+  <div style="flex:1"></div>
+  <span style="color:var(--txt3)">APA 7 | Times New Roman 12pt | Çift aralık</span>
+</div>
+
+<!-- PDF PANEL -->
+<div id="pdfpanel">
+  <div id="pdfresize" title="Genislik ayarla"></div>
+  <div id="pdftb">
+    <span style="color:var(--acc);font-family:var(--fm);font-size:9.5px;letter-spacing:.08em;flex-shrink:0">PDF</span>
+    <span id="pdftitle">-- kaynak sec --</span>
+    <button class="ppb" onclick="pPrev()" title="Onceki sayfa (PageUp)">&#9664;</button>
+    <span id="pdfpg" onclick="goToPage()" title="Sayfaya git" style="cursor:pointer">--</span>
+    <button class="ppb" onclick="pNext()" title="Sonraki sayfa (PageDown)">&#9654;</button>
+    <span class="sep"></span>
+    <button class="ppb" onclick="pZO()" title="Uzaklastir (Ctrl+-)">-</button>
+    <span id="pdfzoom" style="font-family:var(--fm);font-size:10px;color:var(--txt3);min-width:36px;text-align:center;cursor:pointer" onclick="pZFit()" title="Genislige sigdir">100%</span>
+    <button class="ppb" onclick="pZI()" title="Yakinlastir (Ctrl++)">+</button>
+    <span class="sep"></span>
+    <button class="ppb" onclick="togglePdfSearch()" title="Ara (Ctrl+F)">Ara</button>
+    <button class="ppb" onclick="document.getElementById('lfinp').click()">+PDF</button>
+    <button id="pdfclosebtn" onclick="togglePDF()">x</button>
+  </div>
+  <!-- SEARCH BAR -->
+  <div id="pdfsearchbar">
+    <input type="text" id="pdfsearchinp" placeholder="PDF icinde ara..." onkeydown="if(event.key==='Enter')pdfSearchNext();if(event.key==='Escape')togglePdfSearch()"/>
+    <span id="pdfsearchcount" style="font-family:var(--fm);font-size:10px;color:var(--txt3);min-width:40px;text-align:center">--</span>
+    <button class="ppb" onclick="pdfSearchPrev()" title="Onceki">&#9650;</button>
+    <button class="ppb" onclick="pdfSearchNext()" title="Sonraki">&#9660;</button>
+    <button class="ppb" onclick="togglePdfSearch()">x</button>
+  </div>
+  <div id="hlbar">
+    <span>Highlight:</span>
+    <div class="hlc on" style="background:#fef08a" data-c="#fef08a" title="Sari" onclick="setHLC(this)"></div>
+    <div class="hlc" style="background:#86efac" data-c="#86efac" title="Yesil" onclick="setHLC(this)"></div>
+    <div class="hlc" style="background:#93c5fd" data-c="#93c5fd" title="Mavi" onclick="setHLC(this)"></div>
+    <div class="hlc" style="background:#fca5a5" data-c="#fca5a5" title="Kirmizi" onclick="setHLC(this)"></div>
+    <span style="margin-left:auto;font-family:var(--fm);font-size:9px;color:var(--txt3)">Ctrl+F ara | Ctrl+G sayfa</span>
+  </div>
+  <div id="pdfscroll" ondragover="event.preventDefault()" ondrop="hDrop(event)">
+    <div id="pdfempty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;gap:10px;text-align:center;width:100%;">
+      <div style="font-size:28px">&#128196;</div>
+      <div style="font-size:12px;color:var(--txt2)">PDF yukle veya kutuphaneden sec</div>
+      <button onclick="document.getElementById('lfinp').click()" style="background:var(--acc);color:#0d1117;border:none;border-radius:6px;padding:10px 20px;cursor:pointer;font-size:12px;font-weight:600;font-family:var(--f);">+ PDF Yukle</button>
+    </div>
+  </div>
+</div>
+
+<!-- HIGHLIGHT TOOLTIP -->
+<div id="hltip">
+  <button class="htb" onclick="doHL(true)">🖊 Nota Kaydet</button>
+  <button class="htb" onclick="doHL(false)">Highlight</button>
+  <button class="htb" onclick="hideHLtip()">✕</button>
+</div>
+
+<!-- /r TRIGGER -->
+<div id="trig">
+  <div class="tgh"><span class="tgtag">Kaynak Seç</span><span id="tgq" style="flex:1"></span><span id="tgsel" style="font-family:var(--fm);font-size:10px;color:var(--acc);display:none"></span></div>
+  <div class="tgmodes">
+    <button class="tgm on" onclick="setCM('inline',this)">(Yazar, Yıl)</button>
+    <button class="tgm" onclick="setCM('footnote',this)">Dipnot*</button>
+  </div>
+  <input type="text" id="tgs" placeholder="Yazar, başlık, yıl..."/>
+  <div id="tgl"></div>
+  <div class="tghint">↑↓ gez · Boşluk çoklu seç · Enter metne ekle · Esc kapat</div>
+</div>
+
+<!-- WORKSPACE MODAL -->
+<div class="modal-bg" id="wsm"><div class="modal">
+  <div class="mt">Yeni Çalışma Alanı</div>
+  <input class="minp" id="wsminp" placeholder="Alan adı (ör. Tez Bölüm 1)" onkeydown="if(event.key==='Enter')doAddWs()"/>
+  <div class="mb">
+    <button class="mbtn s" onclick="hideM('wsm')">İptal</button>
+    <button class="mbtn p" onclick="doAddWs()">Oluştur</button>
+  </div>
+</div></div>
+
+<!-- NOTEBOOK MODAL -->
+<div class="modal-bg" id="nbm"><div class="modal">
+  <div class="mt">Yeni Not Defteri</div>
+  <input class="minp" id="nbminp" placeholder="Not defteri adı (ör. Literatür Notları)" onkeydown="if(event.key==='Enter')doAddNb()"/>
+  <div class="mb">
+    <button class="mbtn s" onclick="hideM('nbm')">İptal</button>
+    <button class="mbtn p" onclick="doAddNb()">Oluştur</button>
+  </div>
+</div></div>
+
+<!-- TABLE WIZARD -->
+<div class="modal-bg" id="wiz"><div class="modal" style="width:340px">
+
+<!-- SYNC SETTINGS MODAL -->
+</div></div>
+<div class="modal-bg" id="syncmodal"><div class="modal" style="width:400px">
+  <div class="mt">Sync Ayarları</div>
+  <div id="syncinfo" style="font-size:12px;color:var(--txt2);line-height:1.7;margin-bottom:12px;">
+    <div style="margin-bottom:8px;">Verilerinizi cihazlar arası senkronize etmek için bir bulut klasörü seçin.</div>
+    <div style="font-family:var(--fm);font-size:10px;color:var(--txt3);margin-bottom:6px;">Desteklenen: OneDrive, Google Drive, Proton Drive, Dropbox vb.</div>
+    <div id="syncstatus" style="padding:8px;background:var(--bg);border:1px solid var(--b);border-radius:4px;margin-bottom:8px;">
+      <div style="font-family:var(--fm);font-size:10px;color:var(--txt3);">Durum</div>
+      <div id="syncdirshow" style="font-size:11px;color:var(--acc);margin-top:3px;">Yükleniyor...</div>
+    </div>
+    <div id="syncappinfo" style="font-family:var(--fm);font-size:9.5px;color:var(--txt3);line-height:1.7;"></div>
+  </div>
+  <div class="mb" style="flex-wrap:wrap;gap:6px;">
+    <button class="mbtn p" onclick="doSetSyncDir()" style="flex:1;min-width:120px;">Klasor Sec</button>
+    <button class="mbtn s" onclick="doClearSyncDir()" style="flex:1;min-width:100px;">Yerel Moda Gec</button>
+    <button class="mbtn s" onclick="hideM('syncmodal')" style="flex:1;min-width:60px;">Kapat</button>
+  </div>
+  <!-- UPDATE SECTION -->
+  <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b);">
+    <div style="font-family:var(--fm);font-size:9.5px;color:var(--acc);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;">GUNCELLEME</div>
+    <div id="updatestatus" style="padding:8px;background:var(--bg);border:1px solid var(--b);border-radius:4px;margin-bottom:8px;font-size:11px;color:var(--txt2);line-height:1.6;">
+      Kontrol edilmedi.
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <button class="mbtn s" onclick="checkForUpdate()" style="flex:1;min-width:100px;font-size:11px;">Guncelleme Kontrol</button>
+      <button class="mbtn s" id="btnDoUpdate" onclick="doUpdate()" style="flex:1;min-width:80px;font-size:11px;display:none;">Guncelle</button>
+    </div>
+    <div style="margin-top:8px;">
+      <div style="font-size:10px;color:var(--txt3);margin-bottom:3px;">Guncelleme URL (GitHub Releases API):</div>
+      <input class="minp" id="updateurlinp" placeholder="https://api.github.com/repos/cyrenard/academiq-research/releases/latest" style="font-size:10px;font-family:var(--fm);margin-bottom:4px;"/>
+      <button class="mbtn s" onclick="saveUpdateUrl()" style="font-size:10px;padding:4px 10px;">URL Kaydet</button>
+    </div>
+  </div>
+</div></div>
+<div class="modal-bg" id="wiz"><div class="modal" style="width:340px">
+  <div class="mt">APA 7 Tablo Ekle</div>
+  <div class="wr">
+    <div class="wf"><label>No</label><input type="number" id="wtn" value="1" min="1"/></div>
+    <div class="wf"><label>Sütun</label><input type="number" id="wtc" value="3" min="2" max="10"/></div>
+    <div class="wf"><label>Satır</label><input type="number" id="wtr" value="4" min="2" max="30"/></div>
+  </div>
+  <div class="wr"><div class="wf"><label>Başlık</label><input type="text" id="wtt" placeholder="Tablo başlığı"/></div></div>
+  <div class="wr"><div class="wf"><label>Not</label><input type="text" id="wtn2" placeholder="Not. n = 120."/></div></div>
+  <div class="mb">
+    <button class="mbtn s" onclick="hideM('wiz')">İptal</button>
+    <button class="mbtn p" onclick="doTable()">Ekle</button>
+  </div>
+</div></div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ── STATE ──────────────────────────────────────────────────────────────────
+var S={
+  wss:[{id:'ws1',name:'Çalışma Alanı 1',lib:[]}],
+  cur:'ws1',
+  notebooks:[{id:'nb1',name:'Genel Notlar'}],
+  curNb:'nb1',
+  notes:[],  // {id, nbId, type, txt, q, src, rid, tag, dt, hlColor}
+  doc:'',
+  cm:'inline'
+};
+
+var pdfDoc=null,pdfPg=1,pdfTotal=0,pdfScale=0,curRef=null; // 0=auto
+var trigOn=false,trigIdx=-1,savedRange=null;
+var trigSelected=[]; // çoklu atıf seçim listesi
+var hlColor='#fef08a';
+var selText='',selPageNum=1,selRangeObj=null;
+var hlData=[]; // [{page,color,rects}] — highlight kalıcı veri
+var syncTimer=null,syncDirty=false;
+
+// ── SYNC ─────────────────────────────────────────────────────────────────────
+function setSL(msg,cls){
+  var e=document.getElementById('synclbl');
+  if(!msg){e.textContent='';e.className='';return;}
+  e.textContent=msg;e.className=cls;
+}
+
+async function syncSave(){
+  S.doc=document.getElementById('apaed').innerHTML;
+  var toSave={
+    wss:S.wss.map(function(ws){return {id:ws.id,name:ws.name,lib:(ws.lib||[]).map(function(r){var c=Object.assign({},r);delete c.pdfData;return c;})};}),
+    cur:S.cur,notebooks:S.notebooks,curNb:S.curNb,notes:S.notes,doc:S.doc,cm:S.cm
+  };
+  var json=JSON.stringify(toSave);
+  // Electron: dosya sistemine yaz (Proton Drive klasörü)
+  if(typeof window.electronAPI!=='undefined'){
+    try{
+      setSL('↑ kaydediliyor...','ld');
+      await window.electronAPI.saveData(json);
+      setSL('✓ kaydedildi','ok');
+      setTimeout(function(){setSL('','');},2000);
+    }catch(e){setSL('⚠ kayıt hatası','er');}
+    return;
+  }
+  // Claude artifact: window.storage
+  if(typeof window.storage!=='undefined'){
+    try{setSL('↑ sync...','ld');await window.storage.set('aq_v2',json);setSL('✓ sync','ok');setTimeout(function(){setSL('','');},3000);}
+    catch(e){setSL('⚠ sync hatası','er');}
+    return;
+  }
+  // Fallback: localStorage (yalnızca window.storage yoksa)
+  try{localStorage.setItem('aqR2',json);}catch(e){}
+  // PDF önbellek (tarayıcıda)
+  try{var pm={};S.wss.forEach(function(ws){(ws.lib||[]).forEach(function(r){if(r.pdfData)pm[r.id]=r.pdfData;});});localStorage.setItem('aqPDF2',JSON.stringify(pm));}catch(e){}
+}
+
+async function syncLoad(){
+  var d=null;
+  // Electron: dosyadan oku
+  if(typeof window.electronAPI!=='undefined'){
+    try{
+      setSL('↓ yükleniyor...','ld');
+      var res=await window.electronAPI.loadData();
+      if(res.ok&&res.data)d=JSON.parse(res.data);
+      if(res.dir)document.title='AcademiQ — '+res.dir;
+      setSL('','');
+    }catch(e){setSL('','');}
+  } else if(typeof window.storage!=='undefined'){
+    try{setSL('↓ yükleniyor...','ld');var res2=await window.storage.get('aq_v2');if(res2&&res2.value)d=JSON.parse(res2.value);setSL('','');}catch(e){setSL('','');}
+  }
+  if(!d){try{var ls=localStorage.getItem('aqR2');if(ls)d=JSON.parse(ls);}catch(e){}}
+  if(d&&d.wss){
+    S=d;
+    if(!S.notebooks||!S.notebooks.length)S.notebooks=[{id:'nb1',name:'Genel Notlar'}];
+    if(!S.curNb)S.curNb=S.notebooks[0].id;
+    // PDF'leri yükle
+    if(typeof window.electronAPI!=='undefined'){
+      // Electron: dosya sisteminden
+      for(var wi=0;wi<S.wss.length;wi++){
+        var lib=S.wss[wi].lib||[];
+        for(var ri=0;ri<lib.length;ri++){
+          var r=lib[ri];
+          try{var pr=await window.electronAPI.loadPDF(r.id);if(pr.ok)r.pdfData=pr.buffer;}catch(e){}
+        }
+      }
+    } else {
+      try{var pm=JSON.parse(localStorage.getItem('aqPDF2')||'{}');S.wss.forEach(function(ws){(ws.lib||[]).forEach(function(r){if(pm[r.id])r.pdfData=pm[r.id];});});}catch(e){}
+    }
+  }
+  if(!S.wss||!S.wss.length)S.wss=[{id:'ws1',name:'Çalışma Alanı 1',lib:[]}];
+  if(!S.cur)S.cur=S.wss[0].id;
+  if(!S.notebooks||!S.notebooks.length)S.notebooks=[{id:'nb1',name:'Genel Notlar'}];
+  if(!S.curNb)S.curNb=S.notebooks[0].id;
+  if(S.doc)document.getElementById('apaed').innerHTML=S.doc;
+}
+
+function save(){
+  clearTimeout(syncTimer);syncDirty=true;
+  syncTimer=setTimeout(function(){if(syncDirty){syncDirty=false;syncSave();}},1500);
+}
+
+function uid(){return 'x'+Date.now().toString(36)+Math.random().toString(36).slice(2);}
+function cLib(){var w=S.wss.find(function(x){return x.id===S.cur;});return w?w.lib:[];}
+function findRef(id){for(var i=0;i<S.wss.length;i++){var r=(S.wss[i].lib||[]).find(function(x){return x.id===id;});if(r)return r;}return null;}
+function curNotes(){return S.notes.filter(function(n){return n.nbId===S.curNb;});}
+
+// ── APA 7 ─────────────────────────────────────────────────────────────────────
+function fa(r){if(!r)return'';r=r.trim();if(r.includes(',')){var p=r.split(',');var l=p[0].trim();var rest=(p[1]||'').trim();if(!rest)return l;return l+', '+rest.split(/\s+/).filter(Boolean).map(function(n){return n[0].toUpperCase()+'.'}).join(' ');}var p=r.split(/\s+/);if(p.length===1)return p[0];var l=p[p.length-1];return l+', '+p.slice(0,-1).map(function(n){return n[0].toUpperCase()+'.'}).join(' ');}
+function fal(a){if(!a||!a.length)return'';var f=a.map(fa).filter(Boolean);if(f.length===1)return f[0];if(f.length<=20)return f.slice(0,-1).join(', ')+' ve '+f[f.length-1];return f.slice(0,19).join(', ')+', . . . '+f[f.length-1];}
+function fT(t){if(!t)return'';return t.toLowerCase().replace(/(^|\.\s+|:\s*)([a-zçğıöşüâîû])/g,function(m,p,c){return p+c.toUpperCase();});}
+function apa7(d){var c='';var a=fal(d.authors||[]);if(a)c+=a+' ';c+='('+(d.year||'t.y.')+('). ');c+=fT(d.title||'')+'. ';if(d.journal){c+=d.journal;if(d.volume){c+=', '+d.volume;if(d.issue)c+='('+d.issue+')';}if(d.fp){c+=', '+d.fp;if(d.lp)c+='\u2013'+d.lp;}c+='. ';}if(d.doi)c+='https://doi.org/'+d.doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i,'');else if(d.url)c+=d.url;return c.trim();}
+function inText(d,mode){var au=(d.authors||[]).map(fa).filter(Boolean);var ls=au.map(function(a){return a.split(',')[0].trim();});var ap=ls.length===0?'Bilinmeyen':ls.length===1?ls[0]:ls.length===2?ls[0]+' ve '+ls[1]:ls[0]+' vd.';var yr=d.year||'t.y.';return mode==='footnote'?ap+', '+yr+'.':'('+ap+', '+yr+')';}
+function shortRef(d){var a=d.authors&&d.authors[0]?d.authors[0].split(',')[0]:'?';if(d.authors&&d.authors.length>1)a+=' et al.';return a+' ('+(d.year||'t.y.')+')';}
+function sortLib(refs){return refs.slice().sort(function(a,b){var la=(a.authors&&a.authors[0]?a.authors[0].split(',')[0]:a.title||'').toLowerCase();var lb=(b.authors&&b.authors[0]?b.authors[0].split(',')[0]:b.title||'').toLowerCase();return la.localeCompare(lb,'tr');});}
+
+// ── WORKSPACES ─────────────────────────────────────────────────────────────────
+function rWS(){
+  var row=document.getElementById('wsrow');row.innerHTML='';
+  S.wss.forEach(function(ws){
+    var btn=document.createElement('button');btn.className='wsbtn'+(ws.id===S.cur?' on':'');btn.textContent=ws.name;btn.title=ws.name;
+    btn.onclick=function(){S.cur=ws.id;save();rWS();rLib();rRefs();};
+    if(S.wss.length>1){var del=document.createElement('span');del.className='wsdel';del.textContent='×';del.onclick=function(e){e.stopPropagation();delWs(ws.id);};btn.appendChild(del);}
+    row.appendChild(btn);
+  });
+  var add=document.createElement('button');add.id='wsadd';add.textContent='+';add.title='Yeni alan';
+  add.onclick=function(){showM('wsm');setTimeout(function(){document.getElementById('wsminp').focus();},50);};
+  row.appendChild(add);
+}
+function delWs(id){if(S.wss.length<=1){alert('En az bir alan gerekli.');return;}if(!confirm('Bu alanı ve kaynaklarını sil?'))return;S.wss=S.wss.filter(function(w){return w.id!==id;});if(S.cur===id)S.cur=S.wss[0].id;save();rWS();rLib();rRefs();}
+function doAddWs(){var n=document.getElementById('wsminp').value.trim();if(!n)return;var ws={id:uid(),name:n,lib:[]};S.wss.push(ws);S.cur=ws.id;hideM('wsm');save();rWS();rLib();rRefs();}
+
+// ── NOTEBOOKS ─────────────────────────────────────────────────────────────────
+function rNB(){
+  var bar=document.getElementById('nbtabs');bar.innerHTML='';
+  S.notebooks.forEach(function(nb){
+    var btn=document.createElement('button');btn.className='nbtab'+(nb.id===S.curNb?' on':'');btn.textContent=nb.name;
+    btn.onclick=function(){S.curNb=nb.id;rNB();rNotes();};
+    // Double-click to rename
+    btn.ondblclick=function(){var n=prompt('Not defteri adı:',nb.name);if(n&&n.trim()){nb.name=n.trim();save();rNB();}};
+    // Right-click to delete
+    btn.oncontextmenu=function(e){e.preventDefault();if(S.notebooks.length<=1){alert('En az bir not defteri gerekli.');return;}if(!confirm('"'+nb.name+'" silinsin? Notlar kalır ama bu defterle ilişkisi kesilir.'))return;S.notebooks=S.notebooks.filter(function(x){return x.id!==nb.id;});if(S.curNb===nb.id)S.curNb=S.notebooks[0].id;save();rNB();rNotes();};
+    bar.appendChild(btn);
+  });
+  var add=document.createElement('button');add.id='nb-add';add.textContent='+';add.title='Yeni not defteri';
+  add.onclick=function(){showM('nbm');setTimeout(function(){document.getElementById('nbminp').focus();},50);};
+  bar.appendChild(add);
+}
+function doAddNb(){var n=document.getElementById('nbminp').value.trim();if(!n)return;var nb={id:uid(),name:n};S.notebooks.push(nb);S.curNb=nb.id;hideM('nbm');save();rNB();rNotes();}
+
+// ── CROSSREF ─────────────────────────────────────────────────────────────────
+function fetchCR(doi,cb){
+  var clean=doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i,'').trim();
+  fetch('https://api.crossref.org/works/'+encodeURIComponent(clean)+'?mailto=academiq@example.com')
+    .then(function(r){if(!r.ok)throw new Error('CrossRef HTTP '+r.status);return r.json();})
+    .then(function(data){
+      var w=data.message||{};
+      var authors=(w.author||[]).map(function(a){return(a.family&&a.given)?a.family+', '+a.given:(a.family||a.name||'');}).filter(Boolean);
+      var year='';var dp=w['published-print']||w['published-online']||w['created'];
+      if(dp&&dp['date-parts']&&dp['date-parts'][0])year=String(dp['date-parts'][0][0]);
+      var pages=w.page||'';var fp='',lp='';
+      if(pages.includes('-')){fp=pages.split('-')[0];lp=pages.split('-').slice(1).join('-');}else fp=pages;
+      var ref={id:uid(),title:(w.title&&w.title[0])||'',authors:authors,year:year,
+        journal:(w['container-title']&&w['container-title'][0])||'',
+        volume:w.volume||'',issue:w.issue||'',fp:fp,lp:lp,
+        doi:clean,url:'',pdfData:null,pdfUrl:null,wsId:S.cur};
+      setDst('✓ Metadata alındı, OA aranıyor...','ld');
+      fetch('https://api.unpaywall.org/v2/'+encodeURIComponent(clean)+'?email=academiq@example.com')
+        .then(function(r2){return r2.ok?r2.json():null;})
+        .then(function(ua){
+          if(ua){
+            var pdfUrl=null;
+            if(ua.best_oa_location){
+              pdfUrl=ua.best_oa_location.url_for_pdf||null;
+              if(!pdfUrl) pdfUrl=ua.best_oa_location.url||null;
+            }
+            if(!pdfUrl&&ua.oa_locations&&ua.oa_locations.length){
+              for(var i=0;i<ua.oa_locations.length;i++){
+                if(ua.oa_locations[i].url_for_pdf){pdfUrl=ua.oa_locations[i].url_for_pdf;break;}
+              }
+              if(!pdfUrl){
+                for(var j=0;j<ua.oa_locations.length;j++){
+                  if(ua.oa_locations[j].url){pdfUrl=ua.oa_locations[j].url;break;}
+                }
+              }
+            }
+            ref.pdfUrl=pdfUrl;
+          }
+          cb(null,ref);
+        })
+        .catch(function(e){
+          // Unpaywall başarısız — metadata ile devam
+          cb(null,ref);
+        });
+    }).catch(function(e){cb(e);});
+}
+
+function addDOI(){
+  var doi=document.getElementById('doiinp').value.trim();
+  if(!doi){setDst('DOI boş.','er');return;}
+  // DOI temizle
+  doi=doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i,'').trim();
+  setDst('⏳ CrossRef sorgulanıyor...','ld');
+  // Timeout: 15 saniye sonra hata
+  var timedOut=false;
+  var timer=setTimeout(function(){timedOut=true;setDst('⚠ Bağlantı zaman aşımı — ağ erişimi engellenmiş olabilir.','er');},15000);
+  fetchCR(doi,function(err,ref){
+    clearTimeout(timer);
+    if(timedOut)return;
+    if(err){setDst('⚠ CrossRef hatası: '+err.message,'er');return;}
+    addToLib(ref);
+    document.getElementById('doiinp').value='';
+    setDst('✓ '+shortRef(ref)+(ref.pdfUrl?' · OA PDF bulundu':'· OA PDF yok'),'ok');
+    document.getElementById('pdfpanel').classList.add('open');
+    document.getElementById('pdftitle').textContent=(ref.title||ref.doi).substring(0,55);
+    if(ref.pdfUrl){
+      setTimeout(function(){setDst('📥 OA PDF indiriliyor...','ld');},1500);
+      tryFetch(ref.pdfUrl, ref.id);
+    } else {
+      showNoPDF(ref);
+      setTimeout(function(){setDst('','');},5000);
+    }
+  });
+}
+function setDst(m,c){var e=document.getElementById('dst');e.textContent=m;e.className=c;}
+function addToLib(ref){
+  if(!ref.id)ref.id=uid();if(!ref.wsId)ref.wsId=S.cur;
+  var lib=cLib();
+  if(ref.doi&&lib.some(function(r){return r.doi===ref.doi;}))return;
+  lib.push(ref);save();rLib();rRefs();
+}
+
+// ── LIBRARY ─────────────────────────────────────────────────────────────────
+function rLib(){
+  var q=(document.getElementById('libsrch').value||'').toLowerCase();
+  var el=document.getElementById('liblist');el.innerHTML='';var any=false;
+  S.wss.forEach(function(ws){
+    var fl=(ws.lib||[]).filter(function(r){return !q||((r.title||'')+(r.authors||[]).join(' ')+(r.year||'')).toLowerCase().includes(q);});
+    if(!fl.length)return;any=true;
+    var hdr=document.createElement('div');
+    hdr.style.cssText='display:flex;align-items:center;gap:5px;padding:7px 4px 3px;font-family:var(--fm);font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:'+(ws.id===S.cur?'var(--acc)':'var(--txt3)')+';';
+    hdr.innerHTML='<span>'+ws.name+'</span><span style="flex:1;height:1px;background:var(--b);display:inline-block"></span><span>'+fl.length+'</span>';
+    el.appendChild(hdr);
+    fl.forEach(function(r){
+      var a=r.authors&&r.authors[0]?r.authors[0].split(',')[0]:'?';if(r.authors&&r.authors.length>1)a+=' et al.';
+      var div=document.createElement('div');
+      div.className='lcard'+(curRef&&curRef.id===r.id?' on':'');
+      if(ws.id!==S.cur)div.style.opacity='0.65';
+      // PDF durumu: local önbellekte var mı?
+      var hasPDFlocal=!!r.pdfData;
+      var hasOAurl=!!(r.pdfUrl);
+      var pdfStatus=hasPDFlocal?'<span class="lbadge pdf">PDF ✓</span>':
+        (hasOAurl?'<span class="lbadge oa">OA ↓</span>':'');
+      div.innerHTML='<div class="ltitle">'+(r.title||'Başlıksız').substring(0,62)+'</div>'+
+        '<div class="lmeta">'+a+' '+(r.year||'t.y.')+(r.journal?' · '+r.journal.substring(0,22):'')+'</div>'+
+        '<div class="lbadges">'+
+          pdfStatus+
+          (r.doi?'<span class="lbadge doi">DOI</span>':'')+
+        '</div>';
+      // İndir butonu (OA var ve local yok ise)
+      if(hasOAurl&&!hasPDFlocal){
+        var dlBtn=document.createElement('button');
+        dlBtn.style.cssText='position:absolute;bottom:6px;right:7px;background:var(--acc);color:#0d1117;border:none;border-radius:3px;font-family:var(--fm);font-size:9px;padding:2px 7px;cursor:pointer;opacity:0;transition:opacity .15s;';
+        dlBtn.textContent='↓ İndir';
+        dlBtn.title='PDF bu cihaza indirilir';
+        div.addEventListener('mouseenter',function(){dlBtn.style.opacity='1';});
+        div.addEventListener('mouseleave',function(){dlBtn.style.opacity='0';});
+        dlBtn.addEventListener('click',function(e){e.stopPropagation();downloadPDF(r.id);});
+        div.appendChild(dlBtn);
+      }
+      var del=document.createElement('button');del.className='ldel';del.textContent='×';
+      del.addEventListener('click',function(e){e.stopPropagation();dRefIn(r.id,ws.id);});
+      div.appendChild(del);
+      div.addEventListener('click',function(){if(ws.id!==S.cur){S.cur=ws.id;save();rWS();}openRef(r.id);});
+      el.appendChild(div);
+    });
+  });
+  if(!any)el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">'+(q?'Eşleşme yok.':'DOI gir veya PDF yükle.')+'</div>';
+}
+// İndir butonu: OA PDF'i bu cihaza çek ve önbelleğe al
+function downloadPDF(id,overrideUrl){
+  var r=findRef(id);
+  var fetchUrl=overrideUrl||( r&&r.pdfUrl)||null;
+  if(!r||!fetchUrl){setDst('İndirilecek URL yok.','er');return;}
+  if(!r.pdfUrl&&fetchUrl)r.pdfUrl=fetchUrl;
+  setDst('PDF indiriliyor...','ld');
+  document.getElementById('pdfpanel').classList.add('open');
+  document.getElementById('pdftitle').textContent=(r&&(r.title||r.doi)||'PDF').substring(0,55);
+  var sc=document.getElementById('pdfscroll');
+  sc.innerHTML='<div style="color:var(--acc);font-size:12px;padding:20px;text-align:center;width:100%;">'+
+    '📥 PDF indiriliyor...<br/><span style="font-size:10px;color:var(--txt3);display:block;margin-top:6px;">'+
+    fetchUrl.substring(0,60)+'...</span></div>';
+  // Electron: CORS bypass ile indir (Node.js üzerinden)
+  if(typeof window.electronAPI!=='undefined'){
+    window.electronAPI.downloadPDFfromURL(fetchUrl, r.id).then(function(res){
+      if(res.ok){
+        window.electronAPI.loadPDF(r.id).then(function(pr){
+          if(pr.ok){r.pdfData=pr.buffer;curRef=r;rLib();renderPDF(pr.buffer);setDst('✓ PDF indirildi (Electron)','ok');setTimeout(function(){setDst('','');},3000);}
+        });
+      } else {
+        setDst('Electron indirme hatasi: '+res.error,'er');
+        showNoPDF(r);
+      }
+    }).catch(function(e){setDst('Electron hatasi','er');showNoPDF(r);});
+    return;
+  }
+  // Tarayici: fetch (CORS acik kaynaklar icin)
+  fetch(fetchUrl)
+    .then(function(res){
+      if(!res.ok)throw new Error('HTTP '+res.status);
+      return res.arrayBuffer();
+    })
+    .then(function(buf){
+      // Önbelleğe al (bu cihazda)
+      r.pdfData=buf;
+      // localStorage'a kaydet
+      try{
+        var pm=JSON.parse(localStorage.getItem('aqPDF2')||'{}');
+        pm[r.id]=buf;
+        localStorage.setItem('aqPDF2',JSON.stringify(pm));
+      }catch(e){}
+      curRef=r;
+      rLib();rRefs();
+      renderPDF(buf);
+      setDst('✓ PDF indirildi ve önbelleğe alındı','ok');
+      setTimeout(function(){setDst('','');},3000);
+    })
+    .catch(function(e){
+      // CORS engeli veya bağlantı sorunu
+      sc.innerHTML='';
+      var d=document.createElement('div');
+      d.style.cssText='padding:24px;text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center;';
+      d.innerHTML='<div style="font-size:24px">⚠️</div>'+
+        '<div style="color:var(--txt2);font-size:12px;">PDF doğrudan indirilemedi (CORS engeli).</div>'+
+        '<a href="'+r.pdfUrl+'" target="_blank" download style="background:var(--acc);color:#0d1117;border:none;border-radius:6px;padding:10px 16px;font-size:12px;font-weight:600;text-decoration:none;display:block;">📥 Tarayıcıdan İndir</a>'+
+        (r.doi?'<a href="https://doi.org/'+r.doi+'" target="_blank" style="color:var(--txt3);font-size:11px;text-decoration:none;">Yayıncı sayfası ↗</a>':'')+
+        '<div style="font-size:10px;color:var(--txt3);">İndirilen PDF dosyasini surukle birak ile yukle.</div>';
+      sc.appendChild(d);
+      setDst('CORS engeli — tarayıcıdan indir','er');
+      setTimeout(function(){setDst('','');},6000);
+    });
+}
+
+function openRef(id){
+  var r=findRef(id);if(!r)return;
+  curRef=r;rLib();
+  document.getElementById('pdfpanel').classList.add('open');
+  document.getElementById('pdftitle').textContent=(r.title||r.doi||'PDF').substring(0,55);
+  if(r.pdfData){renderPDF(r.pdfData);}
+  else if(r.pdfUrl){tryFetch(r.pdfUrl,r.id);}
+  else{showNoPDF(r);}
+}
+function dRefIn(id,wsId){var ws=S.wss.find(function(x){return x.id===wsId;});if(ws)ws.lib=ws.lib.filter(function(r){return r.id!==id;});if(curRef&&curRef.id===id)curRef=null;save();rLib();rRefs();}
+
+// ── PDF UPLOAD ────────────────────────────────────────────────────────────────
+function hPDFs(e){Array.from(e.target.files).forEach(pPF);}
+function hDrop(e){e.preventDefault();Array.from(e.dataTransfer.files).filter(function(f){return f.type==='application/pdf';}).forEach(pPF);}
+function pPF(file){
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    var orig=ev.target.result;
+    setDst('PDF okunuyor...','ld');
+    document.getElementById('pdfpanel').classList.add('open');
+    document.getElementById('pdftitle').textContent=file.name;
+    // Render immediately
+    renderPDF(orig.slice(0));
+    // Extract DOI in background
+    pdfjsLib.getDocument({data:orig.slice(0)}).promise.then(function(pdf){
+      pdf.getMetadata().then(function(meta){
+        var info=meta.info||{};
+        extractDOI(pdf,function(doi){
+          var ref={id:uid(),title:(info.Title&&info.Title.trim())||file.name.replace(/\.pdf$/i,''),
+            authors:[],year:'',journal:'',volume:'',issue:'',fp:'',lp:'',
+            doi:doi||'',url:'',pdfData:orig,pdfUrl:null,wsId:S.cur};
+          function finish(r){
+            var allRefs=[];S.wss.forEach(function(ws){allRefs=allRefs.concat(ws.lib||[]);});
+            var existing=r.doi?allRefs.find(function(x){return x.doi===r.doi;}):null;
+            if(existing){existing.pdfData=orig;curRef=existing;}
+            else{cLib().push(r);curRef=r;}
+            document.getElementById('pdftitle').textContent=(curRef.title||file.name).substring(0,55);
+            // Electron: PDF dosyasini kaydet
+            if(typeof window.electronAPI!=='undefined'){
+              window.electronAPI.savePDF(curRef.id,orig).catch(function(e){console.warn('PDF kayit:',e);});
+            }
+            save();rLib();rRefs();
+            setDst('✓ PDF eklendi'+(curRef.doi?' + metadata':''),'ok');
+            setTimeout(function(){setDst('','');},3000);
+          }
+          if(doi){setDst('DOI bulundu, metadata çekiliyor...','ld');fetchCR(doi,function(err,cr){if(!err){ref.title=cr.title||ref.title;ref.authors=cr.authors.length?cr.authors:[];ref.year=cr.year||'';ref.journal=cr.journal||'';ref.volume=cr.volume;ref.issue=cr.issue;ref.fp=cr.fp;ref.lp=cr.lp;}finish(ref);});}
+          else{finish(ref);}
+        });
+      }).catch(function(){
+        var ref={id:uid(),title:file.name.replace(/\.pdf$/i,''),authors:[],year:'',journal:'',volume:'',issue:'',fp:'',lp:'',doi:'',url:'',pdfData:orig,pdfUrl:null,wsId:S.cur};
+        cLib().push(ref);curRef=ref;save();rLib();rRefs();
+        setDst('✓ PDF eklendi','ok');setTimeout(function(){setDst('','');},3000);
+      });
+    }).catch(function(e){setDst('PDF açılamadı: '+e.message,'er');});
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function extractDOI(pdf,cb){
+  var found='',checked=0,total=Math.min(pdf.numPages,3);
+  if(!total){cb('');return;}
+  for(var i=1;i<=total;i++){(function(n){
+    pdf.getPage(n).then(function(page){
+      page.getTextContent().then(function(tc){
+        var text=tc.items.map(function(i){return i.str;}).join(' ');
+        var m=text.match(/\b(10\.\d{4,9}\/[^\s"<>]+)/);
+        if(m&&!found)found=m[1].replace(/[.,;)]+$/,'');
+        if(++checked>=total)cb(found);
+      }).catch(function(){if(++checked>=total)cb(found);});
+    }).catch(function(){if(++checked>=total)cb(found);});
+  })(i);}
+}
+
+// ── OA PDF URL helpers ────────────────────────────────────────────────────────
+function buildPDFUrls(url){
+  if(!url) return [];
+  var urls=[url];
+  // arXiv: /abs/ -> /pdf/
+  if(url.match(/arxiv\.org\/abs\//i)){
+    urls.unshift(url.replace(/\/abs\//,'/pdf/')+'.pdf');
+    urls.unshift(url.replace(/\/abs\//,'/pdf/'));
+  }
+  if(url.match(/arxiv\.org\/pdf\//i)&&!url.endsWith('.pdf')){
+    urls.unshift(url+'.pdf');
+  }
+  // PMC: europepmc veya ncbi pdf linki
+  var pmcMatch=url.match(/PMC(\d+)/i);
+  if(pmcMatch){
+    urls.unshift('https://europepmc.org/backend/ptpmcrender.fcgi?accid=PMC'+pmcMatch[1]+'&blobtype=pdf');
+    urls.unshift('https://www.ncbi.nlm.nih.gov/pmc/articles/PMC'+pmcMatch[1]+'/pdf/');
+  }
+  // bioRxiv/medRxiv
+  if(url.match(/(biorxiv|medrxiv)\.org\/content\//i)){
+    if(!url.endsWith('.pdf')&&!url.endsWith('.full.pdf')){
+      urls.unshift(url.replace(/\.full$/,'')+'.full.pdf');
+      urls.unshift(url+'.full.pdf');
+    }
+  }
+  // MDPI
+  if(url.match(/mdpi\.com/i)&&!url.includes('/pdf')){
+    urls.unshift(url.replace(/\/htm$/,'/pdf'));
+  }
+  // PeerJ
+  if(url.match(/peerj\.com\/articles\//i)&&!url.endsWith('.pdf')){
+    urls.unshift(url+'.pdf');
+  }
+  // PLOS
+  if(url.match(/journals\.plos\.org/i)&&url.includes('article?id=')){
+    var plosId=url.match(/id=([\w.\/]+)/);
+    if(plosId) urls.unshift('https://journals.plos.org/plosone/article/file?id='+plosId[1]+'&type=printable');
+  }
+  // Frontiers
+  if(url.match(/frontiersin\.org\/articles?\//i)&&!url.endsWith('/pdf')){
+    urls.unshift(url.replace(/\/full$/,'')+'/pdf');
+  }
+  // Semantic Scholar - direct PDF
+  if(url.match(/semanticscholar\.org/i)&&url.includes('/paper/')){
+    // S2 URL'den PDF versiyonunu dene
+    var s2Match=url.match(/\/paper\/.*?\/([a-f0-9]{40})/i);
+    if(s2Match) urls.unshift('https://pdfs.semanticscholar.org/'+s2Match[1].substring(0,4)+'/'+s2Match[1]+'.pdf');
+  }
+  // DOI resolver: sci-hub alternatifleri yok, sadece OA
+  // URL'deki .html -> .pdf degisimi
+  if(url.endsWith('.html')){
+    urls.push(url.replace(/\.html$/,'.pdf'));
+  }
+  // Tekrar eden URL'leri kaldir
+  var seen={};return urls.filter(function(u){if(seen[u])return false;seen[u]=true;return true;});
+}
+
+function tryFetchChain(urls,idx,refId){
+  if(idx>=urls.length){
+    // Tüm URL'ler başarısız
+    var ref=findRef(refId);
+    showNoPDF(ref||{doi:'',pdfUrl:urls[0]||'',title:''});
+    setDst('OA PDF açılamadı (CORS). PDF dosyasını indirip yükleyin.','er');
+    setTimeout(function(){setDst('','');},7000);
+    return;
+  }
+  var u=urls[idx];
+  fetch(u,{redirect:'follow'})
+    .then(function(r){
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      var ct=(r.headers.get('content-type')||'').toLowerCase();
+      if(ct.indexOf('pdf')<0&&ct.indexOf('octet')<0&&ct.indexOf('binary')<0) throw new Error('PDF değil: '+ct);
+      return r.arrayBuffer();
+    })
+    .then(function(buf){
+      if(!buf||buf.byteLength<1000) throw new Error('Çok küçük dosya');
+      // İlk birkaç byte'ı kontrol et — PDF mi?
+      var header=new Uint8Array(buf.slice(0,5));
+      var sig=String.fromCharCode.apply(null,header);
+      if(sig!=='%PDF-') throw new Error('PDF header yok');
+      var ref=findRef(refId);
+      if(ref){ref.pdfData=buf.slice(0);save();rLib();}
+      renderPDF(buf);
+      setDst('✓ OA PDF yüklendi','ok');
+      setTimeout(function(){setDst('','');},3000);
+    })
+    .catch(function(err){
+      // Sonraki URL'yi dene
+      tryFetchChain(urls,idx+1,refId);
+    });
+}
+
+function tryFetch(url,refId){
+  if(!url){var ref=findRef(refId);showNoPDF(ref||{});return;}
+  // Her iki modda da URL alternatifleri oluştur
+  var urls=buildPDFUrls(url);
+  // Electron: Node.js ile sırayla dene
+  if(typeof window.electronAPI!=='undefined'){
+    clearPDFView();
+    var scEl=document.getElementById('pdfscroll');
+    scEl.innerHTML='<div style="color:var(--acc);font-size:12px;padding:20px;text-align:center;width:100%;min-height:100px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px"><div>PDF indiriliyor...</div><div id="trystatus" style="font-size:10px;color:var(--txt3);max-width:350px;word-break:break-all"></div></div>';
+    electronFetchChain(urls,0,refId);
+    return;
+  }
+  // Tarayici
+  clearPDFView();
+  document.getElementById('pdfscroll').innerHTML='<div style="color:var(--acc);font-size:12px;padding:20px;text-align:center;width:100%">OA PDF deneniyor...</div>';
+  tryFetchChain(urls,0,refId);
+}
+
+function electronFetchChain(urls,idx,refId){
+  if(idx>=urls.length){
+    var ref=findRef(refId);
+    showNoPDF(ref||{doi:'',pdfUrl:urls[0]||'',title:''});
+    setDst('PDF indirilemedi. Manuel yukleyin.','er');
+    setTimeout(function(){setDst('','');},6000);
+    return;
+  }
+  var u=urls[idx];
+  var stEl=document.getElementById('trystatus');
+  if(stEl) stEl.textContent='Deneniyor '+(idx+1)+'/'+urls.length+': '+u.substring(0,60)+'...';
+  setDst('Deneniyor '+(idx+1)+'/'+urls.length+'...','ld');
+  window.electronAPI.downloadPDFfromURL(u,refId)
+    .then(function(res){
+      if(res.ok){
+        return window.electronAPI.loadPDF(refId).then(function(pr){
+          if(pr.ok){
+            var ref=findRef(refId);
+            if(ref){ref.pdfData=pr.buffer;save();rLib();}
+            renderPDF(pr.buffer);
+            setDst('PDF indirildi ('+Math.round(res.size/1024)+' KB)','ok');
+            setTimeout(function(){setDst('','');},3000);
+          } else {
+            electronFetchChain(urls,idx+1,refId);
+          }
+        });
+      } else {
+        // Bu URL basarisiz, sonrakini dene
+        electronFetchChain(urls,idx+1,refId);
+      }
+    })
+    .catch(function(e){
+      electronFetchChain(urls,idx+1,refId);
+    });
+}
+
+// ── PDF RENDER WITH TEXT LAYER ────────────────────────────────────────────────
+// Matrix multiply: [a1,b1,c1,d1,e1,f1] × [a2,b2,c2,d2,e2,f2]
+function matMul(m1,m2){
+  return [
+    m1[0]*m2[0]+m1[2]*m2[1],
+    m1[1]*m2[0]+m1[3]*m2[1],
+    m1[0]*m2[2]+m1[2]*m2[3],
+    m1[1]*m2[2]+m1[3]*m2[3],
+    m1[0]*m2[4]+m1[2]*m2[5]+m1[4],
+    m1[1]*m2[4]+m1[3]*m2[5]+m1[5]
+  ];
+}
+function manualTextLayer(tc,container,vp){
+  var vpTx=vp.transform;
+  var items=tc.items;
+  if(!items||!items.length) return;
+  for(var i=0;i<items.length;i++){
+    var item=items[i];
+    if(!item.str||!item.transform) continue;
+    // Birleşik transform: viewport × item
+    var t=matMul(vpTx, item.transform);
+    // Font yüksekliği
+    var fontH=Math.sqrt(t[2]*t[2]+t[3]*t[3]);
+    if(fontH<0.5) continue;
+    var angle=Math.atan2(t[1],t[0]);
+    // Span oluştur
+    var span=document.createElement('span');
+    span.textContent=item.str;
+    span.style.cssText='position:absolute;left:'+Math.round(t[4]*10)/10+'px;top:'+Math.round((t[5]-fontH)*10)/10+'px;font-size:'+Math.round(fontH*10)/10+'px;font-family:sans-serif;color:transparent;white-space:pre;cursor:text;transform-origin:0% 0%;line-height:1;-webkit-user-select:text;user-select:text;pointer-events:auto;';
+    // DOM'a ekle → senkron layout → genişlik ölçekle
+    container.appendChild(span);
+    if(item.width>0){
+      var expected=item.width*vp.scale;
+      var actual=span.offsetWidth;
+      if(actual>0){
+        var scX=expected/actual;
+        if(scX>0.05&&scX<20&&Math.abs(scX-1)>0.02){
+          span.style.transform=(Math.abs(angle)>0.001?'rotate('+angle+'rad) ':'')+'scaleX('+scX.toFixed(4)+')';
+        } else if(Math.abs(angle)>0.001){
+          span.style.transform='rotate('+angle+'rad)';
+        }
+      }
+    }
+  }
+}
+
+function getScale(){
+  var w=document.getElementById('pdfscroll').clientWidth||560;
+  if(pdfScale>0)return pdfScale;
+  return Math.max(0.6,Math.min((w-28)/595,2.2)); // 595 = A4 width points
+}
+
+function renderPDF(buf){
+  clearPDFView();
+  loadHLData();  // Restore highlights for current ref
+  var safeBuf = buf.slice ? buf.slice(0) : buf;
+  pdfjsLib.getDocument({data:safeBuf}).promise.then(function(pdf){
+    pdfDoc=pdf; pdfTotal=pdf.numPages; pdfPg=1;
+    updPgLabel();
+    var sc=document.getElementById('pdfscroll');
+    pdfTextCache={};
+    function renderNext(n){
+      if(n>pdf.numPages){setupPageTracking();return;}
+      pdf.getPage(n).then(function(page){
+        var scale=getScale();
+        var vp=page.getViewport({scale:scale});
+        var wrap=document.createElement('div');
+        wrap.className='pdf-page-wrap';
+        wrap.dataset.page=String(n);
+        wrap.style.cssText='position:relative;flex-shrink:0;width:'+vp.width+'px;height:'+vp.height+'px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.4);';
+        var canvas=document.createElement('canvas');
+        canvas.width=vp.width; canvas.height=vp.height;
+        canvas.style.cssText='display:block;position:absolute;top:0;left:0;z-index:0;';
+        wrap.appendChild(canvas);
+        var textDiv=document.createElement('div');
+        textDiv.className='textLayer';
+        textDiv.style.cssText='position:absolute;top:0;left:0;width:'+vp.width+'px;height:'+vp.height+'px;';
+        wrap.appendChild(textDiv);
+        var hlc=document.createElement('canvas');
+        hlc.className='hl-overlay';
+        hlc.width=vp.width; hlc.height=vp.height;
+        wrap.appendChild(hlc);
+        sc.appendChild(wrap);
+        page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise.then(function(){
+          page.getTextContent({normalizeWhitespace:true}).then(function(tc){
+            if(!tc||!tc.items||!tc.items.length){paintHL(hlc,n);renderNext(n+1);return;}
+            // Cache text for search
+            pdfTextCache[n]=tc.items;
+            var done=false;
+            if(typeof pdfjsLib.renderTextLayer==='function'){
+              try{
+                // PDF.js 3.x: textContentSource replaces textContent; --scale-factor required for font sizing
+                textDiv.style.setProperty('--scale-factor',String(vp.scale));
+                var params={container:textDiv,viewport:vp,textDivs:[]};
+                params.textContentSource=tc;
+                var task=pdfjsLib.renderTextLayer(params);
+                if(task&&task.promise){
+                  done=true;
+                  task.promise.then(function(){
+                    textDiv.querySelectorAll('span').forEach(function(s){
+                      if(!s.style.position) s.style.position='absolute';
+                      s.style.color='transparent';s.style.cursor='text';
+                    });
+                    paintHL(hlc,n);renderNext(n+1);
+                  }).catch(function(){
+                    textDiv.innerHTML='';manualTextLayer(tc,textDiv,vp);
+                    paintHL(hlc,n);renderNext(n+1);
+                  });
+                }
+              }catch(e){}
+            }
+            if(!done){manualTextLayer(tc,textDiv,vp);paintHL(hlc,n);renderNext(n+1);}
+          }).catch(function(){paintHL(hlc,n);renderNext(n+1);});
+        }).catch(function(){renderNext(n+1);});
+      }).catch(function(){renderNext(n+1);});
+    }
+    renderNext(1);
+  }).catch(function(e){setDst('PDF acilamadi: '+e.message,'er');});
+}
+
+function clearPDFView(){
+  if(pageObserver)pageObserver.disconnect();
+  pdfDoc=null;pdfPg=1;pdfTotal=0;
+  pdfTextCache={};
+  pdfSearchResults=[];pdfSearchIdx=-1;
+  var pgEl=document.getElementById('pdfpg');if(pgEl)pgEl.textContent='--';
+  var zmEl=document.getElementById('pdfzoom');if(zmEl)zmEl.textContent='--';
+  var sc=document.getElementById('pdfscroll');if(sc)sc.innerHTML='';
+}
+
+function showNoPDF(ref){
+  clearPDFView();
+  var sc=document.getElementById('pdfscroll');
+  var doi=(ref&&ref.doi)||'';var oaUrl=(ref&&ref.pdfUrl)||'';var title=(ref&&ref.title)||'';
+  var d=document.createElement('div');
+  d.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:10px;text-align:center;width:100%;';
+  d.innerHTML='<div style="font-size:28px">📄</div>'+
+    (title?'<div style="font-size:11px;color:var(--txt2);max-width:360px;line-height:1.5">'+title.substring(0,80)+'</div>':'')+
+    (doi?'<div style="font-family:var(--fm);font-size:10px;color:var(--txt3)">DOI: '+doi+'</div>':'')+
+    '<div style="width:100%;max-width:320px;display:flex;flex-direction:column;gap:7px;margin-top:8px;">'+
+    '<button onclick="document.getElementById(\'lfinp\').click()" style="background:var(--acc);color:#0d1117;border:none;border-radius:6px;padding:10px;cursor:pointer;font-size:12px;font-weight:600;font-family:var(--f);">+ PDF Dosyası Yükle</button>'+
+    (oaUrl?'<button onclick="downloadPDF(\''+((ref&&ref.id)||'')+'\',\''+oaUrl+'\')" style="background:var(--bg3);color:var(--blue);border:1px solid var(--b);border-radius:6px;padding:9px;font-size:11px;cursor:pointer;font-family:var(--f);display:block;width:100%;">📥 OA PDF Otomatik Indir</button>':'<div style="font-size:11px;color:var(--txt3)">Açık erişim PDF yok</div>')+
+    (doi?'<a href="https://doi.org/'+doi+'" target="_blank" style="color:var(--txt3);font-size:11px;text-decoration:none;">Yayıncı sayfası ↗</a>':'')+
+    '</div>'+
+    '<div style="font-size:10px;color:var(--txt3);margin-top:6px;line-height:1.7">PDF indirip "PDF Yükle" butonuna tıklayın.</div>';
+  sc.appendChild(d);
+}
+
+function pPrev(){if(pdfPg>1){pdfPg--;scrollToPage(pdfPg);}}
+function pNext(){if(pdfPg<pdfTotal){pdfPg++;scrollToPage(pdfPg);}}
+function scrollToPage(n){var w=document.querySelector('.pdf-page-wrap[data-page="'+n+'"]');if(w)w.scrollIntoView({behavior:'smooth',block:'start'});updPgLabel();}
+function updPgLabel(){
+  var pgEl=document.getElementById('pdfpg');
+  var zmEl=document.getElementById('pdfzoom');
+  if(pgEl) pgEl.textContent=pdfPg+'/'+pdfTotal;
+  if(zmEl) zmEl.textContent=Math.round((pdfScale||getScale())*100)+'%';
+}
+function pZI(){pdfScale=Math.min(((pdfScale||getScale())+0.15),4);if(curRef&&curRef.pdfData)renderPDF(curRef.pdfData);updPgLabel();}
+function pZO(){pdfScale=Math.max(((pdfScale||getScale())-0.15),0.3);if(curRef&&curRef.pdfData)renderPDF(curRef.pdfData);updPgLabel();}
+function pZFit(){pdfScale=0;if(curRef&&curRef.pdfData)renderPDF(curRef.pdfData);updPgLabel();}
+function togglePDF(){document.getElementById('pdfpanel').classList.toggle('open');}
+function goToPage(){if(!pdfTotal)return;var n=prompt('Sayfa numarasi (1-'+pdfTotal+'):',pdfPg);n=parseInt(n);if(n>=1&&n<=pdfTotal){pdfPg=n;scrollToPage(n);}}
+
+// ── SCROLL PAGE TRACKING ────────────────────────────────────────────────────
+var pageObserver=null;
+function setupPageTracking(){
+  if(pageObserver)pageObserver.disconnect();
+  var sc=document.getElementById('pdfscroll');
+  pageObserver=new IntersectionObserver(function(entries){
+    var best=null,bestR=0;
+    entries.forEach(function(e){
+      if(e.isIntersecting&&e.intersectionRatio>bestR){bestR=e.intersectionRatio;best=e.target;}
+    });
+    if(best&&best.dataset&&best.dataset.page){
+      var pg=parseInt(best.dataset.page);
+      if(pg&&pg!==pdfPg){pdfPg=pg;updPgLabel();}
+    }
+  },{root:sc,threshold:[0,0.25,0.5,0.75,1]});
+  sc.querySelectorAll('.pdf-page-wrap').forEach(function(w){pageObserver.observe(w);});
+}
+
+// ── PANEL RESIZE ────────────────────────────────────────────────────────────
+(function(){
+  var handle=document.getElementById('pdfresize');
+  var panel=document.getElementById('pdfpanel');
+  if(!handle||!panel) return;
+  var dragging=false;
+  handle.addEventListener('mousedown',function(e){dragging=true;e.preventDefault();document.body.style.cursor='col-resize';document.body.style.userSelect='none';});
+  document.addEventListener('mousemove',function(e){
+    if(!dragging)return;
+    var w=window.innerWidth-e.clientX;
+    w=Math.max(350,Math.min(w,window.innerWidth-300));
+    panel.style.width=w+'px';
+  });
+  document.addEventListener('mouseup',function(){
+    if(!dragging)return;
+    dragging=false;document.body.style.cursor='';document.body.style.userSelect='';
+    // Refit if auto-scale
+    if(pdfScale===0&&curRef&&curRef.pdfData)renderPDF(curRef.pdfData);
+  });
+})();
+
+// ── PDF SEARCH ──────────────────────────────────────────────────────────────
+var pdfSearchResults=[];  // [{page,itemIdx,text}]
+var pdfSearchIdx=-1;
+var pdfTextCache={};  // {pageNum: [{str,transform,...}]}
+
+function togglePdfSearch(){
+  var bar=document.getElementById('pdfsearchbar');
+  if(!bar) return;
+  bar.classList.toggle('open');
+  if(bar.classList.contains('open')){
+    var inp=document.getElementById('pdfsearchinp');
+    if(inp){inp.focus();inp.select();}
+  } else {
+    clearSearchHL();
+    pdfSearchResults=[];pdfSearchIdx=-1;
+    var cnt=document.getElementById('pdfsearchcount');
+    if(cnt) cnt.textContent='--';
+  }
+}
+
+function pdfSearchExec(){
+  var inp=document.getElementById('pdfsearchinp');
+  var q=inp?(inp.value||'').toLowerCase().trim():'';
+  clearSearchHL();
+  pdfSearchResults=[];pdfSearchIdx=-1;
+  var cnt=document.getElementById('pdfsearchcount');
+  if(!q||!pdfDoc){if(cnt)cnt.textContent='--';return;}
+  var keys=Object.keys(pdfTextCache).map(Number).sort(function(a,b){return a-b;});
+  keys.forEach(function(pgNum){
+    var items=pdfTextCache[pgNum]||[];
+    var fullText=items.map(function(it){return it.str;}).join(' ').toLowerCase();
+    var idx=0;
+    while(true){
+      var pos=fullText.indexOf(q,idx);
+      if(pos<0) break;
+      pdfSearchResults.push({page:pgNum,pos:pos,len:q.length});
+      idx=pos+1;
+    }
+  });
+  if(cnt) cnt.textContent=pdfSearchResults.length>0?'0/'+pdfSearchResults.length:'yok';
+  if(pdfSearchResults.length>0) pdfSearchGoTo(0);
+}
+
+function pdfSearchNext(){
+  if(!pdfSearchResults.length){pdfSearchExec();return;}
+  pdfSearchGoTo((pdfSearchIdx+1)%pdfSearchResults.length);
+}
+function pdfSearchPrev(){
+  if(!pdfSearchResults.length)return;
+  pdfSearchGoTo((pdfSearchIdx-1+pdfSearchResults.length)%pdfSearchResults.length);
+}
+
+function pdfSearchGoTo(idx){
+  pdfSearchIdx=idx;
+  var cnt=document.getElementById('pdfsearchcount');
+  if(cnt) cnt.textContent=(idx+1)+'/'+pdfSearchResults.length;
+  var r=pdfSearchResults[idx];
+  if(!r) return;
+  highlightSearchOnPage(r.page,r.pos,r.len,true);
+  scrollToPage(r.page);
+}
+
+function highlightSearchOnPage(pgNum,pos,len,isActive){
+  clearSearchHL();
+  var wrap=document.querySelector('.pdf-page-wrap[data-page="'+pgNum+'"]');
+  if(!wrap) return;
+  var spans=wrap.querySelectorAll('.textLayer span');
+  var charCount=0;
+  spans.forEach(function(sp){
+    var txt=sp.textContent||'';
+    var spanStart=charCount;
+    var spanEnd=charCount+txt.length;
+    // +1 for space between items
+    if(spanStart<=pos+len&&spanEnd>=pos){
+      sp.style.background=isActive?'rgba(255,100,0,.4)':'rgba(255,165,0,.3)';
+      sp.style.borderRadius='2px';
+      sp.classList.add('search-marked');
+      if(isActive) sp.scrollIntoView({behavior:'smooth',block:'center'});
+    }
+    charCount=spanEnd+1; // +1 for join space
+  });
+}
+
+function clearSearchHL(){
+  document.querySelectorAll('.search-marked').forEach(function(sp){
+    sp.style.background='';sp.style.borderRadius='';sp.classList.remove('search-marked');
+  });
+}
+
+// Search input debounce
+var searchTimer=null;
+(function(){
+  var sinp=document.getElementById('pdfsearchinp');
+  if(sinp) sinp.addEventListener('input',function(){
+    clearTimeout(searchTimer);
+    searchTimer=setTimeout(pdfSearchExec,300);
+  });
+})();
+
+// ── KEYBOARD SHORTCUTS ──────────────────────────────────────────────────────
+document.addEventListener('keydown',function(e){
+  var inInput=e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.isContentEditable;
+  var pdfOpen=document.getElementById('pdfpanel').classList.contains('open');
+
+  // Ctrl+F: PDF search
+  if((e.ctrlKey||e.metaKey)&&e.key==='f'&&pdfOpen){
+    e.preventDefault();
+    var bar=document.getElementById('pdfsearchbar');
+    if(!bar.classList.contains('open'))togglePdfSearch();
+    else document.getElementById('pdfsearchinp').focus();
+    return;
+  }
+  // Ctrl+G: go to page
+  if((e.ctrlKey||e.metaKey)&&e.key==='g'&&pdfOpen){
+    e.preventDefault();goToPage();return;
+  }
+  // Ctrl+ / Ctrl-: zoom
+  if((e.ctrlKey||e.metaKey)&&e.key==='='&&pdfOpen){e.preventDefault();pZI();return;}
+  if((e.ctrlKey||e.metaKey)&&e.key==='-'&&pdfOpen){e.preventDefault();pZO();return;}
+  if((e.ctrlKey||e.metaKey)&&e.key==='0'&&pdfOpen){e.preventDefault();pZFit();return;}
+
+  if(inInput) return;
+
+  // PageUp/PageDown for PDF
+  if(e.key==='PageUp'&&pdfOpen){e.preventDefault();pPrev();}
+  if(e.key==='PageDown'&&pdfOpen){e.preventDefault();pNext();}
+});
+
+// Ctrl+scroll zoom in PDF
+(function(){
+  var psc=document.getElementById('pdfscroll');
+  if(psc) psc.addEventListener('wheel',function(e){
+    if(!e.ctrlKey&&!e.metaKey) return;
+    e.preventDefault();
+    if(e.deltaY<0) pZI(); else pZO();
+  },{passive:false});
+})();
+
+// ── HIGHLIGHT PERSISTENCE ───────────────────────────────────────────────────
+// hlData per-ref: save in ref object, restore on open
+function saveHLData(){
+  if(!curRef) return;
+  curRef._hlData=hlData.slice();
+  save();
+}
+function loadHLData(){
+  hlData=(curRef&&curRef._hlData)?curRef._hlData.slice():[];
+}
+
+// ── HIGHLIGHT — works on text layer ──────────────────────────────────────────
+function setHLC(el){document.querySelectorAll('.hlc').forEach(function(e){e.classList.remove('on');});el.classList.add('on');hlColor=el.dataset.c;}
+
+// Listen for text selection AND highlight clicks in PDF panel
+(function(){
+var psc=document.getElementById('pdfscroll');
+if(!psc) return;
+psc.addEventListener('mouseup',function(e){
+  var hltipEl=document.getElementById('hltip');
+  if(hltipEl&&hltipEl.contains(e.target)) return;
+  setTimeout(function(){
+    var sel=window.getSelection();
+    var hasSelection=sel&&!sel.isCollapsed&&sel.toString().trim();
+
+    if(hasSelection){
+      selText=sel.toString().trim();
+      try{selRangeObj=sel.getRangeAt(0).cloneRange();}catch(ex){return;}
+      var node=sel.anchorNode;
+      while(node&&node.nodeType!==1) node=node.parentNode;
+      while(node&&!(node.dataset&&node.dataset.page)) node=node.parentNode;
+      selPageNum=(node&&node.dataset&&node.dataset.page)?parseInt(node.dataset.page):pdfPg;
+      try {
+        var rect=selRangeObj.getBoundingClientRect();
+        showHLtip(rect.bottom+8, rect.left, 'selection');
+      } catch(ex){}
+    } else {
+      var clickedHL=findHLAtPoint(e.clientX, e.clientY);
+      if(clickedHL){
+        selText=clickedHL.text||'';
+        selPageNum=clickedHL.page;
+        clickedHLIdx=clickedHL.idx;
+        showHLtip(e.clientY+10, e.clientX, 'highlight');
+      } else {
+        var hltipEl2=document.getElementById('hltip');
+        if(hltipEl2&&!hltipEl2.matches(':hover')) hideHLtip();
+      }
+    }
+  },80);
+});
+})();
+
+var clickedHLIdx=-1; // tiklanan highlight'in hlData index'i
+
+function findHLAtPoint(cx,cy){
+  var wraps=document.querySelectorAll('.pdf-page-wrap');
+  for(var wi=0;wi<wraps.length;wi++){
+    var wrap=wraps[wi];
+    var wRect=wrap.getBoundingClientRect();
+    var px=(cx-wRect.left)/wRect.width;
+    var py=(cy-wRect.top)/wRect.height;
+    if(px<0||px>1||py<0||py>1) continue;
+    var pgNum=parseInt(wrap.dataset.page);
+    for(var hi=0;hi<hlData.length;hi++){
+      var hd=hlData[hi];
+      if(hd.page!==pgNum) continue;
+      for(var ri=0;ri<hd.rects.length;ri++){
+        var r=hd.rects[ri];
+        if(px>=r.x&&px<=r.x+r.w&&py>=r.y&&py<=r.y+r.h){
+          return {idx:hi, page:pgNum, text:hd.text||'', color:hd.color};
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function showHLtip(top,left,mode){
+  var tip=document.getElementById('hltip');
+  // Butonlari moda gore ayarla
+  tip.innerHTML='';
+  if(mode==='selection'){
+    tip.innerHTML='<button class="htb" onclick="doHL(true)">Nota Kaydet</button><button class="htb" onclick="doHL(false)">Highlight</button><button class="htb" onclick="hideHLtip()">x</button>';
+  } else {
+    tip.innerHTML='<button class="htb" onclick="hlToNote()">Nota Ekle</button><button class="htb" onclick="hlRemove()">Sil</button><button class="htb" onclick="hideHLtip()">x</button>';
+  }
+  tip.style.top=Math.min(top, window.innerHeight-60)+'px';
+  tip.style.left=Math.max(Math.min(left, window.innerWidth-220), 8)+'px';
+  tip.classList.add('show');
+}
+// hltip butonlarinda mousedown'da secimi korumak icin preventDefault
+(function(){
+  var htip=document.getElementById('hltip');
+  if(htip) htip.addEventListener('mousedown',function(e){ e.preventDefault(); });
+})();
+
+document.addEventListener('mousedown',function(e){
+  var htip=document.getElementById('hltip');
+  var psc=document.getElementById('pdfscroll');
+  if(htip&&!htip.contains(e.target)&&psc&&!psc.contains(e.target))hideHLtip();
+});
+
+function hideHLtip(){var t=document.getElementById('hltip');if(t)t.classList.remove('show');clickedHLIdx=-1;}
+
+function doHL(saveToNote){
+  if(!selText||!selRangeObj){hideHLtip();return;}
+  drawHL();
+  saveHLData();  // Persist highlights
+  hideHLtip();
+  if(saveToNote){
+    var note={id:uid(),nbId:S.curNb,type:'hl',txt:'',q:selText,
+      src:curRef?shortRef(curRef):'',rid:curRef?curRef.id:'',
+      tag:'s.'+selPageNum,dt:new Date().toLocaleDateString('tr-TR'),hlColor:hlColor};
+    S.notes.unshift(note);save();rNotes();
+    swR('notes',document.querySelectorAll('.rtab')[0]);
+  }
+  window.getSelection().removeAllRanges();
+  selRangeObj=null;selText='';
+}
+
+// Tiklanan highlight'i nota ekle
+function hlToNote(){
+  if(clickedHLIdx<0||!hlData[clickedHLIdx]){hideHLtip();return;}
+  var hd=hlData[clickedHLIdx];
+  var txt=hd.text||'(metin yok)';
+  var note={id:uid(),nbId:S.curNb,type:'hl',txt:'',q:txt,
+    src:curRef?shortRef(curRef):'',rid:curRef?curRef.id:'',
+    tag:'s.'+hd.page,dt:new Date().toLocaleDateString('tr-TR'),hlColor:hd.color};
+  S.notes.unshift(note);save();rNotes();
+  swR('notes',document.querySelectorAll('.rtab')[0]);
+  hideHLtip();
+}
+
+// Tiklanan highlight'i sil
+function hlRemove(){
+  if(clickedHLIdx<0||!hlData[clickedHLIdx]){hideHLtip();return;}
+  var pgNum=hlData[clickedHLIdx].page;
+  hlData.splice(clickedHLIdx,1);
+  // Sayfayi tekrar boya
+  var wrap=document.querySelector('.pdf-page-wrap[data-page="'+pgNum+'"]');
+  if(wrap){var hlc=wrap.querySelector('.hl-overlay');if(hlc)paintHL(hlc,pgNum);}
+  saveHLData();  // Persist
+  hideHLtip();
+}
+
+function drawHL(){
+  if(!selRangeObj) return;
+  // Seçili sayfanın wrap div'ini bul
+  var wrap=document.querySelector('.pdf-page-wrap[data-page="'+selPageNum+'"]');
+  if(!wrap) return;
+  var hlCanvas=wrap.querySelector('.hl-overlay');
+  if(!hlCanvas) return;
+  var wRect=wrap.getBoundingClientRect();
+  var rects=Array.from(selRangeObj.getClientRects());
+  var saved=[];
+  rects.forEach(function(r){
+    if(r.width<2||r.height<2) return;
+    // viewport → canvas koordinatı (normalize 0-1)
+    var x=(r.left-wRect.left)/wRect.width;
+    var y=(r.top-wRect.top)/wRect.height;
+    var w=r.width/wRect.width;
+    var hh=r.height/wRect.height;
+    // Sınır kontrolü
+    if(x>1||y>1||x+w<0||y+hh<0) return;
+    saved.push({x:x,y:y,w:w,h:hh});
+  });
+  if(saved.length){
+    hlData.push({page:selPageNum,color:hlColor,rects:saved,text:selText||''});
+    paintHL(hlCanvas,selPageNum);
+  }
+}
+
+function paintHL(hlCanvas,pageNum){
+  var ctx=hlCanvas.getContext('2d');
+  ctx.clearRect(0,0,hlCanvas.width,hlCanvas.height);
+  hlData.filter(function(hd){return hd.page===pageNum;}).forEach(function(hd){
+    ctx.fillStyle=hd.color;
+    ctx.globalAlpha=0.38;
+    hd.rects.forEach(function(r){
+      // normalize (0-1) → canvas pixel
+      var px=r.x*hlCanvas.width;
+      var py=r.y*hlCanvas.height;
+      var pw=r.w*hlCanvas.width;
+      var ph=r.h*hlCanvas.height;
+      ctx.fillRect(px,py,pw,ph);
+    });
+    ctx.globalAlpha=1;
+  });
+}
+
+// ── NOTES ──────────────────────────────────────────────────────────────────────
+function rNotes(){
+  var el=document.getElementById('notelist');
+  var notes=curNotes();
+  if(!notes.length){el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">PDF\'ten metin seç → 🖊 Nota Kaydet<br/>veya aşağıdan yaz.</div>';return;}
+  el.innerHTML=notes.map(function(n){
+    var isHL=n.type==='hl';
+    var bc=isHL&&n.hlColor?n.hlColor:'var(--acc-d)';
+    return '<div class="nc">'+
+      (n.src?'<div class="ncsrc">'+n.src+(n.tag?' · '+n.tag:'')+'</div>':'')+
+      (n.txt?'<div class="nctxt">'+n.txt+'</div>':'')+
+      (n.q?'<div class="ncq" style="border-left-color:'+bc+'">'+n.q+'</div>':'')+
+      '<div class="ncacts">'+
+      (n.rid?'<button class="ncb" onclick="cpCite(\''+n.id+'\')">Atıfı Kopyala</button>':'')+ 
+      (n.rid?'<button class="ncb" onclick="insCiteNote(\''+n.id+'\')">Metne Ekle</button>':'')+
+      '</div>'+
+      '<button class="ncdel" onclick="dNote(\''+n.id+'\')">×</button></div>';
+  }).join('');
+}
+function dNote(id){S.notes=S.notes.filter(function(n){return n.id!=id;});save();rNotes();}
+function cpCite(id){var n=S.notes.find(function(x){return x.id==id;});if(!n)return;var r=findRef(n.rid);if(!r)return;cpStr(inText(r,S.cm));}
+function insCiteNote(id){var n=S.notes.find(function(x){return x.id==id;});if(!n)return;var r=findRef(n.rid);if(!r)return;iHTML('<span class="cit" data-ref="'+r.id+'">\u00a0'+inText(r,S.cm)+'</span>');updateRefSection();}
+function saveNote(){var txt=document.getElementById('noteta').value.trim();if(!txt)return;var tag=document.getElementById('notetag').value.trim()||'genel';S.notes.unshift({id:uid(),nbId:S.curNb,type:'m',txt:txt,q:'',src:curRef?shortRef(curRef):'',rid:curRef?curRef.id:'',tag:tag,dt:new Date().toLocaleDateString('tr-TR')});save();rNotes();document.getElementById('noteta').value='';document.getElementById('notetag').value='';}
+
+// ── REFS ──────────────────────────────────────────────────────────────────────
+function getUsedRefs(){var rawIds=Array.from(document.getElementById('apaed').querySelectorAll('.cit')).map(function(c){return c.dataset.ref;}).filter(Boolean);var allIds=[];rawIds.forEach(function(rid){rid.split(',').forEach(function(id){id=id.trim();if(id&&allIds.indexOf(id)<0)allIds.push(id);});});return sortLib(allIds.map(function(id){return findRef(id);}).filter(Boolean));}
+function rRefs(){
+  var refs=getUsedRefs();var el=document.getElementById('reflist');
+  if(!refs.length){el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">Metinde atıf yok.</div>';return;}
+  el.innerHTML=refs.map(function(r){return '<div class="ri"><div class="ricite">'+inText(r,S.cm)+'</div><div class="rifull">'+apa7(r)+'</div><div class="riacts"><button class="rib" onclick="cpStr(\''+apa7(r).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">Kopyala</button><button class="rib" onclick="openRef(\''+r.id+'\')">PDF</button></div></div>';}).join('');
+}
+function updateRefSection(){
+  rRefs();
+  var ed=document.getElementById('apaed');var refs=getUsedRefs();if(!refs.length)return;
+  var refH1=Array.from(ed.querySelectorAll('h1')).find(function(h){return h.textContent.trim()==='Kaynakça';});
+  if(!refH1){var h=document.createElement('h1');h.textContent='Kaynakça';ed.appendChild(h);refH1=h;}
+  var node=refH1.nextSibling;
+  while(node){var next=node.nextSibling;if(node.nodeType===1&&node.classList.contains('refe'))node.parentNode.removeChild(node);node=next;}
+  var after=refH1;
+  refs.forEach(function(r){var p=document.createElement('p');p.className='refe';p.textContent=apa7(r);if(after.nextSibling)ed.insertBefore(p,after.nextSibling);else ed.appendChild(p);after=p;});
+  save();
+}
+
+// ── EDITOR ────────────────────────────────────────────────────────────────────
+function ec(cmd,val){document.getElementById('apaed').focus();document.execCommand(cmd,false,val||null);uSt();}
+function iHTML(html){document.getElementById('apaed').focus();document.execCommand('insertHTML',false,html);uSt();save();}
+function uSt(){var ed=document.getElementById('apaed');var txt=ed.innerText||'';var words=txt.trim().split(/\s+/).filter(function(w){return w.length>0;}).length;var cites=ed.querySelectorAll('.cit').length;var refs=getUsedRefs().length;document.getElementById('tbinfo').textContent=words+' kelime';document.getElementById('sbw').textContent=words+' kelime';document.getElementById('sbc').textContent=cites+' atıf';document.getElementById('sbr2').textContent=refs+' kaynak';}
+document.getElementById('apaed').addEventListener('input',function(){uSt();save();});
+
+// ── /r TRIGGER ────────────────────────────────────────────────────────────────
+document.getElementById('apaed').addEventListener('keydown',function(e){
+  if(!trigOn)return;
+  var items=document.querySelectorAll('.tgi');
+  if(e.key==='ArrowDown'){trigIdx=Math.min(trigIdx+1,items.length-1);e.preventDefault();}
+  else if(e.key==='ArrowUp'){trigIdx=Math.max(trigIdx-1,0);e.preventDefault();}
+  else if(e.key===' '&&trigIdx>=0){
+    // Boşluk: mevcut öğeyi seç/kaldır
+    var cur=items[trigIdx];if(cur){var rid=cur.querySelector('.tgic');
+      // data-id özelliği yok, allLib'den bul
+      var allL=[];S.wss.forEach(function(ws){allL=allL.concat(ws.lib||[]);});
+      var q2=(document.getElementById('tgs').value||'').toLowerCase().trim();
+      var fl2=allL.filter(function(r){if(!q2)return true;var fn=r.authors&&r.authors[0]?r.authors[0].split(',')[0].toLowerCase():'';return fn.startsWith(q2)||(r.title||'').toLowerCase().includes(q2)||(r.year||'').startsWith(q2);});
+      if(fl2[trigIdx])toggleTrigSel(fl2[trigIdx].id);
+    }
+    e.preventDefault();
+  }
+  else if(e.key==='Enter'){
+    e.preventDefault();
+    if(trigSelected.length>0){insertCitation(null);}
+    else if(items[trigIdx]){items[trigIdx].click();}
+  }
+  else if(e.key==='Escape'){closeTrig();}
+  items.forEach(function(it,i){it.classList[i===trigIdx?'add':'remove']('on');});
+});
+document.getElementById('apaed').addEventListener('keyup',function(e){if(e.key==='Escape'){closeTrig();return;}checkTrig();});
+
+function checkTrig(){
+  var sel=window.getSelection();if(!sel||!sel.rangeCount)return;
+  var range=sel.getRangeAt(0);var node=range.startContainer;if(node.nodeType!==3)return;
+  var txt=node.textContent.substring(0,range.startOffset);
+  var m=txt.match(/\/r([^\s]*)$/);
+  if(m){savedRange=range.cloneRange();if(!trigOn){trigOn=true;openTrig(m[1]||'');}else filterTrig(m[1]||'');}
+  else if(trigOn)closeTrig();
+}
+function openTrig(q){
+  var sel=window.getSelection();if(!sel||!sel.rangeCount)return;
+  var rect=sel.getRangeAt(0).getBoundingClientRect();
+  var ov=document.getElementById('trig');
+  ov.style.top=Math.min(rect.bottom+8,window.innerHeight-320)+'px';
+  ov.style.left=Math.max(Math.min(rect.left,window.innerWidth-390),8)+'px';
+  ov.classList.add('show');
+  document.getElementById('tgq').textContent=q?'"'+q+'"':'tüm kaynaklar';
+  var inp=document.getElementById('tgs');
+  inp.value=q;trigIdx=0;renderTrig(q);
+  // Arama kutusuna odaklan — boşluk/enter burada çalışacak
+  setTimeout(function(){inp.focus();},50);
+}
+function filterTrig(q){document.getElementById('tgq').textContent=q?'"'+q+'"':'tüm kaynaklar';document.getElementById('tgs').value=q;renderTrig(q);}
+function renderTrig(q){
+  q=(q||'').toLowerCase().trim();
+  var allLib=[];S.wss.forEach(function(ws){allLib=allLib.concat(ws.lib||[]);});
+  var fl=allLib.filter(function(r){if(!q)return true;var fn=r.authors&&r.authors[0]?r.authors[0].split(',')[0].toLowerCase():'';return fn.startsWith(q)||(r.title||'').toLowerCase().includes(q)||(r.year||'').startsWith(q);});
+  var list=document.getElementById('tgl');
+  if(!fl.length){list.innerHTML='<div class="tge">'+(allLib.length?'Eşleşme yok.':'Kütüphaneye kaynak ekleyin.')+'</div>';return;}
+  list.innerHTML='';
+  fl.forEach(function(r,i){
+    var a=r.authors&&r.authors[0]?r.authors[0].split(',')[0]:'?';if(r.authors&&r.authors.length>1)a+=' et al.';
+    var isSel=trigSelected.indexOf(r.id)>=0;
+    var div=document.createElement('div');
+    div.className='tgi'+(i===trigIdx?' on':'')+(isSel?' sel':'');
+    div.innerHTML=
+      '<div style="display:flex;align-items:center;gap:6px">'+
+      '<span style="width:14px;height:14px;border:1px solid '+(isSel?'var(--acc)':'var(--b)')+';border-radius:3px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:var(--acc);flex-shrink:0">'+(isSel?'✓':'')+'</span>'+
+      '<div><div class="tgia">'+a+' ('+(r.year||'t.y.')+')</div><div class="tgit">'+(r.title||'').substring(0,50)+'</div></div></div>'+
+      '<div class="tgic" style="padding-left:20px">→ '+inText(r,S.cm)+'</div>';
+    div.addEventListener('mousedown',function(e){var sel=window.getSelection();if(sel&&sel.rangeCount)savedRange=sel.getRangeAt(0).cloneRange();e.preventDefault();});
+    div.addEventListener('click',function(){toggleTrigSel(r.id);});
+    list.appendChild(div);
+  });
+  list.querySelectorAll('.tgi').forEach(function(it,i){it.classList[i===trigIdx?'add':'remove']('on');});
+  // Seçim sayacı
+  var selEl=document.getElementById('tgsel');
+  if(trigSelected.length>0){selEl.textContent=trigSelected.length+' seçili · Enter ekle';selEl.style.display='inline';}
+  else{selEl.style.display='none';}
+}
+function toggleTrigSel(id){
+  var idx=trigSelected.indexOf(id);
+  if(idx>=0){trigSelected.splice(idx,1);}
+  else{trigSelected.push(id);}
+  renderTrig(document.getElementById('tgs').value);
+}
+function insertCitation(id){
+  var allLib=[];S.wss.forEach(function(ws){allLib=allLib.concat(ws.lib||[]);});
+  var ids=trigSelected.length>0?trigSelected.slice():(id?[id]:[]);
+  if(!ids.length){closeTrig();return;}
+  var refs=ids.map(function(i){return allLib.find(function(r){return r.id===i;});}).filter(Boolean);
+  if(!refs.length){closeTrig();return;}
+  document.getElementById('apaed').focus();
+  if(savedRange){
+    var sel=window.getSelection();sel.removeAllRanges();sel.addRange(savedRange);
+    var node=savedRange.startContainer;
+    if(node.nodeType===3){
+      var offset=savedRange.startOffset;
+      var txt=node.textContent.substring(0,offset);
+      var m=txt.match(/\/r[^\s]*$/);
+      if(m){var s2=offset-m[0].length;var dr=document.createRange();dr.setStart(node,s2);dr.setEnd(node,offset);sel.removeAllRanges();sel.addRange(dr);dr.deleteContents();}
+    }
+  }
+  var html;
+  if(refs.length===1){
+    html='<span class="cit" data-ref="'+refs[0].id+'"> '+inText(refs[0],S.cm)+'</span>';
+  } else {
+    // APA 7 çoklu atıf: alfabetik sıraya göre; noktalı virgülle
+    refs.sort(function(a,b){
+      var la=(a.authors&&a.authors[0]?a.authors[0].split(',')[0]:'').toLowerCase();
+      var lb=(b.authors&&b.authors[0]?b.authors[0].split(',')[0]:'').toLowerCase();
+      return la.localeCompare(lb,'tr');
+    });
+    var parts=refs.map(function(r){
+      var au=(r.authors||[]).map(fa).filter(Boolean);
+      var ls=au.map(function(a){return a.split(',')[0].trim();});
+      var ap=ls.length===0?'Bilinmeyen':ls.length===1?ls[0]:ls.length===2?ls[0]+' ve '+ls[1]:ls[0]+' vd.';
+      return ap+', '+(r.year||'t.y.');
+    });
+    var citText='('+parts.join('; ')+')';
+    var refIds=refs.map(function(r){return r.id;}).join(',');
+    html='<span class="cit" data-ref="'+refIds+'"> '+citText+'</span>';
+  }
+  document.execCommand('insertHTML',false,html);
+  trigSelected=[];savedRange=null;closeTrig();uSt();save();updateRefSection();
+}
+function closeTrig(){trigOn=false;trigIdx=-1;trigSelected=[];document.getElementById('trig').classList.remove('show');document.getElementById('apaed').focus();}
+function doTrigRef(){document.getElementById('apaed').focus();document.execCommand('insertText',false,'/r');checkTrig();}
+function setCM(m,btn){S.cm=m;document.querySelectorAll('.tgm').forEach(function(b){b.classList.remove('on');});btn.classList.add('on');renderTrig(document.getElementById('tgs').value);rRefs();}
+document.getElementById('tgs').addEventListener('input',function(){renderTrig(this.value);});
+document.getElementById('tgs').addEventListener('keydown',function(e){
+  var items=document.querySelectorAll('.tgi');
+  if(e.key==='ArrowDown'){trigIdx=Math.min(trigIdx+1,items.length-1);e.preventDefault();}
+  else if(e.key==='ArrowUp'){trigIdx=Math.max(trigIdx-1,0);e.preventDefault();}
+  else if(e.key===' '){
+    // Boşluk: mevcut öğeyi seç/kaldır (çoklu atıf)
+    e.preventDefault();
+    if(trigIdx>=0){
+      var allL=[];S.wss.forEach(function(ws){allL=allL.concat(ws.lib||[]);});
+      var q3=(document.getElementById('tgs').value||'').toLowerCase().trim();
+      var fl3=allL.filter(function(r){if(!q3)return true;var fn=r.authors&&r.authors[0]?r.authors[0].split(',')[0].toLowerCase():'';return fn.startsWith(q3)||(r.title||'').toLowerCase().includes(q3)||(r.year||'').startsWith(q3);});
+      if(fl3[trigIdx]) toggleTrigSel(fl3[trigIdx].id);
+    }
+  }
+  else if(e.key==='Enter'){e.preventDefault();if(trigSelected.length>0){insertCitation(null);}else if(trigIdx>=0){
+    var allL2=[];S.wss.forEach(function(ws){allL2=allL2.concat(ws.lib||[]);});
+    var q4=(document.getElementById('tgs').value||'').toLowerCase().trim();
+    var fl4=allL2.filter(function(r){if(!q4)return true;var fn=r.authors&&r.authors[0]?r.authors[0].split(',')[0].toLowerCase():'';return fn.startsWith(q4)||(r.title||'').toLowerCase().includes(q4)||(r.year||'').startsWith(q4);});
+    if(fl4[trigIdx]) insertCitation(fl4[trigIdx].id);
+  }}
+  else if(e.key==='Escape'){closeTrig();}
+  items.forEach(function(it,i){it.classList[i===trigIdx?'add':'remove']('on');});
+});
+document.addEventListener('click',function(e){if(!e.target.closest('.dd'))cdd();});
+document.addEventListener('mousedown',function(e){var t=document.getElementById('trig');if(trigOn&&!t.contains(e.target)&&!document.getElementById('apaed').contains(e.target))closeTrig();});
+
+// ── INSERT HELPERS ────────────────────────────────────────────────────────────
+function insRefs(){var refs=getUsedRefs();if(!refs.length)refs=sortLib(cLib());iHTML('<h1>Kaynakça</h1>'+refs.map(function(r){return '<p class="refe">'+apa7(r)+'</p>';}).join(''));}
+function insCover(){var t=prompt('Makale başlığı:','');var a=prompt('Yazar(lar):','');var af=prompt('Kurum:','');if(!t)return;iHTML('<div style="text-align:center;padding-top:192px;font-family:Times New Roman,serif;font-size:12pt;line-height:2;"><p style="font-weight:bold;text-indent:0">'+t+'</p><p style="text-indent:0">'+a+'</p><p style="text-indent:0">'+af+'</p><p style="text-indent:0">'+new Date().toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'})+'</p></div><p><br/></p>');}
+function insAbstract(){iHTML('<h1>Abstract</h1><p class="ni">Özet metni (150-250 kelime).</p><p class="ni"><em>Keywords:</em> kelime1, kelime2</p><p><br/></p>');}
+function insBlkQ(){iHTML('<blockquote>Alıntı metni (40+ kelime). (Yazar, Yıl, s. XX)</blockquote><p><br/></p>');}
+function insFig(){var n=prompt('Şekil No:','1');if(!n)return;var t=prompt('Başlık:','');iHTML('<p style="text-align:center;text-indent:0">[Şekil '+n+']</p><p style="text-align:center;text-indent:0;font-style:italic">Şekil '+n+(t?'<br/>'+t:'')+'</p><p><br/></p>');}
+function doTable(){var num=document.getElementById('wtn').value||'1';var cols=parseInt(document.getElementById('wtc').value)||3;var rows=parseInt(document.getElementById('wtr').value)||4;var title=document.getElementById('wtt').value||'';var note=document.getElementById('wtn2').value||'';var th='<thead><tr>'+Array(cols).fill(0).map(function(_,i){return '<th>Başlık '+(i+1)+'</th>';}).join('')+'</tr></thead>';var tb='<tbody>'+Array(rows-1).fill(0).map(function(){return '<tr>'+Array(cols).fill(0).map(function(){return '<td>&nbsp;</td>';}).join('')+'</tr>';}).join('')+'</tbody>';iHTML('<p class="ni"><strong>Tablo '+num+'</strong></p>'+(title?'<p class="ni"><em>'+title+'</em></p>':'')+'<table>'+th+tb+'</table>'+(note?'<p class="ni"><em>Not.</em> '+note+'</p>':'')+'<p><br/></p>');hideM('wiz');}
+
+// ── EXPORT ────────────────────────────────────────────────────────────────────
+function expDOC(){var h='<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:"Times New Roman",serif;font-size:12pt;line-height:2;margin:2.54cm;}h1{font-size:12pt;font-weight:bold;text-align:center;margin:0;text-indent:0;}h2{font-size:12pt;font-weight:bold;text-align:left;margin:0;text-indent:0;}h3{font-size:12pt;font-weight:bold;font-style:italic;margin:0;text-indent:0;}p{margin:0;text-indent:.5in;}.ni{text-indent:0;}.cit{color:#000;border:none;}.refe{text-indent:-.5in;padding-left:.5in;margin:0;}blockquote{padding-left:.5in;text-indent:0;margin:0;}table{width:100%;border-collapse:collapse;font-size:12pt;}th{border-top:1.5px solid #000;border-bottom:1px solid #000;padding:4px 8px;}td{padding:4px 8px;}</style></head><body>'+document.getElementById('apaed').innerHTML+'</body></html>';saveAs(new Blob([h],{type:'application/msword'}),'makale.doc');}
+function expNotes(){var t=S.notes.map(function(n,i){var nb=S.notebooks.find(function(x){return x.id===n.nbId;});return (i+1)+'. ['+(nb?nb.name:'?')+'] '+(n.src?'('+n.src+') ':'')+'\n'+(n.txt||'')+(n.q?'\nAlıntı: "'+n.q+'"':'');}).join('\n\n');saveAs(new Blob([t],{type:'text/plain;charset=utf-8'}),'notlar.txt');}
+function expLib(){var c=[];S.wss.forEach(function(ws){(ws.lib||[]).forEach(function(r){var x=Object.assign({},r);delete x.pdfData;c.push(x);});});saveAs(new Blob([JSON.stringify(c,null,2)],{type:'application/json'}),'kutuphane.json');}
+
+// ── UI ────────────────────────────────────────────────────────────────────────
+function tSB(side){var el=document.getElementById(side);var btn=document.getElementById('btn'+side);el.classList.toggle('closed');btn.classList.toggle('on');}
+function swR(name,btn){document.querySelectorAll('.rtab').forEach(function(t){t.classList.remove('on');});document.querySelectorAll('.rpnl').forEach(function(p){p.classList.remove('on');});if(btn)btn.classList.add('on');var el=document.getElementById('rp'+name);if(el)el.classList.add('on');}
+function showM(id){document.getElementById(id).classList.add('show');}
+function hideM(id){document.getElementById(id).classList.remove('show');var inp=document.querySelector('#'+id+' .minp');if(inp)inp.value='';}
+function opdd(id,btn){cdd();var m=document.getElementById(id);var r=btn.getBoundingClientRect();m.style.top=(r.bottom+4)+'px';m.style.left=r.left+'px';m.classList.add('open');}
+function cdd(){document.querySelectorAll('.ddm').forEach(function(m){m.classList.remove('open');});}
+function cpStr(s){var ta=document.createElement('textarea');ta.value=s;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);}
+// Close modals on bg click
+document.querySelectorAll('.modal-bg').forEach(function(bg){bg.addEventListener('click',function(e){if(e.target===bg)bg.classList.remove('show');});});
+
+// ── SYNC SETTINGS UI ─────────────────────────────────────────────────────────
+async function showSyncSettings(){
+  showM('syncmodal');
+  var dirEl=document.getElementById('syncdirshow');
+  var infoEl=document.getElementById('syncappinfo');
+  if(typeof window.electronAPI!=='undefined'){
+    try{
+      var info=await window.electronAPI.getAppInfo();
+      dirEl.innerHTML=info.syncDir?'<span style="color:var(--green)">'+info.syncDir+'</span>':'<span style="color:var(--txt3)">Yerel mod ('+info.appDir+')</span>';
+      infoEl.innerHTML='Uygulama: '+info.appDir+'<br/>PDF: '+info.pdfDir+' ('+info.pdfCount+' dosya)<br/>Surum: v'+info.version;
+    }catch(e){dirEl.textContent='Bilgi alinamadi';infoEl.textContent='';}
+  } else {
+    dirEl.innerHTML='<span style="color:var(--txt3)">Tarayici modu - localStorage kullaniliyor</span>';
+    infoEl.innerHTML='Electron uygulamasini kurun.';
+  }
+}
+async function doSetSyncDir(){
+  if(typeof window.electronAPI==='undefined'){alert('Bu özellik yalnızca Electron uygulamasında çalışır.');return;}
+  try{
+    var res=await window.electronAPI.setSyncDir();
+    if(res.ok){
+      document.getElementById('syncdirshow').innerHTML='<span style="color:var(--green)">☁️ '+res.dir+'</span>';
+      setSL('✓ Sync klasörü: '+res.dir.split('\\').pop(),'ok');
+      setTimeout(function(){setSL('','');},3000);
+    }
+  }catch(e){alert('Hata: '+e.message);}
+}
+async function doClearSyncDir(){
+  if(typeof window.electronAPI==='undefined')return;
+  try{
+    await window.electronAPI.clearSyncDir();
+    document.getElementById('syncdirshow').innerHTML='<span style="color:var(--txt3)">Yerel mod</span>';
+    setSL('Yerel moda gecildi','ok');
+    setTimeout(function(){setSL('','');},3000);
+  }catch(e){}
+}
+
+// ── UPDATE FUNCTIONS ────────────────────────────────────────────────────────
+var latestUpdateUrl='';
+
+async function checkForUpdate(){
+  if(typeof window.electronAPI==='undefined'){
+    document.getElementById('updatestatus').innerHTML='<span style="color:var(--txt3)">Guncelleme yalnizca Electron uygulamasinda calisir.</span>';
+    return;
+  }
+  document.getElementById('updatestatus').innerHTML='<span style="color:var(--acc)">Kontrol ediliyor...</span>';
+  try{
+    var res=await window.electronAPI.checkUpdate();
+    if(res.error){
+      document.getElementById('updatestatus').innerHTML='<span style="color:var(--red)">Hata: '+res.error+'</span><br/><span style="color:var(--txt3)">Mevcut: v'+res.current+'</span>';
+      return;
+    }
+    if(res.available){
+      latestUpdateUrl=res.downloadUrl||'';
+      document.getElementById('updatestatus').innerHTML=
+        '<span style="color:var(--green);font-weight:600;">Yeni surum: v'+res.remote+'</span>'+
+        '<br/><span style="color:var(--txt3)">Mevcut: v'+res.current+'</span>'+
+        (res.notes?'<br/><span style="color:var(--txt2);font-size:10px;">'+res.notes.substring(0,200)+'</span>':'')+
+        (res.publishedAt?'<br/><span style="color:var(--txt3);font-size:9px;">'+res.publishedAt.substring(0,10)+'</span>':'');
+      document.getElementById('btnDoUpdate').style.display='inline-block';
+    } else {
+      document.getElementById('updatestatus').innerHTML=
+        '<span style="color:var(--green)">Guncel! v'+res.current+'</span>';
+      document.getElementById('btnDoUpdate').style.display='none';
+    }
+  }catch(e){
+    document.getElementById('updatestatus').innerHTML='<span style="color:var(--red)">Kontrol hatasi: '+e.message+'</span>';
+  }
+}
+
+async function doUpdate(){
+  if(!latestUpdateUrl){alert('Indirme URL bulunamadi.');return;}
+  document.getElementById('updatestatus').innerHTML='<span style="color:var(--acc)">Indiriliyor...</span>';
+  try{
+    var res=await window.electronAPI.downloadUpdate(latestUpdateUrl);
+    if(res.ok){
+      document.getElementById('updatestatus').innerHTML=
+        '<span style="color:var(--green);font-weight:600;">Guncelleme indirildi!</span>'+
+        '<br/><span style="color:var(--txt2)">Uygulama yeniden baslatilacak.</span>';
+      document.getElementById('btnDoUpdate').style.display='none';
+      // 2 saniye sonra yeniden baslat
+      setTimeout(function(){
+        window.electronAPI.restartApp();
+      },2000);
+    } else {
+      document.getElementById('updatestatus').innerHTML='<span style="color:var(--red)">Indirme hatasi: '+res.error+'</span>';
+    }
+  }catch(e){
+    document.getElementById('updatestatus').innerHTML='<span style="color:var(--red)">Hata: '+e.message+'</span>';
+  }
+}
+
+async function saveUpdateUrl(){
+  var url=(document.getElementById('updateurlinp').value||'').trim();
+  if(typeof window.electronAPI!=='undefined'){
+    await window.electronAPI.setUpdateUrl(url);
+    document.getElementById('updatestatus').innerHTML='<span style="color:var(--green)">URL kaydedildi.</span>';
+  }
+}
+
+// Otomatik guncelleme kontrolu (baslangicta, sessiz)
+function autoCheckUpdate(){
+  if(typeof window.electronAPI==='undefined') return;
+  setTimeout(function(){
+    window.electronAPI.checkUpdate().then(function(res){
+      if(res&&res.available){
+        setSL('Yeni surum: v'+res.remote,'ld');
+        latestUpdateUrl=res.downloadUrl||'';
+      }
+    }).catch(function(){});
+  },5000); // 5 saniye sonra kontrol et
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+syncLoad().then(function(){
+  rWS();rNB();rLib();rNotes();rRefs();uSt();
+  // Electron: sync durumunu göster
+  if(typeof window.electronAPI!=='undefined'){
+    window.electronAPI.getAppInfo().then(function(info){
+      if(info.syncDir){
+        var folder=info.syncDir.split('\\').pop()||info.syncDir;
+        setSL('☁️ '+folder,'ok');
+        setTimeout(function(){setSL('','');},4000);
+      } else {
+        setSL('📁 Yerel','ok');
+        setTimeout(function(){setSL('','');},3000);
+      }
+    }).catch(function(){});
+  }
+  var hasAny=false;S.wss.forEach(function(ws){if(ws.lib&&ws.lib.length)hasAny=true;});
+  if(!hasAny){
+    [{id:'d1',title:'Post-traumatic growth: Conceptual foundations and empirical evidence',authors:['Tedeschi, R. G.','Calhoun, L. G.'],year:'2004',journal:'Psychological Inquiry',volume:'15',issue:'1',fp:'1',lp:'18',doi:'10.1207/s15327965pli1501_01',url:'',pdfData:null,pdfUrl:null,wsId:'ws1'},
+     {id:'d2',title:'Internet addiction: A review of current assessment techniques',authors:['Widyanto, L.','McMurran, M.'],year:'2004',journal:'CyberPsychology & Behavior',volume:'7',issue:'3',fp:'353',lp:'363',doi:'10.1089/1094931041291295',url:'',pdfData:null,pdfUrl:null,wsId:'ws1'},
+     {id:'d3',title:'Counseling and psychotherapy: Theories and interventions',authors:['Capuzzi, D.','Stauffer, M. D.'],year:'2016',journal:'American Counseling Association',volume:'',issue:'',fp:'',lp:'',doi:'',url:'',pdfData:null,pdfUrl:null,wsId:'ws1'}
+    ].forEach(function(d){var w=S.wss.find(function(x){return x.id===S.cur;});if(w)w.lib.push(d);});
+    save();rLib();
+  }
+});
+setInterval(function(){if(syncDirty){syncDirty=false;syncSave();}},30000);
+autoCheckUpdate();
+</script>
+</body>
+</html>
