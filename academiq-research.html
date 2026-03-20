@@ -1959,7 +1959,11 @@ async function doSetSyncDir(){
     var res=await window.electronAPI.setSyncDir();
     if(res.ok){
       document.getElementById('syncdirshow').innerHTML='<span style="color:var(--green)">☁️ '+res.dir+'</span>';
-      setSL('✓ Sync klasörü: '+res.dir.split('\\').pop(),'ok');
+      setSL('✓ Sync klasörü ayarlandı, veriler yükleniyor...','ok');
+      // Reload data from sync folder
+      await syncLoad();
+      renderList();
+      setSL('✓ Sync tamamlandı: '+res.dir.split('\\').pop(),'ok');
       setTimeout(function(){setSL('','');},3000);
     }
   }catch(e){alert('Hata: '+e.message);}

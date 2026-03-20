@@ -267,16 +267,52 @@ ipcMain.handle('sync:setSyncDir', async () => {
   });
   if (result.canceled || !result.filePaths.length) return { ok: false };
 
-  // Migrate existing data to new sync folder
+  // Migrate: sync ↔ local smart merge
   const oldPath = getSyncDataPath();
   settings.syncDir = result.filePaths[0];
   saveSettings();
   const newPath = getSyncDataPath();
 
-  // Copy existing data if present
-  if (fs.existsSync(oldPath) && oldPath !== newPath) {
-    try { fs.copyFileSync(oldPath, newPath); } catch (e) {}
+  if (oldPath !== newPath) {
+    const localExists = fs.existsSync(oldPath);
+    const syncExists = fs.existsSync(newPath);
+
+    if (localExists && !syncExists) {
+      // First computer: copy local → sync
+      try { fs.copyFileSync(oldPath, newPath); } catch (e) {}
+    } else if (syncExists && !localExists) {
+      // Second computer: copy sync → local (cache)
+      try { fs.copyFileSync(newPath, oldPath); } catch (e) {}
+    } else if (localExists && syncExists) {
+      // Both exist: keep the newer one, backup the older
+      try {
+        const localStat = fs.statSync(oldPath);
+        const syncStat = fs.statSync(newPath);
+        if (localStat.mtimeMs > syncStat.mtimeMs) {
+          fs.copyFileSync(newPath, newPath + '.bak');
+          fs.copyFileSync(oldPath, newPath);
+        } else {
+          fs.copyFileSync(oldPath, oldPath + '.bak');
+          fs.copyFileSync(newPath, oldPath);
+        }
+      } catch (e) {}
+    }
   }
+
+  // Auto-sync PDFs
+  try {
+    const syncPdfDir = getSyncPDFDir();
+    const syncFiles = fs.existsSync(syncPdfDir) ? fs.readdirSync(syncPdfDir).filter(f => f.endsWith('.pdf')) : [];
+    for (const f of syncFiles) {
+      const localFp = path.join(LOCAL_PDF_DIR, f);
+      if (!fs.existsSync(localFp)) fs.copyFileSync(path.join(syncPdfDir, f), localFp);
+    }
+    const localFiles = fs.readdirSync(LOCAL_PDF_DIR).filter(f => f.endsWith('.pdf'));
+    for (const f of localFiles) {
+      const syncFp = path.join(syncPdfDir, f);
+      if (!fs.existsSync(syncFp)) fs.copyFileSync(path.join(LOCAL_PDF_DIR, f), syncFp);
+    }
+  } catch (e) { console.warn('PDF sync error:', e.message); }
 
   return { ok: true, dir: settings.syncDir };
 });
