@@ -112,10 +112,21 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 
 /* CENTER */
 #ctr{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#d8d0c4;}
-#etb{height:36px;background:var(--bg2);border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 10px;gap:4px;flex-shrink:0;}
+#etb{height:36px;background:var(--bg2);border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 10px;gap:4px;flex-shrink:0;overflow-x:auto;overflow-y:hidden;}
 .efmt{background:none;border:none;color:var(--txt2);font-size:12px;padding:4px 8px;border-radius:var(--radius);cursor:pointer;font-family:var(--f);transition:all .1s;}
 .efmt:hover{background:var(--bg3);color:var(--txt);}
+.efmt-state.active{background:var(--acc-d);color:var(--acc);box-shadow:inset 0 0 0 1px var(--acc);}
 #escroll{flex:1;overflow-y:auto;padding:32px 24px;display:flex;flex-direction:column;align-items:center;background:#d8d0c4;}
+/* Editor zoom */
+#zoomBar{position:fixed;bottom:8px;right:8px;background:var(--bg2);border:1px solid var(--b);border-radius:6px;padding:2px 6px;display:flex;align-items:center;gap:4px;z-index:50;font-family:var(--fm);font-size:10px;color:var(--txt3);}
+#zoomBar button{background:none;border:none;color:var(--txt2);font-size:14px;cursor:pointer;padding:2px 4px;border-radius:3px;}
+#zoomBar button:hover{background:var(--bg3);}
+/* Context menu */
+.ctx-menu{position:fixed;background:var(--bg);border:1px solid var(--b);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.18);z-index:9999;min-width:160px;padding:4px 0;font-family:var(--fm);font-size:12px;}
+.ctx-menu div{padding:6px 16px;cursor:pointer;color:var(--txt);}
+.ctx-menu div:hover{background:var(--bg3);}
+.ctx-menu .ctx-sep{height:1px;background:var(--b);margin:4px 8px;padding:0;cursor:default;}
+.ctx-menu .ctx-shortcut{float:right;color:var(--txt3);font-size:10px;margin-left:16px;}
 #apapage{width:816px;min-height:1056px;background:#fff;padding:96px;box-shadow:0 2px 20px rgba(0,0,0,.12);margin-bottom:32px;border-radius:2px;overflow:visible;position:relative;}
 #apaed{font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;color:#000;outline:none;min-height:864px;caret-color:#0044cc;word-wrap:break-word;overflow-wrap:break-word;}
 /* Page break overlay — positioned outside editor in #apapage */
@@ -420,6 +431,22 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
     <button class="efmt" onclick="ec('formatBlock','p')">¶</button>
     <button class="efmt" onclick="insBlkQ()">&#10077;</button>
     <span class="sep"></span>
+    <button class="efmt efmt-state" id="btnBold" onclick="ec('bold')" title="Kalın (Ctrl+B)"><b>B</b></button>
+    <button class="efmt efmt-state" id="btnItalic" onclick="ec('italic')" title="İtalik (Ctrl+I)"><i>I</i></button>
+    <button class="efmt efmt-state" id="btnUnderline" onclick="ec('underline')" title="Altı çizili (Ctrl+U)"><u>U</u></button>
+    <button class="efmt efmt-state" id="btnStrike" onclick="ec('strikeThrough')" title="Üstü çizili (Ctrl+D)"><s>S</s></button>
+    <span class="sep"></span>
+    <input type="color" id="txtColor" value="#000000" title="Yazı rengi" style="width:24px;height:22px;border:1px solid var(--b);border-radius:3px;cursor:pointer;padding:0;" onchange="ec('foreColor',this.value)"/>
+    <input type="color" id="hlColor" value="#FFFF00" title="Vurgulama rengi" style="width:24px;height:22px;border:1px solid var(--b);border-radius:3px;cursor:pointer;padding:0;" onchange="ec('hiliteColor',this.value)"/>
+    <span class="sep"></span>
+    <select class="efmt" id="lineSpacing" onchange="setLineSpacing(this.value)" style="padding:2px 4px;font-size:10px;background:var(--bg);color:var(--txt2);border:1px solid var(--b);border-radius:3px;width:48px;cursor:pointer;" title="Satır aralığı">
+      <option value="1">1.0</option>
+      <option value="1.5">1.5</option>
+      <option value="2" selected>2.0</option>
+      <option value="2.5">2.5</option>
+      <option value="3">3.0</option>
+    </select>
+    <span class="sep"></span>
     <button class="efmt" onclick="ec('justifyLeft')" title="Sola hizala">&#8676;</button>
     <button class="efmt" onclick="ec('justifyCenter')" title="Ortala">&#8596;</button>
     <button class="efmt" onclick="ec('justifyRight')" title="Sağa hizala">&#8677;</button>
@@ -474,6 +501,11 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
     <div id="apapage">
       <div id="apaed" contenteditable="true" spellcheck="true" data-gramm="true" data-gramm_editor="true" data-enable-grammarly="true"></div>
     </div>
+  </div>
+  <div id="zoomBar">
+    <button onclick="editorZoom(-10)" title="Küçült">−</button>
+    <span id="zoomLbl">100%</span>
+    <button onclick="editorZoom(10)" title="Büyüt">+</button>
   </div>
 </div>
 
@@ -2376,6 +2408,10 @@ document.addEventListener('keydown',function(e){
   if(mod&&e.key==='='&&pdfOpen){e.preventDefault();pZI();return;}
   if(mod&&e.key==='-'&&pdfOpen){e.preventDefault();pZO();return;}
   if(mod&&e.key==='0'&&!edFocused&&pdfOpen){e.preventDefault();pZFit();return;}
+  // Editor zoom
+  if(mod&&e.key==='='&&!pdfOpen){e.preventDefault();editorZoom(10);return;}
+  if(mod&&e.key==='-'&&!pdfOpen){e.preventDefault();editorZoom(-10);return;}
+  if(mod&&e.key==='0'&&!pdfOpen){e.preventDefault();_edZoom=100;editorZoom(0);return;}
 
   if(inInput) return;
 
@@ -2675,7 +2711,78 @@ function updateRefSection(){
 }
 
 // ── EDITOR ────────────────────────────────────────────────────────────────────
-function ec(cmd,val){document.getElementById('apaed').focus();document.execCommand(cmd,false,val||null);uSt();}
+function ec(cmd,val){document.getElementById('apaed').focus();document.execCommand(cmd,false,val||null);uSt();updateFmtState();}
+// ── LINE SPACING ───────────────────────────────────────────────────────────
+function setLineSpacing(val){
+  var ed=document.getElementById('apaed');
+  ed.style.lineHeight=val;
+  uSt();save();
+}
+// ── EDITOR ZOOM ────────────────────────────────────────────────────────────
+var _edZoom=100;
+function editorZoom(delta){
+  _edZoom=Math.max(50,Math.min(200,_edZoom+delta));
+  var page=document.getElementById('apapage');
+  page.style.transform='scale('+(_edZoom/100)+')';
+  page.style.transformOrigin='top center';
+  document.getElementById('zoomLbl').textContent=_edZoom+'%';
+}
+// ── FORMATTING STATE FEEDBACK ──────────────────────────────────────────────
+function updateFmtState(){
+  try{
+    var cmds=[{id:'btnBold',cmd:'bold'},{id:'btnItalic',cmd:'italic'},{id:'btnUnderline',cmd:'underline'},{id:'btnStrike',cmd:'strikeThrough'}];
+    cmds.forEach(function(c){
+      var btn=document.getElementById(c.id);
+      if(btn){
+        if(document.queryCommandState(c.cmd))btn.classList.add('active');
+        else btn.classList.remove('active');
+      }
+    });
+  }catch(e){}
+}
+// Update formatting state on selection change
+document.addEventListener('selectionchange',function(){
+  var ed=document.getElementById('apaed');
+  if(ed&&ed.contains(document.getSelection().anchorNode))updateFmtState();
+});
+// ── CONTEXT MENU ───────────────────────────────────────────────────────────
+(function(){
+  var ctxMenu=null;
+  function hideCtx(){if(ctxMenu){ctxMenu.remove();ctxMenu=null;}}
+  document.addEventListener('click',hideCtx);
+  document.addEventListener('keydown',hideCtx);
+  document.getElementById('apaed').addEventListener('contextmenu',function(e){
+    e.preventDefault();hideCtx();
+    var sel=window.getSelection();
+    var hasSelection=sel&&sel.toString().length>0;
+    ctxMenu=document.createElement('div');ctxMenu.className='ctx-menu';
+    var items=[];
+    if(hasSelection){
+      items.push({label:'Kes',key:'Ctrl+X',fn:function(){document.execCommand('cut');}});
+      items.push({label:'Kopyala',key:'Ctrl+C',fn:function(){document.execCommand('copy');}});
+    }
+    items.push({label:'Yapıştır',key:'Ctrl+V',fn:function(){navigator.clipboard.readText().then(function(t){document.execCommand('insertText',false,t);}).catch(function(){});}});
+    if(hasSelection){
+      items.push({sep:true});
+      items.push({label:'Kalın',key:'Ctrl+B',fn:function(){ec('bold');}});
+      items.push({label:'İtalik',key:'Ctrl+I',fn:function(){ec('italic');}});
+      items.push({label:'Altı Çizili',key:'Ctrl+U',fn:function(){ec('underline');}});
+    }
+    items.push({sep:true});
+    items.push({label:'Tümünü Seç',key:'Ctrl+A',fn:function(){document.execCommand('selectAll');}});
+    items.forEach(function(item){
+      if(item.sep){var s=document.createElement('div');s.className='ctx-sep';ctxMenu.appendChild(s);return;}
+      var d=document.createElement('div');
+      d.textContent=item.label;
+      if(item.key){var sp=document.createElement('span');sp.className='ctx-shortcut';sp.textContent=item.key;d.appendChild(sp);}
+      d.onclick=function(){hideCtx();item.fn();};
+      ctxMenu.appendChild(d);
+    });
+    ctxMenu.style.left=Math.min(e.clientX,window.innerWidth-180)+'px';
+    ctxMenu.style.top=Math.min(e.clientY,window.innerHeight-200)+'px';
+    document.body.appendChild(ctxMenu);
+  });
+})();
 function iHTML(html){
   var ed=document.getElementById('apaed');
   ed.focus();
