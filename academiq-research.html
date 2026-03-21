@@ -123,8 +123,10 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 .page-break-overlay::after{content:attr(data-label);font-family:var(--fm);font-size:9px;color:var(--txt3);letter-spacing:.05em;}
 /* Page number overlay */
 .page-number{position:absolute;right:0;font-family:'Times New Roman',Times,serif;font-size:12pt;color:#000;pointer-events:none;user-select:none;z-index:5;}
-/* Page spacer inside editor — simulates page margins */
-.pg-spacer{display:block;height:192px;border:none;margin:0;padding:0;background:transparent;pointer-events:none;-webkit-user-select:none;user-select:none;outline:none;caret-color:transparent;overflow:hidden;}
+/* Page spacer inside editor — simulates page margins. NO contentEditable=false! */
+.pg-spacer{display:block;height:192px;border:none;margin:0;padding:0;background:#d8d0c4;pointer-events:none;-webkit-user-select:none;user-select:none;outline:none;caret-color:transparent;overflow:hidden;color:transparent;font-size:0;line-height:0;position:relative;}
+.pg-spacer::before{content:'';position:absolute;top:0;left:-96px;right:-96px;height:96px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.08);}
+.pg-spacer::after{content:'';position:absolute;bottom:0;left:-96px;right:-96px;height:96px;background:#fff;box-shadow:0 -2px 8px rgba(0,0,0,.08);}
 /* Legacy cleanup */
 .page-break{display:none!important;}
 @media print{
@@ -135,7 +137,10 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
   @page{size:letter;margin:0;}
 }
 #apaed:empty::before{content:'Yazmaya başlayın. Atıf için /r yazın...';color:#bbb;font-style:italic;pointer-events:none;}
-.toc-container{border:1px solid #e0d8cc;padding:12px 16px;margin:0 0 12px 0;border-radius:4px;background:#faf8f4;}
+.toc-container{border:1px solid #e0d8cc;padding:12px 16px;margin:0 0 12px 0;border-radius:4px;background:#faf8f4;position:relative;}
+.toc-container .toc-delete{position:absolute;top:4px;right:4px;background:#e74c3c;color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;}
+.toc-container:hover .toc-delete{opacity:1;}
+.toc-entry .toc-page{float:right;color:#888;font-size:11px;}
 .toc-entry:hover{color:var(--acc);text-decoration:underline;}
 .find-hl{background:rgba(255,165,0,.35);border-radius:2px;}
 .find-hl-active{background:rgba(255,100,0,.6);outline:2px solid #ff6400;border-radius:2px;}
@@ -258,6 +263,9 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
 #apaed img{cursor:pointer;transition:outline .15s;}
 #apaed img.img-selected{outline:2px solid var(--acc);outline-offset:2px;}
 .img-resize-handle{position:absolute;width:10px;height:10px;background:var(--acc);border:1px solid #fff;border-radius:2px;cursor:nwse-resize;z-index:10;}
+.img-toolbar{position:absolute;top:-32px;left:50%;transform:translateX(-50%);background:var(--bg2);border:1px solid var(--b);border-radius:4px;display:flex;gap:2px;padding:2px 4px;z-index:20;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.15);}
+.img-toolbar button{background:none;border:none;color:var(--txt2);font-size:11px;padding:2px 6px;border-radius:3px;cursor:pointer;}
+.img-toolbar button:hover{background:var(--bg3);color:var(--txt);}
 .pdf-annot{position:absolute;z-index:5;border:1.5px solid var(--acc);background:rgba(255,248,225,.92);border-radius:4px;padding:4px 6px;font-size:10px;font-family:var(--f);color:var(--txt);min-width:60px;min-height:24px;cursor:move;resize:both;overflow:auto;box-shadow:0 1px 6px rgba(0,0,0,.1);line-height:1.4;}
 .pdf-annot:focus{outline:2px solid var(--acc);border-color:var(--acc-d);}
 .pdf-annot-del{position:absolute;top:1px;right:1px;width:14px;height:14px;background:var(--red);color:#fff;border-radius:50%;font-size:9px;line-height:14px;text-align:center;cursor:pointer;display:none;z-index:6;}
@@ -724,8 +732,12 @@ async function syncSave(){
   html=html.replace(/<div[^>]*class="page-break[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');
   html=html.replace(/<div[^>]*class="page-top-spacer[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');
   html=html.replace(/<hr[^>]*class="pg-spacer"[^>]*\/?>/gi,'');
+  html=html.replace(/<div[^>]*class="pg-spacer"[^>]*>[\s\S]*?<\/div>/gi,'');
   html=html.replace(/<hr[^>]*class="find-hl[^"]*"[^>]*\/?>/gi,'');
   html=html.replace(/<mark[^>]*class="find-hl[^"]*"[^>]*>([\s\S]*?)<\/mark>/gi,'$1');
+  html=html.replace(/<button[^>]*class="toc-delete"[^>]*>[\s\S]*?<\/button>/gi,'');
+  html=html.replace(/<div[^>]*class="img-toolbar"[^>]*>[\s\S]*?<\/div>/gi,'');
+  html=html.replace(/<div[^>]*class="img-resize-handle"[^>]*>[\s\S]*?<\/div>/gi,'');
   S.doc=html;
   // Save current doc tab content
   if(S.docs&&S.curDoc){
@@ -816,6 +828,7 @@ async function syncLoad(){
   rawHTML=rawHTML.replace(/<div[^>]*class="page-break-overlay[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');
   rawHTML=rawHTML.replace(/<div[^>]*class="page-number[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');
   rawHTML=rawHTML.replace(/<hr[^>]*class="pg-spacer"[^>]*\/?>/gi,'');
+  rawHTML=rawHTML.replace(/<div[^>]*class="pg-spacer"[^>]*>[\s\S]*?<\/div>/gi,'');
   document.getElementById('apaed').innerHTML=rawHTML;
   if(typeof updatePageHeight==='function')updatePageHeight();
 }
@@ -857,8 +870,12 @@ function rDocTabs(){
   });
   var add=document.createElement('button');add.id='doctab-add';add.textContent='+';add.title='Yeni belge';
   add.onclick=function(){
-    var name='Belge '+(S.docs.length+1);
-    var nd={id:uid(),name:name,content:''};
+    var n=1;
+    var existNames=S.docs.map(function(d){return d.name;});
+    while(existNames.indexOf('Belge '+n)!==-1)n++;
+    var name=prompt('Belge adı:','Belge '+n);
+    if(!name||!name.trim())return;
+    var nd={id:uid(),name:name.trim(),content:''};
     S.docs.push(nd);
     switchDoc(nd.id);
   };
@@ -868,13 +885,15 @@ function switchDoc(docId){
   // Save current doc content (cleaned)
   var cur=S.docs.find(function(d){return d.id===S.curDoc;});
   var ed=document.getElementById('apaed');
-  if(cur){var ch=ed.innerHTML;ch=ch.replace(/<div[^>]*class="page-break[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');ch=ch.replace(/<div[^>]*class="page-top-spacer[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');ch=ch.replace(/<hr[^>]*class="pg-spacer"[^>]*\/?>/gi,'');cur.content=ch;}
+  if(cur){var ch=ed.innerHTML;ch=ch.replace(/<div[^>]*class="page-break[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');ch=ch.replace(/<div[^>]*class="page-top-spacer[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');ch=ch.replace(/<hr[^>]*class="pg-spacer"[^>]*\/?>/gi,'');ch=ch.replace(/<div[^>]*class="pg-spacer"[^>]*>[\s\S]*?<\/div>/gi,'');cur.content=ch;}
   // Switch
   S.curDoc=docId;
   var next=S.docs.find(function(d){return d.id===docId;});
   var nc=next?next.content:'';
   nc=nc.replace(/<div[^>]*class="page-break[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');
   nc=nc.replace(/<div[^>]*class="page-top-spacer[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');
+  nc=nc.replace(/<div[^>]*class="pg-spacer"[^>]*>[\s\S]*?<\/div>/gi,'');
+  nc=nc.replace(/<hr[^>]*class="pg-spacer"[^>]*\/?>/gi,'');
   ed.innerHTML=nc;
   save();rDocTabs();uSt();updatePageHeight();
 }
@@ -2756,7 +2775,7 @@ function formatPlainTextAPA(text){
 
 var _refTimer=null;
 document.getElementById('apaed').addEventListener('input',function(){
-  uSt();save();updatePageHeight();
+  uSt();save();updatePageHeight();autoUpdateTOC();
   // Auto-update kaynakça if it exists
   clearTimeout(_refTimer);
   _refTimer=setTimeout(function(){
@@ -2767,8 +2786,6 @@ document.getElementById('apaed').addEventListener('input',function(){
 
 // ── PAGE HEIGHT AUTO-ADJUST WITH PAGE BREAKS ────────────────────────────────
 var _pgTimer=null;
-var _lastPageCount=1;
-var _spacerH=192; // bottom margin + gap + top margin simulation
 function updatePageHeight(){
   clearTimeout(_pgTimer);
   _pgTimer=setTimeout(_doUpdatePageHeight,300);
@@ -2779,53 +2796,14 @@ function _doUpdatePageHeight(){
   if(!page||!ed)return;
   // Remove old overlays from #apapage
   page.querySelectorAll('.page-break-overlay,.page-number').forEach(function(pb){pb.remove();});
-  // Measure content height WITHOUT spacers
-  var spacers=ed.querySelectorAll('.pg-spacer');
-  var spacerCount=spacers.length;
-  var totalSpacerH=spacerCount*_spacerH;
-  var contentH=ed.scrollHeight-totalSpacerH;
-  var pageContentH=864; // 1056 - 96*2 padding
+  // Remove old spacers from editor
+  ed.querySelectorAll('.pg-spacer').forEach(function(s){s.remove();});
+  var contentH=ed.scrollHeight;
+  var pageContentH=864;
   var numPages=Math.max(1,Math.ceil(contentH/pageContentH));
-  var pageH=1056,gapH=32;
-  // Total height including spacers
-  var totalH=numPages*pageH+(numPages-1)*gapH;
-  page.style.minHeight=totalH+'px';
-  // Only re-insert spacers if page count changed
-  if(numPages!==_lastPageCount){
-    _lastPageCount=numPages;
-    // Save selection before DOM changes
-    var sel=window.getSelection();
-    var savedSel=null;
-    if(sel&&sel.rangeCount){try{savedSel=sel.getRangeAt(0).cloneRange();}catch(e){}}
-    // Remove old spacers
-    spacers.forEach(function(s){s.remove();});
-    // Insert new spacers (from bottom to top to avoid offset shifts)
-    if(numPages>1){
-      for(var i=numPages-1;i>=1;i--){
-        var breakPos=i*pageContentH;
-        var hr=document.createElement('hr');
-        hr.className='pg-spacer';
-        hr.contentEditable='false';
-        // Find insertion point by cumulative height of children
-        var children=Array.from(ed.children);
-        var insertBefore=null;
-        var cumH=0;
-        for(var j=0;j<children.length;j++){
-          if(children[j].classList&&children[j].classList.contains('pg-spacer'))continue;
-          cumH+=children[j].offsetHeight||0;
-          if(cumH>=breakPos){
-            insertBefore=children[j].nextElementSibling||null;
-            break;
-          }
-        }
-        if(insertBefore)ed.insertBefore(hr,insertBefore);
-        else ed.appendChild(hr);
-      }
-    }
-    // Restore selection
-    if(savedSel){try{sel.removeAllRanges();sel.addRange(savedSel);}catch(e){}}
-  }
-  // Create page numbers (only if preference enabled)
+  var pageH=1056,gapH=32,spacerH=192;
+  page.style.minHeight=(numPages*pageH+(numPages-1)*gapH)+'px';
+  // Page numbers
   if(S.showPageNumbers){
     for(var p=0;p<numPages;p++){
       var pn=document.createElement('div');
@@ -2836,16 +2814,54 @@ function _doUpdatePageHeight(){
     }
   }
   if(numPages<=1)return;
-  // Create page-break overlays OUTSIDE the editor (in #apapage)
-  // Calculate positions accounting for spacers in content
-  for(var i=1;i<numPages;i++){
+  // Insert spacers at page boundaries inside editor (NO contentEditable=false!)
+  var children=Array.from(ed.children);
+  var accH=0;
+  var breakIdx=1;
+  for(var ci=0;ci<children.length&&breakIdx<numPages;ci++){
+    var child=children[ci];
+    if(child.classList&&child.classList.contains('pg-spacer'))continue;
+    accH+=child.offsetHeight||0;
+    if(accH>=pageContentH*breakIdx){
+      var spacer=document.createElement('div');
+      spacer.className='pg-spacer';
+      spacer.innerHTML='\u200b'; // zero-width space
+      child.after(spacer);
+      breakIdx++;
+      ci++; // skip inserted spacer
+    }
+  }
+  // Position overlays based on spacer positions
+  var spacers=ed.querySelectorAll('.pg-spacer');
+  spacers.forEach(function(sp,idx){
+    var spTop=sp.offsetTop;
     var pb=document.createElement('div');
     pb.className='page-break-overlay';
-    pb.style.top=(96+i*pageContentH+(i-1)*_spacerH+(i-1)*gapH)+'px';
-    pb.dataset.label='Sayfa '+(i+1);
+    // Center the 32px overlay on the spacer (which is 192px)
+    pb.style.top=(96+spTop+80)+'px';
+    pb.dataset.label='Sayfa '+(idx+2);
     page.appendChild(pb);
-  }
+  });
 }
+
+// ── CURSOR GUARD: prevent cursor from staying in spacers ──────────────────
+document.addEventListener('selectionchange',function(){
+  var sel=window.getSelection();
+  if(!sel||!sel.rangeCount)return;
+  var node=sel.anchorNode;
+  if(!node)return;
+  var spacer=node.nodeType===1?node.closest('.pg-spacer'):node.parentElement?node.parentElement.closest('.pg-spacer'):null;
+  if(!spacer)return;
+  // Move cursor to next sibling or previous sibling
+  var next=spacer.nextElementSibling;
+  var prev=spacer.previousElementSibling;
+  var target=next||prev;
+  if(target){
+    var r=document.createRange();
+    r.setStart(target,0);r.collapse(true);
+    sel.removeAllRanges();sel.addRange(r);
+  }
+});
 
 // ── TABLE DELETE ─────────────────────────────────────────────────────────────
 var tblDelBtn=document.createElement('button');
@@ -3097,7 +3113,7 @@ function handleImgUpload(e){
   reader.onload=function(ev){
     var ed=document.getElementById('apaed');ed.focus();
     if(editorSavedRange){try{var s=window.getSelection();s.removeAllRanges();s.addRange(editorSavedRange);}catch(ex){}editorSavedRange=null;}
-    var html='<div style="text-align:center;margin:12px 0;text-indent:0"><img src="'+ev.target.result+'" style="max-width:100%;height:auto;border:1px solid var(--b);border-radius:4px;" alt="'+file.name+'"/></div><p><br></p>';
+    var html='<div style="text-align:left;margin:12px 0;text-indent:0"><img src="'+ev.target.result+'" style="max-width:100%;height:auto;border:1px solid var(--b);border-radius:4px;" alt="'+file.name+'"/></div><p><br></p>';
     var ok=document.execCommand('insertHTML',false,html);
     if(!ok){var tmp=document.createElement('div');tmp.innerHTML=html;while(tmp.firstChild)ed.appendChild(tmp.firstChild);}
     uSt();save();updatePageHeight();
@@ -3112,11 +3128,12 @@ function handleImgUpload(e){
     // Deselect previous
     var prev=document.querySelector('#apaed img.img-selected');
     if(prev&&prev!==e.target)prev.classList.remove('img-selected');
-    removeResizeHandles();
+    removeResizeHandles();removeImgToolbar();
     if(e.target.tagName==='IMG'){
       selectedImg=e.target;
       selectedImg.classList.add('img-selected');
       addResizeHandle(selectedImg);
+      addImgToolbar(selectedImg);
     }else{selectedImg=null;}
   });
   function addResizeHandle(img){
@@ -3147,6 +3164,33 @@ function handleImgUpload(e){
     uSt();save();
   }
   function removeResizeHandles(){document.querySelectorAll('#apaed .img-resize-handle').forEach(function(h){h.remove();});}
+  function addImgToolbar(img){
+    var wrap=img.parentElement;
+    if(!wrap||wrap.id==='apaed')return;
+    wrap.style.position='relative';
+    var tb=document.createElement('div');tb.className='img-toolbar';
+    tb.contentEditable='false';
+    var btns=[
+      {label:'\u25C0',title:'Sola hizala',align:'left'},
+      {label:'\u25A0',title:'Ortala',align:'center'},
+      {label:'\u25B6',title:'Sa\u011fa hizala',align:'right'}
+    ];
+    btns.forEach(function(b){
+      var btn=document.createElement('button');btn.textContent=b.label;btn.title=b.title;
+      btn.onmousedown=function(ev){ev.preventDefault();ev.stopPropagation();};
+      btn.onclick=function(ev){
+        ev.preventDefault();ev.stopPropagation();
+        wrap.style.textAlign=b.align;
+        if(b.align==='left'){wrap.style.display='block';wrap.style.marginRight='auto';wrap.style.marginLeft='0';}
+        else if(b.align==='right'){wrap.style.display='block';wrap.style.marginLeft='auto';wrap.style.marginRight='0';}
+        else{wrap.style.display='block';wrap.style.marginLeft='auto';wrap.style.marginRight='auto';}
+        uSt();save();
+      };
+      tb.appendChild(btn);
+    });
+    wrap.appendChild(tb);
+  }
+  function removeImgToolbar(){document.querySelectorAll('#apaed .img-toolbar').forEach(function(t){t.remove();});}
   // Delete key removes selected image
   document.addEventListener('keydown',function(e){
     if(selectedImg&&(e.key==='Delete'||e.key==='Backspace')&&document.activeElement.id!=='apaed'){
@@ -3239,19 +3283,7 @@ function insertTOC(){
   var ed=document.getElementById('apaed');
   var headings=ed.querySelectorAll('h1,h2,h3,h4,h5');
   if(!headings.length){alert('Belgede başlık bulunamadı. Önce H1-H5 başlıkları ekleyin.');return;}
-  // Build TOC HTML
-  var tocHTML='<div class="toc-container" contenteditable="true">';
-  tocHTML+='<h1 style="text-align:center;font-weight:bold;">İçindekiler</h1>';
-  headings.forEach(function(h,idx){
-    var level=parseInt(h.tagName.charAt(1));
-    var text=h.textContent.trim();
-    if(!text||text==='İçindekiler'||text==='Kaynakça')return;
-    var indent=(level-1)*24;
-    tocHTML+='<p class="ni toc-entry" style="text-indent:0;padding-left:'+indent+'px;cursor:pointer;margin:2px 0;" data-toc-idx="'+idx+'" onclick="scrollToHeading('+idx+')">';
-    tocHTML+=text;
-    tocHTML+='</p>';
-  });
-  tocHTML+='</div><p><br></p>';
+  var tocHTML=buildTOCHTML(ed,headings);
   // Check if TOC already exists — update it
   var existing=ed.querySelector('.toc-container');
   if(existing){
@@ -3268,6 +3300,51 @@ function insertTOC(){
     }
   }
   uSt();save();updatePageHeight();
+}
+function buildTOCHTML(ed,headings){
+  var pageContentH=864;
+  var tocHTML='<div class="toc-container" contenteditable="true">';
+  tocHTML+='<button class="toc-delete" onclick="removeTOC()" title="İçindekileri kaldır" contenteditable="false">\u00d7</button>';
+  tocHTML+='<h1 style="text-align:center;font-weight:bold;">İçindekiler</h1>';
+  var realIdx=0;
+  headings.forEach(function(h){
+    var level=parseInt(h.tagName.charAt(1));
+    var text=h.textContent.trim();
+    if(!text||text==='İçindekiler'||text==='Kaynakça')return;
+    var indent=(level-1)*24;
+    // Calculate page number based on heading position
+    var hTop=h.offsetTop;
+    var pageNum=Math.floor(hTop/pageContentH)+1;
+    tocHTML+='<p class="ni toc-entry" style="text-indent:0;padding-left:'+indent+'px;cursor:pointer;margin:2px 0;" data-toc-idx="'+realIdx+'" onclick="scrollToHeading('+realIdx+')">';
+    tocHTML+=text;
+    tocHTML+='<span class="toc-page">'+pageNum+'</span>';
+    tocHTML+='</p>';
+    realIdx++;
+  });
+  tocHTML+='</div>';
+  return tocHTML;
+}
+function removeTOC(){
+  var ed=document.getElementById('apaed');
+  var toc=ed.querySelector('.toc-container');
+  if(toc){toc.remove();uSt();save();updatePageHeight();}
+}
+// Auto-update TOC when headings change
+var _tocTimer=null;
+function autoUpdateTOC(){
+  clearTimeout(_tocTimer);
+  _tocTimer=setTimeout(function(){
+    var ed=document.getElementById('apaed');
+    if(!ed)return;
+    var existing=ed.querySelector('.toc-container');
+    if(!existing)return;
+    var headings=ed.querySelectorAll('h1,h2,h3,h4,h5');
+    if(!headings.length)return;
+    var newHTML=buildTOCHTML(ed,headings);
+    var temp=document.createElement('div');temp.innerHTML=newHTML;
+    existing.replaceWith(temp.firstChild);
+    temp.remove();
+  },2000);
 }
 function scrollToHeading(idx){
   var ed=document.getElementById('apaed');
