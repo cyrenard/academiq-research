@@ -1754,10 +1754,12 @@ function ec(cmd,val){
 }
 function iHTML(html){
   var ed=document.getElementById('apaed');
-  if(!restoreEditorSelection()){
-    ed.focus();
+  ed.focus();
+  if(editorSavedRange){
     var sel=window.getSelection();
-    if(sel.rangeCount===0){var r=document.createRange();r.selectNodeContents(ed);r.collapse(false);sel.addRange(r);}
+    sel.removeAllRanges();
+    sel.addRange(editorSavedRange);
+    editorSavedRange=null;
   }
   document.execCommand('insertHTML',false,html);
   uSt();save();
