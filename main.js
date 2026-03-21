@@ -400,6 +400,13 @@ ipcMain.handle('update:check', async () => {
 ipcMain.handle('update:download', async (_ev, url) => {
   try {
     if (!url) return { ok: false, error: 'No URL' };
+
+    // If URL is a GitHub release page (not a direct file), convert to raw file URL
+    if (url.includes('/releases/tag/')) {
+      const tag = url.split('/releases/tag/').pop();
+      url = 'https://raw.githubusercontent.com/cyrenard/academiq-research/' + tag + '/academiq-research.html';
+    }
+
     const buf = await followRedirects(url);
     if (!buf || buf.length < 100) return { ok: false, error: 'Empty download' };
 
