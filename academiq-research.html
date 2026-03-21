@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <title>AcademiQ Research</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Playfair+Display:ital,wght@0,600;1,400&display=swap" rel="stylesheet"/>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css" rel="stylesheet"/>
@@ -92,14 +93,17 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 .efmt:hover{background:var(--bg3);color:var(--txt);}
 #escroll{flex:1;overflow-y:auto;padding:32px 24px;display:flex;flex-direction:column;align-items:center;background:#d8d0c4;}
 #apapage{width:816px;min-height:1056px;background:#fff;padding:96px;box-shadow:0 2px 20px rgba(0,0,0,.12);margin-bottom:32px;border-radius:2px;overflow:visible;position:relative;}
-#apaed{font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;color:#000;outline:none;min-height:860px;caret-color:#0044cc;word-wrap:break-word;overflow-wrap:break-word;}
-/* Sayfa kesim cizgileri - her 864px'de (1056-96*2 padding) */
-#apaed{background-image:repeating-linear-gradient(transparent 0px,transparent 862px,var(--b2) 862px,var(--b2) 864px,transparent 864px);background-size:100% 864px;background-position:0 0;}
+#apaed{font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;color:#000;outline:none;min-height:864px;caret-color:#0044cc;word-wrap:break-word;overflow-wrap:break-word;}
+/* Page break divider — Word-like page gap */
+.page-break{width:calc(100% + 192px);height:32px;background:#d8d0c4;margin:0 -96px;box-shadow:inset 0 8px 8px -8px rgba(0,0,0,.15),inset 0 -8px 8px -8px rgba(0,0,0,.15);position:relative;pointer-events:none;-webkit-user-select:none;user-select:none;display:flex;align-items:center;justify-content:center;}
+.page-break::after{content:attr(data-label);font-family:var(--fm);font-size:9px;color:var(--txt3);letter-spacing:.05em;}
 @media print{
   #tb,#sbl,#sbr,#etb,#pdfpanel{display:none!important;}
   #lay,#ctr,#escroll{overflow:visible!important;display:block!important;height:auto!important;}
   #apapage{box-shadow:none;margin:0;padding:2.54cm;width:auto;min-height:auto;overflow:visible;}
-  #apaed{background-image:none;min-height:auto;}
+  #apaed{min-height:auto;}
+  .page-break{display:block;height:0;margin:0;box-shadow:none;background:transparent;page-break-before:always;}
+  .page-break::after{display:none;}
   @page{size:letter;margin:0;}
 }
 #apaed:empty::before{content:'Yazmaya başlayın. Atıf için /r yazın...';color:#bbb;font-style:italic;pointer-events:none;}
@@ -195,15 +199,16 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 .hlc:hover{transform:scale(1.15);}
 .hlc.on{border-color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.4);}
 /* PDF scroll area */
-#pdfscroll{flex:1;overflow-y:auto;overflow-x:auto;background:#c5bdb0;display:flex;flex-direction:column;align-items:center;padding:16px;gap:8px;scroll-behavior:smooth;}
+#pdfscroll{flex:1;overflow:auto;background:#c5bdb0;position:relative;}
 /* Page container: canvas + text layer stacked */
 .pdf-page-wrap{position:relative;flex-shrink:0;background:#fff;box-shadow:0 1px 8px rgba(0,0,0,.15);border-radius:1px;}
 .pdf-page-wrap canvas{display:block;}
-/* PDF.js text layer — pdf_viewer.min.css handles positioning, we only override colors */
-.pdf-page-wrap .textLayer{z-index:3;pointer-events:auto;}
-.pdf-page-wrap .textLayer span{color:transparent!important;cursor:text;pointer-events:auto;}
-.pdf-page-wrap .textLayer span::selection{background:rgba(37,99,235,.8);color:transparent!important;}
-.pdf-page-wrap .textLayer span::-moz-selection{background:rgba(37,99,235,.8);color:transparent!important;}
+/* PDF.js PDFViewer pages */
+#pdfscroll .pdfViewer .page{margin:4px auto;box-shadow:0 1px 8px rgba(0,0,0,.15);background:#fff;}
+/* Text layer — pdf_viewer.min.css handles positioning, we only override colors */
+.textLayer span{color:transparent!important;cursor:text;}
+.textLayer span::selection{background:rgba(37,99,235,.8)!important;color:transparent!important;}
+.textLayer span::-moz-selection{background:rgba(37,99,235,.8)!important;color:transparent!important;}
 /* Highlight overlay: text layer ALTINDA, pointer-events kapalı */
 .hl-overlay{
   position:absolute;top:0;left:0;
@@ -443,6 +448,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
     <div id="pdfthumbs" style="display:none;width:120px;background:var(--bg);border-right:1px solid var(--b);overflow-y:auto;flex-shrink:0;padding:4px;"></div>
     <div id="pdfoutline" style="display:none;width:200px;background:var(--bg);border-right:1px solid var(--b);overflow-y:auto;flex-shrink:0;padding:6px;"></div>
     <div id="pdfscroll" ondragover="event.preventDefault()" ondrop="hDrop(event)">
+      <div id="viewer" class="pdfViewer"></div>
       <div id="pdfempty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;gap:10px;text-align:center;width:100%;">
         <div style="font-size:28px">&#128196;</div>
         <div style="font-size:12px;color:var(--txt2)">PDF yukle veya kutuphaneden sec</div>
@@ -1112,176 +1118,101 @@ function electronFetchChain(urls,idx,refId){
     });
 }
 
-// ── PDF RENDER WITH TEXT LAYER ────────────────────────────────────────────────
-// Matrix multiply: [a1,b1,c1,d1,e1,f1] × [a2,b2,c2,d2,e2,f2]
-function matMul(m1,m2){
-  return [
-    m1[0]*m2[0]+m1[2]*m2[1],
-    m1[1]*m2[0]+m1[3]*m2[1],
-    m1[0]*m2[2]+m1[2]*m2[3],
-    m1[1]*m2[2]+m1[3]*m2[3],
-    m1[0]*m2[4]+m1[2]*m2[5]+m1[4],
-    m1[1]*m2[4]+m1[3]*m2[5]+m1[5]
-  ];
-}
-function manualTextLayer(tc,container,vp){
-  var vpTx=vp.transform;
-  var items=tc.items;
-  if(!items||!items.length) return;
-  for(var i=0;i<items.length;i++){
-    var item=items[i];
-    if(!item.str||!item.transform) continue;
-    // Birleşik transform: viewport × item
-    var t=matMul(vpTx, item.transform);
-    // Font yüksekliği
-    var fontH=Math.sqrt(t[2]*t[2]+t[3]*t[3]);
-    if(fontH<0.5) continue;
-    var angle=Math.atan2(t[1],t[0]);
-    // Span oluştur
-    var span=document.createElement('span');
-    span.textContent=item.str;
-    span.style.cssText='position:absolute;left:'+Math.round(t[4]*10)/10+'px;top:'+Math.round((t[5]-fontH)*10)/10+'px;font-size:'+Math.round(fontH*10)/10+'px;font-family:sans-serif;color:transparent;white-space:pre;cursor:text;transform-origin:0% 0%;line-height:1;-webkit-user-select:text;user-select:text;pointer-events:auto;';
-    // DOM'a ekle → senkron layout → genişlik ölçekle
-    container.appendChild(span);
-    if(item.width>0){
-      var expected=item.width*vp.scale;
-      var actual=span.offsetWidth;
-      if(actual>0){
-        var scX=expected/actual;
-        if(scX>0.05&&scX<20&&Math.abs(scX-1)>0.02){
-          span.style.transform=(Math.abs(angle)>0.001?'rotate('+angle+'rad) ':'')+'scaleX('+scX.toFixed(4)+')';
-        } else if(Math.abs(angle)>0.001){
-          span.style.transform='rotate('+angle+'rad)';
-        }
-      }
-    }
-  }
-}
+// ── PDF RENDER WITH PDFViewer ─────────────────────────────────────────────────
+var pdfEventBus=null;
+var pdfViewer=null;
 
 function getScale(){
   var w=document.getElementById('pdfscroll').clientWidth||560;
   if(pdfScale>0)return pdfScale;
-  return Math.max(0.6,Math.min((w-28)/595,2.2)); // 595 = A4 width points
+  return Math.max(0.6,Math.min((w-28)/595,2.2));
 }
-
-var renderedPages={};
-var lazyObserver=null;
 
 function renderPDF(buf){
   clearPDFView();
   loadHLData();
   var safeBuf=buf.slice?buf.slice(0):buf;
+
+  pdfEventBus=new pdfjsViewer.EventBus();
+  var container=document.getElementById('pdfscroll');
+
+  pdfViewer=new pdfjsViewer.PDFViewer({
+    container:container,
+    eventBus:pdfEventBus,
+    textLayerMode:2,
+    annotationMode:0,
+    removePageBorders:true
+  });
+
+  // Track current page
+  pdfEventBus.on('pagechanging',function(e){
+    pdfPg=e.pageNumber;
+    updPgLabel();
+    updateThumbHL();
+  });
+
+  // When text layer renders on a page, cache text + add highlight overlay
+  pdfEventBus.on('textlayerrendered',function(e){
+    var pgNum=e.pageNumber;
+    var pageView=pdfViewer.getPageView(pgNum-1);
+    if(!pageView)return;
+    // Cache text content for search
+    if(pageView.textLayer&&pageView.textLayer.textContentItems){
+      pdfTextCache[pgNum]=pageView.textLayer.textContentItems;
+    } else {
+      pdfDoc.getPage(pgNum).then(function(page){
+        page.getTextContent({normalizeWhitespace:true}).then(function(tc){
+          if(tc&&tc.items)pdfTextCache[pgNum]=tc.items;
+        });
+      });
+    }
+    // Add highlight overlay canvas if not present
+    var pageDiv=pageView.div;
+    if(pageDiv&&!pageDiv.querySelector('.hl-overlay')){
+      var hlc=document.createElement('canvas');
+      hlc.className='hl-overlay';
+      hlc.width=pageDiv.clientWidth;
+      hlc.height=pageDiv.clientHeight;
+      hlc.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2;';
+      pageDiv.style.position='relative';
+      pageDiv.appendChild(hlc);
+    }
+    // Paint highlights for this page
+    var hlc2=pageDiv.querySelector('.hl-overlay');
+    if(hlc2){
+      hlc2.width=pageDiv.clientWidth;
+      hlc2.height=pageDiv.clientHeight;
+      paintHL(hlc2,pgNum);
+    }
+  });
+
   pdfjsLib.getDocument({data:safeBuf}).promise.then(function(pdf){
     pdfDoc=pdf;pdfTotal=pdf.numPages;pdfPg=1;
-    renderedPages={};
-    updPgLabel();
-    var sc=document.getElementById('pdfscroll');
     pdfTextCache={};
-    // Get first page dimensions for placeholders
-    pdf.getPage(1).then(function(firstPage){
-      var scale=getScale();
-      var vp=firstPage.getViewport({scale:scale});
-      for(var n=1;n<=pdf.numPages;n++){
-        var wrap=document.createElement('div');
-        wrap.className='pdf-page-wrap';
-        wrap.dataset.page=String(n);
-        wrap.style.cssText='position:relative;flex-shrink:0;width:'+vp.width+'px;height:'+vp.height+'px;background:#e8e8e8;box-shadow:0 2px 12px rgba(0,0,0,.4);';
-        var label=document.createElement('div');
-        label.className='page-placeholder';
-        label.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#999;font-size:16px;';
-        label.textContent=n;
-        wrap.appendChild(label);
-        sc.appendChild(wrap);
-      }
-      setupLazyRendering();
-      setupPageTracking();
-      // Render thumbnails if visible
-      if(document.getElementById('pdfthumbs').style.display!=='none')renderThumbnails();
-      loadOutline();
-    });
-  }).catch(function(e){setDst('PDF acilamadi: '+e.message,'er');});
-}
-
-function setupLazyRendering(){
-  if(lazyObserver)lazyObserver.disconnect();
-  var sc=document.getElementById('pdfscroll');
-  lazyObserver=new IntersectionObserver(function(entries){
-    entries.forEach(function(entry){
-      if(entry.isIntersecting){
-        var pgNum=parseInt(entry.target.dataset.page);
-        if(pgNum&&!renderedPages[pgNum]){
-          renderSinglePage(pgNum);
-          if(pgNum>1&&!renderedPages[pgNum-1])renderSinglePage(pgNum-1);
-          if(pgNum<pdfTotal&&!renderedPages[pgNum+1])renderSinglePage(pgNum+1);
-        }
-      }
-    });
-  },{root:sc,rootMargin:'300px 0px'});
-  sc.querySelectorAll('.pdf-page-wrap').forEach(function(w){lazyObserver.observe(w);});
-}
-
-function renderSinglePage(n){
-  if(!pdfDoc||renderedPages[n])return;
-  renderedPages[n]=true;
-  pdfDoc.getPage(n).then(function(page){
+    pdfViewer.setDocument(pdf);
+    // Set scale
     var scale=getScale();
-    var dpr=window.devicePixelRatio||1;
-    var vp=page.getViewport({scale:scale});
-    var wrap=document.querySelector('.pdf-page-wrap[data-page="'+n+'"]');
-    if(!wrap)return;
-    wrap.style.width=Math.round(vp.width)+'px';wrap.style.height=Math.round(vp.height)+'px';wrap.style.background='#fff';
-    var ph=wrap.querySelector('.page-placeholder');if(ph)ph.remove();
-    // Canvas: render at dpr resolution for HiDPI sharpness
-    var canvas=document.createElement('canvas');
-    canvas.width=Math.round(vp.width*dpr);canvas.height=Math.round(vp.height*dpr);
-    canvas.style.cssText='display:block;position:absolute;top:0;left:0;z-index:0;width:'+Math.round(vp.width)+'px;height:'+Math.round(vp.height)+'px;';
-    wrap.appendChild(canvas);
-    var ctx=canvas.getContext('2d');
-    ctx.scale(dpr,dpr);
-    // Text layer
-    var textDiv=document.createElement('div');
-    textDiv.className='textLayer';
-    wrap.appendChild(textDiv);
-    // Highlight overlay
-    var hlc=document.createElement('canvas');
-    hlc.className='hl-overlay';
-    hlc.width=Math.round(vp.width);hlc.height=Math.round(vp.height);
-    wrap.appendChild(hlc);
-    // Render PDF
-    page.render({canvasContext:ctx,viewport:vp}).promise.then(function(){
-      page.getTextContent({normalizeWhitespace:true}).then(function(tc){
-        if(!tc||!tc.items||!tc.items.length){paintHL(hlc,n);return;}
-        pdfTextCache[n]=tc.items;
-        var done=false;
-        if(typeof pdfjsLib.renderTextLayer==='function'){
-          try{
-            textDiv.style.setProperty('--scale-factor',String(scale));
-            var params={container:textDiv,viewport:vp,textDivs:[]};
-            params.textContent=tc;
-            var task=pdfjsLib.renderTextLayer(params);
-            if(task&&task.promise){
-              done=true;
-              task.promise.then(function(){paintHL(hlc,n);}).catch(function(){
-                textDiv.innerHTML='';manualTextLayer(tc,textDiv,vp);paintHL(hlc,n);
-              });
-            }
-          }catch(e){}
-        }
-        if(!done){manualTextLayer(tc,textDiv,vp);paintHL(hlc,n);}
-      }).catch(function(){paintHL(hlc,n);});
-    }).catch(function(){});
-  }).catch(function(){});
+    pdfViewer.currentScaleValue=scale;
+    updPgLabel();
+    // Thumbnails & outline
+    if(document.getElementById('pdfthumbs').style.display!=='none')renderThumbnails();
+    loadOutline();
+  }).catch(function(e){setDst('PDF acilamadi: '+e.message,'er');});
 }
 
 function clearPDFView(){
   if(pageObserver)pageObserver.disconnect();
-  if(lazyObserver)lazyObserver.disconnect();
+  if(pdfViewer){try{pdfViewer.setDocument(null);}catch(e){}}
+  pdfViewer=null;pdfEventBus=null;
   pdfDoc=null;pdfPg=1;pdfTotal=0;
-  pdfTextCache={};renderedPages={};
+  pdfTextCache={};
   pdfSearchResults=[];pdfSearchIdx=-1;
   var pgEl=document.getElementById('pdfpg');if(pgEl)pgEl.textContent='--';
   var zmEl=document.getElementById('pdfzoom');if(zmEl)zmEl.textContent='--';
-  var sc=document.getElementById('pdfscroll');if(sc)sc.innerHTML='';
+  var sc=document.getElementById('pdfscroll');if(sc){
+    // Keep only the viewerContainer structure needed by PDFViewer
+    sc.innerHTML='<div id="viewer" class="pdfViewer"></div>';
+  }
 }
 
 function showNoPDF(ref){
@@ -1304,37 +1235,53 @@ function showNoPDF(ref){
 
 function pPrev(){if(pdfPg>1){pdfPg--;scrollToPage(pdfPg);}}
 function pNext(){if(pdfPg<pdfTotal){pdfPg++;scrollToPage(pdfPg);}}
-function scrollToPage(n){var w=document.querySelector('.pdf-page-wrap[data-page="'+n+'"]');if(w)w.scrollIntoView({behavior:'smooth',block:'start'});updPgLabel();}
+function scrollToPage(n){
+  if(pdfViewer){pdfViewer.scrollPageIntoView({pageNumber:n});}
+  else{var w=document.querySelector('.pdf-page-wrap[data-page="'+n+'"]')||document.querySelector('.page[data-page-number="'+n+'"]');if(w)w.scrollIntoView({behavior:'smooth',block:'start'});}
+  updPgLabel();
+}
 function updPgLabel(){
   var pgEl=document.getElementById('pdfpg');
   var zmEl=document.getElementById('pdfzoom');
   if(pgEl) pgEl.textContent=pdfPg+'/'+pdfTotal;
-  if(zmEl) zmEl.textContent=Math.round((pdfScale||getScale())*100)+'%';
+  var curScale=pdfViewer?pdfViewer.currentScale:(pdfScale||getScale());
+  if(zmEl) zmEl.textContent=Math.round(curScale*100)+'%';
 }
-function pZI(){pdfScale=Math.min(((pdfScale||getScale())+0.15),4);if(curRef&&curRef.pdfData)renderPDF(curRef.pdfData);updPgLabel();}
-function pZO(){pdfScale=Math.max(((pdfScale||getScale())-0.15),0.3);if(curRef&&curRef.pdfData)renderPDF(curRef.pdfData);updPgLabel();}
-function pZFit(){pdfScale=0;if(curRef&&curRef.pdfData)renderPDF(curRef.pdfData);updPgLabel();}
+function pZI(){
+  if(pdfViewer){pdfViewer.currentScale=Math.min(pdfViewer.currentScale+0.15,4);pdfScale=pdfViewer.currentScale;}
+  else{pdfScale=Math.min(((pdfScale||getScale())+0.15),4);if(curRef&&curRef.pdfData)renderPDF(curRef.pdfData);}
+  updPgLabel();refreshHLOverlays();
+}
+function pZO(){
+  if(pdfViewer){pdfViewer.currentScale=Math.max(pdfViewer.currentScale-0.15,0.3);pdfScale=pdfViewer.currentScale;}
+  else{pdfScale=Math.max(((pdfScale||getScale())-0.15),0.3);if(curRef&&curRef.pdfData)renderPDF(curRef.pdfData);}
+  updPgLabel();refreshHLOverlays();
+}
+function pZFit(){
+  pdfScale=0;
+  if(pdfViewer){pdfViewer.currentScaleValue='page-width';}
+  else if(curRef&&curRef.pdfData){renderPDF(curRef.pdfData);}
+  updPgLabel();refreshHLOverlays();
+}
+function refreshHLOverlays(){
+  // Resize hl overlays after zoom change
+  if(!pdfViewer)return;
+  setTimeout(function(){
+    for(var p=1;p<=pdfTotal;p++){
+      var pv=pdfViewer.getPageView(p-1);
+      if(!pv||!pv.div)continue;
+      var hlc=pv.div.querySelector('.hl-overlay');
+      if(hlc){hlc.width=pv.div.clientWidth;hlc.height=pv.div.clientHeight;paintHL(hlc,p);}
+    }
+  },300);
+}
 function togglePDF(){var p=document.getElementById('pdfpanel');if(p.classList.contains('fullscreen')){p.classList.remove('fullscreen');document.getElementById('pdffullbtn').innerHTML='&#x26F6;';}p.classList.toggle('open');}
-function togglePdfFullscreen(){var p=document.getElementById('pdfpanel');p.classList.toggle('fullscreen');document.getElementById('pdffullbtn').innerHTML=p.classList.contains('fullscreen')?'&#x2716;':'&#x26F6;';if(p.classList.contains('fullscreen')){document.getElementById('pdfresize').style.display='none';}else{document.getElementById('pdfresize').style.display='';}if(pdfDoc&&curRef&&curRef.pdfData){pdfScale=0;renderPDF(curRef.pdfData);}}
+function togglePdfFullscreen(){var p=document.getElementById('pdfpanel');p.classList.toggle('fullscreen');document.getElementById('pdffullbtn').innerHTML=p.classList.contains('fullscreen')?'&#x2716;':'&#x26F6;';if(p.classList.contains('fullscreen')){document.getElementById('pdfresize').style.display='none';}else{document.getElementById('pdfresize').style.display='';}if(pdfDoc&&curRef&&curRef.pdfData){pdfScale=0;if(pdfViewer){pdfViewer.currentScaleValue='page-width';refreshHLOverlays();}else{renderPDF(curRef.pdfData);}}}
 function goToPage(){if(!pdfTotal)return;var n=prompt('Sayfa numarasi (1-'+pdfTotal+'):',pdfPg);n=parseInt(n);if(n>=1&&n<=pdfTotal){pdfPg=n;scrollToPage(n);}}
 
 // ── SCROLL PAGE TRACKING ────────────────────────────────────────────────────
+// PDFViewer handles page tracking via 'pagechanging' event on the eventBus
 var pageObserver=null;
-function setupPageTracking(){
-  if(pageObserver)pageObserver.disconnect();
-  var sc=document.getElementById('pdfscroll');
-  pageObserver=new IntersectionObserver(function(entries){
-    var best=null,bestR=0;
-    entries.forEach(function(e){
-      if(e.isIntersecting&&e.intersectionRatio>bestR){bestR=e.intersectionRatio;best=e.target;}
-    });
-    if(best&&best.dataset&&best.dataset.page){
-      var pg=parseInt(best.dataset.page);
-      if(pg&&pg!==pdfPg){pdfPg=pg;updPgLabel();updateThumbHL();}
-    }
-  },{root:sc,threshold:[0,0.25,0.5,0.75,1]});
-  sc.querySelectorAll('.pdf-page-wrap').forEach(function(w){pageObserver.observe(w);});
-}
 
 // ── PANEL RESIZE ────────────────────────────────────────────────────────────
 (function(){
@@ -1353,7 +1300,8 @@ function setupPageTracking(){
     if(!dragging)return;
     dragging=false;document.body.style.cursor='';document.body.style.userSelect='';
     // Refit if auto-scale
-    if(pdfScale===0&&curRef&&curRef.pdfData)renderPDF(curRef.pdfData);
+    if(pdfScale===0&&pdfViewer){pdfViewer.currentScaleValue='page-width';refreshHLOverlays();}
+    else if(pdfScale===0&&curRef&&curRef.pdfData)renderPDF(curRef.pdfData);
   });
 })();
 
@@ -1426,14 +1374,14 @@ function pdfSearchGoTo(idx){
   if(cnt) cnt.textContent=(idx+1)+'/'+pdfSearchResults.length;
   var r=pdfSearchResults[idx];
   if(!r) return;
-  // Ensure page is rendered for search highlight
-  if(!renderedPages[r.page])renderSinglePage(r.page);
   setTimeout(function(){highlightSearchOnPage(r.page,r.pos,r.len,true);scrollToPage(r.page);},100);
 }
 
 function highlightSearchOnPage(pgNum,pos,len,isActive){
   clearSearchHL();
-  var wrap=document.querySelector('.pdf-page-wrap[data-page="'+pgNum+'"]');
+  var wrap=null;
+  if(pdfViewer){var pv=pdfViewer.getPageView(pgNum-1);if(pv)wrap=pv.div;}
+  if(!wrap)wrap=document.querySelector('.pdf-page-wrap[data-page="'+pgNum+'"]')||document.querySelector('.page[data-page-number="'+pgNum+'"]');
   if(!wrap) return;
   var spans=wrap.querySelectorAll('.textLayer span');
   var charCount=0;
@@ -1545,8 +1493,8 @@ psc.addEventListener('mouseup',function(e){
       try{selRangeObj=sel.getRangeAt(0).cloneRange();}catch(ex){return;}
       var node=sel.anchorNode;
       while(node&&node.nodeType!==1) node=node.parentNode;
-      while(node&&!(node.dataset&&node.dataset.page)) node=node.parentNode;
-      selPageNum=(node&&node.dataset&&node.dataset.page)?parseInt(node.dataset.page):pdfPg;
+      while(node&&!(node.dataset&&(node.dataset.page||node.dataset.pageNumber))) node=node.parentNode;
+      selPageNum=(node&&node.dataset)?(parseInt(node.dataset.pageNumber||node.dataset.page)):pdfPg;
       try {
         var rect=selRangeObj.getBoundingClientRect();
         showHLtip(rect.bottom+8, rect.left, 'selection');
@@ -1570,14 +1518,14 @@ psc.addEventListener('mouseup',function(e){
 var clickedHLIdx=-1; // tiklanan highlight'in hlData index'i
 
 function findHLAtPoint(cx,cy){
-  var wraps=document.querySelectorAll('.pdf-page-wrap');
+  var wraps=pdfViewer?document.querySelectorAll('#pdfscroll .page'):document.querySelectorAll('.pdf-page-wrap');
   for(var wi=0;wi<wraps.length;wi++){
     var wrap=wraps[wi];
     var wRect=wrap.getBoundingClientRect();
     var px=(cx-wRect.left)/wRect.width;
     var py=(cy-wRect.top)/wRect.height;
     if(px<0||px>1||py<0||py>1) continue;
-    var pgNum=parseInt(wrap.dataset.page);
+    var pgNum=parseInt(wrap.dataset.pageNumber||wrap.dataset.page);
     for(var hi=0;hi<hlData.length;hi++){
       var hd=hlData[hi];
       if(hd.page!==pgNum) continue;
@@ -1654,7 +1602,9 @@ function hlRemove(){
   var pgNum=hlData[clickedHLIdx].page;
   hlData.splice(clickedHLIdx,1);
   // Sayfayi tekrar boya
-  var wrap=document.querySelector('.pdf-page-wrap[data-page="'+pgNum+'"]');
+  var wrap=null;
+  if(pdfViewer){var pv=pdfViewer.getPageView(pgNum-1);if(pv)wrap=pv.div;}
+  if(!wrap)wrap=document.querySelector('.pdf-page-wrap[data-page="'+pgNum+'"]');
   if(wrap){var hlc=wrap.querySelector('.hl-overlay');if(hlc)paintHL(hlc,pgNum);}
   saveHLData();  // Persist
   hideHLtip();
@@ -1663,7 +1613,9 @@ function hlRemove(){
 function drawHL(){
   if(!selRangeObj) return;
   // Seçili sayfanın wrap div'ini bul
-  var wrap=document.querySelector('.pdf-page-wrap[data-page="'+selPageNum+'"]');
+  var wrap=null;
+  if(pdfViewer){var pv=pdfViewer.getPageView(selPageNum-1);if(pv)wrap=pv.div;}
+  if(!wrap)wrap=document.querySelector('.pdf-page-wrap[data-page="'+selPageNum+'"]');
   if(!wrap) return;
   var hlCanvas=wrap.querySelector('.hl-overlay');
   if(!hlCanvas) return;
@@ -1755,28 +1707,72 @@ function ec(cmd,val){
 function iHTML(html){
   var ed=document.getElementById('apaed');
   ed.focus();
+  // Restore saved selection
   if(editorSavedRange){
-    var sel=window.getSelection();
+    try{
+      var sel=window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(editorSavedRange);
+      editorSavedRange=null;
+    }catch(e){editorSavedRange=null;}
+  }
+  // If no selection exists (e.g. after prompt dialogs), place cursor at end
+  var sel=window.getSelection();
+  if(!sel||!sel.rangeCount||!ed.contains(sel.anchorNode)){
+    var range=document.createRange();
+    range.selectNodeContents(ed);
+    range.collapse(false);
+    sel=window.getSelection();
     sel.removeAllRanges();
-    sel.addRange(editorSavedRange);
-    editorSavedRange=null;
+    sel.addRange(range);
   }
   document.execCommand('insertHTML',false,html);
   uSt();save();
+  if(typeof updatePageHeight==='function')updatePageHeight();
 }
 function uSt(){var ed=document.getElementById('apaed');var txt=ed.innerText||'';var words=txt.trim().split(/\s+/).filter(function(w){return w.length>0;}).length;var cites=ed.querySelectorAll('.cit').length;var refs=getUsedRefs().length;document.getElementById('tbinfo').textContent=words+' kelime';document.getElementById('sbw').textContent=words+' kelime';document.getElementById('sbc').textContent=cites+' atıf';document.getElementById('sbr2').textContent=refs+' kaynak';}
 document.getElementById('apaed').addEventListener('input',function(){uSt();save();updatePageHeight();});
 
-// ── PAGE HEIGHT AUTO-ADJUST ──────────────────────────────────────────────────
+// ── PAGE HEIGHT AUTO-ADJUST WITH PAGE BREAKS ────────────────────────────────
+var _pgTimer=null;
 function updatePageHeight(){
+  clearTimeout(_pgTimer);
+  _pgTimer=setTimeout(_doUpdatePageHeight,50);
+}
+function _doUpdatePageHeight(){
   var page=document.getElementById('apapage');
   var ed=document.getElementById('apaed');
   if(!page||!ed)return;
-  // 96px top + 96px bottom padding = 192px, content area per page = 864px
+  // Remove existing page breaks
+  ed.querySelectorAll('.page-break').forEach(function(pb){pb.remove();});
+  // Measure content height without page breaks
   var contentH=ed.scrollHeight;
-  var pages=Math.max(1,Math.ceil(contentH/864));
-  var totalH=pages*1056;
-  page.style.minHeight=totalH+'px';
+  var pageContentH=864; // 1056 - 96*2 padding
+  var numPages=Math.max(1,Math.ceil(contentH/pageContentH));
+  // Update #apapage min-height: pages * 1056px + (numPages-1)*32px gaps
+  page.style.minHeight=(numPages*1056+(numPages-1)*32)+'px';
+  if(numPages<=1)return;
+  // Walk through content nodes and insert page breaks at ~864px intervals
+  var cumH=0;var pageIdx=1;
+  var children=Array.from(ed.childNodes);
+  for(var i=0;i<children.length&&pageIdx<numPages;i++){
+    var node=children[i];
+    if(node.nodeType!==1)continue;
+    var h=node.offsetHeight||0;
+    cumH+=h;
+    if(cumH>=pageContentH){
+      pageIdx++;
+      var pb=document.createElement('div');
+      pb.className='page-break';
+      pb.contentEditable='false';
+      pb.dataset.label='\u2014 '+pageIdx+' \u2014';
+      // Insert after current node
+      if(node.nextSibling)ed.insertBefore(pb,node.nextSibling);
+      else ed.appendChild(pb);
+      cumH=0;
+      i++; // skip the page-break we just inserted
+    }
+  }
 }
 
 // ── TABLE DELETE ─────────────────────────────────────────────────────────────
@@ -1988,6 +1984,7 @@ function insCover(){
   var a=prompt('Yazarlar:','')||'';
   var af=prompt('Kurum:','')||'';
   var dt=new Date().toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('apaed').focus();
   iHTML('<div style="text-align:center;padding-top:192px;font-family:Times New Roman,serif;font-size:12pt;line-height:2"><p style="font-weight:bold;text-indent:0">'+t+'</p><p style="text-indent:0">'+a+'</p><p style="text-indent:0">'+af+'</p><p style="text-indent:0">'+dt+'</p></div><p><br></p>');
 }
 function insAbstract(){iHTML('<h1>Abstract</h1><p class="ni">Ozet metni (150-250 kelime).</p><p class="ni"><em>Keywords:</em> kelime1, kelime2</p><p><br></p>');}
@@ -1995,6 +1992,7 @@ function insBlkQ(){iHTML('<blockquote>Alinti metni (40+ kelime). (Yazar, Yil, s.
 function insFig(){
   var n=prompt('Sekil No:','1');if(!n)return;
   var t=prompt('Baslik:','')||'';
+  document.getElementById('apaed').focus();
   iHTML('<p style="text-align:center;text-indent:0">[Sekil '+n+']</p><p style="text-align:center;text-indent:0;font-style:italic">Sekil '+n+(t?' - '+t:'')+'</p><p><br></p>');
 }
 function doTable(){
