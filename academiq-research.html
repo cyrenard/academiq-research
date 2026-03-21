@@ -91,8 +91,10 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 .efmt{background:none;border:none;color:var(--txt2);font-size:12px;padding:4px 8px;border-radius:var(--radius);cursor:pointer;font-family:var(--f);transition:all .1s;}
 .efmt:hover{background:var(--bg3);color:var(--txt);}
 #escroll{flex:1;overflow-y:auto;padding:32px 24px;display:flex;flex-direction:column;align-items:center;background:#d8d0c4;}
-#apapage{width:816px;min-height:1056px;background:#fff;padding:96px;box-shadow:0 2px 20px rgba(0,0,0,.12);margin-bottom:32px;border-radius:2px;height:auto;}
+#apapage{width:816px;min-height:1056px;background:#fff;padding:96px;box-shadow:0 2px 20px rgba(0,0,0,.12);margin-bottom:32px;border-radius:2px;}
 #apaed{font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;color:#000;outline:none;min-height:860px;caret-color:#0044cc;word-wrap:break-word;overflow-wrap:break-word;}
+/* Sayfa kesim cizgisi - her 864px'de (1056-96*2 padding) */
+#apaed{background-image:repeating-linear-gradient(transparent 0px,transparent 862px,#ccc 862px,#ccc 864px,transparent 864px);background-size:100% 864px;background-position:0 0;}
 #apaed:empty::before{content:'Yazmaya başlayın. Atıf için /r yazın...';color:#bbb;font-style:italic;pointer-events:none;}
 #apaed p{margin:0;text-indent:.5in;}
 #apaed p.ni{text-indent:0;}
@@ -192,8 +194,9 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 /* PDF.js 3.x text layer — düzgün seçim için */
 .pdf-page-wrap .textLayer{
   position:absolute;top:0;left:0;width:100%;height:100%;
-  overflow:hidden;opacity:1;line-height:1;z-index:3;
+  overflow:hidden;opacity:.25;line-height:1;z-index:3;
   pointer-events:auto;
+  mix-blend-mode:multiply;
 }
 .pdf-page-wrap .textLayer span,
 .pdf-page-wrap .textLayer br{
@@ -205,11 +208,13 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
   -webkit-user-select:text;user-select:text;
   pointer-events:auto;
   line-height:1;
-  will-change:auto;
 }
-.pdf-page-wrap .textLayer span::selection,
+.pdf-page-wrap .textLayer span::selection{
+  background:rgba(37,99,235,.8);
+  color:transparent;
+}
 .pdf-page-wrap .textLayer span::-moz-selection{
-  background:rgba(37,99,235,.3);
+  background:rgba(37,99,235,.8);
   color:transparent;
 }
 /* Highlight overlay: text layer ALTINDA, pointer-events kapalı */
@@ -1236,29 +1241,31 @@ function renderSinglePage(n){
   renderedPages[n]=true;
   pdfDoc.getPage(n).then(function(page){
     var scale=getScale();
+    // Render at 2x for sharpness, display at 1x
+    var renderScale=scale*2;
     var vp=page.getViewport({scale:scale});
+    var vpRender=page.getViewport({scale:renderScale});
     var wrap=document.querySelector('.pdf-page-wrap[data-page="'+n+'"]');
     if(!wrap)return;
-    wrap.style.width=vp.width+'px';wrap.style.height=vp.height+'px';wrap.style.background='#fff';
+    wrap.style.width=Math.round(vp.width)+'px';wrap.style.height=Math.round(vp.height)+'px';wrap.style.background='#fff';
     var ph=wrap.querySelector('.page-placeholder');if(ph)ph.remove();
-    // HiDPI rendering for sharp text
-    var dpr=window.devicePixelRatio||1;
+    // Canvas: render at 2x, CSS display at 1x
     var canvas=document.createElement('canvas');
-    canvas.width=Math.floor(vp.width*dpr);canvas.height=Math.floor(vp.height*dpr);
-    canvas.style.cssText='display:block;position:absolute;top:0;left:0;z-index:0;width:'+vp.width+'px;height:'+vp.height+'px;';
+    canvas.width=Math.round(vpRender.width);canvas.height=Math.round(vpRender.height);
+    canvas.style.cssText='display:block;position:absolute;top:0;left:0;z-index:0;width:'+Math.round(vp.width)+'px;height:'+Math.round(vp.height)+'px;';
     wrap.appendChild(canvas);
+    // Text layer
     var textDiv=document.createElement('div');
     textDiv.className='textLayer';
-    textDiv.style.cssText='position:absolute;top:0;left:0;width:'+vp.width+'px;height:'+vp.height+'px;';
+    textDiv.style.cssText='position:absolute;top:0;left:0;width:'+Math.round(vp.width)+'px;height:'+Math.round(vp.height)+'px;';
     wrap.appendChild(textDiv);
+    // Highlight overlay
     var hlc=document.createElement('canvas');
     hlc.className='hl-overlay';
-    hlc.width=Math.floor(vp.width*dpr);hlc.height=Math.floor(vp.height*dpr);
-    hlc.style.width=vp.width+'px';hlc.style.height=vp.height+'px';
+    hlc.width=Math.round(vp.width);hlc.height=Math.round(vp.height);
     wrap.appendChild(hlc);
-    var ctx=canvas.getContext('2d');
-    if(dpr>1){ctx.scale(dpr,dpr);}
-    page.render({canvasContext:ctx,viewport:vp}).promise.then(function(){
+    // Render PDF at 2x resolution
+    page.render({canvasContext:canvas.getContext('2d'),viewport:vpRender}).promise.then(function(){
       page.getTextContent({normalizeWhitespace:true}).then(function(tc){
         if(!tc||!tc.items||!tc.items.length){paintHL(hlc,n);return;}
         pdfTextCache[n]=tc.items;
@@ -1706,10 +1713,8 @@ function drawHL(){
 
 function paintHL(hlCanvas,pageNum){
   var ctx=hlCanvas.getContext('2d');
-  var dpr=window.devicePixelRatio||1;
-  var cw=hlCanvas.width/dpr;
-  var ch=hlCanvas.height/dpr;
-  ctx.setTransform(dpr,0,0,dpr,0,0);
+  var cw=hlCanvas.width;
+  var ch=hlCanvas.height;
   ctx.clearRect(0,0,cw,ch);
   hlData.filter(function(hd){return hd.page===pageNum;}).forEach(function(hd){
     ctx.fillStyle=hd.color;
@@ -1719,7 +1724,6 @@ function paintHL(hlCanvas,pageNum){
     });
     ctx.globalAlpha=1;
   });
-  ctx.setTransform(1,0,0,1,0,0);
 }
 
 // ── NOTES ──────────────────────────────────────────────────────────────────────
@@ -1940,12 +1944,51 @@ document.addEventListener('click',function(e){if(!e.target.closest('.dd'))cdd();
 document.addEventListener('mousedown',function(e){var t=document.getElementById('trig');if(trigOn&&!t.contains(e.target)&&!document.getElementById('apaed').contains(e.target))closeTrig();});
 
 // ── INSERT HELPERS ────────────────────────────────────────────────────────────
-function insRefs(){var refs=getUsedRefs();if(!refs.length)refs=sortLib(cLib());iHTML('<h1>Kaynakça</h1>'+refs.map(function(r){return '<p class="refe">'+apa7(r)+'</p>';}).join(''));}
-function insCover(){var t=prompt('Makale baslig\u0131:','');var a=prompt('Yazar(lar):','');var af=prompt('Kurum:','');if(!t)return;iHTML('<div style="text-align:center;padding-top:192px;font-family:Times New Roman,serif;font-size:12pt;line-height:2;"><p style="font-weight:bold;text-indent:0">'+t+'</p><p style="text-indent:0">'+(a||'')+'</p><p style="text-indent:0">'+(af||'')+'</p><p style="text-indent:0">'+new Date().toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'})+'</p></div><p><br/></p>');}
-function insAbstract(){iHTML('<h1>Abstract</h1><p class="ni">Özet metni (150-250 kelime).</p><p class="ni"><em>Keywords:</em> kelime1, kelime2</p><p><br/></p>');}
-function insBlkQ(){iHTML('<blockquote>Alıntı metni (40+ kelime). (Yazar, Yıl, s. XX)</blockquote><p><br/></p>');}
-function insFig(){var n=prompt('Şekil No:','1');if(!n)return;var t=prompt('Başlık:','');iHTML('<p style="text-align:center;text-indent:0">[Şekil '+n+']</p><p style="text-align:center;text-indent:0;font-style:italic">Şekil '+n+(t?'<br/>'+t:'')+'</p><p><br/></p>');}
-function doTable(){var num=document.getElementById('wtn').value||'1';var cols=parseInt(document.getElementById('wtc').value)||3;var rows=parseInt(document.getElementById('wtr').value)||4;var title=document.getElementById('wtt').value||'';var note=document.getElementById('wtn2').value||'';var th='<thead><tr>'+Array(cols).fill(0).map(function(_,i){return '<th>Başlık '+(i+1)+'</th>';}).join('')+'</tr></thead>';var tb='<tbody>'+Array(rows-1).fill(0).map(function(){return '<tr>'+Array(cols).fill(0).map(function(){return '<td>&nbsp;</td>';}).join('')+'</tr>';}).join('')+'</tbody>';iHTML('<p class="ni"><strong>Tablo '+num+'</strong></p>'+(title?'<p class="ni"><em>'+title+'</em></p>':'')+'<table>'+th+tb+'</table>'+(note?'<p class="ni"><em>Not.</em> '+note+'</p>':'')+'<p><br/></p>');hideM('wiz');}
+function edAppend(html){
+  try{
+    var ed=document.getElementById('apaed');
+    var d=document.createElement('div');d.innerHTML=html;
+    while(d.firstChild){ed.appendChild(d.firstChild);}
+    ed.focus();
+    uSt();save();
+    // scroll to bottom
+    var sc=document.getElementById('escroll');
+    sc.scrollTop=sc.scrollHeight;
+  }catch(err){alert('Ekleme hatasi: '+err.message);}
+}
+function insRefs(){var refs=getUsedRefs();if(!refs.length)refs=sortLib(cLib());edAppend('<h1>Kaynakca</h1>'+refs.map(function(r){return '<p class="refe">'+apa7(r)+'</p>';}).join(''));}
+function insCover(){
+  var t=prompt('Makale basligi:','');if(!t)return;
+  var a=prompt('Yazarlar:','')||'';
+  var af=prompt('Kurum:','')||'';
+  var dt=new Date().toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'});
+  edAppend('<div style="text-align:center;padding-top:192px;font-family:Times New Roman,serif;font-size:12pt;line-height:2"><p style="font-weight:bold;text-indent:0">'+t+'</p><p style="text-indent:0">'+a+'</p><p style="text-indent:0">'+af+'</p><p style="text-indent:0">'+dt+'</p></div><p><br></p>');
+}
+function insAbstract(){edAppend('<h1>Abstract</h1><p class="ni">Ozet metni (150-250 kelime).</p><p class="ni"><em>Keywords:</em> kelime1, kelime2</p><p><br></p>');}
+function insBlkQ(){edAppend('<blockquote>Alinti metni (40+ kelime). (Yazar, Yil, s. XX)</blockquote><p><br></p>');}
+function insFig(){
+  var n=prompt('Sekil No:','1');if(!n)return;
+  var t=prompt('Baslik:','')||'';
+  edAppend('<p style="text-align:center;text-indent:0">[Sekil '+n+']</p><p style="text-align:center;text-indent:0;font-style:italic">Sekil '+n+(t?' - '+t:'')+'</p><p><br></p>');
+}
+function doTable(){
+  try{
+    var num=document.getElementById('wtn').value||'1';
+    var cols=parseInt(document.getElementById('wtc').value)||3;
+    var rows=parseInt(document.getElementById('wtr').value)||4;
+    var title=document.getElementById('wtt').value||'';
+    var note=document.getElementById('wtn2').value||'';
+    var hdr='';for(var i=0;i<cols;i++){hdr+='<th>Baslik '+(i+1)+'</th>';}
+    var body='';for(var r=0;r<rows-1;r++){body+='<tr>';for(var c=0;c<cols;c++){body+='<td>&nbsp;</td>';}body+='</tr>';}
+    var html='<p class="ni"><strong>Tablo '+num+'</strong></p>';
+    if(title)html+='<p class="ni"><em>'+title+'</em></p>';
+    html+='<table><thead><tr>'+hdr+'</tr></thead><tbody>'+body+'</tbody></table>';
+    if(note)html+='<p class="ni"><em>Not.</em> '+note+'</p>';
+    html+='<p><br></p>';
+    edAppend(html);
+    hideM('wiz');
+  }catch(err){alert('Tablo hatasi: '+err.message);}
+}
 
 // ── EXPORT ────────────────────────────────────────────────────────────────────
 function expDOC(){var h='<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:"Times New Roman",serif;font-size:12pt;line-height:2;margin:2.54cm;}h1{font-size:12pt;font-weight:bold;text-align:center;margin:0;text-indent:0;}h2{font-size:12pt;font-weight:bold;text-align:left;margin:0;text-indent:0;}h3{font-size:12pt;font-weight:bold;font-style:italic;margin:0;text-indent:0;}p{margin:0;text-indent:.5in;}.ni{text-indent:0;}.cit{color:#000;border:none;}.refe{text-indent:-.5in;padding-left:.5in;margin:0;}blockquote{padding-left:.5in;text-indent:0;margin:0;}table{width:100%;border-collapse:collapse;font-size:12pt;}th{border-top:1.5px solid #000;border-bottom:1px solid #000;padding:4px 8px;}td{padding:4px 8px;}</style></head><body>'+document.getElementById('apaed').innerHTML+'</body></html>';saveAs(new Blob([h],{type:'application/msword'}),'makale.doc');}
