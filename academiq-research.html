@@ -16,6 +16,14 @@
   --f:'IBM Plex Sans',sans-serif;--fm:'IBM Plex Mono',monospace;--fd:'Playfair Display',serif;
   --radius:6px;--shadow:0 2px 12px rgba(0,0,0,.1);
 }
+[data-theme="dark"]{
+  --bg:#1a1a1a;--bg2:#222;--bg3:#2a2a2a;--b:#444;--b2:#555;
+  --acc:#d4a24c;--acc-d:#b8862a;--acc-g:rgba(212,162,76,.1);
+  --txt:#e0dcd4;--txt2:#a09888;--txt3:#706858;
+  --green:#4caf50;--red:#ef5350;--blue:#64b5f6;
+}
+[data-theme="dark"] #escroll{background:#333!important;}
+[data-theme="dark"] .page-break-overlay{background:#333!important;}
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;overflow:hidden;}
 body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;display:flex;flex-direction:column;}
@@ -90,6 +98,18 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 .ctxi{display:block;width:100%;background:none;border:none;color:var(--txt2);font-family:var(--f);font-size:12px;padding:7px 12px;border-radius:var(--radius);cursor:pointer;text-align:left;}
 .ctxi:hover{background:var(--bg3);color:var(--txt);}
 
+/* DOCUMENT TABS */
+#doctabs{height:30px;background:var(--bg2);border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 6px;gap:3px;flex-shrink:0;overflow-x:auto;}
+#doctabs::-webkit-scrollbar{height:3px;}
+.doctab{background:none;border:1px solid transparent;color:var(--txt3);font-family:var(--fm);font-size:10px;padding:3px 10px;border-radius:4px 4px 0 0;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:4px;transition:all .1s;}
+.doctab:hover{color:var(--txt2);background:var(--bg3);}
+.doctab.on{color:var(--acc);background:var(--bg);border-color:var(--b);border-bottom-color:var(--bg);}
+.doctab .dtclose{font-size:11px;color:var(--txt3);cursor:pointer;padding:0 2px;display:none;}
+.doctab:hover .dtclose{display:inline;}
+.doctab .dtclose:hover{color:var(--red);}
+#doctab-add{width:20px;height:20px;background:none;border:1px solid var(--b);color:var(--txt2);border-radius:3px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+#doctab-add:hover{border-color:var(--acc);color:var(--acc);}
+
 /* CENTER */
 #ctr{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#d8d0c4;}
 #etb{height:36px;background:var(--bg2);border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 10px;gap:4px;flex-shrink:0;}
@@ -98,17 +118,18 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 #escroll{flex:1;overflow-y:auto;padding:32px 24px;display:flex;flex-direction:column;align-items:center;background:#d8d0c4;}
 #apapage{width:816px;min-height:1056px;background:#fff;padding:96px;box-shadow:0 2px 20px rgba(0,0,0,.12);margin-bottom:32px;border-radius:2px;overflow:visible;position:relative;}
 #apaed{font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;color:#000;outline:none;min-height:864px;caret-color:#0044cc;word-wrap:break-word;overflow-wrap:break-word;}
-/* Page break divider — Word-like page gap */
-.page-break{width:calc(100% + 192px);height:32px;background:#d8d0c4;margin:0 -96px;padding:0;box-shadow:inset 0 8px 8px -8px rgba(0,0,0,.15),inset 0 -8px 8px -8px rgba(0,0,0,.15);position:relative;pointer-events:none;-webkit-user-select:none;user-select:none;display:flex;align-items:center;justify-content:center;}
-.page-break::after{content:attr(data-label);font-family:var(--fm);font-size:9px;color:var(--txt3);letter-spacing:.05em;}
-.page-break+*{margin-top:0!important;padding-top:0!important;}
+/* Page break overlay — positioned outside editor in #apapage */
+.page-break-overlay{position:absolute;left:-96px;right:-96px;height:32px;background:#d8d0c4;pointer-events:none;-webkit-user-select:none;user-select:none;display:flex;align-items:center;justify-content:center;z-index:5;box-shadow:inset 0 8px 8px -8px rgba(0,0,0,.15),inset 0 -8px 8px -8px rgba(0,0,0,.15);}
+.page-break-overlay::after{content:attr(data-label);font-family:var(--fm);font-size:9px;color:var(--txt3);letter-spacing:.05em;}
+/* Page number overlay */
+.page-number{position:absolute;right:0;font-family:'Times New Roman',Times,serif;font-size:12pt;color:#000;pointer-events:none;user-select:none;z-index:5;}
+/* Legacy cleanup */
+.page-break{display:none!important;}
 @media print{
-  #tb,#sbl,#sbr,#etb,#pdfpanel{display:none!important;}
+  #tb,#sbl,#sbr,#etb,#pdfpanel,.page-break-overlay{display:none!important;}
   #lay,#ctr,#escroll{overflow:visible!important;display:block!important;height:auto!important;}
   #apapage{box-shadow:none;margin:0;padding:2.54cm;width:auto;min-height:auto;overflow:visible;}
   #apaed{min-height:auto;}
-  .page-break{display:block;height:0;margin:0;box-shadow:none;background:transparent;page-break-before:always;}
-  .page-break::after{display:none;}
   @page{size:letter;margin:0;}
 }
 #apaed:empty::before{content:'Yazmaya başlayın. Atıf için /r yazın...';color:#bbb;font-style:italic;pointer-events:none;}
@@ -117,6 +138,8 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 #apaed h1{font-size:12pt;font-weight:bold;text-align:center;margin:0;text-indent:0;line-height:2;display:block;}
 #apaed h2{font-size:12pt;font-weight:bold;text-align:left;margin:0;text-indent:0;line-height:2;display:block;}
 #apaed h3{font-size:12pt;font-weight:bold;font-style:italic;text-align:left;margin:0;text-indent:0;line-height:2;display:block;}
+#apaed h4{font-size:12pt;font-weight:bold;text-align:left;margin:0;text-indent:.5in;line-height:2;display:block;}
+#apaed h5{font-size:12pt;font-weight:bold;font-style:italic;text-align:left;margin:0;text-indent:.5in;line-height:2;display:block;}
 #apaed blockquote{margin:0;padding-left:.5in;text-indent:0;font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;}
 #apaed ul,#apaed ol{margin:0 0 0 .5in;padding:0;font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;}
 #apaed ul li,#apaed ol li{text-indent:0;margin:0;}
@@ -212,6 +235,10 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 .pdftab .tabclose{margin-left:auto;font-size:13px;color:var(--txt3);cursor:pointer;padding:0 2px;flex-shrink:0;line-height:1;}
 .pdftab .tabclose:hover{color:var(--red);}
 /* PDF annotations */
+/* Image resize handles */
+#apaed img{cursor:pointer;transition:outline .15s;}
+#apaed img.img-selected{outline:2px solid var(--acc);outline-offset:2px;}
+.img-resize-handle{position:absolute;width:10px;height:10px;background:var(--acc);border:1px solid #fff;border-radius:2px;cursor:nwse-resize;z-index:10;}
 .pdf-annot{position:absolute;z-index:5;border:1.5px solid var(--acc);background:rgba(255,248,225,.92);border-radius:4px;padding:4px 6px;font-size:10px;font-family:var(--f);color:var(--txt);min-width:60px;min-height:24px;cursor:move;resize:both;overflow:auto;box-shadow:0 1px 6px rgba(0,0,0,.1);line-height:1.4;}
 .pdf-annot:focus{outline:2px solid var(--acc);border-color:var(--acc-d);}
 .pdf-annot-del{position:absolute;top:1px;right:1px;width:14px;height:14px;background:var(--red);color:#fff;border-radius:50%;font-size:9px;line-height:14px;text-align:center;cursor:pointer;display:none;z-index:6;}
@@ -305,6 +332,11 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
       <button class="ddi" onclick="insCover();cdd()">Kapak Sayfası</button>
       <button class="ddi" onclick="insAbstract();cdd()">Abstract / Özet</button>
       <button class="ddi" onclick="insRefs();cdd()">Kaynakça Bölümü</button>
+      <div class="dds"></div>
+      <button class="ddi" onclick="applyTemplate('tez');cdd()">📄 Tez Şablonu</button>
+      <button class="ddi" onclick="applyTemplate('makale');cdd()">📄 Araştırma Makalesi</button>
+      <button class="ddi" onclick="applyTemplate('rapor');cdd()">📄 Rapor</button>
+      <button class="ddi" onclick="applyTemplate('literatur');cdd()">📄 Literatür Taraması</button>
     </div>
   </div>
   <div class="dd"><button class="btn prim" onclick="opdd('ddexp',this)">Dışa Aktar ▾</button>
@@ -317,6 +349,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
   </div>
   <span class="sp"></span>
   <span id="synclbl"></span>
+  <button class="btn" style="font-size:14px;padding:4px 8px;" onclick="toggleTheme()" id="themebtn" title="Tema değiştir">🌙</button>
   <button class="btn" style="font-size:11px;" onclick="showSyncSettings()" title="Ayarlar">⚙ Ayarlar</button>
   <button class="btn" style="border:1px solid var(--acc-d);color:var(--acc);" onclick="togglePDF()">📄 PDF</button>
   <button class="btn tog on" id="btnsbl" onclick="tSB('sbl')">☰ Kütüphane</button>
@@ -337,22 +370,23 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
   <input class="srch" id="libsrch" placeholder="Filtrele..." oninput="rLib()"/>
   <button class="pdfupbtn" onclick="document.getElementById('lfinp').click()">+ PDF Yukle</button>
   <button class="pdfupbtn" onclick="batchDownloadOA()" title="DOI'si olan tum kaynaklarin OA PDF'lerini indir" style="background:var(--bg3);color:var(--blue);border:1px solid var(--b);">&#8595; Tum OA PDF'leri Indir</button>
+  <button class="pdfupbtn" onclick="document.getElementById('bibinp').click()" style="color:var(--txt2);">📥 Kaynakça İçe Aktar (.bib/.ris)</button>
+  <input type="file" id="bibinp" accept=".bib,.ris,.enw" style="display:none" onchange="importBib(event)"/>
   <input type="file" id="lfinp" accept=".pdf" multiple style="display:none" onchange="hPDFs(event)"/>
   <div id="liblist"></div>
 </div>
 
 <!-- CENTER: Editor -->
 <div id="ctr">
+  <div id="doctabs"></div>
   <div id="etb">
     <span style="font-family:var(--fm);font-size:10px;color:var(--txt3);margin-right:3px">APA 7</span>
     <span class="sep"></span>
-    <button class="efmt" onclick="ec('bold')"><b>B</b></button>
-    <button class="efmt" onclick="ec('italic')"><i>I</i></button>
-    <button class="efmt" onclick="ec('underline')"><u>U</u></button>
-    <span class="sep"></span>
-    <button class="efmt" onclick="ec('formatBlock','h1')">H1</button>
-    <button class="efmt" onclick="ec('formatBlock','h2')">H2</button>
-    <button class="efmt" onclick="ec('formatBlock','h3')">H3</button>
+    <button class="efmt" onclick="ec('formatBlock','h1')" title="Düzey 1: Ortalı, Kalın">H1</button>
+    <button class="efmt" onclick="ec('formatBlock','h2')" title="Düzey 2: Sola, Kalın">H2</button>
+    <button class="efmt" onclick="ec('formatBlock','h3')" title="Düzey 3: Sola, Kalın İtalik">H3</button>
+    <button class="efmt" onclick="ec('formatBlock','h4')" title="Düzey 4: Girintili, Kalın">H4</button>
+    <button class="efmt" onclick="ec('formatBlock','h5')" title="Düzey 5: Girintili, Kalın İtalik">H5</button>
     <button class="efmt" onclick="ec('formatBlock','p')">¶</button>
     <button class="efmt" onclick="insBlkQ()">&#10077;</button>
     <span class="sep"></span>
@@ -427,6 +461,8 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
   <span id="sbw" class="sv">0 kelime</span><div class="ss"></div>
   <span id="sbc" class="sv">0 atıf</span><div class="ss"></div>
   <span id="sbr2" class="sv">0 kaynak</span><div class="ss"></div>
+  <span id="sbgoal" class="sv" style="cursor:pointer" onclick="setWordGoal()" title="Kelime hedefi belirle"></span>
+  <div class="ss"></div>
   <span class="sh">/r → atıf</span>
   <div style="flex:1"></div>
   <span style="color:var(--txt3)">APA 7 | Times New Roman 12pt | Çift aralık</span>
@@ -599,7 +635,9 @@ var S={
   curNb:'nb1',
   notes:[],  // {id, nbId, type, txt, q, src, rid, tag, dt, hlColor}
   doc:'',
-  cm:'inline'
+  cm:'inline',
+  docs:[{id:'doc1',name:'Belge 1',content:''}],
+  curDoc:'doc1'
 };
 
 var pdfDoc=null,pdfPg=1,pdfTotal=0,pdfScale=0,curRef=null; // 0=auto
@@ -620,10 +658,19 @@ function setSL(msg,cls){
 }
 
 async function syncSave(){
-  S.doc=document.getElementById('apaed').innerHTML;
+  // Clean legacy page-break elements from content before saving
+  var ed=document.getElementById('apaed');
+  ed.querySelectorAll('.page-break,.page-top-spacer').forEach(function(pb){pb.remove();});
+  S.doc=ed.innerHTML;
+  // Save current doc tab content
+  if(S.docs&&S.curDoc){
+    var curD=S.docs.find(function(d){return d.id===S.curDoc;});
+    if(curD)curD.content=S.doc;
+  }
   var toSave={
     wss:S.wss.map(function(ws){return {id:ws.id,name:ws.name,lib:(ws.lib||[]).map(function(r){var c=Object.assign({},r);delete c.pdfData;return c;})};}),
-    cur:S.cur,notebooks:S.notebooks,curNb:S.curNb,notes:S.notes,doc:S.doc,cm:S.cm
+    cur:S.cur,notebooks:S.notebooks,curNb:S.curNb,notes:S.notes,doc:S.doc,cm:S.cm,
+    docs:S.docs,curDoc:S.curDoc
   };
   var json=JSON.stringify(toSave);
   // Electron: dosya sistemine yaz (Proton Drive klasörü)
@@ -685,7 +732,16 @@ async function syncLoad(){
   if(!S.cur)S.cur=S.wss[0].id;
   if(!S.notebooks||!S.notebooks.length)S.notebooks=[{id:'nb1',name:'Genel Notlar'}];
   if(!S.curNb)S.curNb=S.notebooks[0].id;
-  if(S.doc)document.getElementById('apaed').innerHTML=S.doc;
+  // Document tabs migration: if no docs array, create one with existing doc content
+  if(!S.docs||!S.docs.length){
+    S.docs=[{id:'doc1',name:'Belge 1',content:S.doc||''}];
+    S.curDoc='doc1';
+  }
+  if(!S.curDoc)S.curDoc=S.docs[0].id;
+  // Load current doc content
+  var curD=S.docs.find(function(d){return d.id===S.curDoc;});
+  if(curD&&curD.content)document.getElementById('apaed').innerHTML=curD.content;
+  else if(S.doc)document.getElementById('apaed').innerHTML=S.doc;
   if(typeof updatePageHeight==='function')updatePageHeight();
 }
 
@@ -698,6 +754,52 @@ function uid(){return 'x'+Date.now().toString(36)+Math.random().toString(36).sli
 function cLib(){var w=S.wss.find(function(x){return x.id===S.cur;});return w?w.lib:[];}
 function findRef(id){for(var i=0;i<S.wss.length;i++){var r=(S.wss[i].lib||[]).find(function(x){return x.id===id;});if(r)return r;}return null;}
 function curNotes(){return S.notes.filter(function(n){return n.nbId===S.curNb;});}
+
+// ── DOCUMENT TABS ────────────────────────────────────────────────────────────
+function rDocTabs(){
+  if(!S.docs||!S.docs.length)S.docs=[{id:'doc1',name:'Belge 1',content:''}];
+  if(!S.curDoc)S.curDoc=S.docs[0].id;
+  var bar=document.getElementById('doctabs');bar.innerHTML='';
+  S.docs.forEach(function(doc){
+    var btn=document.createElement('button');
+    btn.className='doctab'+(doc.id===S.curDoc?' on':'');
+    var lbl=document.createElement('span');lbl.textContent=doc.name;
+    btn.appendChild(lbl);
+    // Close button
+    if(S.docs.length>1){
+      var cl=document.createElement('span');cl.className='dtclose';cl.textContent='×';
+      cl.onclick=function(e){e.stopPropagation();
+        if(!confirm('"'+doc.name+'" silinsin?'))return;
+        S.docs=S.docs.filter(function(d){return d.id!==doc.id;});
+        if(S.curDoc===doc.id)S.curDoc=S.docs[0].id;
+        switchDoc(S.curDoc);
+      };
+      btn.appendChild(cl);
+    }
+    btn.onclick=function(){switchDoc(doc.id);};
+    btn.ondblclick=function(){var n=prompt('Belge adı:',doc.name);if(n&&n.trim()){doc.name=n.trim();save();rDocTabs();}};
+    bar.appendChild(btn);
+  });
+  var add=document.createElement('button');add.id='doctab-add';add.textContent='+';add.title='Yeni belge';
+  add.onclick=function(){
+    var name='Belge '+(S.docs.length+1);
+    var nd={id:uid(),name:name,content:''};
+    S.docs.push(nd);
+    switchDoc(nd.id);
+  };
+  bar.appendChild(add);
+}
+function switchDoc(docId){
+  // Save current doc content
+  var cur=S.docs.find(function(d){return d.id===S.curDoc;});
+  var ed=document.getElementById('apaed');
+  if(cur)cur.content=ed.innerHTML;
+  // Switch
+  S.curDoc=docId;
+  var next=S.docs.find(function(d){return d.id===docId;});
+  ed.innerHTML=next?next.content:'';
+  save();rDocTabs();uSt();updatePageHeight();
+}
 
 // ── APA 7 ─────────────────────────────────────────────────────────────────────
 function fa(r){if(!r)return'';r=r.trim();if(r.includes(',')){var p=r.split(',');var l=p[0].trim();var rest=(p[1]||'').trim();if(!rest)return l;return l+', '+rest.split(/\s+/).filter(Boolean).map(function(n){return n[0].toUpperCase()+'.'}).join(' ');}var p=r.split(/\s+/);if(p.length===1)return p[0];var l=p[p.length-1];return l+', '+p.slice(0,-1).map(function(n){return n[0].toUpperCase()+'.'}).join(' ');}
@@ -1525,10 +1627,19 @@ function addPdfAnnot(pageNum,x,y){
 function makeDraggable(el,container){
   var dragging=false,startX,startY,origX,origY;
   el.addEventListener('mousedown',function(e){
-    if(e.target.className==='pdf-annot-del'||el.isContentEditable&&document.activeElement===el)return;
+    // Allow clicking delete button
+    if(e.target.className==='pdf-annot-del')return;
+    // If element is focused (editing mode), allow text selection — don't drag
+    if(el.isContentEditable&&document.activeElement===el)return;
+    // Double-click enters edit mode — don't drag
+    if(e.detail>=2){el.focus();return;}
     dragging=true;startX=e.clientX;startY=e.clientY;
     origX=parseInt(el.style.left)||0;origY=parseInt(el.style.top)||0;
     e.preventDefault();
+  });
+  // Single click also focuses for typing after a short delay (if not dragging)
+  el.addEventListener('click',function(e){
+    if(!dragging&&el.isContentEditable){el.focus();}
   });
   document.addEventListener('mousemove',function(e){
     if(!dragging)return;
@@ -1571,6 +1682,22 @@ function restoreAnnots(annots){
     wrap.appendChild(el);
   });
 }
+
+// Delete key removes focused PDF annotation (only if empty or Shift+Delete)
+document.addEventListener('keydown',function(e){
+  if(e.key==='Delete'||e.key==='Backspace'){
+    var active=document.activeElement;
+    if(active&&active.classList.contains('pdf-annot')){
+      var text=(active.innerText||'').replace(/×/g,'').trim();
+      // Delete if annotation is empty, or if user presses Shift+Delete
+      if(!text||e.shiftKey){
+        e.preventDefault();
+        active.remove();
+        saveAnnotsToTab();
+      }
+    }
+  }
+});
 
 // ── PDF DRAWING ──────────────────────────────────────────────────────────────
 function setupDrawOnPage(wrap){
@@ -1830,13 +1957,69 @@ var searchTimer=null;
   });
 })();
 
-// ── KEYBOARD SHORTCUTS ──────────────────────────────────────────────────────
+// ── KEYBOARD SHORTCUTS (Word-like) ──────────────────────────────────────────
 document.addEventListener('keydown',function(e){
   var inInput=e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.isContentEditable;
   var pdfOpen=document.getElementById('pdfpanel').classList.contains('open');
+  var mod=e.ctrlKey||e.metaKey;
+  var ed=document.getElementById('apaed');
+  var edFocused=document.activeElement===ed||ed.contains(document.activeElement);
+
+  // ── Word-like shortcuts (work when editor focused) ──
+  if(mod&&edFocused){
+    // Ctrl+S: Save
+    if(e.key==='s'&&!e.shiftKey){e.preventDefault();syncSave();setSL('✓ Kaydedildi','ok');setTimeout(function(){setSL('','');},2000);return;}
+    // Ctrl+Shift+S: Export DOC
+    if(e.key==='S'&&e.shiftKey){e.preventDefault();expDOC();return;}
+    // Ctrl+P: Print
+    if(e.key==='p'){e.preventDefault();window.print();return;}
+    // Ctrl+Z: Undo (browser default — let it pass)
+    // Ctrl+Y: Redo (browser default — let it pass)
+    // Ctrl+1-5: Heading levels
+    if(e.key==='1'){e.preventDefault();ec('formatBlock','h1');return;}
+    if(e.key==='2'){e.preventDefault();ec('formatBlock','h2');return;}
+    if(e.key==='3'){e.preventDefault();ec('formatBlock','h3');return;}
+    if(e.key==='4'){e.preventDefault();ec('formatBlock','h4');return;}
+    if(e.key==='5'){e.preventDefault();ec('formatBlock','h5');return;}
+    if(e.key==='0'){e.preventDefault();ec('formatBlock','p');return;}
+    // Ctrl+Shift+L: Unordered list
+    if(e.key==='L'&&e.shiftKey){e.preventDefault();ec('insertUnorderedList');return;}
+    // Ctrl+Shift+N: Ordered list
+    if(e.key==='N'&&e.shiftKey){e.preventDefault();ec('insertOrderedList');return;}
+    // Ctrl+E: Center align
+    if(e.key==='e'){e.preventDefault();ec('justifyCenter');return;}
+    // Ctrl+L: Left align
+    if(e.key==='l'){e.preventDefault();ec('justifyLeft');return;}
+    // Ctrl+R: Right align
+    if(e.key==='r'&&!e.shiftKey){e.preventDefault();ec('justifyRight');return;}
+    // Ctrl+J: Justify
+    if(e.key==='j'){e.preventDefault();ec('justifyFull');return;}
+    // Ctrl+Shift+>: Increase font size
+    if(e.key==='>'||e.key==='.'){if(e.shiftKey){e.preventDefault();var sel=document.getElementById('sizesel');var i=sel.selectedIndex;if(i<sel.options.length-1){sel.selectedIndex=i+1;applyFontSize(sel.value);}return;}}
+    // Ctrl+Shift+<: Decrease font size
+    if(e.key==='<'||e.key===','){if(e.shiftKey){e.preventDefault();var sel2=document.getElementById('sizesel');var i2=sel2.selectedIndex;if(i2>0){sel2.selectedIndex=i2-1;applyFontSize(sel2.value);}return;}}
+    // Ctrl+Q: Block quote
+    if(e.key==='q'){e.preventDefault();insBlkQ();return;}
+    // Ctrl+D: Strikethrough
+    if(e.key==='d'){e.preventDefault();ec('strikeThrough');return;}
+    // Ctrl+Shift+X: Subscript
+    if(e.key==='X'&&e.shiftKey){e.preventDefault();ec('subscript');return;}
+    // Ctrl+Shift+P: Superscript (avoid conflict with Ctrl+P print)
+    if(e.key==='P'&&e.shiftKey){e.preventDefault();ec('superscript');return;}
+  }
+
+  // Ctrl+S: Save (even when not in editor)
+  if(mod&&e.key==='s'&&!e.shiftKey&&!edFocused){e.preventDefault();syncSave();setSL('✓ Kaydedildi','ok');setTimeout(function(){setSL('','');},2000);return;}
+
+  // Tab key in editor: insert indent
+  if(e.key==='Tab'&&edFocused&&!mod){
+    e.preventDefault();
+    if(e.shiftKey){ec('outdent');}else{ec('indent');}
+    return;
+  }
 
   // Ctrl+F: PDF search
-  if((e.ctrlKey||e.metaKey)&&e.key==='f'&&pdfOpen){
+  if(mod&&e.key==='f'&&pdfOpen){
     e.preventDefault();
     var bar=document.getElementById('pdfsearchbar');
     if(!bar.classList.contains('open'))togglePdfSearch();
@@ -1846,13 +2029,11 @@ document.addEventListener('keydown',function(e){
   // F11: PDF fullscreen
   if(e.key==='F11'&&pdfOpen){e.preventDefault();togglePdfFullscreen();return;}
   // Ctrl+G: go to page
-  if((e.ctrlKey||e.metaKey)&&e.key==='g'&&pdfOpen){
-    e.preventDefault();goToPage();return;
-  }
+  if(mod&&e.key==='g'&&pdfOpen){e.preventDefault();goToPage();return;}
   // Ctrl+ / Ctrl-: zoom
-  if((e.ctrlKey||e.metaKey)&&e.key==='='&&pdfOpen){e.preventDefault();pZI();return;}
-  if((e.ctrlKey||e.metaKey)&&e.key==='-'&&pdfOpen){e.preventDefault();pZO();return;}
-  if((e.ctrlKey||e.metaKey)&&e.key==='0'&&pdfOpen){e.preventDefault();pZFit();return;}
+  if(mod&&e.key==='='&&pdfOpen){e.preventDefault();pZI();return;}
+  if(mod&&e.key==='-'&&pdfOpen){e.preventDefault();pZO();return;}
+  if(mod&&e.key==='0'&&!edFocused&&pdfOpen){e.preventDefault();pZFit();return;}
 
   if(inInput) return;
 
@@ -2180,48 +2361,67 @@ function iHTML(html){
   uSt();save();
   if(typeof updatePageHeight==='function')updatePageHeight();
 }
-function uSt(){var ed=document.getElementById('apaed');var txt=ed.innerText||'';var words=txt.trim().split(/\s+/).filter(function(w){return w.length>0;}).length;var cites=ed.querySelectorAll('.cit').length;var refs=getUsedRefs().length;document.getElementById('tbinfo').textContent=words+' kelime';document.getElementById('sbw').textContent=words+' kelime';document.getElementById('sbc').textContent=cites+' atıf';document.getElementById('sbr2').textContent=refs+' kaynak';}
-document.getElementById('apaed').addEventListener('input',function(){uSt();save();updatePageHeight();});
+function uSt(){var ed=document.getElementById('apaed');var txt=ed.innerText||'';var words=txt.trim().split(/\s+/).filter(function(w){return w.length>0;}).length;var cites=ed.querySelectorAll('.cit').length;var refs=getUsedRefs().length;document.getElementById('tbinfo').textContent=words+' kelime';document.getElementById('sbw').textContent=words+' kelime';document.getElementById('sbc').textContent=cites+' atıf';document.getElementById('sbr2').textContent=refs+' kaynak';
+  // Word goal progress
+  var goalEl=document.getElementById('sbgoal');
+  if(S.wordGoal&&S.wordGoal>0){
+    var pct=Math.round(words/S.wordGoal*100);
+    var col=pct>=100?'var(--blue)':pct>=80?'var(--green)':pct>=50?'var(--acc)':'var(--red)';
+    goalEl.innerHTML=words+'/'+S.wordGoal+' <span style="color:'+col+';font-weight:600">(%'+pct+')</span>';
+    goalEl.style.color=col;
+  }else{goalEl.textContent='';goalEl.style.color='';}
+}
+function setWordGoal(){var g=prompt('Kelime hedefi:',S.wordGoal||'');if(g===null)return;S.wordGoal=parseInt(g)||0;save();uSt();}
+var _refTimer=null;
+document.getElementById('apaed').addEventListener('input',function(){
+  uSt();save();updatePageHeight();
+  // Auto-update kaynakça if it exists
+  clearTimeout(_refTimer);
+  _refTimer=setTimeout(function(){
+    var refH1=Array.from(document.getElementById('apaed').querySelectorAll('h1')).find(function(h){return h.textContent.trim()==='Kaynakça';});
+    if(refH1)updateRefSection();
+  },2000);
+});
 
 // ── PAGE HEIGHT AUTO-ADJUST WITH PAGE BREAKS ────────────────────────────────
 var _pgTimer=null;
 function updatePageHeight(){
   clearTimeout(_pgTimer);
-  _pgTimer=setTimeout(_doUpdatePageHeight,50);
+  _pgTimer=setTimeout(_doUpdatePageHeight,300);
 }
 function _doUpdatePageHeight(){
   var page=document.getElementById('apapage');
   var ed=document.getElementById('apaed');
   if(!page||!ed)return;
-  // Remove existing page breaks and page-top spacers
+  // Clean up any legacy page-break elements INSIDE the editor (from saved content)
   ed.querySelectorAll('.page-break,.page-top-spacer').forEach(function(pb){pb.remove();});
-  // Measure content height without page breaks
+  // Remove old overlays from #apapage
+  page.querySelectorAll('.page-break-overlay,.page-number').forEach(function(pb){pb.remove();});
+  // Measure content height
   var contentH=ed.scrollHeight;
   var pageContentH=864; // 1056 - 96*2 padding
   var numPages=Math.max(1,Math.ceil(contentH/pageContentH));
-  // Update #apapage min-height: pages * pageH + gaps
-  page.style.minHeight=(numPages*1056+(numPages-1)*32)+'px';
+  // Update #apapage min-height: pages * pageH + gaps between pages
+  var pageH=1056,gapH=32;
+  page.style.minHeight=(numPages*pageH+(numPages-1)*gapH)+'px';
+  // Create page numbers for all pages
+  for(var p=0;p<numPages;p++){
+    var pn=document.createElement('div');
+    pn.className='page-number';
+    pn.textContent=String(p+1);
+    // Position: top of each page area + 48px down (header position)
+    pn.style.top=(p*(pageH+gapH)+48)+'px';
+    page.appendChild(pn);
+  }
   if(numPages<=1)return;
-  // Walk through content nodes and insert page breaks at ~864px intervals
-  var cumH=0;var pageIdx=1;
-  var children=Array.from(ed.childNodes);
-  for(var i=0;i<children.length&&pageIdx<numPages;i++){
-    var node=children[i];
-    if(node.nodeType!==1)continue;
-    var h=node.offsetHeight||0;
-    cumH+=h;
-    if(cumH>=pageContentH){
-      pageIdx++;
-      // Add bottom padding to simulate page bottom margin
-      var pb=document.createElement('div');
-      pb.className='page-break';
-      pb.contentEditable='false';
-      pb.dataset.label='Sayfa '+pageIdx;
-      if(node.nextSibling)ed.insertBefore(pb,node.nextSibling);
-      else ed.appendChild(pb);
-      cumH=0;
-      i++;
-    }
+  // Create page-break overlays OUTSIDE the editor (in #apapage)
+  for(var i=1;i<numPages;i++){
+    var pb=document.createElement('div');
+    pb.className='page-break-overlay';
+    // Position: top padding (96px) + i pages of content (864px each) + (i-1) gaps (32px each)
+    pb.style.top=(96+i*pageContentH+(i-1)*gapH)+'px';
+    pb.dataset.label='Sayfa '+(i+1);
+    page.appendChild(pb);
   }
 }
 
@@ -2455,6 +2655,19 @@ function doCover(){
   ['cvtitle','cvauthor','cvinst','cvcourse','cvprof'].forEach(function(id){document.getElementById(id).value='';});
 }
 function insAbstract(){iHTML('<h1>Abstract</h1><p class="ni">Ozet metni (150-250 kelime).</p><p class="ni"><em>Keywords:</em> kelime1, kelime2</p><p><br></p>');}
+function applyTemplate(type){
+  if(!confirm('Mevcut belge içeriği silinecek. Devam etmek istiyor musunuz?'))return;
+  var templates={
+    tez:'<h1>Başlık</h1><p class="ni">[Yazar Adı]</p><p class="ni">[Kurum Adı]</p><p class="ni">[Ders/Program]</p><p class="ni">[Danışman]</p><p class="ni">[Tarih]</p><p><br></p><h1>Özet</h1><p class="ni">Bu çalışmanın amacı... (150-250 kelime)</p><p class="ni"><em>Anahtar Kelimeler:</em> kelime1, kelime2, kelime3</p><p><br></p><h1>İçindekiler</h1><p class="ni">[Otomatik güncellenecek]</p><p><br></p><h1>Giriş</h1><p>Araştırmanın arka planı ve önemi...</p><p><br></p><h1>Literatür Taraması</h1><h2>Kuramsal Çerçeve</h2><p>İlgili kuramlar...</p><h2>İlgili Araştırmalar</h2><p>Önceki çalışmalar...</p><p><br></p><h1>Yöntem</h1><h2>Araştırma Deseni</h2><p>Bu çalışmada... deseni kullanılmıştır.</p><h2>Katılımcılar</h2><p>Araştırmanın örneklemi...</p><h2>Veri Toplama Araçları</h2><p>Veri toplamak için...</p><h2>Verilerin Analizi</h2><p>Veriler... yöntemiyle analiz edilmiştir.</p><p><br></p><h1>Bulgular</h1><p>Analiz sonuçları...</p><p><br></p><h1>Tartışma</h1><p>Bulgular literatür ışığında değerlendirildiğinde...</p><p><br></p><h1>Sonuç ve Öneriler</h1><p>Bu çalışmanın sonuçları...</p><p><br></p><h1>Kaynakça</h1><p class="refe">[Atıflar otomatik eklenecek]</p>',
+    makale:'<h1>Başlık</h1><p class="ni">[Yazar Adı]</p><p class="ni">[Kurum Adı]</p><p><br></p><h1>Özet</h1><p class="ni">Bu çalışmanın amacı... (150-250 kelime)</p><p class="ni"><em>Anahtar Kelimeler:</em> kelime1, kelime2</p><p><br></p><h1>Giriş</h1><p>Araştırma problemi ve amaçlar...</p><p><br></p><h1>Yöntem</h1><h2>Katılımcılar</h2><p>Örneklem bilgileri...</p><h2>Prosedür</h2><p>Veri toplama süreci...</p><p><br></p><h1>Bulgular</h1><p>Analiz sonuçları...</p><p><br></p><h1>Tartışma</h1><p>Bulguların yorumu...</p><p><br></p><h1>Kaynakça</h1><p class="refe">[Atıflar otomatik eklenecek]</p>',
+    rapor:'<h1>Başlık</h1><p class="ni">[Yazar Adı]</p><p class="ni">[Kurum Adı]</p><p class="ni">[Tarih]</p><p><br></p><h1>Özet</h1><p class="ni">Raporun özeti...</p><p><br></p><h1>Giriş</h1><p>Raporun amacı ve kapsamı...</p><p><br></p><h1>Bulgular</h1><h2>Bölüm 1</h2><p>Bulgular...</p><h2>Bölüm 2</h2><p>Bulgular...</p><p><br></p><h1>Sonuç</h1><p>Sonuçlar ve öneriler...</p><p><br></p><h1>Kaynakça</h1><p class="refe">[Atıflar otomatik eklenecek]</p>',
+    literatur:'<h1>Başlık</h1><p class="ni">[Yazar Adı]</p><p class="ni">[Kurum Adı]</p><p><br></p><h1>Özet</h1><p class="ni">Bu literatür taramasının amacı... (150-250 kelime)</p><p class="ni"><em>Anahtar Kelimeler:</em> kelime1, kelime2</p><p><br></p><h1>Giriş</h1><p>Konu tanıtımı ve araştırma soruları...</p><p><br></p><h1>Yöntem</h1><p>Literatür tarama stratejisi, veritabanları, dahil etme/dışlama kriterleri...</p><p><br></p><h1>Bulgular</h1><h2>Tema 1</h2><p>İlgili çalışmaların sentezi...</p><h2>Tema 2</h2><p>İlgili çalışmaların sentezi...</p><h2>Tema 3</h2><p>İlgili çalışmaların sentezi...</p><p><br></p><h1>Tartışma</h1><p>Genel değerlendirme, boşluklar, gelecek araştırma önerileri...</p><p><br></p><h1>Kaynakça</h1><p class="refe">[Atıflar otomatik eklenecek]</p>'
+  };
+  var html=templates[type];
+  if(!html)return;
+  document.getElementById('apaed').innerHTML=html;
+  uSt();save();updatePageHeight();
+}
 function insImage(){saveEditorSelection();document.getElementById('imginp').click();}
 function handleImgUpload(e){
   var file=e.target.files[0];if(!file)return;
@@ -2470,6 +2683,60 @@ function handleImgUpload(e){
   reader.readAsDataURL(file);
   e.target.value='';
 }
+// ── IMAGE RESIZE/DRAG ─────────────────────────────────────────────────────────
+(function(){
+  var selectedImg=null,resizing=false,resizeStartX,resizeStartW;
+  document.getElementById('apaed').addEventListener('click',function(e){
+    // Deselect previous
+    var prev=document.querySelector('#apaed img.img-selected');
+    if(prev&&prev!==e.target)prev.classList.remove('img-selected');
+    removeResizeHandles();
+    if(e.target.tagName==='IMG'){
+      selectedImg=e.target;
+      selectedImg.classList.add('img-selected');
+      addResizeHandle(selectedImg);
+    }else{selectedImg=null;}
+  });
+  function addResizeHandle(img){
+    var wrap=img.parentElement;
+    if(!wrap||wrap.id==='apaed')return;
+    wrap.style.position='relative';wrap.style.display='inline-block';
+    var h=document.createElement('div');h.className='img-resize-handle';
+    h.style.right='-5px';h.style.bottom='-5px';h.style.position='absolute';
+    h.addEventListener('mousedown',function(e2){
+      e2.preventDefault();e2.stopPropagation();
+      resizing=true;resizeStartX=e2.clientX;resizeStartW=img.offsetWidth;
+      document.addEventListener('mousemove',onResize);
+      document.addEventListener('mouseup',stopResize);
+    });
+    wrap.appendChild(h);
+  }
+  function onResize(e){
+    if(!resizing||!selectedImg)return;
+    var newW=Math.max(50,resizeStartW+(e.clientX-resizeStartX));
+    selectedImg.style.width=newW+'px';
+    selectedImg.style.height='auto';
+    selectedImg.style.maxWidth='none';
+  }
+  function stopResize(){
+    resizing=false;
+    document.removeEventListener('mousemove',onResize);
+    document.removeEventListener('mouseup',stopResize);
+    uSt();save();
+  }
+  function removeResizeHandles(){document.querySelectorAll('#apaed .img-resize-handle').forEach(function(h){h.remove();});}
+  // Delete key removes selected image
+  document.addEventListener('keydown',function(e){
+    if(selectedImg&&(e.key==='Delete'||e.key==='Backspace')&&document.activeElement.id!=='apaed'){
+      e.preventDefault();
+      var wrap=selectedImg.parentElement;
+      if(wrap&&wrap!==document.getElementById('apaed'))wrap.remove();
+      else selectedImg.remove();
+      selectedImg=null;removeResizeHandles();uSt();save();
+    }
+  });
+})();
+
 function insBlkQ(){iHTML('<blockquote>Alinti metni (40+ kelime). (Yazar, Yil, s. XX)</blockquote><p><br></p>');}
 function insFig(){var n=prompt('Sekil No:','1');if(!n)return;var t=prompt('Baslik:','')||'';iHTML('<p style="text-align:center;text-indent:0">[Sekil '+n+']</p><p style="text-align:center;text-indent:0;font-style:italic">Sekil '+n+(t?' - '+t:'')+'</p><p><br></p>');
 }
@@ -2493,7 +2760,7 @@ function doTable(){
 }
 
 // ── EXPORT ────────────────────────────────────────────────────────────────────
-function expDOC(){var h='<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:"Times New Roman",serif;font-size:12pt;line-height:2;margin:2.54cm;}h1{font-size:12pt;font-weight:bold;text-align:center;margin:0;text-indent:0;}h2{font-size:12pt;font-weight:bold;text-align:left;margin:0;text-indent:0;}h3{font-size:12pt;font-weight:bold;font-style:italic;margin:0;text-indent:0;}p{margin:0;text-indent:.5in;}.ni{text-indent:0;}.cit{color:#000;border:none;}.refe{text-indent:-.5in;padding-left:.5in;margin:0;}blockquote{padding-left:.5in;text-indent:0;margin:0;}table{width:100%;border-collapse:collapse;font-size:12pt;}th{border-top:1.5px solid #000;border-bottom:1px solid #000;padding:4px 8px;}td{padding:4px 8px;}</style></head><body>'+document.getElementById('apaed').innerHTML+'</body></html>';saveAs(new Blob([h],{type:'application/msword'}),'makale.doc');}
+function expDOC(){var h='<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:"Times New Roman",serif;font-size:12pt;line-height:2;margin:2.54cm;}h1{font-size:12pt;font-weight:bold;text-align:center;margin:0;text-indent:0;}h2{font-size:12pt;font-weight:bold;text-align:left;margin:0;text-indent:0;}h3{font-size:12pt;font-weight:bold;font-style:italic;margin:0;text-indent:0;}h4{font-size:12pt;font-weight:bold;margin:0;text-indent:.5in;}h5{font-size:12pt;font-weight:bold;font-style:italic;margin:0;text-indent:.5in;}p{margin:0;text-indent:.5in;}.ni{text-indent:0;}.cit{color:#000;border:none;}.refe{text-indent:-.5in;padding-left:.5in;margin:0;}blockquote{padding-left:.5in;text-indent:0;margin:0;}table{width:100%;border-collapse:collapse;font-size:12pt;}th{border-top:1.5px solid #000;border-bottom:1px solid #000;padding:4px 8px;}td{padding:4px 8px;}</style></head><body>'+document.getElementById('apaed').innerHTML+'</body></html>';saveAs(new Blob([h],{type:'application/msword'}),'makale.doc');}
 function expNotes(){var t=S.notes.map(function(n,i){var nb=S.notebooks.find(function(x){return x.id===n.nbId;});return (i+1)+'. ['+(nb?nb.name:'?')+'] '+(n.src?'('+n.src+') ':'')+'\n'+(n.txt||'')+(n.q?'\nAlıntı: "'+n.q+'"':'');}).join('\n\n');saveAs(new Blob([t],{type:'text/plain;charset=utf-8'}),'notlar.txt');}
 function expLib(){var c=[];S.wss.forEach(function(ws){(ws.lib||[]).forEach(function(r){var x=Object.assign({},r);delete x.pdfData;c.push(x);});});saveAs(new Blob([JSON.stringify(c,null,2)],{type:'application/json'}),'kutuphane.json');}
 
@@ -2627,7 +2894,7 @@ async function fetchOAUrls(doi){
   var urls=[];
   var clean=doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i,'').trim();
   var promises=[];
-  // Unpaywall
+  // 1. Unpaywall — en büyük OA link veritabanı
   promises.push(fetch('https://api.unpaywall.org/v2/'+encodeURIComponent(clean)+'?email=academiq@example.com').then(function(r){return r.ok?r.json():null;}).then(function(ua){
     if(ua){
       if(ua.best_oa_location&&ua.best_oa_location.url_for_pdf)urls.push(ua.best_oa_location.url_for_pdf);
@@ -2635,15 +2902,69 @@ async function fetchOAUrls(doi){
       (ua.oa_locations||[]).forEach(function(loc){if(loc.url_for_pdf)urls.push(loc.url_for_pdf);if(loc.url)urls.push(loc.url);});
     }
   }).catch(function(){}));
-  // Semantic Scholar
+  // 2. Semantic Scholar
   promises.push(fetch('https://api.semanticscholar.org/graph/v1/paper/DOI:'+encodeURIComponent(clean)+'?fields=openAccessPdf').then(function(r){return r.ok?r.json():null;}).then(function(s2){
     if(s2&&s2.openAccessPdf&&s2.openAccessPdf.url)urls.push(s2.openAccessPdf.url);
   }).catch(function(){}));
-  // OpenAlex
-  promises.push(fetch('https://api.openalex.org/works/doi:'+clean,{headers:{'Accept':'application/json'}}).then(function(r){return r.ok?r.json():null;}).then(function(oa){
+  // 3. OpenAlex — açık erişim lokasyonları
+  promises.push(fetch('https://api.openalex.org/works/doi:'+clean,{headers:{'Accept':'application/json','User-Agent':'AcademiQ/2.0 (mailto:academiq@example.com)'}}).then(function(r){return r.ok?r.json():null;}).then(function(oa){
     if(oa){
       if(oa.open_access&&oa.open_access.oa_url)urls.push(oa.open_access.oa_url);
-      (oa.locations||[]).forEach(function(loc){if(loc.pdf_url)urls.push(loc.pdf_url);});
+      (oa.locations||[]).forEach(function(loc){if(loc.pdf_url)urls.push(loc.pdf_url);if(loc.landing_page_url)urls.push(loc.landing_page_url);});
+    }
+  }).catch(function(){}));
+  // 4. CORE — dünyanın en büyük OA deposu (core.ac.uk)
+  promises.push(fetch('https://api.core.ac.uk/v3/search/works/?q=doi:'+encodeURIComponent(clean)+'&limit=3',{headers:{'Accept':'application/json'}}).then(function(r){return r.ok?r.json():null;}).then(function(core){
+    if(core&&core.results){
+      core.results.forEach(function(item){
+        if(item.downloadUrl)urls.push(item.downloadUrl);
+        if(item.sourceFulltextUrls)(Array.isArray(item.sourceFulltextUrls)?item.sourceFulltextUrls:[item.sourceFulltextUrls]).forEach(function(u){urls.push(u);});
+      });
+    }
+  }).catch(function(){}));
+  // 5. Europe PMC — Avrupa'nın OA deposu
+  promises.push(fetch('https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:'+encodeURIComponent(clean)+'&format=json&resultType=core').then(function(r){return r.ok?r.json():null;}).then(function(epmc){
+    if(epmc&&epmc.resultList&&epmc.resultList.result){
+      epmc.resultList.result.forEach(function(item){
+        if(item.fullTextUrlList&&item.fullTextUrlList.fullTextUrl){
+          item.fullTextUrlList.fullTextUrl.forEach(function(fu){
+            if(fu.documentStyle==='pdf'&&fu.url)urls.push(fu.url);
+            else if(fu.availability==='Open access'&&fu.url)urls.push(fu.url);
+          });
+        }
+        if(item.pmcid)urls.push('https://europepmc.org/backend/ptpmcrender.fcgi?accid='+item.pmcid+'&blobtype=pdf');
+      });
+    }
+  }).catch(function(){}));
+  // 6. PubMed Central — biyomedikal tam metin
+  promises.push(fetch('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pmc&term='+encodeURIComponent(clean)+'[doi]&retmode=json').then(function(r){return r.ok?r.json():null;}).then(function(pmc){
+    if(pmc&&pmc.esearchresult&&pmc.esearchresult.idlist){
+      pmc.esearchresult.idlist.forEach(function(pmcid){
+        urls.push('https://www.ncbi.nlm.nih.gov/pmc/articles/PMC'+pmcid+'/pdf/');
+        urls.push('https://europepmc.org/backend/ptpmcrender.fcgi?accid=PMC'+pmcid+'&blobtype=pdf');
+      });
+    }
+  }).catch(function(){}));
+  // 7. DOAJ — açık erişim dergi dizini
+  promises.push(fetch('https://doaj.org/api/search/articles/doi:'+encodeURIComponent(clean)).then(function(r){return r.ok?r.json():null;}).then(function(doaj){
+    if(doaj&&doaj.results){
+      doaj.results.forEach(function(item){
+        if(item.bibjson&&item.bibjson.link){
+          item.bibjson.link.forEach(function(link){
+            if(link.type==='fulltext'&&link.url)urls.push(link.url);
+          });
+        }
+      });
+    }
+  }).catch(function(){}));
+  // 8. Crossref funder mandate check — OA zorunlu fonlama bilgisi
+  promises.push(fetch('https://api.crossref.org/works/'+encodeURIComponent(clean)+'?mailto=academiq@example.com').then(function(r){return r.ok?r.json():null;}).then(function(cr){
+    if(cr&&cr.message){
+      // Check for open access links in Crossref
+      (cr.message.link||[]).forEach(function(lnk){
+        if(lnk['content-type']==='application/pdf'&&lnk.URL)urls.push(lnk.URL);
+        if(lnk['intended-application']==='text-mining'&&lnk.URL)urls.push(lnk.URL);
+      });
     }
   }).catch(function(){}));
   await Promise.allSettled(promises);
@@ -2823,6 +3144,96 @@ function restoreEditorSelection(){
   return false;
 }
 
+// ── BIBTEX / RIS IMPORT ──────────────────────────────────────────────────────
+function parseBibTeX(text){
+  var entries=[];var re=/@(\w+)\s*\{([^,]*),\s*([\s\S]*?)\n\s*\}/g;
+  var m;
+  while((m=re.exec(text))!==null){
+    var fields={};var body=m[3];
+    var fr=/(\w+)\s*=\s*[\{"]([^}"]*)[\}"]/g;var fm;
+    while((fm=fr.exec(body))!==null){
+      fields[fm[1].toLowerCase()]=fm[2].replace(/[\{\}]/g,'').replace(/\\&/g,'&').replace(/\\\"/g,'"').replace(/\\'/g,"'").trim();
+    }
+    var authors=(fields.author||'').split(/\s+and\s+/i).map(function(a){return a.trim();}).filter(Boolean);
+    var pages=(fields.pages||'').replace(/--/g,'-');
+    var fp='',lp='';if(pages.includes('-')){fp=pages.split('-')[0].trim();lp=pages.split('-').pop().trim();}else fp=pages;
+    entries.push({
+      id:uid(),title:fields.title||'',authors:authors,year:fields.year||'',
+      journal:fields.journal||fields.booktitle||'',volume:fields.volume||'',
+      issue:fields.number||'',fp:fp,lp:lp,
+      doi:fields.doi||'',url:fields.url||'',pdfData:null,pdfUrl:null,wsId:S.cur
+    });
+  }
+  return entries;
+}
+function parseRIS(text){
+  var entries=[];var blocks=text.split(/^ER\s*-/m);
+  blocks.forEach(function(block){
+    if(!block.trim())return;
+    var fields={};var lines=block.split('\n');
+    var authors=[];
+    lines.forEach(function(line){
+      var m=line.match(/^([A-Z][A-Z0-9])\s*-\s*(.*)/);
+      if(!m)return;
+      var tag=m[1].trim(),val=m[2].trim();
+      if(tag==='AU'||tag==='A1')authors.push(val);
+      else if(tag==='TI'||tag==='T1')fields.title=val;
+      else if(tag==='PY'||tag==='Y1')fields.year=val.split('/')[0];
+      else if(tag==='JO'||tag==='JF'||tag==='T2')fields.journal=fields.journal||val;
+      else if(tag==='VL')fields.volume=val;
+      else if(tag==='IS')fields.issue=val;
+      else if(tag==='SP')fields.fp=val;
+      else if(tag==='EP')fields.lp=val;
+      else if(tag==='DO')fields.doi=val;
+      else if(tag==='UR')fields.url=val;
+    });
+    if(!fields.title&&!authors.length)return;
+    entries.push({
+      id:uid(),title:fields.title||'',authors:authors,year:fields.year||'',
+      journal:fields.journal||'',volume:fields.volume||'',issue:fields.issue||'',
+      fp:fields.fp||'',lp:fields.lp||'',
+      doi:fields.doi||'',url:fields.url||'',pdfData:null,pdfUrl:null,wsId:S.cur
+    });
+  });
+  return entries;
+}
+function importBib(e){
+  var file=e.target.files[0];if(!file)return;
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    var text=ev.target.result;
+    var entries=[];
+    if(file.name.endsWith('.bib'))entries=parseBibTeX(text);
+    else entries=parseRIS(text);
+    if(!entries.length){setDst('Kaynak bulunamadı.','er');return;}
+    var added=0;
+    entries.forEach(function(ref){
+      var lib=cLib();
+      if(ref.doi&&lib.some(function(r){return r.doi===ref.doi;}))return;
+      lib.push(ref);added++;
+    });
+    save();rLib();rRefs();
+    setDst(added+'/'+entries.length+' kaynak içe aktarıldı','ok');
+    setTimeout(function(){setDst('','');},4000);
+  };
+  reader.readAsText(file);
+  e.target.value='';
+}
+
+// ── DARK THEME ────────────────────────────────────────────────────────────────
+function toggleTheme(){
+  var isDark=document.documentElement.dataset.theme==='dark';
+  document.documentElement.dataset.theme=isDark?'':'dark';
+  document.getElementById('themebtn').textContent=isDark?'🌙':'☀';
+  try{localStorage.setItem('aqTheme',isDark?'':'dark');}catch(e){}
+}
+(function(){
+  try{
+    var t=localStorage.getItem('aqTheme');
+    if(t==='dark'){document.documentElement.dataset.theme='dark';document.getElementById('themebtn').textContent='☀';}
+  }catch(e){}
+})();
+
 // Otomatik guncelleme kontrolu (baslangicta, sessiz)
 function autoCheckUpdate(){
   if(typeof window.electronAPI==='undefined') return;
@@ -2838,7 +3249,7 @@ function autoCheckUpdate(){
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 syncLoad().then(function(){
-  rWS();rNB();rLib();rNotes();rRefs();uSt();
+  rWS();rNB();rLib();rNotes();rRefs();uSt();rDocTabs();
   // Electron: uygulama bilgisi
   if(typeof window.electronAPI!=='undefined'){
     window.electronAPI.getAppInfo().then(function(info){

@@ -67,12 +67,38 @@ function createWindow() {
   });
 
   mainWindow.setMenuBarVisibility(false);
-  mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
+  mainWindow.loadFile(path.join(__dirname, 'academiq-research.html'));
 
   // Open external links in browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
+  });
+
+  // Close confirmation — ask user if they want to save
+  let forceClose = false;
+  mainWindow.on('close', (e) => {
+    if (forceClose) return;
+    e.preventDefault();
+    const choice = dialog.showMessageBoxSync(mainWindow, {
+      type: 'question',
+      buttons: ['Kaydet ve Kapat', 'Kaydetmeden Kapat', 'İptal'],
+      defaultId: 0,
+      cancelId: 2,
+      title: 'AcademiQ Research',
+      message: 'Değişiklikler kaydedilsin mi?'
+    });
+    if (choice === 0) {
+      // Save then close
+      mainWindow.webContents.executeJavaScript('(async function(){try{await syncSave();}catch(e){}})()')
+        .then(() => { forceClose = true; mainWindow.close(); })
+        .catch(() => { forceClose = true; mainWindow.close(); });
+    } else if (choice === 1) {
+      // Close without saving
+      forceClose = true;
+      mainWindow.close();
+    }
+    // choice === 2: Cancel — do nothing
   });
 }
 
@@ -372,10 +398,8 @@ ipcMain.handle('update:download', async (_ev, url) => {
     const fileName = url.split('/').pop() || 'update';
 
     if (fileName.endsWith('.html')) {
-      const target = path.join(APP_DIR, 'src', 'index.html');
+      const target = path.join(__dirname, 'academiq-research.html');
       const backup = target + '.bak';
-      const targetDir = path.dirname(target);
-      if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
       if (fs.existsSync(target)) fs.copyFileSync(target, backup);
       fs.writeFileSync(target, buf);
       return { ok: true, type: 'html', restart: true };
