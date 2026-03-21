@@ -1766,39 +1766,22 @@ function updateRefSection(){
 }
 
 // ── EDITOR ────────────────────────────────────────────────────────────────────
-function ensureEditorFocus(){
-  var ed=document.getElementById('apaed');
-  ed.focus();
-  var sel=window.getSelection();
-  if(!sel.rangeCount||!ed.contains(sel.anchorNode)){
-    var r=document.createRange();r.selectNodeContents(ed);r.collapse(false);
-    sel.removeAllRanges();sel.addRange(r);
-  }
-}
 function ec(cmd,val){
   restoreEditorSelection();
-  ensureEditorFocus();
+  var ed=document.getElementById('apaed');
+  ed.focus();
   document.execCommand(cmd,false,val||null);uSt();
 }
 function iHTML(html){
   var ed=document.getElementById('apaed');
-  restoreEditorSelection();
-  ensureEditorFocus();
-  // Direct DOM insertion — works reliably regardless of focus state
-  var tmp=document.createElement('div');tmp.innerHTML=html;
+  // Always append to end of editor — simple and reliable
+  ed.innerHTML+=html;
+  // Place cursor at end
+  ed.focus();
   var sel=window.getSelection();
-  var range=sel.getRangeAt(0);
-  range.deleteContents();
-  var frag=document.createDocumentFragment();
-  var lastNode;
-  while(tmp.firstChild){lastNode=frag.appendChild(tmp.firstChild);}
-  range.insertNode(frag);
-  // Move cursor after inserted content
-  if(lastNode){
-    var newRange=document.createRange();
-    newRange.setStartAfter(lastNode);newRange.collapse(true);
-    sel.removeAllRanges();sel.addRange(newRange);
-  }
+  var r=document.createRange();
+  r.selectNodeContents(ed);r.collapse(false);
+  sel.removeAllRanges();sel.addRange(r);
   uSt();save();
 }
 function uSt(){var ed=document.getElementById('apaed');var txt=ed.innerText||'';var words=txt.trim().split(/\s+/).filter(function(w){return w.length>0;}).length;var cites=ed.querySelectorAll('.cit').length;var refs=getUsedRefs().length;document.getElementById('tbinfo').textContent=words+' kelime';document.getElementById('sbw').textContent=words+' kelime';document.getElementById('sbc').textContent=cites+' atıf';document.getElementById('sbr2').textContent=refs+' kaynak';}
