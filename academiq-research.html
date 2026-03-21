@@ -698,7 +698,7 @@ function rWS(){
   var row=document.getElementById('wsrow');row.innerHTML='';
   S.wss.forEach(function(ws){
     var btn=document.createElement('button');btn.className='wsbtn'+(ws.id===S.cur?' on':'');btn.textContent=ws.name;btn.title=ws.name;
-    btn.onclick=function(){S.cur=ws.id;save();rWS();rLib();rRefs();};
+    btn.onclick=function(){S.cur=ws.id;save();rWS();rLib();rRefs();switchWsPdfTabs();};
     if(S.wss.length>1){var del=document.createElement('span');del.className='wsdel';del.textContent='×';del.onclick=function(e){e.stopPropagation();delWs(ws.id);};btn.appendChild(del);}
     row.appendChild(btn);
   });
@@ -1322,7 +1322,7 @@ function addPdfTab(title,pdfData,refId){
     var existing=pdfTabs.find(function(t){return t.refId===refId;});
     if(existing){switchPdfTab(existing.id);return;}
   }
-  var tab={id:'tab_'+Date.now(),title:(title||'PDF').substring(0,40),refId:refId||null,pdfData:pdfData,scrollPos:0,hlData:[],annots:[]};
+  var tab={id:'tab_'+Date.now(),title:(title||'PDF').substring(0,40),refId:refId||null,wsId:S.cur,pdfData:pdfData,scrollPos:0,hlData:[],annots:[]};
   // Load annotations from ref if exists
   if(refId){var ref=findRef(refId);if(ref&&ref._annots)tab.annots=ref._annots;}
   pdfTabs.push(tab);
@@ -1369,14 +1369,14 @@ function switchPdfTab(tabId){
 function closePdfTab(tabId){
   var idx=pdfTabs.findIndex(function(t){return t.id===tabId;});
   if(idx===-1)return;
-  // Save annotations to ref before closing
   var tab=pdfTabs[idx];
   if(tab.refId){
     if(tabId===activeTabId){tab.annots=collectAnnotsFromDOM();}
     var ref=findRef(tab.refId);if(ref){ref._annots=tab.annots;save();}
   }
   pdfTabs.splice(idx,1);
-  if(pdfTabs.length===0){
+  var wsTabs=getWsTabs();
+  if(wsTabs.length===0){
     activeTabId=null;curRef=null;clearPDFView();
     document.getElementById('pdftitle').textContent='PDF Okuyucu';
     renderPdfTabs();
@@ -1384,20 +1384,21 @@ function closePdfTab(tabId){
     return;
   }
   if(tabId===activeTabId){
-    var newIdx=Math.min(idx,pdfTabs.length-1);
     activeTabId=null;
-    switchPdfTab(pdfTabs[newIdx].id);
+    switchPdfTab(wsTabs[0].id);
   }else{
     renderPdfTabs();
   }
 }
+function getWsTabs(){return pdfTabs.filter(function(t){return !t.wsId||t.wsId===S.cur;});}
 function renderPdfTabs(){
   var bar=document.getElementById('pdftabs');
   if(!bar)return;
   bar.innerHTML='';
-  if(pdfTabs.length<=1){bar.style.display='none';return;}
+  var wsTabs=getWsTabs();
+  if(wsTabs.length<=1){bar.style.display='none';return;}
   bar.style.display='flex';
-  pdfTabs.forEach(function(tab){
+  wsTabs.forEach(function(tab){
     var el=document.createElement('div');
     el.className='pdftab'+(tab.id===activeTabId?' on':'');
     el.title=tab.title;
@@ -1413,6 +1414,22 @@ function renderPdfTabs(){
     el.onclick=function(){switchPdfTab(tab.id);};
     bar.appendChild(el);
   });
+}
+function switchWsPdfTabs(){
+  saveCurrentTabState();
+  var wsTabs=getWsTabs();
+  if(wsTabs.length>0){
+    // Switch to first tab of current workspace
+    var found=wsTabs.find(function(t){return t.id===activeTabId;});
+    if(!found){activeTabId=null;switchPdfTab(wsTabs[0].id);}
+    else{renderPdfTabs();}
+  } else {
+    // No tabs in this workspace
+    activeTabId=null;curRef=null;clearPDFView();
+    document.getElementById('pdftitle').textContent='PDF Okuyucu';
+    renderPdfTabs();
+    showNoPDF({});
+  }
 }
 
 // ── PDF ANNOTATIONS ──────────────────────────────────────────────────────────
