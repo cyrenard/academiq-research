@@ -226,7 +226,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 }
 
 /* Highlight tooltip */
-#hltip{display:none;position:fixed;z-index:800;background:#fff;border:1px solid var(--b);border-radius:8px;padding:5px 7px;gap:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);}
+#hltip{display:none;position:fixed;z-index:10001;background:#fff;border:1px solid var(--b);border-radius:8px;padding:5px 7px;gap:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);}
 #hltip.show{display:flex;}
 .htb{background:none;border:1px solid var(--b);color:var(--txt2);border-radius:3px;font-size:11px;padding:3px 9px;cursor:pointer;font-family:var(--fm);}
 .htb:hover{border-color:var(--acc);color:var(--acc);}
@@ -1215,9 +1215,12 @@ function renderSinglePage(n){
     var ph=wrap.querySelector('.page-placeholder');if(ph)ph.remove();
     // Double-click to add annotation
     if(!wrap._annotHandler){wrap._annotHandler=true;wrap.addEventListener('dblclick',function(e){
-      if(e.target.closest('.pdf-annot')||e.target.closest('.textLayer'))return;
+      if(e.target.closest('.pdf-annot'))return;
+      // Only create annotation if no text is selected (double-click selects a word)
+      var sel=window.getSelection();
+      if(sel&&!sel.isCollapsed&&sel.toString().trim())return;
       var rect=wrap.getBoundingClientRect();
-      addPdfAnnot(n,e.clientX-rect.left,e.clientY-rect.top);
+      addPdfAnnot(parseInt(wrap.dataset.page),e.clientX-rect.left,e.clientY-rect.top);
     });}
     // Canvas at dpr resolution
     var canvas=document.createElement('canvas');
@@ -1739,6 +1742,8 @@ psc.addEventListener('mouseup',function(e){
         selText=clickedHL.text||'';
         selPageNum=clickedHL.page;
         clickedHLIdx=clickedHL.idx;
+        // Auto-select the highlighted text in text layer
+        selectHLText(clickedHL);
         showHLtip(e.clientY+10, e.clientX, 'highlight');
       } else {
         var hltipEl2=document.getElementById('hltip');
@@ -1750,6 +1755,43 @@ psc.addEventListener('mouseup',function(e){
 })();
 
 var clickedHLIdx=-1; // tiklanan highlight'in hlData index'i
+
+function selectHLText(hl){
+  if(!hl||!hlData[hl.idx])return;
+  var hd=hlData[hl.idx];
+  var wrap=document.querySelector('.pdf-page-wrap[data-page="'+hd.page+'"]');
+  if(!wrap)return;
+  var textLayer=wrap.querySelector('.textLayer');
+  if(!textLayer)return;
+  var spans=textLayer.querySelectorAll('span');
+  if(!spans.length)return;
+  // Find spans that overlap with highlight rects
+  var ww=wrap.offsetWidth,wh=wrap.offsetHeight;
+  var firstSpan=null,lastSpan=null;
+  spans.forEach(function(sp){
+    var sr=sp.getBoundingClientRect();
+    var wr=wrap.getBoundingClientRect();
+    var sx=(sr.left-wr.left)/ww,sy=(sr.top-wr.top)/wh;
+    var sw=sr.width/ww,sh=sr.height/wh;
+    for(var ri=0;ri<hd.rects.length;ri++){
+      var r=hd.rects[ri];
+      if(sx+sw>r.x&&sx<r.x+r.w&&sy+sh>r.y&&sy<r.y+r.h){
+        if(!firstSpan)firstSpan=sp;
+        lastSpan=sp;
+        break;
+      }
+    }
+  });
+  if(firstSpan&&lastSpan){
+    try{
+      var range=document.createRange();
+      range.setStart(firstSpan.firstChild||firstSpan,0);
+      range.setEnd(lastSpan.firstChild||lastSpan,(lastSpan.firstChild||lastSpan).length||0);
+      var sel=window.getSelection();
+      sel.removeAllRanges();sel.addRange(range);
+    }catch(ex){}
+  }
+}
 
 function findHLAtPoint(cx,cy){
   var wraps=document.querySelectorAll('.pdf-page-wrap');
@@ -2205,7 +2247,16 @@ document.addEventListener('mousedown',function(e){var t=document.getElementById(
 
 // ── INSERT HELPERS ────────────────────────────────────────────────────────────
 function insRefs(){var refs=getUsedRefs();if(!refs.length)refs=sortLib(cLib());iHTML('<h1>Kaynakca</h1>'+refs.map(function(r){return '<p class="refe">'+apa7(r)+'</p>';}).join(''));}
-function insCover(){var t=prompt('Makale başlığı:','');if(!t)return;var a=prompt('Yazar(lar):','')||'';var af=prompt('Kurum:','')||'';var ders=prompt('Ders:','')||'';var ogr=prompt('Öğretim Üyesi:','')||'';var dt=new Date().toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'});iHTML('<div style="text-align:center;padding-top:192px;font-family:Times New Roman,serif;font-size:12pt;line-height:2;"><p style="font-weight:bold;text-indent:0">'+t+'</p><p style="text-indent:0">'+a+'</p><p style="text-indent:0">'+af+'</p>'+(ders?'<p style="text-indent:0">'+ders+'</p>':'')+(ogr?'<p style="text-indent:0">'+ogr+'</p>':'')+'<p style="text-indent:0">'+dt+'</p></div><p><br/></p>');
+function insCover(){var t=prompt('Makale başlığı:','');if(!t)return;var a=prompt('Yazar(lar):','')||'';var af=prompt('Kurum:','')||'';var ders=prompt('Ders:','')||'';var ogr=prompt('Öğretim Üyesi:','')||'';var dt=new Date().toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'});
+  var ed=document.getElementById('apaed');
+  var div=document.createElement('div');
+  div.style.cssText='text-align:center;padding-top:192px;font-family:Times New Roman,serif;font-size:12pt;line-height:2;';
+  var fields=[{t:t,b:true},{t:a},{t:af}];
+  if(ders)fields.push({t:ders});if(ogr)fields.push({t:ogr});fields.push({t:dt});
+  fields.forEach(function(f){var p=document.createElement('p');p.style.textIndent='0';if(f.b)p.style.fontWeight='bold';p.textContent=f.t;div.appendChild(p);});
+  ed.insertBefore(div,ed.firstChild);
+  var br=document.createElement('p');br.innerHTML='<br>';if(div.nextSibling)ed.insertBefore(br,div.nextSibling);else ed.appendChild(br);
+  ed.focus();uSt();save();if(typeof updatePageHeight==='function')updatePageHeight();
 }
 function insAbstract(){iHTML('<h1>Abstract</h1><p class="ni">Ozet metni (150-250 kelime).</p><p class="ni"><em>Keywords:</em> kelime1, kelime2</p><p><br></p>');}
 function insBlkQ(){iHTML('<blockquote>Alinti metni (40+ kelime). (Yazar, Yil, s. XX)</blockquote><p><br></p>');}
