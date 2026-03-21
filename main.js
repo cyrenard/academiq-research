@@ -376,12 +376,20 @@ ipcMain.handle('update:check', async () => {
       htmlAsset = data.assets.find(a => a.name && a.name.endsWith('.html'));
       if (!htmlAsset) htmlAsset = data.assets.find(a => a.name && a.name.endsWith('.zip'));
     }
+    // If no .html/.zip asset, use raw file URL from the tagged commit
+    let downloadUrl = '';
+    if (htmlAsset) {
+      downloadUrl = htmlAsset.browser_download_url;
+    } else {
+      // Download the main HTML file directly from the repo at this tag
+      downloadUrl = 'https://raw.githubusercontent.com/cyrenard/academiq-research/' + data.tag_name + '/academiq-research.html';
+    }
     return {
       available,
       current: APP_VERSION,
       remote,
       notes: data.body || '',
-      downloadUrl: htmlAsset ? htmlAsset.browser_download_url : (data.html_url || ''),
+      downloadUrl,
       publishedAt: data.published_at || ''
     };
   } catch (e) {
@@ -402,6 +410,24 @@ ipcMain.handle('update:download', async (_ev, url) => {
       const backup = target + '.bak';
       if (fs.existsSync(target)) fs.copyFileSync(target, backup);
       fs.writeFileSync(target, buf);
+      // Also try to download updated main.js and package.json
+      try {
+        const baseUrl = url.replace(/\/[^\/]+$/, '/');
+        const mainBuf = await followRedirects(baseUrl + 'main.js');
+        if (mainBuf && mainBuf.length > 100) {
+          const mainTarget = path.join(__dirname, 'main.js');
+          fs.copyFileSync(mainTarget, mainTarget + '.bak');
+          fs.writeFileSync(mainTarget, mainBuf);
+        }
+        const pkgBuf = await followRedirects(baseUrl + 'package.json');
+        if (pkgBuf && pkgBuf.length > 10) {
+          fs.writeFileSync(path.join(__dirname, 'package.json'), pkgBuf);
+        }
+        const preBuf = await followRedirects(baseUrl + 'preload.js');
+        if (preBuf && preBuf.length > 10) {
+          fs.writeFileSync(path.join(__dirname, 'preload.js'), preBuf);
+        }
+      } catch (e2) { /* secondary files optional */ }
       return { ok: true, type: 'html', restart: true };
     } else if (fileName.endsWith('.zip')) {
       const zipPath = path.join(APP_DIR, 'update.zip');
