@@ -350,7 +350,7 @@ ipcMain.handle('sync:clearSyncDir', async () => {
 });
 
 // ── IPC: APP INFO ────────────────────────────────────────────────────────────
-const APP_VERSION = '2.0.0';
+const APP_VERSION = require('./package.json').version;
 const UPDATE_URL = 'https://api.github.com/repos/cyrenard/academiq-research/releases/latest';
 
 ipcMain.handle('app:getInfo', async () => {
