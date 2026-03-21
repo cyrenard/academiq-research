@@ -397,22 +397,33 @@ ipcMain.handle('update:check', async () => {
   }
 });
 
-ipcMain.handle('update:download', async (_ev, url) => {
+ipcMain.handle('update:download', async (_ev, origUrl) => {
   try {
-    if (!url) return { ok: false, error: 'No URL' };
+    if (!origUrl) return { ok: false, error: 'No URL' };
+
+    let url = origUrl;
 
     // If URL is a GitHub release page (not a direct file), convert to raw file URL
     if (url.includes('/releases/tag/')) {
       const tag = url.split('/releases/tag/').pop();
       url = 'https://raw.githubusercontent.com/cyrenard/academiq-research/' + tag + '/academiq-research.html';
     }
+    // If URL doesn't end with a known extension, assume it's an HTML update
+    const fileName = url.split('/').pop() || 'update';
+    const isKnownType = fileName.endsWith('.html') || fileName.endsWith('.zip');
+    if (!isKnownType) {
+      // Force raw download of academiq-research.html from main branch
+      url = 'https://raw.githubusercontent.com/cyrenard/academiq-research/main/academiq-research.html';
+    }
+
+    console.log('[UPDATE] Downloading from:', url, '(original:', origUrl, ')');
 
     const buf = await followRedirects(url);
-    if (!buf || buf.length < 100) return { ok: false, error: 'Empty download' };
+    if (!buf || buf.length < 100) return { ok: false, error: 'Empty download (' + (buf ? buf.length : 0) + ' bytes)' };
 
-    const fileName = url.split('/').pop() || 'update';
+    const finalName = url.split('/').pop() || 'update';
 
-    if (fileName.endsWith('.html')) {
+    if (finalName.endsWith('.html')) {
       const target = path.join(__dirname, 'academiq-research.html');
       const backup = target + '.bak';
       if (fs.existsSync(target)) fs.copyFileSync(target, backup);
@@ -436,12 +447,21 @@ ipcMain.handle('update:download', async (_ev, url) => {
         }
       } catch (e2) { /* secondary files optional */ }
       return { ok: true, type: 'html', restart: true };
-    } else if (fileName.endsWith('.zip')) {
+    } else if (finalName.endsWith('.zip')) {
       const zipPath = path.join(APP_DIR, 'update.zip');
       fs.writeFileSync(zipPath, buf);
       return { ok: true, type: 'zip', path: zipPath, restart: true };
     } else {
-      return { ok: false, error: 'Unknown file type: ' + fileName };
+      // Last resort: treat as HTML if content looks like HTML
+      const headerStr = buf.slice(0, 200).toString('utf8');
+      if (headerStr.includes('<!DOCTYPE') || headerStr.includes('<html')) {
+        const target = path.join(__dirname, 'academiq-research.html');
+        const backup = target + '.bak';
+        if (fs.existsSync(target)) fs.copyFileSync(target, backup);
+        fs.writeFileSync(target, buf);
+        return { ok: true, type: 'html', restart: true };
+      }
+      return { ok: false, error: 'Unknown file type: ' + finalName + ' (url: ' + url + ')' };
     }
   } catch (e) { return { ok: false, error: e.message }; }
 });
