@@ -123,6 +123,8 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 .page-break-overlay::after{content:attr(data-label);font-family:var(--fm);font-size:9px;color:var(--txt3);letter-spacing:.05em;}
 /* Page number overlay */
 .page-number{position:absolute;right:0;font-family:'Times New Roman',Times,serif;font-size:12pt;color:#000;pointer-events:none;user-select:none;z-index:5;}
+/* Page spacer inside editor — simulates page margins */
+.pg-spacer{display:block;height:192px;border:none;margin:0;padding:0;background:transparent;pointer-events:none;-webkit-user-select:none;user-select:none;outline:none;caret-color:transparent;overflow:hidden;}
 /* Legacy cleanup */
 .page-break{display:none!important;}
 @media print{
@@ -133,6 +135,23 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
   @page{size:letter;margin:0;}
 }
 #apaed:empty::before{content:'Yazmaya başlayın. Atıf için /r yazın...';color:#bbb;font-style:italic;pointer-events:none;}
+.toc-container{border:1px solid #e0d8cc;padding:12px 16px;margin:0 0 12px 0;border-radius:4px;background:#faf8f4;}
+.toc-entry:hover{color:var(--acc);text-decoration:underline;}
+.find-hl{background:rgba(255,165,0,.35);border-radius:2px;}
+.find-hl-active{background:rgba(255,100,0,.6);outline:2px solid #ff6400;border-radius:2px;}
+/* Zen Mode */
+body.zen #tb{display:none!important;}
+body.zen #sbl{width:0!important;opacity:0!important;pointer-events:none!important;overflow:hidden!important;}
+body.zen #sbr{width:0!important;opacity:0!important;pointer-events:none!important;}
+body.zen #sbar{display:none!important;}
+body.zen #etb{display:none!important;}
+body.zen #escroll{background:#e8e0d0;padding:48px 24px;}
+body.zen #pdfpanel{display:none!important;}
+body.zen #findbar{display:none!important;}
+body.zen #doctabs{display:none!important;}
+#zentb{display:none;position:fixed;top:12px;right:12px;z-index:999;background:rgba(255,255,255,.9);border:1px solid var(--b);border-radius:8px;padding:4px 8px;box-shadow:0 2px 12px rgba(0,0,0,.1);transition:opacity .3s;}
+body.zen #zentb{display:flex;align-items:center;gap:6px;}
+[data-theme="dark"] #zentb{background:rgba(30,30,30,.9);}
 #apaed p{margin:0;text-indent:.5in;}
 #apaed p.ni{text-indent:0;}
 #apaed h1{font-size:12pt;font-weight:bold;text-align:center;margin:0;text-indent:0;line-height:2;display:block;}
@@ -141,8 +160,8 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 #apaed h4{font-size:12pt;font-weight:bold;text-align:left;margin:0;text-indent:.5in;line-height:2;display:block;}
 #apaed h5{font-size:12pt;font-weight:bold;font-style:italic;text-align:left;margin:0;text-indent:.5in;line-height:2;display:block;}
 #apaed blockquote{margin:0;padding-left:.5in;text-indent:0;font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;}
-#apaed ul,#apaed ol{margin:0 0 0 .5in;padding:0;font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;}
-#apaed ul li,#apaed ol li{text-indent:0;margin:0;}
+#apaed ul,#apaed ol{margin:0 0 0 .5in;padding:0;font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;text-align:left;}
+#apaed ul li,#apaed ol li{text-indent:0;margin:0;text-align:left;}
 #apaed .cit{color:#000;cursor:default;white-space:nowrap;}
 #apaed .refe{margin:0;text-indent:-.5in;padding-left:.5in;font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;color:#000;display:block;text-align:left;}
 #apaed table{width:100%;border-collapse:collapse;font-size:12pt;font-family:'Times New Roman',Times,serif;margin:4px 0;position:relative;}
@@ -350,6 +369,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
   <span class="sp"></span>
   <span id="synclbl"></span>
   <button class="btn" style="font-size:14px;padding:4px 8px;" onclick="toggleTheme()" id="themebtn" title="Tema değiştir">🌙</button>
+  <button class="btn" onclick="toggleZenMode()" title="Odak Modu (F10)" id="zenbtn" style="font-size:11px;">Odak</button>
   <button class="btn" style="font-size:11px;" onclick="showSyncSettings()" title="Ayarlar">⚙ Ayarlar</button>
   <button class="btn" style="border:1px solid var(--acc-d);color:var(--acc);" onclick="togglePDF()">📄 PDF</button>
   <button class="btn tog on" id="btnsbl" onclick="tSB('sbl')">☰ Kütüphane</button>
@@ -368,8 +388,10 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
   </div>
   <div id="dst"></div>
   <input class="srch" id="libsrch" placeholder="Filtrele..." oninput="rLib()"/>
+  <div id="labelfilt" style="padding:0 8px 4px;display:flex;gap:3px;flex-wrap:wrap;"></div>
   <button class="pdfupbtn" onclick="document.getElementById('lfinp').click()">+ PDF Yukle</button>
   <button class="pdfupbtn" onclick="batchDownloadOA()" title="DOI'si olan tum kaynaklarin OA PDF'lerini indir" style="background:var(--bg3);color:var(--blue);border:1px solid var(--b);">&#8595; Tum OA PDF'leri Indir</button>
+  <button class="pdfupbtn" onclick="batchFetchCitations()" style="background:var(--bg3);color:var(--txt2);border:1px solid var(--b);">Atıf Sayılarını Güncelle</button>
   <button class="pdfupbtn" onclick="document.getElementById('bibinp').click()" style="color:var(--txt2);">📥 Kaynakça İçe Aktar (.bib/.ris)</button>
   <input type="file" id="bibinp" accept=".bib,.ris,.enw" style="display:none" onchange="importBib(event)"/>
   <input type="file" id="lfinp" accept=".pdf" multiple style="display:none" onchange="hPDFs(event)"/>
@@ -419,11 +441,30 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
     </select>
     <span class="sep"></span>
     <button class="efmt" style="color:var(--acc);border:1px solid var(--acc-d);padding:2px 8px;" onclick="doTrigRef()">/r Atif</button>
+    <button class="efmt" onclick="insertTOC()" title="İçindekiler ekle/güncelle" style="font-size:10px;">İçindekiler</button>
     <input type="file" id="imginp" accept="image/*" style="display:none" onchange="handleImgUpload(event)"/>
+  </div>
+  <div id="findbar" style="display:none;height:auto;background:var(--bg2);border-bottom:1px solid var(--b);padding:6px 10px;flex-shrink:0;">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+      <span style="font-family:var(--fm);font-size:10px;color:var(--txt3);min-width:28px;">Bul:</span>
+      <input type="text" id="findinp" placeholder="Ara..." style="flex:1;background:var(--bg);border:1px solid var(--b);border-radius:4px;color:var(--txt);font-family:var(--fm);font-size:12px;padding:4px 8px;outline:none;"/>
+      <label style="font-family:var(--fm);font-size:10px;color:var(--txt3);display:flex;align-items:center;gap:3px;cursor:pointer;"><input type="checkbox" id="findregex"/> Regex</label>
+      <label style="font-family:var(--fm);font-size:10px;color:var(--txt3);display:flex;align-items:center;gap:3px;cursor:pointer;"><input type="checkbox" id="findcase"/> Büyük/küçük</label>
+      <span id="findcount" style="font-family:var(--fm);font-size:10px;color:var(--txt3);min-width:40px;text-align:center;">--</span>
+      <button class="efmt" onclick="findPrev()" title="Önceki">&#9650;</button>
+      <button class="efmt" onclick="findNext()" title="Sonraki">&#9660;</button>
+      <button class="efmt" onclick="closeFindBar()">&#10005;</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <span style="font-family:var(--fm);font-size:10px;color:var(--txt3);min-width:28px;">Değ:</span>
+      <input type="text" id="replaceinp" placeholder="Değiştir..." style="flex:1;background:var(--bg);border:1px solid var(--b);border-radius:4px;color:var(--txt);font-family:var(--fm);font-size:12px;padding:4px 8px;outline:none;"/>
+      <button class="efmt" onclick="replaceCurrent()" style="font-size:11px;">Değiştir</button>
+      <button class="efmt" onclick="replaceAll()" style="font-size:11px;">Tümünü</button>
+    </div>
   </div>
   <div id="escroll">
     <div id="apapage">
-      <div id="apaed" contenteditable="true" spellcheck="true" data-gramm="true" data-gramm_editor="true"></div>
+      <div id="apaed" contenteditable="true" spellcheck="true" data-gramm="true" data-gramm_editor="true" data-enable-grammarly="true"></div>
     </div>
   </div>
 </div>
@@ -572,6 +613,13 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
     </div>
     <div id="syncappinfo" style="font-family:var(--fm);font-size:9.5px;color:var(--txt3);line-height:1.7;"></div>
   </div>
+  <!-- EDITOR PREFERENCES -->
+  <div style="margin-bottom:12px;padding:8px;background:var(--bg);border:1px solid var(--b);border-radius:4px;">
+    <div style="font-family:var(--fm);font-size:9.5px;color:var(--acc);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;">EDITOR TERCIHLERI</div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--txt2);cursor:pointer;">
+      <input type="checkbox" id="prefPageNum" onchange="S.showPageNumbers=this.checked;save();updatePageHeight();"/> Sayfa numaralarını göster
+    </label>
+  </div>
   <div class="mb" style="flex-wrap:wrap;gap:6px;">
     <button class="mbtn s" onclick="hideM('syncmodal')" style="flex:1;min-width:60px;">Kapat</button>
   </div>
@@ -637,8 +685,19 @@ var S={
   doc:'',
   cm:'inline',
   docs:[{id:'doc1',name:'Belge 1',content:''}],
-  curDoc:'doc1'
+  curDoc:'doc1',
+  showPageNumbers:false,
+  customLabels:[]
 };
+var defaultLabels=[
+  {name:'Okudum',color:'#4caf50'},
+  {name:'Önemli',color:'#f44336'},
+  {name:'Metodoloji',color:'#2196f3'},
+  {name:'Teori',color:'#9c27b0'},
+  {name:'Sonra Oku',color:'#ff9800'},
+  {name:'Tezde Kullan',color:'#e91e63'}
+];
+var activeLabelFilter=null;
 
 var pdfDoc=null,pdfPg=1,pdfTotal=0,pdfScale=0,curRef=null; // 0=auto
 var pdfTabs=[],activeTabId=null; // {id,title,refId,pdfData,scrollPos,hlData,annots}
@@ -658,10 +717,16 @@ function setSL(msg,cls){
 }
 
 async function syncSave(){
-  // Clean legacy page-break elements from content before saving
   var ed=document.getElementById('apaed');
-  ed.querySelectorAll('.page-break,.page-top-spacer').forEach(function(pb){pb.remove();});
-  S.doc=ed.innerHTML;
+  // Save innerHTML WITHOUT mutating the editor DOM (no remove calls!)
+  var html=ed.innerHTML;
+  // Strip legacy page-break elements and spacers from the saved string only
+  html=html.replace(/<div[^>]*class="page-break[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');
+  html=html.replace(/<div[^>]*class="page-top-spacer[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');
+  html=html.replace(/<hr[^>]*class="pg-spacer"[^>]*\/?>/gi,'');
+  html=html.replace(/<hr[^>]*class="find-hl[^"]*"[^>]*\/?>/gi,'');
+  html=html.replace(/<mark[^>]*class="find-hl[^"]*"[^>]*>([\s\S]*?)<\/mark>/gi,'$1');
+  S.doc=html;
   // Save current doc tab content
   if(S.docs&&S.curDoc){
     var curD=S.docs.find(function(d){return d.id===S.curDoc;});
@@ -670,7 +735,9 @@ async function syncSave(){
   var toSave={
     wss:S.wss.map(function(ws){return {id:ws.id,name:ws.name,lib:(ws.lib||[]).map(function(r){var c=Object.assign({},r);delete c.pdfData;return c;})};}),
     cur:S.cur,notebooks:S.notebooks,curNb:S.curNb,notes:S.notes,doc:S.doc,cm:S.cm,
-    docs:S.docs,curDoc:S.curDoc
+    docs:S.docs,curDoc:S.curDoc,
+    showPageNumbers:S.showPageNumbers,
+    customLabels:S.customLabels||[]
   };
   var json=JSON.stringify(toSave);
   // Electron: dosya sistemine yaz (Proton Drive klasörü)
@@ -738,10 +805,18 @@ async function syncLoad(){
     S.curDoc='doc1';
   }
   if(!S.curDoc)S.curDoc=S.docs[0].id;
-  // Load current doc content
+  if(typeof S.showPageNumbers==='undefined')S.showPageNumbers=false;
+  if(!S.customLabels)S.customLabels=[];
+  // Load current doc content — clean legacy page-break elements BEFORE setting innerHTML
   var curD=S.docs.find(function(d){return d.id===S.curDoc;});
-  if(curD&&curD.content)document.getElementById('apaed').innerHTML=curD.content;
-  else if(S.doc)document.getElementById('apaed').innerHTML=S.doc;
+  var rawHTML=curD&&curD.content?curD.content:(S.doc||'');
+  // Remove any legacy contentEditable=false page-break/spacer elements from saved data
+  rawHTML=rawHTML.replace(/<div[^>]*class="page-break[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');
+  rawHTML=rawHTML.replace(/<div[^>]*class="page-top-spacer[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');
+  rawHTML=rawHTML.replace(/<div[^>]*class="page-break-overlay[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');
+  rawHTML=rawHTML.replace(/<div[^>]*class="page-number[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');
+  rawHTML=rawHTML.replace(/<hr[^>]*class="pg-spacer"[^>]*\/?>/gi,'');
+  document.getElementById('apaed').innerHTML=rawHTML;
   if(typeof updatePageHeight==='function')updatePageHeight();
 }
 
@@ -790,14 +865,17 @@ function rDocTabs(){
   bar.appendChild(add);
 }
 function switchDoc(docId){
-  // Save current doc content
+  // Save current doc content (cleaned)
   var cur=S.docs.find(function(d){return d.id===S.curDoc;});
   var ed=document.getElementById('apaed');
-  if(cur)cur.content=ed.innerHTML;
+  if(cur){var ch=ed.innerHTML;ch=ch.replace(/<div[^>]*class="page-break[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');ch=ch.replace(/<div[^>]*class="page-top-spacer[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');ch=ch.replace(/<hr[^>]*class="pg-spacer"[^>]*\/?>/gi,'');cur.content=ch;}
   // Switch
   S.curDoc=docId;
   var next=S.docs.find(function(d){return d.id===docId;});
-  ed.innerHTML=next?next.content:'';
+  var nc=next?next.content:'';
+  nc=nc.replace(/<div[^>]*class="page-break[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');
+  nc=nc.replace(/<div[^>]*class="page-top-spacer[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');
+  ed.innerHTML=nc;
   save();rDocTabs();uSt();updatePageHeight();
 }
 
@@ -937,7 +1015,37 @@ function addDOI(){
       showNoPDF(ref);
       setTimeout(function(){setDst('','');},5000);
     }
+    // Fetch citation count in background
+    fetchCitationCount(ref);
   });
+}
+// ── CITATION COUNT ───────────────────────────────────────────────────────────
+async function fetchCitationCount(ref){
+  if(!ref.doi)return;
+  try{
+    var r=await fetch('https://api.semanticscholar.org/graph/v1/paper/DOI:'+encodeURIComponent(ref.doi)+'?fields=citationCount');
+    if(!r.ok)return;
+    var data=await r.json();
+    if(data&&typeof data.citationCount==='number'){
+      ref.citationCount=data.citationCount;
+      ref.citationFetchDate=new Date().toISOString().substring(0,10);
+      save();rLib();
+    }
+  }catch(e){}
+}
+async function batchFetchCitations(){
+  var ws=S.wss.find(function(x){return x.id===S.cur;});
+  if(!ws||!ws.lib||!ws.lib.length){setDst('Kaynak yok.','er');return;}
+  var refs=ws.lib.filter(function(r){return r.doi;});
+  if(!refs.length){setDst('DOI olan kaynak yok.','er');return;}
+  setDst('Atıf sayıları güncelleniyor (0/'+refs.length+')...','ld');
+  for(var i=0;i<refs.length;i++){
+    setDst('Atıf güncelleniyor ('+(i+1)+'/'+refs.length+')...','ld');
+    await fetchCitationCount(refs[i]);
+    if(i<refs.length-1)await new Promise(function(res){setTimeout(res,500);});
+  }
+  setDst('Atıf sayıları güncellendi.','ok');
+  setTimeout(function(){setDst('','');},3000);
 }
 function setDst(m,c){var e=document.getElementById('dst');e.textContent=m;e.className=c;}
 function addToLib(ref){
@@ -948,13 +1056,30 @@ function addToLib(ref){
 }
 
 // ── LIBRARY ─────────────────────────────────────────────────────────────────
+function rLabelFilter(){
+  var el=document.getElementById('labelfilt');if(!el)return;
+  var allLabels=defaultLabels.concat(S.customLabels||[]);
+  el.innerHTML='';
+  allLabels.forEach(function(l){
+    var btn=document.createElement('button');
+    btn.style.cssText='font-family:var(--fm);font-size:9px;padding:2px 6px;border-radius:10px;cursor:pointer;border:1px solid '+l.color+';color:'+l.color+';background:'+(activeLabelFilter===l.name?l.color+'30':'transparent')+';';
+    btn.textContent=l.name;
+    btn.onclick=function(){activeLabelFilter=activeLabelFilter===l.name?null:l.name;rLabelFilter();rLib();};
+    el.appendChild(btn);
+  });
+}
 function rLib(){
   var q=(document.getElementById('libsrch').value||'').toLowerCase();
   var el=document.getElementById('liblist');el.innerHTML='';
+  rLabelFilter();
   var ws=S.wss.find(function(x){return x.id===S.cur;});
   if(!ws){el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">Çalışma alanı yok.</div>';return;}
-  var fl=(ws.lib||[]).filter(function(r){return !q||((r.title||'')+(r.authors||[]).join(' ')+(r.year||'')).toLowerCase().includes(q);});
-  if(!fl.length){el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">'+(q?'Eşleşme yok.':'DOI gir veya PDF yükle.')+'</div>';return;}
+  var fl=(ws.lib||[]).filter(function(r){
+    if(q&&!((r.title||'')+(r.authors||[]).join(' ')+(r.year||'')).toLowerCase().includes(q))return false;
+    if(activeLabelFilter&&!(r.labels||[]).some(function(l){return l.name===activeLabelFilter;}))return false;
+    return true;
+  });
+  if(!fl.length){el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">'+(q||activeLabelFilter?'Eşleşme yok.':'DOI gir veya PDF yükle.')+'</div>';return;}
   fl.forEach(function(r){
     var a=r.authors&&r.authors[0]?r.authors[0].split(',')[0]:'?';if(r.authors&&r.authors.length>1)a+=' et al.';
     var div=document.createElement('div');
@@ -963,11 +1088,15 @@ function rLib(){
     var hasOAurl=!!(r.pdfUrl);
     var pdfStatus=hasPDFlocal?'<span class="lbadge pdf">PDF ✓</span>':
       (hasOAurl?'<span class="lbadge oa">OA ↓</span>':'');
+    var labelHTML=(r.labels||[]).map(function(l){return '<span class="lbadge" style="color:'+l.color+';border-color:'+l.color+';background:'+l.color+'15;">'+l.name+'</span>';}).join('');
+    var citeStr='';
+    if(typeof r.citationCount==='number')citeStr='<span class="lbadge" style="color:var(--txt2);border-color:var(--b);background:var(--bg);" title="Atıf sayısı">'+r.citationCount+' atıf</span>';
     div.innerHTML='<div class="ltitle">'+(r.title||'Başlıksız').substring(0,62)+'</div>'+
       '<div class="lmeta">'+a+' '+(r.year||'t.y.')+(r.journal?' · '+r.journal.substring(0,22):'')+'</div>'+
       '<div class="lbadges">'+
         pdfStatus+
         (r.doi?'<span class="lbadge doi">DOI</span>':'')+
+        citeStr+labelHTML+
       '</div>';
     if(hasOAurl&&!hasPDFlocal){
       var dlBtn=document.createElement('button');
@@ -982,11 +1111,10 @@ function rLib(){
     var del=document.createElement('button');del.className='ldel';del.textContent='×';
     del.addEventListener('click',function(e){e.stopPropagation();dRefIn(r.id,S.cur);});
     div.appendChild(del);
-    // Right-click: move to another workspace
+    // Right-click: labels + move to another workspace
     div.addEventListener('contextmenu',function(e){
       e.preventDefault();
-      if(S.wss.length<=1)return;
-      showMoveMenu(e.clientX,e.clientY,r,S.cur);
+      showLabelMenu(e.clientX,e.clientY,r);
     });
     div.addEventListener('click',function(){openRef(r.id);});
     el.appendChild(div);
@@ -1066,6 +1194,57 @@ function openRef(id){
   else{showNoPDF(r);}
 }
 function dRefIn(id,wsId){var ws=S.wss.find(function(x){return x.id===wsId;});if(ws)ws.lib=ws.lib.filter(function(r){return r.id!==id;});if(curRef&&curRef.id===id)curRef=null;save();rLib();rRefs();}
+function showLabelMenu(x,y,ref){
+  var menu=document.getElementById('ctxmenu');
+  menu.innerHTML='';
+  // Label section
+  var lbl=document.createElement('div');lbl.style.cssText='font-family:var(--fm);font-size:9px;color:var(--txt3);padding:4px 8px;text-transform:uppercase;letter-spacing:.1em;';lbl.textContent='Etiketler';
+  menu.appendChild(lbl);
+  var allLabels=defaultLabels.concat(S.customLabels||[]);
+  if(!ref.labels)ref.labels=[];
+  allLabels.forEach(function(l){
+    var hasLabel=ref.labels.some(function(rl){return rl.name===l.name;});
+    var btn=document.createElement('button');btn.className='ctxi';
+    btn.innerHTML=(hasLabel?'✓ ':'')+'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+l.color+';margin-right:4px;"></span>'+l.name;
+    btn.onclick=function(){
+      if(hasLabel){ref.labels=ref.labels.filter(function(rl){return rl.name!==l.name;});}
+      else{ref.labels.push({name:l.name,color:l.color});}
+      save();rLib();hideCtx();
+    };
+    menu.appendChild(btn);
+  });
+  // New label option
+  var newBtn=document.createElement('button');newBtn.className='ctxi';newBtn.textContent='+ Yeni Etiket';
+  newBtn.onclick=function(){
+    var name=prompt('Etiket adı:');if(!name||!name.trim())return;
+    var colors=['#4caf50','#f44336','#2196f3','#9c27b0','#ff9800','#e91e63','#00bcd4','#795548'];
+    var color=colors[Math.floor(Math.random()*colors.length)];
+    var newLabel={name:name.trim(),color:color};
+    if(!S.customLabels)S.customLabels=[];
+    if(!S.customLabels.some(function(l){return l.name===newLabel.name;}))S.customLabels.push(newLabel);
+    if(!ref.labels)ref.labels=[];
+    ref.labels.push(newLabel);
+    save();rLib();hideCtx();
+  };
+  menu.appendChild(newBtn);
+  // Separator + workspace move options
+  if(S.wss.length>1){
+    var sep=document.createElement('div');sep.style.cssText='border-top:1px solid var(--b);margin:4px 0;';menu.appendChild(sep);
+    showMoveMenuItems(menu,ref,S.cur);
+  }
+  menu.style.top=Math.min(y,window.innerHeight-300)+'px';
+  menu.style.left=Math.min(x,window.innerWidth-180)+'px';
+  menu.classList.add('show');
+}
+function showMoveMenuItems(menu,ref,fromWsId){
+  S.wss.forEach(function(ws){
+    if(ws.id===fromWsId)return;
+    var btn=document.createElement('button');btn.className='ctxi';
+    btn.textContent='→ '+ws.name;
+    btn.onclick=function(){moveRefToWs(ref,fromWsId,ws.id);hideCtx();};
+    menu.appendChild(btn);
+  });
+}
 function showMoveMenu(x,y,ref,fromWsId){
   var menu=document.getElementById('ctxmenu');
   menu.innerHTML='';
@@ -1625,29 +1804,34 @@ function addPdfAnnot(pageNum,x,y){
   el.focus();
 }
 function makeDraggable(el,container){
-  var dragging=false,startX,startY,origX,origY;
+  var dragging=false,mayDrag=false,startX,startY,origX,origY;
   el.addEventListener('mousedown',function(e){
-    // Allow clicking delete button
     if(e.target.className==='pdf-annot-del')return;
-    // If element is focused (editing mode), allow text selection — don't drag
+    // If already focused (editing mode), allow text selection — don't drag
     if(el.isContentEditable&&document.activeElement===el)return;
-    // Double-click enters edit mode — don't drag
-    if(e.detail>=2){el.focus();return;}
-    dragging=true;startX=e.clientX;startY=e.clientY;
+    // Record potential drag start, but DON'T preventDefault — allow natural focus
+    mayDrag=true;startX=e.clientX;startY=e.clientY;
     origX=parseInt(el.style.left)||0;origY=parseInt(el.style.top)||0;
-    e.preventDefault();
   });
-  // Single click also focuses for typing after a short delay (if not dragging)
   el.addEventListener('click',function(e){
     if(!dragging&&el.isContentEditable){el.focus();}
+    mayDrag=false;
   });
   document.addEventListener('mousemove',function(e){
+    if(!mayDrag&&!dragging)return;
+    // Only start drag after 5px movement threshold
+    if(mayDrag&&!dragging){
+      if(Math.abs(e.clientX-startX)>5||Math.abs(e.clientY-startY)>5){
+        dragging=true;mayDrag=false;
+      }else return;
+    }
     if(!dragging)return;
     el.style.left=Math.max(0,origX+(e.clientX-startX))+'px';
     el.style.top=Math.max(0,origY+(e.clientY-startY))+'px';
   });
   document.addEventListener('mouseup',function(){
     if(dragging){dragging=false;saveAnnotsToTab();}
+    mayDrag=false;
   });
 }
 function saveAnnotsToTab(){
@@ -1957,6 +2141,134 @@ var searchTimer=null;
   });
 })();
 
+// ── FIND & REPLACE ──────────────────────────────────────────────────────────
+var findMatches=[];
+var findIdx=-1;
+var _findTimer=null;
+function toggleFindBar(){
+  var bar=document.getElementById('findbar');
+  if(bar.style.display==='none'){
+    bar.style.display='block';
+    var inp=document.getElementById('findinp');
+    inp.focus();inp.select();
+  }else{closeFindBar();}
+}
+function closeFindBar(){
+  document.getElementById('findbar').style.display='none';
+  clearFindHL();
+  findMatches=[];findIdx=-1;
+  document.getElementById('findcount').textContent='--';
+}
+function clearFindHL(){
+  var ed=document.getElementById('apaed');
+  ed.querySelectorAll('.find-hl').forEach(function(m){
+    var parent=m.parentNode;
+    while(m.firstChild)parent.insertBefore(m.firstChild,m);
+    parent.removeChild(m);
+    parent.normalize();
+  });
+}
+function findExec(){
+  clearFindHL();
+  findMatches=[];findIdx=-1;
+  var query=document.getElementById('findinp').value;
+  if(!query){document.getElementById('findcount').textContent='--';return;}
+  var ed=document.getElementById('apaed');
+  var useRegex=document.getElementById('findregex').checked;
+  var caseSens=document.getElementById('findcase').checked;
+  var flags=caseSens?'g':'gi';
+  var re;
+  try{re=useRegex?new RegExp(query,flags):new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),flags);}
+  catch(e){document.getElementById('findcount').textContent='Hata';return;}
+  // Walk text nodes
+  var walker=document.createTreeWalker(ed,NodeFilter.SHOW_TEXT,null,false);
+  var textNodes=[];
+  while(walker.nextNode()){
+    var n=walker.currentNode;
+    if(n.parentElement&&n.parentElement.classList&&(n.parentElement.classList.contains('pg-spacer')||n.parentElement.classList.contains('find-hl')))continue;
+    textNodes.push(n);
+  }
+  // Find matches and wrap with <mark>
+  for(var i=textNodes.length-1;i>=0;i--){
+    var node=textNodes[i];
+    var text=node.textContent;
+    var match;
+    re.lastIndex=0;
+    var parts=[];var lastIdx=0;
+    while((match=re.exec(text))!==null){
+      if(match[0].length===0){re.lastIndex++;continue;}
+      parts.push({start:match.index,end:match.index+match[0].length,text:match[0]});
+    }
+    if(!parts.length)continue;
+    // Split text node and wrap matches (from end to start)
+    for(var p=parts.length-1;p>=0;p--){
+      var part=parts[p];
+      var after=node.splitText(part.end);
+      var matchNode=node.splitText(part.start);
+      var mark=document.createElement('mark');
+      mark.className='find-hl';
+      matchNode.parentNode.replaceChild(mark,matchNode);
+      mark.appendChild(matchNode);
+      findMatches.unshift(mark);
+    }
+  }
+  document.getElementById('findcount').textContent=findMatches.length>0?findMatches.length+' sonuç':'Yok';
+  if(findMatches.length>0){findIdx=0;highlightActive();}
+}
+function highlightActive(){
+  findMatches.forEach(function(m,i){m.className=i===findIdx?'find-hl find-hl-active':'find-hl';});
+  if(findMatches[findIdx])findMatches[findIdx].scrollIntoView({behavior:'smooth',block:'center'});
+  document.getElementById('findcount').textContent=(findIdx+1)+'/'+findMatches.length;
+}
+function findNext(){
+  if(!findMatches.length)return;
+  findIdx=(findIdx+1)%findMatches.length;
+  highlightActive();
+}
+function findPrev(){
+  if(!findMatches.length)return;
+  findIdx=(findIdx-1+findMatches.length)%findMatches.length;
+  highlightActive();
+}
+function replaceCurrent(){
+  if(!findMatches.length||findIdx<0||findIdx>=findMatches.length)return;
+  var replVal=document.getElementById('replaceinp').value;
+  var mark=findMatches[findIdx];
+  var textNode=document.createTextNode(replVal);
+  mark.parentNode.replaceChild(textNode,mark);
+  textNode.parentNode.normalize();
+  findMatches.splice(findIdx,1);
+  if(findMatches.length===0){findIdx=-1;document.getElementById('findcount').textContent='0 sonuç';}
+  else{if(findIdx>=findMatches.length)findIdx=0;highlightActive();}
+  uSt();save();
+}
+function replaceAll(){
+  if(!findMatches.length)return;
+  var replVal=document.getElementById('replaceinp').value;
+  var count=findMatches.length;
+  for(var i=findMatches.length-1;i>=0;i--){
+    var mark=findMatches[i];
+    var textNode=document.createTextNode(replVal);
+    mark.parentNode.replaceChild(textNode,mark);
+    textNode.parentNode.normalize();
+  }
+  findMatches=[];findIdx=-1;
+  document.getElementById('findcount').textContent=count+' değiştirildi';
+  uSt();save();
+}
+(function(){
+  var fi=document.getElementById('findinp');
+  if(fi){
+    fi.addEventListener('input',function(){clearTimeout(_findTimer);_findTimer=setTimeout(findExec,200);});
+    fi.addEventListener('keydown',function(e){
+      if(e.key==='Enter'){e.preventDefault();if(e.shiftKey)findPrev();else findNext();}
+      if(e.key==='Escape'){e.preventDefault();closeFindBar();}
+    });
+  }
+  var ri=document.getElementById('replaceinp');
+  if(ri){ri.addEventListener('keydown',function(e){if(e.key==='Escape'){e.preventDefault();closeFindBar();}});}
+})();
+
 // ── KEYBOARD SHORTCUTS (Word-like) ──────────────────────────────────────────
 document.addEventListener('keydown',function(e){
   var inInput=e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.isContentEditable;
@@ -1964,6 +2276,14 @@ document.addEventListener('keydown',function(e){
   var mod=e.ctrlKey||e.metaKey;
   var ed=document.getElementById('apaed');
   var edFocused=document.activeElement===ed||ed.contains(document.activeElement);
+
+  // ── Global shortcuts ──
+  // Ctrl+H: Find & Replace (works everywhere)
+  if(mod&&e.key==='h'&&!e.shiftKey){e.preventDefault();toggleFindBar();return;}
+  // Ctrl+F: Find (editor mode, non-PDF)
+  if(mod&&e.key==='f'&&!pdfOpen){e.preventDefault();toggleFindBar();return;}
+  // F10: Zen mode
+  if(e.key==='F10'){e.preventDefault();toggleZenMode();return;}
 
   // ── Word-like shortcuts (work when editor focused) ──
   if(mod&&edFocused){
@@ -2007,6 +2327,9 @@ document.addEventListener('keydown',function(e){
     // Ctrl+Shift+P: Superscript (avoid conflict with Ctrl+P print)
     if(e.key==='P'&&e.shiftKey){e.preventDefault();ec('superscript');return;}
   }
+
+  // Escape: exit zen mode
+  if(e.key==='Escape'&&zenActive){e.preventDefault();toggleZenMode();return;}
 
   // Ctrl+S: Save (even when not in editor)
   if(mod&&e.key==='s'&&!e.shiftKey&&!edFocused){e.preventDefault();syncSave();setSL('✓ Kaydedildi','ok');setTimeout(function(){setSL('','');},2000);return;}
@@ -2184,7 +2507,7 @@ function showHLtip(top,left,mode){
   // Butonlari moda gore ayarla
   tip.innerHTML='';
   if(mode==='selection'){
-    tip.innerHTML='<button class="htb" onclick="cpSelText()">Kopyala</button><button class="htb" onclick="doHL(true)">Nota Kaydet</button><button class="htb" onclick="doHL(false)">Highlight</button><button class="htb" onclick="hideHLtip()">x</button>';
+    tip.innerHTML='<button class="htb" onclick="cpSelText()">Kopyala</button><button class="htb" onclick="doHL(true)">Nota Kaydet</button><button class="htb" onclick="doHL(false)">Highlight</button><button class="htb" onclick="extractTableFromSelection()">Tablo</button><button class="htb" onclick="hideHLtip()">x</button>';
   } else {
     tip.innerHTML='<button class="htb" onclick="hlToNote()">Nota Ekle</button><button class="htb" onclick="hlRemove()">Sil</button><button class="htb" onclick="hideHLtip()">x</button>';
   }
@@ -2372,6 +2695,65 @@ function uSt(){var ed=document.getElementById('apaed');var txt=ed.innerText||'';
   }else{goalEl.textContent='';goalEl.style.color='';}
 }
 function setWordGoal(){var g=prompt('Kelime hedefi:',S.wordGoal||'');if(g===null)return;S.wordGoal=parseInt(g)||0;save();uSt();}
+// ── APA PASTE FORMATTING ─────────────────────────────────────────────────────
+document.getElementById('apaed').addEventListener('paste',function(e){
+  var html=e.clipboardData.getData('text/html');
+  var text=e.clipboardData.getData('text/plain');
+  // If AcademiQ format, let browser handle it
+  if(html&&html.includes('class="cit"'))return;
+  e.preventDefault();
+  if(html&&!e.shiftKey){
+    var cleaned=cleanPastedHTML(html);
+    document.execCommand('insertHTML',false,cleaned);
+  }else{
+    var formatted=formatPlainTextAPA(text);
+    document.execCommand('insertHTML',false,formatted);
+  }
+  uSt();save();updatePageHeight();
+});
+function cleanPastedHTML(html){
+  var div=document.createElement('div');div.innerHTML=html;
+  // Remove mso styles, spans with only style, comments
+  div.querySelectorAll('[style]').forEach(function(el){
+    var s=el.style;
+    // Remove Word-specific styles
+    s.removeProperty('mso-style-type');
+    s.removeProperty('mso-style-name');
+    s.removeProperty('mso-style-parent');
+    // Keep bold/italic/underline, normalize font
+    if(s.fontFamily&&!s.fontFamily.includes('Times New Roman'))s.removeProperty('font-family');
+    if(s.fontSize&&s.fontSize!=='12pt')s.removeProperty('font-size');
+    if(s.color){var c=s.color;if(c==='rgb(0, 0, 0)'||c==='#000000'||c==='#000'||c==='black')s.removeProperty('color');}
+    if(s.lineHeight)s.lineHeight='2';
+    // Remove empty style attributes
+    if(!el.getAttribute('style')||el.getAttribute('style').trim()==='')el.removeAttribute('style');
+  });
+  // Remove empty spans (keep content)
+  div.querySelectorAll('span').forEach(function(sp){
+    if(!sp.getAttribute('style')&&!sp.className){
+      while(sp.firstChild)sp.parentNode.insertBefore(sp.firstChild,sp);
+      sp.remove();
+    }
+  });
+  // Add text-indent to paragraphs
+  div.querySelectorAll('p').forEach(function(p){
+    if(!p.classList.contains('ni')&&!p.classList.contains('refe')){
+      p.style.textIndent='.5in';
+      p.style.margin='0';
+    }
+  });
+  return div.innerHTML;
+}
+function formatPlainTextAPA(text){
+  if(!text)return'';
+  var paragraphs=text.split(/\n\s*\n/);
+  return paragraphs.map(function(para){
+    var trimmed=para.replace(/\n/g,' ').trim();
+    if(!trimmed)return'';
+    return '<p>'+trimmed.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</p>';
+  }).filter(Boolean).join('');
+}
+
 var _refTimer=null;
 document.getElementById('apaed').addEventListener('input',function(){
   uSt();save();updatePageHeight();
@@ -2385,6 +2767,8 @@ document.getElementById('apaed').addEventListener('input',function(){
 
 // ── PAGE HEIGHT AUTO-ADJUST WITH PAGE BREAKS ────────────────────────────────
 var _pgTimer=null;
+var _lastPageCount=1;
+var _spacerH=192; // bottom margin + gap + top margin simulation
 function updatePageHeight(){
   clearTimeout(_pgTimer);
   _pgTimer=setTimeout(_doUpdatePageHeight,300);
@@ -2393,33 +2777,71 @@ function _doUpdatePageHeight(){
   var page=document.getElementById('apapage');
   var ed=document.getElementById('apaed');
   if(!page||!ed)return;
-  // Clean up any legacy page-break elements INSIDE the editor (from saved content)
-  ed.querySelectorAll('.page-break,.page-top-spacer').forEach(function(pb){pb.remove();});
   // Remove old overlays from #apapage
   page.querySelectorAll('.page-break-overlay,.page-number').forEach(function(pb){pb.remove();});
-  // Measure content height
-  var contentH=ed.scrollHeight;
+  // Measure content height WITHOUT spacers
+  var spacers=ed.querySelectorAll('.pg-spacer');
+  var spacerCount=spacers.length;
+  var totalSpacerH=spacerCount*_spacerH;
+  var contentH=ed.scrollHeight-totalSpacerH;
   var pageContentH=864; // 1056 - 96*2 padding
   var numPages=Math.max(1,Math.ceil(contentH/pageContentH));
-  // Update #apapage min-height: pages * pageH + gaps between pages
   var pageH=1056,gapH=32;
-  page.style.minHeight=(numPages*pageH+(numPages-1)*gapH)+'px';
-  // Create page numbers for all pages
-  for(var p=0;p<numPages;p++){
-    var pn=document.createElement('div');
-    pn.className='page-number';
-    pn.textContent=String(p+1);
-    // Position: top of each page area + 48px down (header position)
-    pn.style.top=(p*(pageH+gapH)+48)+'px';
-    page.appendChild(pn);
+  // Total height including spacers
+  var totalH=numPages*pageH+(numPages-1)*gapH;
+  page.style.minHeight=totalH+'px';
+  // Only re-insert spacers if page count changed
+  if(numPages!==_lastPageCount){
+    _lastPageCount=numPages;
+    // Save selection before DOM changes
+    var sel=window.getSelection();
+    var savedSel=null;
+    if(sel&&sel.rangeCount){try{savedSel=sel.getRangeAt(0).cloneRange();}catch(e){}}
+    // Remove old spacers
+    spacers.forEach(function(s){s.remove();});
+    // Insert new spacers (from bottom to top to avoid offset shifts)
+    if(numPages>1){
+      for(var i=numPages-1;i>=1;i--){
+        var breakPos=i*pageContentH;
+        var hr=document.createElement('hr');
+        hr.className='pg-spacer';
+        hr.contentEditable='false';
+        // Find insertion point by cumulative height of children
+        var children=Array.from(ed.children);
+        var insertBefore=null;
+        var cumH=0;
+        for(var j=0;j<children.length;j++){
+          if(children[j].classList&&children[j].classList.contains('pg-spacer'))continue;
+          cumH+=children[j].offsetHeight||0;
+          if(cumH>=breakPos){
+            insertBefore=children[j].nextElementSibling||null;
+            break;
+          }
+        }
+        if(insertBefore)ed.insertBefore(hr,insertBefore);
+        else ed.appendChild(hr);
+      }
+    }
+    // Restore selection
+    if(savedSel){try{sel.removeAllRanges();sel.addRange(savedSel);}catch(e){}}
+  }
+  // Create page numbers (only if preference enabled)
+  if(S.showPageNumbers){
+    for(var p=0;p<numPages;p++){
+      var pn=document.createElement('div');
+      pn.className='page-number';
+      pn.textContent=String(p+1);
+      pn.style.top=(p*(pageH+gapH)+48)+'px';
+      page.appendChild(pn);
+    }
   }
   if(numPages<=1)return;
   // Create page-break overlays OUTSIDE the editor (in #apapage)
+  // Calculate positions accounting for spacers in content
   for(var i=1;i<numPages;i++){
     var pb=document.createElement('div');
     pb.className='page-break-overlay';
-    // Position: top padding (96px) + i pages of content (864px each) + (i-1) gaps (32px each)
-    pb.style.top=(96+i*pageContentH+(i-1)*gapH)+'px';
+    pb.style.top=(96+i*pageContentH+(i-1)*_spacerH+(i-1)*gapH)+'px';
     pb.dataset.label='Sayfa '+(i+1);
     page.appendChild(pb);
   }
@@ -2737,6 +3159,134 @@ function handleImgUpload(e){
   });
 })();
 
+// ── IMAGE DRAG ───────────────────────────────────────────────────────────────
+(function(){
+  var dragImg=null,dragWrap=null,dragGhost=null,dragStartY=0;
+  document.getElementById('apaed').addEventListener('mousedown',function(e){
+    if(e.target.tagName!=='IMG')return;
+    var img=e.target;
+    var wrap=img.parentElement;
+    if(!wrap||wrap.id==='apaed')return;
+    dragImg=img;dragWrap=wrap;dragStartY=e.clientY;
+    e.preventDefault();
+    function onMove(ev){
+      if(!dragImg)return;
+      if(Math.abs(ev.clientY-dragStartY)<10)return;
+      if(!dragGhost){
+        dragGhost=document.createElement('div');
+        dragGhost.style.cssText='position:fixed;pointer-events:none;opacity:.5;z-index:100;';
+        dragGhost.appendChild(dragImg.cloneNode());
+        dragGhost.firstChild.style.width=dragImg.offsetWidth+'px';
+        document.body.appendChild(dragGhost);
+      }
+      dragGhost.style.left=ev.clientX+'px';
+      dragGhost.style.top=ev.clientY+'px';
+    }
+    function onUp(ev){
+      document.removeEventListener('mousemove',onMove);
+      document.removeEventListener('mouseup',onUp);
+      if(dragGhost){
+        dragGhost.remove();dragGhost=null;
+        // Find drop position
+        var ed=document.getElementById('apaed');
+        var range=null;
+        if(document.caretRangeFromPoint){range=document.caretRangeFromPoint(ev.clientX,ev.clientY);}
+        else if(document.caretPositionFromPoint){var cp=document.caretPositionFromPoint(ev.clientX,ev.clientY);if(cp){range=document.createRange();range.setStart(cp.offsetNode,cp.offset);}}
+        if(range&&ed.contains(range.startContainer)){
+          // Move the image wrap to the new position
+          var marker=document.createElement('span');
+          range.insertNode(marker);
+          marker.parentNode.insertBefore(dragWrap,marker);
+          marker.remove();
+          uSt();save();
+        }
+      }
+      dragImg=null;dragWrap=null;
+    }
+    document.addEventListener('mousemove',onMove);
+    document.addEventListener('mouseup',onUp);
+  });
+})();
+
+// ── CLICK-ANYWHERE TYPING (Word-like) ────────────────────────────────────────
+document.getElementById('apaed').addEventListener('dblclick',function(e){
+  if(e.target!==this)return; // Only on empty area of editor, not on child elements
+  var ed=this;
+  var edRect=ed.getBoundingClientRect();
+  var clickY=e.clientY-edRect.top;
+  var contentH=ed.scrollHeight;
+  // If clicked below content, add empty paragraphs to reach that position
+  if(clickY>contentH){
+    var lh=parseFloat(getComputedStyle(ed).lineHeight)||32;
+    var needed=Math.ceil((clickY-contentH)/lh);
+    for(var i=0;i<needed;i++){
+      var p=document.createElement('p');p.innerHTML='<br>';
+      ed.appendChild(p);
+    }
+    // Place cursor in last added paragraph
+    var last=ed.lastElementChild;
+    if(last){
+      var range=document.createRange();
+      range.setStart(last,0);range.collapse(true);
+      var sel=window.getSelection();sel.removeAllRanges();sel.addRange(range);
+    }
+    uSt();save();updatePageHeight();
+  }
+});
+
+// ── İÇİNDEKİLER (TABLE OF CONTENTS) ─────────────────────────────────────────
+function insertTOC(){
+  var ed=document.getElementById('apaed');
+  var headings=ed.querySelectorAll('h1,h2,h3,h4,h5');
+  if(!headings.length){alert('Belgede başlık bulunamadı. Önce H1-H5 başlıkları ekleyin.');return;}
+  // Build TOC HTML
+  var tocHTML='<div class="toc-container" contenteditable="true">';
+  tocHTML+='<h1 style="text-align:center;font-weight:bold;">İçindekiler</h1>';
+  headings.forEach(function(h,idx){
+    var level=parseInt(h.tagName.charAt(1));
+    var text=h.textContent.trim();
+    if(!text||text==='İçindekiler'||text==='Kaynakça')return;
+    var indent=(level-1)*24;
+    tocHTML+='<p class="ni toc-entry" style="text-indent:0;padding-left:'+indent+'px;cursor:pointer;margin:2px 0;" data-toc-idx="'+idx+'" onclick="scrollToHeading('+idx+')">';
+    tocHTML+=text;
+    tocHTML+='</p>';
+  });
+  tocHTML+='</div><p><br></p>';
+  // Check if TOC already exists — update it
+  var existing=ed.querySelector('.toc-container');
+  if(existing){
+    var temp=document.createElement('div');temp.innerHTML=tocHTML;
+    existing.replaceWith(temp.firstChild);
+    temp.remove();
+  }else{
+    // Insert at cursor position or at the beginning
+    var sel=window.getSelection();
+    if(sel&&sel.rangeCount&&ed.contains(sel.anchorNode)){
+      iHTML(tocHTML);
+    }else{
+      ed.insertAdjacentHTML('afterbegin',tocHTML);
+    }
+  }
+  uSt();save();updatePageHeight();
+}
+function scrollToHeading(idx){
+  var ed=document.getElementById('apaed');
+  var headings=ed.querySelectorAll('h1,h2,h3,h4,h5');
+  var realIdx=0;
+  for(var i=0;i<headings.length;i++){
+    var text=headings[i].textContent.trim();
+    if(text==='İçindekiler'||text==='Kaynakça')continue;
+    if(realIdx===idx){
+      headings[i].scrollIntoView({behavior:'smooth',block:'center'});
+      // Flash highlight
+      headings[i].style.background='rgba(179,131,58,.2)';
+      setTimeout(function(){headings[i].style.background='';},1500);
+      return;
+    }
+    realIdx++;
+  }
+}
+
 function insBlkQ(){iHTML('<blockquote>Alinti metni (40+ kelime). (Yazar, Yil, s. XX)</blockquote><p><br></p>');}
 function insFig(){var n=prompt('Sekil No:','1');if(!n)return;var t=prompt('Baslik:','')||'';iHTML('<p style="text-align:center;text-indent:0">[Sekil '+n+']</p><p style="text-align:center;text-indent:0;font-style:italic">Sekil '+n+(t?' - '+t:'')+'</p><p><br></p>');
 }
@@ -2778,6 +3328,8 @@ document.querySelectorAll('.modal-bg').forEach(function(bg){bg.addEventListener(
 // ── SYNC SETTINGS UI ─────────────────────────────────────────────────────────
 async function showSyncSettings(){
   showM('syncmodal');
+  // Update preference checkboxes
+  var pnCb=document.getElementById('prefPageNum');if(pnCb)pnCb.checked=!!S.showPageNumbers;
   var dirEl=document.getElementById('syncdirshow');
   var infoEl=document.getElementById('syncappinfo');
   if(typeof window.electronAPI!=='undefined'){
@@ -3102,6 +3654,43 @@ function cpSelText(){
   hideHLtip();
 }
 
+// ── PDF TABLE EXTRACTION ─────────────────────────────────────────────────────
+function extractTableFromSelection(){
+  if(!selText){hideHLtip();return;}
+  var text=selText;
+  hideHLtip();
+  var lines=text.split('\n').filter(function(l){return l.trim().length>0;});
+  if(lines.length<2){alert('Tablo için en az 2 satır gerekli. PDF\'te tabloyu seçin.');return;}
+  function splitRow(line){
+    if(line.includes('\t'))return line.split('\t').map(function(c){return c.trim();}).filter(Boolean);
+    var parts=line.split(/\s{3,}/).map(function(c){return c.trim();}).filter(Boolean);
+    if(parts.length>=2)return parts;
+    parts=line.split(/\s{2,}/).map(function(c){return c.trim();}).filter(Boolean);
+    if(parts.length>=2)return parts;
+    return [line.trim()];
+  }
+  var rows=lines.map(splitRow);
+  var maxCols=Math.max.apply(null,rows.map(function(r){return r.length;}));
+  rows.forEach(function(r){while(r.length<maxCols)r.push('');});
+  var headerCells=rows[0];
+  var bodyCells=rows.slice(1);
+  var existingTables=document.getElementById('apaed').querySelectorAll('table').length;
+  var tableNum=existingTables+1;
+  var html='<p class="ni"><strong>Tablo '+tableNum+'</strong></p>';
+  html+='<table><thead><tr>';
+  headerCells.forEach(function(h){html+='<th>'+h+'</th>';});
+  html+='</tr></thead><tbody>';
+  bodyCells.forEach(function(row){
+    html+='<tr>';
+    row.forEach(function(cell){html+='<td>'+cell+'</td>';});
+    html+='</tr>';
+  });
+  html+='</tbody></table><p><br></p>';
+  iHTML(html);
+  setDst('Tablo editöre eklendi ('+bodyCells.length+' satır, '+maxCols+' sütun)','ok');
+  setTimeout(function(){setDst('','');},3000);
+}
+
 // ── FONT SIZE APPLY ──────────────────────────────────────────────────────────
 function applyFontSize(pt){
   var ed=document.getElementById('apaed');
@@ -3268,6 +3857,50 @@ syncLoad().then(function(){
 });
 setInterval(function(){if(syncDirty){syncDirty=false;syncSave();}},30000);
 autoCheckUpdate();
+// ── ZEN MODE ─────────────────────────────────────────────────────────────────
+var zenActive=false;
+var zenStartTime=null;
+var zenTimer=null;
+var zenMouseTimer=null;
+function toggleZenMode(){
+  zenActive=!zenActive;
+  document.body.classList.toggle('zen',zenActive);
+  if(zenActive){
+    zenStartTime=Date.now();
+    zenTimer=setInterval(updateZenTime,1000);
+    document.getElementById('apaed').focus();
+    // Mouse auto-hide for zen toolbar
+    document.addEventListener('mousemove',zenMouseMove);
+  }else{
+    clearInterval(zenTimer);zenStartTime=null;
+    document.removeEventListener('mousemove',zenMouseMove);
+    var zt=document.getElementById('zentb');if(zt)zt.style.opacity='1';
+  }
+}
+function zenMouseMove(){
+  var zt=document.getElementById('zentb');if(!zt)return;
+  zt.style.opacity='1';
+  clearTimeout(zenMouseTimer);
+  zenMouseTimer=setTimeout(function(){zt.style.opacity='0';},3000);
+}
+function updateZenTime(){
+  if(!zenStartTime)return;
+  var elapsed=Math.floor((Date.now()-zenStartTime)/1000);
+  var m=Math.floor(elapsed/60);var s=elapsed%60;
+  var el=document.getElementById('zentime');
+  if(el)el.textContent=m+'dk '+String(s).padStart(2,'0')+'sn';
+  var wEl=document.getElementById('zenwords');
+  if(wEl){var txt=document.getElementById('apaed').innerText||'';var w=txt.trim().split(/\s+/).filter(function(x){return x.length>0;}).length;wEl.textContent=w+' kelime';}
+}
 </script>
+
+<div id="zentb">
+  <span style="font-family:var(--fm);font-size:10px;color:var(--txt3);" id="zenwords">0 kelime</span>
+  <span class="sep"></span>
+  <span style="font-family:var(--fm);font-size:10px;color:var(--txt3);" id="zentime"></span>
+  <span class="sep"></span>
+  <button class="btn" onclick="toggleZenMode()" style="font-size:11px;">✕ Çık</button>
+</div>
+
 </body>
 </html>
