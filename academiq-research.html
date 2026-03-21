@@ -1131,7 +1131,9 @@ function getScale(){
 function renderPDF(buf){
   clearPDFView();
   loadHLData();
-  var safeBuf=buf.slice?buf.slice(0):buf;
+  var safeBuf;
+  try{safeBuf=(buf instanceof ArrayBuffer)?buf.slice(0):(buf.slice?buf.slice(0):new Uint8Array(buf));}
+  catch(e){console.error('PDF buffer error:',e);setDst('PDF verisi bozuk','er');return;}
 
   pdfEventBus=new pdfjsViewer.EventBus();
   var container=document.getElementById('pdfscroll');
@@ -1197,7 +1199,12 @@ function renderPDF(buf){
     // Thumbnails & outline
     if(document.getElementById('pdfthumbs').style.display!=='none')renderThumbnails();
     loadOutline();
-  }).catch(function(e){setDst('PDF acilamadi: '+e.message,'er');});
+  }).catch(function(e){
+    console.error('PDF render error:',e);
+    setDst('PDF açılamadı: '+e.message,'er');
+    var sc=document.getElementById('pdfscroll');
+    if(sc)sc.innerHTML='<div style="color:var(--red);font-size:12px;padding:20px;text-align:center;width:100%;">PDF açılamadı: '+e.message+'</div>';
+  });
 }
 
 function clearPDFView(){
@@ -1210,8 +1217,8 @@ function clearPDFView(){
   var pgEl=document.getElementById('pdfpg');if(pgEl)pgEl.textContent='--';
   var zmEl=document.getElementById('pdfzoom');if(zmEl)zmEl.textContent='--';
   var sc=document.getElementById('pdfscroll');if(sc){
-    // Keep only the viewerContainer structure needed by PDFViewer
     sc.innerHTML='<div id="viewer" class="pdfViewer"></div>';
+    sc.removeAttribute('style');
   }
 }
 
@@ -1698,12 +1705,7 @@ function updateRefSection(){
 }
 
 // ── EDITOR ────────────────────────────────────────────────────────────────────
-function ec(cmd,val){
-  restoreEditorSelection();
-  var ed=document.getElementById('apaed');
-  ed.focus();
-  document.execCommand(cmd,false,val||null);uSt();
-}
+function ec(cmd,val){document.getElementById('apaed').focus();document.execCommand(cmd,false,val||null);uSt();}
 function iHTML(html){
   var ed=document.getElementById('apaed');
   ed.focus();
@@ -1979,21 +1981,11 @@ document.addEventListener('mousedown',function(e){var t=document.getElementById(
 
 // ── INSERT HELPERS ────────────────────────────────────────────────────────────
 function insRefs(){var refs=getUsedRefs();if(!refs.length)refs=sortLib(cLib());iHTML('<h1>Kaynakca</h1>'+refs.map(function(r){return '<p class="refe">'+apa7(r)+'</p>';}).join(''));}
-function insCover(){
-  var t=prompt('Makale basligi:','');if(!t)return;
-  var a=prompt('Yazarlar:','')||'';
-  var af=prompt('Kurum:','')||'';
-  var dt=new Date().toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'});
-  document.getElementById('apaed').focus();
-  iHTML('<div style="text-align:center;padding-top:192px;font-family:Times New Roman,serif;font-size:12pt;line-height:2"><p style="font-weight:bold;text-indent:0">'+t+'</p><p style="text-indent:0">'+a+'</p><p style="text-indent:0">'+af+'</p><p style="text-indent:0">'+dt+'</p></div><p><br></p>');
+function insCover(){saveEditorSelection();var t=prompt('Makale başlığı:','');if(!t)return;var a=prompt('Yazar(lar):','')||'';var af=prompt('Kurum:','')||'';var ders=prompt('Ders:','')||'';var ogr=prompt('Öğretim Üyesi:','')||'';var dt=new Date().toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'});iHTML('<div style="text-align:center;padding-top:192px;font-family:Times New Roman,serif;font-size:12pt;line-height:2;"><p style="font-weight:bold;text-indent:0">'+t+'</p><p style="text-indent:0">'+a+'</p><p style="text-indent:0">'+af+'</p>'+(ders?'<p style="text-indent:0">'+ders+'</p>':'')+(ogr?'<p style="text-indent:0">'+ogr+'</p>':'')+'<p style="text-indent:0">'+dt+'</p></div><p><br/></p>');
 }
 function insAbstract(){iHTML('<h1>Abstract</h1><p class="ni">Ozet metni (150-250 kelime).</p><p class="ni"><em>Keywords:</em> kelime1, kelime2</p><p><br></p>');}
 function insBlkQ(){iHTML('<blockquote>Alinti metni (40+ kelime). (Yazar, Yil, s. XX)</blockquote><p><br></p>');}
-function insFig(){
-  var n=prompt('Sekil No:','1');if(!n)return;
-  var t=prompt('Baslik:','')||'';
-  document.getElementById('apaed').focus();
-  iHTML('<p style="text-align:center;text-indent:0">[Sekil '+n+']</p><p style="text-align:center;text-indent:0;font-style:italic">Sekil '+n+(t?' - '+t:'')+'</p><p><br></p>');
+function insFig(){saveEditorSelection();var n=prompt('Sekil No:','1');if(!n)return;var t=prompt('Baslik:','')||'';iHTML('<p style="text-align:center;text-indent:0">[Sekil '+n+']</p><p style="text-align:center;text-indent:0;font-style:italic">Sekil '+n+(t?' - '+t:'')+'</p><p><br></p>');
 }
 function doTable(){
   try{
