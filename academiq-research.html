@@ -134,8 +134,8 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 .page-break-overlay::after{content:attr(data-label);font-family:var(--fm);font-size:9px;color:var(--txt3);letter-spacing:.05em;}
 /* Page number overlay */
 .page-number{position:absolute;right:0;font-family:'Times New Roman',Times,serif;font-size:12pt;color:#000;pointer-events:none;user-select:none;z-index:5;}
-/* Page spacer inside editor — simulates page margins. NO contentEditable=false! */
-.pg-spacer{display:block;height:192px;border:none;margin:0;padding:0;background:#d8d0c4;pointer-events:none;-webkit-user-select:none;user-select:none;outline:none;caret-color:transparent;overflow:hidden;color:transparent;font-size:0;line-height:0;position:relative;}
+/* Page spacer — visual page gap. contentEditable=false block, cursor skips over it */
+.pg-spacer{display:block;height:192px;border:none;margin:0;padding:0;background:#d8d0c4;pointer-events:none;-webkit-user-select:none;user-select:none;outline:none;overflow:hidden;position:relative;}
 .pg-spacer::before{content:'';position:absolute;top:0;left:-96px;right:-96px;height:96px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.08);}
 .pg-spacer::after{content:'';position:absolute;bottom:0;left:-96px;right:-96px;height:96px;background:#fff;box-shadow:0 -2px 8px rgba(0,0,0,.08);}
 /* Legacy cleanup */
@@ -2344,8 +2344,10 @@ document.addEventListener('keydown',function(e){
     if(e.key==='S'&&e.shiftKey){e.preventDefault();expDOC();return;}
     // Ctrl+P: Print
     if(e.key==='p'){e.preventDefault();window.print();return;}
-    // Ctrl+Z: Undo (browser default — let it pass)
-    // Ctrl+Y: Redo (browser default — let it pass)
+    // Ctrl+Z: Undo — let browser handle, then re-align pages
+    if(e.key==='z'){setTimeout(function(){updatePageHeight();uSt();},50);return;}
+    // Ctrl+Y: Redo — same
+    if(e.key==='y'){setTimeout(function(){updatePageHeight();uSt();},50);return;}
     // Ctrl+1-5: Heading levels
     if(e.key==='1'){e.preventDefault();ec('formatBlock','h1');return;}
     if(e.key==='2'){e.preventDefault();ec('formatBlock','h2');return;}
@@ -2861,6 +2863,14 @@ function cleanPastedHTML(html){
       sp.remove();
     }
   });
+  // Strip contentEditable=false from pasted content (prevents cursor bugs)
+  div.querySelectorAll('[contenteditable="false"]').forEach(function(el){el.removeAttribute('contenteditable');});
+  // Remove script/style/link tags
+  div.querySelectorAll('script,style,link,meta').forEach(function(el){el.remove();});
+  // Remove event handlers
+  div.querySelectorAll('*').forEach(function(el){
+    Array.from(el.attributes).forEach(function(a){if(a.name.startsWith('on'))el.removeAttribute(a.name);});
+  });
   // Add text-indent to paragraphs
   div.querySelectorAll('p').forEach(function(p){
     if(!p.classList.contains('ni')&&!p.classList.contains('refe')){
@@ -2901,9 +2911,27 @@ function _doUpdatePageHeight(){
   var page=document.getElementById('apapage');
   var ed=document.getElementById('apaed');
   if(!page||!ed)return;
+  // Save cursor position before DOM changes
+  var savedSel=null;
+  try{
+    var sel=window.getSelection();
+    if(sel&&sel.rangeCount&&ed.contains(sel.anchorNode)){
+      var range=sel.getRangeAt(0);
+      // Find the text node offset relative to non-spacer content
+      savedSel={node:range.startContainer,offset:range.startOffset,collapsed:range.collapsed};
+      // If cursor is inside a spacer, move reference to adjacent content
+      var spacerParent=savedSel.node.nodeType===1?(savedSel.node.closest?savedSel.node.closest('.pg-spacer'):null):(savedSel.node.parentElement&&savedSel.node.parentElement.closest?savedSel.node.parentElement.closest('.pg-spacer'):null);
+      if(spacerParent){
+        var adj=spacerParent.nextElementSibling||spacerParent.previousElementSibling;
+        if(adj)savedSel={node:adj,offset:0,collapsed:true};
+        else savedSel=null;
+      }
+    }
+  }catch(ex){savedSel=null;}
   // Remove old overlays from #apapage
   page.querySelectorAll('.page-break-overlay,.page-number').forEach(function(pb){pb.remove();});
   // Remove old spacers from editor
+  _guardMoving=true; // prevent cursor guard from firing during DOM changes
   ed.querySelectorAll('.pg-spacer').forEach(function(s){s.remove();});
   var contentH=ed.scrollHeight;
   var pageContentH=864;
@@ -2920,53 +2948,97 @@ function _doUpdatePageHeight(){
       page.appendChild(pn);
     }
   }
-  if(numPages<=1)return;
-  // Insert spacers at page boundaries inside editor (NO contentEditable=false!)
-  var children=Array.from(ed.children);
-  var accH=0;
-  var breakIdx=1;
-  for(var ci=0;ci<children.length&&breakIdx<numPages;ci++){
-    var child=children[ci];
-    if(child.classList&&child.classList.contains('pg-spacer'))continue;
-    accH+=child.offsetHeight||0;
-    if(accH>=pageContentH*breakIdx){
-      var spacer=document.createElement('div');
-      spacer.className='pg-spacer';
-      spacer.innerHTML='\u200b'; // zero-width space
-      child.after(spacer);
-      breakIdx++;
-      ci++; // skip inserted spacer
+  if(numPages>1){
+    // Insert spacers at page boundaries inside editor (NO contentEditable=false!)
+    var children=Array.from(ed.children);
+    var accH=0;
+    var breakIdx=1;
+    for(var ci=0;ci<children.length&&breakIdx<numPages;ci++){
+      var child=children[ci];
+      if(child.classList&&child.classList.contains('pg-spacer'))continue;
+      accH+=child.offsetHeight||0;
+      if(accH>=pageContentH*breakIdx){
+        var spacer=document.createElement('div');
+        spacer.className='pg-spacer';
+        spacer.setAttribute('contenteditable','false');
+        spacer.setAttribute('tabindex','-1');
+        child.after(spacer);
+        breakIdx++;
+        ci++;
+      }
     }
+    // Position overlays based on spacer positions
+    var spacers=ed.querySelectorAll('.pg-spacer');
+    spacers.forEach(function(sp,idx){
+      var spTop=sp.offsetTop;
+      var pb=document.createElement('div');
+      pb.className='page-break-overlay';
+      pb.style.top=(96+spTop+80)+'px';
+      pb.dataset.label='Sayfa '+(idx+2);
+      page.appendChild(pb);
+    });
   }
-  // Position overlays based on spacer positions
-  var spacers=ed.querySelectorAll('.pg-spacer');
-  spacers.forEach(function(sp,idx){
-    var spTop=sp.offsetTop;
-    var pb=document.createElement('div');
-    pb.className='page-break-overlay';
-    // Center the 32px overlay on the spacer (which is 192px)
-    pb.style.top=(96+spTop+80)+'px';
-    pb.dataset.label='Sayfa '+(idx+2);
-    page.appendChild(pb);
-  });
+  // Restore cursor position
+  if(savedSel&&savedSel.node&&ed.contains(savedSel.node)){
+    try{
+      var r=document.createRange();
+      r.setStart(savedSel.node,Math.min(savedSel.offset,savedSel.node.length||savedSel.node.childNodes.length||0));
+      if(savedSel.collapsed)r.collapse(true);
+      var s=window.getSelection();
+      s.removeAllRanges();s.addRange(r);
+    }catch(ex){}
+  }
+  setTimeout(function(){_guardMoving=false;},0);
 }
 
 // ── CURSOR GUARD: prevent cursor from staying in spacers ──────────────────
+var _guardMoving=false;
 document.addEventListener('selectionchange',function(){
+  if(_guardMoving)return;
   var sel=window.getSelection();
   if(!sel||!sel.rangeCount)return;
   var node=sel.anchorNode;
   if(!node)return;
-  var spacer=node.nodeType===1?node.closest('.pg-spacer'):node.parentElement?node.parentElement.closest('.pg-spacer'):null;
+  var spacer=node.nodeType===1?(node.closest?node.closest('.pg-spacer'):null):(node.parentElement&&node.parentElement.closest?node.parentElement.closest('.pg-spacer'):null);
   if(!spacer)return;
-  // Move cursor to next sibling or previous sibling
   var next=spacer.nextElementSibling;
   var prev=spacer.previousElementSibling;
   var target=next||prev;
   if(target){
+    _guardMoving=true;
     var r=document.createRange();
     r.setStart(target,0);r.collapse(true);
     sel.removeAllRanges();sel.addRange(r);
+    setTimeout(function(){_guardMoving=false;},0);
+  }
+});
+
+// ── SPACER PROTECTION: prevent backspace/delete from removing spacers ──────
+document.getElementById('apaed').addEventListener('keydown',function(e){
+  if(e.key!=='Backspace'&&e.key!=='Delete')return;
+  var sel=window.getSelection();
+  if(!sel||!sel.rangeCount||!sel.isCollapsed)return;
+  var node=sel.anchorNode;
+  var offset=sel.anchorOffset;
+  // Check if next/prev sibling is a spacer
+  if(e.key==='Delete'){
+    // Cursor at end of element, next sibling is spacer
+    var container=node.nodeType===3?node.parentElement:node;
+    if(container){
+      var nextEl=null;
+      if(node.nodeType===3&&offset===node.length){nextEl=container.nextElementSibling||container.nextSibling;}
+      else if(node.nodeType===1&&offset>=node.childNodes.length){nextEl=container.nextElementSibling||container.nextSibling;}
+      if(nextEl&&nextEl.classList&&nextEl.classList.contains('pg-spacer')){e.preventDefault();return;}
+    }
+  }
+  if(e.key==='Backspace'){
+    var container=node.nodeType===3?node.parentElement:node;
+    if(container){
+      var prevEl=null;
+      if(node.nodeType===3&&offset===0){prevEl=container.previousElementSibling||container.previousSibling;}
+      else if(node.nodeType===1&&offset===0){prevEl=container.previousElementSibling||container.previousSibling;}
+      if(prevEl&&prevEl.classList&&prevEl.classList.contains('pg-spacer')){e.preventDefault();return;}
+    }
   }
 });
 
