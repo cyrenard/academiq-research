@@ -1,6 +1,6 @@
 {
   "name": "academiq-research",
-  "version": "2.0.0",
+  "version": "2.1.1",
   "description": "AcademiQ Research — Akademik Yazım ve Kaynak Yönetim Uygulaması",
   "main": "main.js",
   "scripts": {
