@@ -9,42 +9,45 @@
 <!-- PDF text layer CSS (inline, uyumlu) -->
 <style>
 :root{
-  --bg:#0d1117;--bg2:#161b22;--bg3:#1e2530;--b:#2d3748;--b2:#3d4f6b;
-  --acc:#c8a96e;--acc-d:#8a6d3f;--acc-g:rgba(200,169,110,.12);
-  --txt:#e6e1d6;--txt2:#8b96a8;--txt3:#4a5568;
-  --green:#4caf82;--red:#e05c6a;--blue:#5b9bd5;
+  --bg:#0a0e14;--bg2:#12171f;--bg3:#1a2030;--b:#243044;--b2:#3a5070;
+  --acc:#d4a853;--acc-d:#9a7530;--acc-g:rgba(212,168,83,.1);
+  --txt:#e8e4da;--txt2:#8b9ab0;--txt3:#4a5a70;
+  --green:#4cce82;--red:#f06070;--blue:#64a8e0;
   --f:'IBM Plex Sans',sans-serif;--fm:'IBM Plex Mono',monospace;--fd:'Playfair Display',serif;
+  --radius:6px;--shadow:0 4px 20px rgba(0,0,0,.4);
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;overflow:hidden;}
 body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;display:flex;flex-direction:column;}
 
 /* TOOLBAR */
-#tb{height:44px;background:var(--bg2);border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 10px;gap:4px;flex-shrink:0;z-index:10;}
-.logo{font-family:var(--fd);font-size:16px;color:var(--acc);font-style:italic;margin-right:4px;}
-.sep{width:1px;height:20px;background:var(--b);margin:0 2px;}
-.btn{background:none;border:none;color:var(--txt2);font-size:12px;padding:4px 8px;border-radius:3px;cursor:pointer;font-family:var(--f);white-space:nowrap;transition:background .1s;}
-.btn:hover{background:var(--bg3);color:var(--txt);}
-.btn.prim{background:var(--acc);color:#0d1117;font-weight:600;}
+#tb{height:48px;background:linear-gradient(180deg,var(--bg2) 0%,var(--bg) 100%);border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 14px;gap:5px;flex-shrink:0;z-index:10;}
+.logo{font-family:var(--fd);font-size:17px;color:var(--acc);font-style:italic;margin-right:6px;letter-spacing:.02em;}
+.sep{width:1px;height:22px;background:var(--b);margin:0 4px;}
+.btn{background:none;border:none;color:var(--txt2);font-size:12px;padding:5px 10px;border-radius:var(--radius);cursor:pointer;font-family:var(--f);white-space:nowrap;transition:all .15s;}
+.btn:hover{background:var(--bg3);color:var(--txt);transform:translateY(-1px);}
+.btn:active{transform:translateY(0);}
+.btn.prim{background:linear-gradient(135deg,var(--acc),#e0b860);color:#0d1117;font-weight:600;box-shadow:0 2px 8px rgba(212,168,83,.25);}
+.btn.prim:hover{box-shadow:0 4px 16px rgba(212,168,83,.35);}
 .btn.tog{border:1px solid var(--b);font-family:var(--fm);font-size:11px;}
 .btn.tog.on{border-color:var(--acc-d);color:var(--acc);background:var(--acc-g);}
 .sp{flex:1;}
 #tbinfo{font-family:var(--fm);font-size:11px;color:var(--txt3);}
-#synclbl{font-family:var(--fm);font-size:10px;padding:2px 6px;border-radius:3px;transition:all .3s;}
+#synclbl{font-family:var(--fm);font-size:10px;padding:2px 8px;border-radius:var(--radius);transition:all .3s;}
 #synclbl.ok{color:var(--green);}#synclbl.ld{color:var(--acc);}#synclbl.er{color:var(--red);}
 .dd{position:relative;display:inline-block;}
-.ddm{display:none;position:fixed;z-index:999;background:var(--bg2);border:1px solid var(--b);border-radius:6px;padding:4px;min-width:165px;box-shadow:0 8px 24px rgba(0,0,0,.6);}
+.ddm{display:none;position:fixed;z-index:999;background:var(--bg2);border:1px solid var(--b);border-radius:8px;padding:4px;min-width:180px;box-shadow:0 12px 36px rgba(0,0,0,.5);backdrop-filter:blur(8px);}
 .ddm.open{display:block;}
-.ddi{display:block;width:100%;background:none;border:none;color:var(--txt2);font-family:var(--f);font-size:12px;padding:7px 12px;border-radius:4px;cursor:pointer;text-align:left;}
-.ddi:hover{background:var(--bg3);color:var(--txt);}
-.dds{height:1px;background:var(--b);margin:3px 0;}
+.ddi{display:block;width:100%;background:none;border:none;color:var(--txt2);font-family:var(--f);font-size:12px;padding:8px 14px;border-radius:var(--radius);cursor:pointer;text-align:left;transition:all .1s;}
+.ddi:hover{background:var(--bg3);color:var(--txt);padding-left:18px;}
+.dds{height:1px;background:var(--b);margin:3px 4px;}
 
 /* LAYOUT */
 #lay{display:flex;flex:1;overflow:hidden;}
 
 /* LEFT SIDEBAR */
-#sbl{width:256px;background:var(--bg2);border-right:1px solid var(--b);display:flex;flex-direction:column;flex-shrink:0;transition:width .2s,opacity .2s;}
-#sbl.closed{width:0;opacity:0;pointer-events:none;}
+#sbl{width:270px;background:var(--bg2);border-right:1px solid var(--b);display:flex;flex-direction:column;flex-shrink:0;transition:width .25s ease,opacity .2s;}
+#sbl.closed{width:0;opacity:0;pointer-events:none;overflow:hidden;}
 /* Workspace bar */
 #wsbar{padding:5px 8px;border-bottom:1px solid var(--b);flex-shrink:0;}
 #wsrow{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
@@ -68,27 +71,27 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 .pdfupbtn{margin:0 8px 5px;background:none;border:1px dashed var(--b);border-radius:4px;color:var(--txt2);font-size:11px;padding:5px;cursor:pointer;width:calc(100% - 16px);text-align:center;}
 .pdfupbtn:hover{border-color:var(--acc);color:var(--acc);}
 #liblist{flex:1;overflow-y:auto;padding:3px 7px 8px;}
-.lcard{background:var(--bg3);border:1px solid var(--b);border-radius:5px;padding:7px 9px;margin-bottom:5px;cursor:pointer;position:relative;}
-.lcard:hover{border-color:var(--b2);}
-.lcard.on{border-color:var(--acc);background:var(--acc-g);}
-.ltitle{font-size:11.5px;font-weight:500;color:var(--txt);line-height:1.4;margin-bottom:2px;padding-right:14px;}
+.lcard{background:var(--bg3);border:1px solid var(--b);border-radius:var(--radius);padding:8px 10px;margin-bottom:6px;cursor:pointer;position:relative;transition:all .15s;}
+.lcard:hover{border-color:var(--b2);background:rgba(26,32,48,.8);transform:translateX(2px);}
+.lcard.on{border-color:var(--acc);background:var(--acc-g);box-shadow:0 0 0 1px var(--acc-d);}
+.ltitle{font-size:11.5px;font-weight:500;color:var(--txt);line-height:1.45;margin-bottom:3px;padding-right:16px;}
 .lmeta{font-family:var(--fm);font-size:9.5px;color:var(--txt2);}
-.lbadges{display:flex;gap:3px;margin-top:4px;flex-wrap:wrap;}
-.lbadge{font-size:9px;padding:1px 5px;border-radius:8px;border:1px solid;font-family:var(--fm);}
-.lbadge.pdf{color:var(--green);border-color:var(--green);}
-.lbadge.doi{color:var(--blue);border-color:var(--blue);}
-.lbadge.oa{color:var(--acc);border-color:var(--acc-d);}
-.ldel{position:absolute;top:5px;right:7px;background:none;border:none;color:var(--txt3);font-size:13px;cursor:pointer;opacity:0;}
+.lbadges{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap;}
+.lbadge{font-size:9px;padding:2px 6px;border-radius:10px;border:1px solid;font-family:var(--fm);letter-spacing:.02em;}
+.lbadge.pdf{color:var(--green);border-color:var(--green);background:rgba(76,206,130,.08);}
+.lbadge.doi{color:var(--blue);border-color:var(--blue);background:rgba(100,168,224,.08);}
+.lbadge.oa{color:var(--acc);border-color:var(--acc-d);background:var(--acc-g);}
+.ldel{position:absolute;top:6px;right:8px;background:none;border:none;color:var(--txt3);font-size:13px;cursor:pointer;opacity:0;transition:opacity .15s;}
 .lcard:hover .ldel{opacity:1;}
 .ldel:hover{color:var(--red);}
 
 /* CENTER */
-#ctr{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#3a3a3a;}
-#etb{height:32px;background:var(--bg2);border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 8px;gap:3px;flex-shrink:0;}
-.efmt{background:none;border:none;color:var(--txt2);font-size:12px;padding:3px 7px;border-radius:3px;cursor:pointer;font-family:var(--f);}
+#ctr{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#2a2a2e;}
+#etb{height:36px;background:var(--bg2);border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 10px;gap:4px;flex-shrink:0;}
+.efmt{background:none;border:none;color:var(--txt2);font-size:12px;padding:4px 8px;border-radius:var(--radius);cursor:pointer;font-family:var(--f);transition:all .1s;}
 .efmt:hover{background:var(--bg3);color:var(--txt);}
-#escroll{flex:1;overflow-y:auto;padding:28px 20px;display:flex;flex-direction:column;align-items:center;}
-#apapage{width:816px;min-height:1056px;background:#fff;padding:96px;box-shadow:0 4px 28px rgba(0,0,0,.5);margin-bottom:28px;}
+#escroll{flex:1;overflow-y:auto;padding:32px 24px;display:flex;flex-direction:column;align-items:center;background:linear-gradient(180deg,#2a2a2e 0%,#252528 100%);}
+#apapage{width:816px;min-height:1056px;background:#fff;padding:96px;box-shadow:0 8px 40px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.05);margin-bottom:32px;border-radius:2px;}
 #apaed{font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;color:#000;outline:none;min-height:800px;caret-color:#0044cc;}
 #apaed:empty::before{content:'Yazmaya başlayın. Atıf için /r yazın...';color:#bbb;font-style:italic;pointer-events:none;}
 #apaed p{margin:0;text-indent:.5in;}
@@ -102,7 +105,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 #apaed table{width:100%;border-collapse:collapse;font-size:12pt;font-family:'Times New Roman',Times,serif;margin:4px 0;}
 #apaed th{border-top:1.5px solid #000;border-bottom:1px solid #000;padding:4px 8px;font-weight:bold;}
 #apaed td{padding:4px 8px;}
-#sbar{height:24px;background:var(--bg2);border-top:1px solid var(--b);display:flex;align-items:center;padding:0 12px;gap:12px;font-family:var(--fm);font-size:10px;color:var(--txt3);flex-shrink:0;}
+#sbar{height:26px;background:linear-gradient(180deg,var(--bg2),var(--bg));border-top:1px solid var(--b);display:flex;align-items:center;padding:0 14px;gap:12px;font-family:var(--fm);font-size:10px;color:var(--txt3);flex-shrink:0;}
 .sv{color:var(--txt2);}.sh{color:var(--acc);}.ss{width:1px;height:12px;background:var(--b);}
 
 /* RIGHT SIDEBAR */
@@ -151,35 +154,39 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 .rib:hover{border-color:var(--acc);color:var(--acc);}
 
 /* PDF PANEL */
-#pdfpanel{position:fixed;top:44px;right:0;bottom:24px;width:600px;background:var(--bg2);border-left:2px solid var(--acc);z-index:500;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .25s ease;}
+#pdfpanel{position:fixed;top:48px;right:0;bottom:26px;width:620px;background:var(--bg2);border-left:2px solid var(--acc);z-index:500;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .3s cubic-bezier(.22,.68,0,1);}
 #pdfpanel.open{transform:translateX(0);}
+#pdfpanel.fullscreen{position:fixed;top:0;left:0;right:0;bottom:0;width:100%!important;border:none;z-index:9999;}
 /* Resize handle */
 #pdfresize{position:absolute;left:-4px;top:0;bottom:0;width:8px;cursor:col-resize;z-index:501;}
-#pdfresize:hover{background:rgba(200,169,110,.25);}
-#pdftb{height:40px;background:var(--bg3);border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 8px;gap:4px;flex-shrink:0;}
+#pdfresize:hover{background:rgba(212,168,83,.3);}
+#pdftb{height:42px;background:linear-gradient(180deg,var(--bg3),var(--bg2));border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 10px;gap:5px;flex-shrink:0;}
 #pdftitle{font-size:11px;color:var(--txt2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.ppb{background:none;border:1px solid var(--b);color:var(--txt2);border-radius:3px;padding:3px 7px;font-size:11px;cursor:pointer;font-family:var(--fm);}
-.ppb:hover{border-color:var(--b2);color:var(--txt);}
-#pdfpg{font-family:var(--fm);font-size:10.5px;color:var(--txt2);min-width:48px;text-align:center;}
-#pdfclosebtn{background:none;border:none;color:var(--txt2);font-size:18px;cursor:pointer;padding:0 2px;line-height:1;}
-#pdfclosebtn:hover{color:var(--red);}
+.ppb{background:none;border:1px solid var(--b);color:var(--txt2);border-radius:var(--radius);padding:4px 8px;font-size:11px;cursor:pointer;font-family:var(--fm);transition:all .12s;}
+.ppb:hover{border-color:var(--b2);color:var(--txt);background:var(--bg3);}
+.ppb:active{transform:scale(.95);}
+#pdfpg{font-family:var(--fm);font-size:10.5px;color:var(--txt2);min-width:50px;text-align:center;cursor:pointer;padding:3px;border-radius:var(--radius);transition:background .1s;}
+#pdfpg:hover{background:var(--bg3);}
+#pdfclosebtn{background:none;border:none;color:var(--txt2);font-size:18px;cursor:pointer;padding:2px 4px;line-height:1;border-radius:var(--radius);transition:all .1s;}
+#pdfclosebtn:hover{color:var(--red);background:rgba(240,96,112,.1);}
 /* Search bar */
-#pdfsearchbar{height:34px;background:var(--bg3);border-bottom:1px solid var(--b);display:none;align-items:center;padding:0 8px;gap:4px;flex-shrink:0;}
+#pdfsearchbar{height:36px;background:var(--bg3);border-bottom:1px solid var(--b);display:none;align-items:center;padding:0 10px;gap:5px;flex-shrink:0;}
 #pdfsearchbar.open{display:flex;}
-#pdfsearchinp{flex:1;background:var(--bg);border:1px solid var(--b);border-radius:4px;color:var(--txt);font-family:var(--fm);font-size:12px;padding:4px 8px;outline:none;}
-#pdfsearchinp:focus{border-color:var(--acc);}
+#pdfsearchinp{flex:1;background:var(--bg);border:1px solid var(--b);border-radius:var(--radius);color:var(--txt);font-family:var(--fm);font-size:12px;padding:5px 10px;outline:none;transition:border-color .15s;}
+#pdfsearchinp:focus{border-color:var(--acc);box-shadow:0 0 0 2px rgba(212,168,83,.15);}
 /* Search highlight marks */
-.pdf-search-hl{background:rgba(255,165,0,.45);border-radius:1px;}
-.pdf-search-hl.active{background:rgba(255,100,0,.7);outline:2px solid #ff6400;}
+.pdf-search-hl{background:rgba(255,165,0,.45);border-radius:2px;}
+.pdf-search-hl.active{background:rgba(255,100,0,.7);outline:2px solid #ff6400;border-radius:2px;}
 /* Highlight toolbar */
-#hlbar{height:32px;background:var(--bg3);border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 10px;gap:8px;flex-shrink:0;}
+#hlbar{height:34px;background:var(--bg3);border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 12px;gap:8px;flex-shrink:0;}
 #hlbar span{font-size:11px;color:var(--txt2);}
-.hlc{width:20px;height:20px;border-radius:3px;cursor:pointer;border:2px solid transparent;flex-shrink:0;}
+.hlc{width:22px;height:22px;border-radius:4px;cursor:pointer;border:2px solid transparent;flex-shrink:0;transition:transform .1s,border-color .1s;}
+.hlc:hover{transform:scale(1.15);}
 .hlc.on{border-color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.4);}
 /* PDF scroll area */
-#pdfscroll{flex:1;overflow-y:auto;overflow-x:hidden;background:#404040;display:flex;flex-direction:column;align-items:center;padding:12px;gap:10px;}
+#pdfscroll{flex:1;overflow-y:auto;overflow-x:auto;background:#3a3a3a;display:flex;flex-direction:column;align-items:center;padding:16px;gap:8px;scroll-behavior:smooth;}
 /* Page container: canvas + text layer stacked */
-.pdf-page-wrap{position:relative;flex-shrink:0;background:#fff;}
+.pdf-page-wrap{position:relative;flex-shrink:0;background:#fff;box-shadow:0 2px 16px rgba(0,0,0,.35);border-radius:1px;}
 .pdf-page-wrap canvas{display:block;}
 /* PDF.js text layer */
 /* PDF.js 3.x text layer — düzgün seçim için */
@@ -212,7 +219,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 }
 
 /* Highlight tooltip */
-#hltip{display:none;position:fixed;z-index:800;background:var(--bg2);border:1px solid var(--acc);border-radius:6px;padding:4px 6px;gap:5px;box-shadow:0 4px 16px rgba(0,0,0,.5);}
+#hltip{display:none;position:fixed;z-index:800;background:var(--bg2);border:1px solid var(--acc);border-radius:8px;padding:5px 7px;gap:6px;box-shadow:0 8px 24px rgba(0,0,0,.5);backdrop-filter:blur(8px);}
 #hltip.show{display:flex;}
 .htb{background:none;border:1px solid var(--b);color:var(--txt2);border-radius:3px;font-size:11px;padding:3px 9px;cursor:pointer;font-family:var(--fm);}
 .htb:hover{border-color:var(--acc);color:var(--acc);}
@@ -238,21 +245,24 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 .tghint{padding:5px 12px;font-family:var(--fm);font-size:9.5px;color:var(--txt3);border-top:1px solid var(--b);text-align:center;}
 
 /* MODALS */
-.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:850;}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:850;backdrop-filter:blur(4px);}
 .modal-bg.show{display:flex;align-items:center;justify-content:center;}
-.modal{background:var(--bg2);border:1px solid var(--b);border-radius:8px;padding:18px;min-width:280px;box-shadow:0 8px 32px rgba(0,0,0,.6);}
-.mt{font-family:var(--fm);font-size:10px;color:var(--acc);letter-spacing:.1em;text-transform:uppercase;margin-bottom:12px;}
-.minp{width:100%;background:var(--bg);border:1px solid var(--b);border-radius:4px;color:var(--txt);font-family:var(--f);font-size:13px;padding:8px;outline:none;margin-bottom:10px;}
-.minp:focus{border-color:var(--acc);}
-.wr{display:flex;gap:8px;margin-bottom:9px;}
-.wf{flex:1;}.wf label{display:block;font-size:11px;color:var(--txt2);margin-bottom:3px;}
-.wf input{width:100%;background:var(--bg);border:1px solid var(--b);border-radius:4px;color:var(--txt);font-family:var(--f);font-size:12px;padding:5px 7px;outline:none;}
+.modal{background:var(--bg2);border:1px solid var(--b);border-radius:12px;padding:22px;min-width:280px;box-shadow:0 16px 48px rgba(0,0,0,.5);}
+.mt{font-family:var(--fm);font-size:10px;color:var(--acc);letter-spacing:.12em;text-transform:uppercase;margin-bottom:14px;}
+.minp{width:100%;background:var(--bg);border:1px solid var(--b);border-radius:var(--radius);color:var(--txt);font-family:var(--f);font-size:13px;padding:9px 10px;outline:none;margin-bottom:10px;transition:border-color .15s;}
+.minp:focus{border-color:var(--acc);box-shadow:0 0 0 2px rgba(212,168,83,.12);}
+.wr{display:flex;gap:10px;margin-bottom:10px;}
+.wf{flex:1;}.wf label{display:block;font-size:11px;color:var(--txt2);margin-bottom:4px;font-weight:500;}
+.wf input{width:100%;background:var(--bg);border:1px solid var(--b);border-radius:var(--radius);color:var(--txt);font-family:var(--f);font-size:12px;padding:6px 8px;outline:none;transition:border-color .15s;}
 .wf input:focus{border-color:var(--acc);}
-.mb{display:flex;gap:7px;margin-top:12px;}
-.mbtn{flex:1;padding:7px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:500;border:none;font-family:var(--f);}
-.mbtn.p{background:var(--acc);color:#0d1117;}.mbtn.s{background:var(--bg3);color:var(--txt2);border:1px solid var(--b);}
+.mb{display:flex;gap:8px;margin-top:14px;}
+.mbtn{flex:1;padding:8px;border-radius:var(--radius);cursor:pointer;font-size:12px;font-weight:500;border:none;font-family:var(--f);transition:all .12s;}
+.mbtn:hover{transform:translateY(-1px);}
+.mbtn:active{transform:translateY(0);}
+.mbtn.p{background:linear-gradient(135deg,var(--acc),#e0b860);color:#0d1117;box-shadow:0 2px 8px rgba(212,168,83,.2);}.mbtn.s{background:var(--bg3);color:var(--txt2);border:1px solid var(--b);}
+.mbtn.s:hover{border-color:var(--b2);color:var(--txt);}
 
-::-webkit-scrollbar{width:5px;height:5px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--b);border-radius:3px;}
+::-webkit-scrollbar{width:6px;height:6px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--b);border-radius:4px;}::-webkit-scrollbar-thumb:hover{background:var(--b2);}
 @media print{#tb,#sbar,#sbl,#sbr,#pdfpanel,#trig,#hltip,.modal-bg{display:none!important;}#ctr{flex:1;}#escroll{padding:0;background:#fff;overflow:visible;}#apapage{box-shadow:none;margin:0;}}
 </style>
 </head>
@@ -412,11 +422,13 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
     <span id="pdfzoom" style="font-family:var(--fm);font-size:10px;color:var(--txt3);min-width:36px;text-align:center;cursor:pointer" onclick="pZFit()" title="Genislige sigdir">100%</span>
     <button class="ppb" onclick="pZI()" title="Yakinlastir (Ctrl++)">+</button>
     <span class="sep"></span>
-    <button class="ppb" onclick="togglePdfSearch()" title="Ara (Ctrl+F)">Ara</button>
+    <button class="ppb" onclick="togglePdfSearch()" title="Ara (Ctrl+F)">&#128269;</button>
     <button class="ppb" onclick="toggleThumbs()" title="Kucuk resimler">&#9783;</button>
     <button class="ppb" onclick="toggleOutline()" title="Icerik tablosu">&#8801;</button>
-    <button class="ppb" onclick="document.getElementById('lfinp').click()">+PDF</button>
-    <button id="pdfclosebtn" onclick="togglePDF()">x</button>
+    <button class="ppb" onclick="togglePdfFullscreen()" title="Tam ekran (F11)" id="pdffullbtn">&#x26F6;</button>
+    <span class="sep"></span>
+    <button class="ppb" onclick="document.getElementById('lfinp').click()" title="PDF yukle">+</button>
+    <button id="pdfclosebtn" onclick="togglePDF()" title="Kapat">&#10005;</button>
   </div>
   <!-- SEARCH BAR -->
   <div id="pdfsearchbar">
@@ -1228,9 +1240,11 @@ function renderSinglePage(n){
     if(!wrap)return;
     wrap.style.width=vp.width+'px';wrap.style.height=vp.height+'px';wrap.style.background='#fff';
     var ph=wrap.querySelector('.page-placeholder');if(ph)ph.remove();
+    // HiDPI rendering for sharp text
+    var dpr=window.devicePixelRatio||1;
     var canvas=document.createElement('canvas');
-    canvas.width=vp.width;canvas.height=vp.height;
-    canvas.style.cssText='display:block;position:absolute;top:0;left:0;z-index:0;';
+    canvas.width=Math.floor(vp.width*dpr);canvas.height=Math.floor(vp.height*dpr);
+    canvas.style.cssText='display:block;position:absolute;top:0;left:0;z-index:0;width:'+vp.width+'px;height:'+vp.height+'px;';
     wrap.appendChild(canvas);
     var textDiv=document.createElement('div');
     textDiv.className='textLayer';
@@ -1240,7 +1254,9 @@ function renderSinglePage(n){
     hlc.className='hl-overlay';
     hlc.width=vp.width;hlc.height=vp.height;
     wrap.appendChild(hlc);
-    page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise.then(function(){
+    var ctx=canvas.getContext('2d');
+    if(dpr>1){ctx.scale(dpr,dpr);}
+    page.render({canvasContext:ctx,viewport:vp}).promise.then(function(){
       page.getTextContent({normalizeWhitespace:true}).then(function(tc){
         if(!tc||!tc.items||!tc.items.length){paintHL(hlc,n);return;}
         pdfTextCache[n]=tc.items;
@@ -1313,7 +1329,8 @@ function updPgLabel(){
 function pZI(){pdfScale=Math.min(((pdfScale||getScale())+0.15),4);if(curRef&&curRef.pdfData)renderPDF(curRef.pdfData);updPgLabel();}
 function pZO(){pdfScale=Math.max(((pdfScale||getScale())-0.15),0.3);if(curRef&&curRef.pdfData)renderPDF(curRef.pdfData);updPgLabel();}
 function pZFit(){pdfScale=0;if(curRef&&curRef.pdfData)renderPDF(curRef.pdfData);updPgLabel();}
-function togglePDF(){document.getElementById('pdfpanel').classList.toggle('open');}
+function togglePDF(){var p=document.getElementById('pdfpanel');if(p.classList.contains('fullscreen')){p.classList.remove('fullscreen');document.getElementById('pdffullbtn').innerHTML='&#x26F6;';}p.classList.toggle('open');}
+function togglePdfFullscreen(){var p=document.getElementById('pdfpanel');p.classList.toggle('fullscreen');document.getElementById('pdffullbtn').innerHTML=p.classList.contains('fullscreen')?'&#x2716;':'&#x26F6;';if(p.classList.contains('fullscreen')){document.getElementById('pdfresize').style.display='none';}else{document.getElementById('pdfresize').style.display='';}if(pdfDoc&&curRef&&curRef.pdfData){pdfScale=0;renderPDF(curRef.pdfData);}}
 function goToPage(){if(!pdfTotal)return;var n=prompt('Sayfa numarasi (1-'+pdfTotal+'):',pdfPg);n=parseInt(n);if(n>=1&&n<=pdfTotal){pdfPg=n;scrollToPage(n);}}
 
 // ── SCROLL PAGE TRACKING ────────────────────────────────────────────────────
@@ -1479,6 +1496,8 @@ document.addEventListener('keydown',function(e){
     else document.getElementById('pdfsearchinp').focus();
     return;
   }
+  // F11: PDF fullscreen
+  if(e.key==='F11'&&pdfOpen){e.preventDefault();togglePdfFullscreen();return;}
   // Ctrl+G: go to page
   if((e.ctrlKey||e.metaKey)&&e.key==='g'&&pdfOpen){
     e.preventDefault();goToPage();return;
@@ -1746,7 +1765,23 @@ function updateRefSection(){
 
 // ── EDITOR ────────────────────────────────────────────────────────────────────
 function ec(cmd,val){restoreEditorSelection();document.getElementById('apaed').focus();document.execCommand(cmd,false,val||null);uSt();}
-function iHTML(html){restoreEditorSelection();document.getElementById('apaed').focus();document.execCommand('insertHTML',false,html);uSt();save();}
+function iHTML(html){
+  var ed=document.getElementById('apaed');
+  var restored=restoreEditorSelection();
+  if(!restored){
+    // No saved selection — place cursor at end of editor
+    ed.focus();
+    var sel=window.getSelection();
+    var range=document.createRange();
+    range.selectNodeContents(ed);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } else {
+    ed.focus();
+  }
+  document.execCommand('insertHTML',false,html);uSt();save();
+}
 function uSt(){var ed=document.getElementById('apaed');var txt=ed.innerText||'';var words=txt.trim().split(/\s+/).filter(function(w){return w.length>0;}).length;var cites=ed.querySelectorAll('.cit').length;var refs=getUsedRefs().length;document.getElementById('tbinfo').textContent=words+' kelime';document.getElementById('sbw').textContent=words+' kelime';document.getElementById('sbc').textContent=cites+' atıf';document.getElementById('sbr2').textContent=refs+' kaynak';}
 document.getElementById('apaed').addEventListener('input',function(){uSt();save();});
 
@@ -1904,7 +1939,7 @@ document.addEventListener('mousedown',function(e){var t=document.getElementById(
 
 // ── INSERT HELPERS ────────────────────────────────────────────────────────────
 function insRefs(){var refs=getUsedRefs();if(!refs.length)refs=sortLib(cLib());iHTML('<h1>Kaynakça</h1>'+refs.map(function(r){return '<p class="refe">'+apa7(r)+'</p>';}).join(''));}
-function insCover(){var t=prompt('Makale başlığı:','');var a=prompt('Yazar(lar):','');var af=prompt('Kurum:','');if(!t)return;iHTML('<div style="text-align:center;padding-top:192px;font-family:Times New Roman,serif;font-size:12pt;line-height:2;"><p style="font-weight:bold;text-indent:0">'+t+'</p><p style="text-indent:0">'+a+'</p><p style="text-indent:0">'+af+'</p><p style="text-indent:0">'+new Date().toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'})+'</p></div><p><br/></p>');}
+function insCover(){var t=prompt('Makale baslig\u0131:','');var a=prompt('Yazar(lar):','');var af=prompt('Kurum:','');if(!t)return;iHTML('<div style="text-align:center;padding-top:192px;font-family:Times New Roman,serif;font-size:12pt;line-height:2;"><p style="font-weight:bold;text-indent:0">'+t+'</p><p style="text-indent:0">'+(a||'')+'</p><p style="text-indent:0">'+(af||'')+'</p><p style="text-indent:0">'+new Date().toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'})+'</p></div><p><br/></p>');}
 function insAbstract(){iHTML('<h1>Abstract</h1><p class="ni">Özet metni (150-250 kelime).</p><p class="ni"><em>Keywords:</em> kelime1, kelime2</p><p><br/></p>');}
 function insBlkQ(){iHTML('<blockquote>Alıntı metni (40+ kelime). (Yazar, Yıl, s. XX)</blockquote><p><br/></p>');}
 function insFig(){var n=prompt('Şekil No:','1');if(!n)return;var t=prompt('Başlık:','');iHTML('<p style="text-align:center;text-indent:0">[Şekil '+n+']</p><p style="text-align:center;text-indent:0;font-style:italic">Şekil '+n+(t?'<br/>'+t:'')+'</p><p><br/></p>');}
@@ -2230,11 +2265,15 @@ function saveEditorSelection(){
 }
 function restoreEditorSelection(){
   if(editorSavedRange){
-    var sel=window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(editorSavedRange);
-    editorSavedRange=null;
+    try{
+      var sel=window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(editorSavedRange);
+      editorSavedRange=null;
+      return true;
+    }catch(e){editorSavedRange=null;return false;}
   }
+  return false;
 }
 
 // Otomatik guncelleme kontrolu (baslangicta, sessiz)
