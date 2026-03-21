@@ -91,10 +91,17 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 .efmt{background:none;border:none;color:var(--txt2);font-size:12px;padding:4px 8px;border-radius:var(--radius);cursor:pointer;font-family:var(--f);transition:all .1s;}
 .efmt:hover{background:var(--bg3);color:var(--txt);}
 #escroll{flex:1;overflow-y:auto;padding:32px 24px;display:flex;flex-direction:column;align-items:center;background:#d8d0c4;}
-#apapage{width:816px;min-height:1056px;background:#fff;padding:96px;box-shadow:0 2px 20px rgba(0,0,0,.12);margin-bottom:32px;border-radius:2px;}
+#apapage{width:816px;min-height:1056px;background:#fff;padding:96px;box-shadow:0 2px 20px rgba(0,0,0,.12);margin-bottom:32px;border-radius:2px;overflow:visible;}
 #apaed{font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;color:#000;outline:none;min-height:860px;caret-color:#0044cc;word-wrap:break-word;overflow-wrap:break-word;}
-/* Sayfa kesim cizgisi - her 864px'de (1056-96*2 padding) */
-#apaed{background-image:repeating-linear-gradient(transparent 0px,transparent 862px,#ccc 862px,#ccc 864px,transparent 864px);background-size:100% 864px;background-position:0 0;}
+/* Sayfa kesim cizgileri - her 864px'de (1056-96*2 padding) */
+#apaed{background-image:repeating-linear-gradient(transparent 0px,transparent 862px,var(--b2) 862px,var(--b2) 864px,transparent 864px);background-size:100% 864px;background-position:0 0;}
+@media print{
+  #tb,#sbl,#sbr,#etb,#pdfpanel{display:none!important;}
+  #lay,#ctr,#escroll{overflow:visible!important;display:block!important;height:auto!important;}
+  #apapage{box-shadow:none;margin:0;padding:2.54cm;width:auto;min-height:auto;overflow:visible;}
+  #apaed{background-image:none;min-height:auto;}
+  @page{size:letter;margin:0;}
+}
 #apaed:empty::before{content:'Yazmaya başlayın. Atıf için /r yazın...';color:#bbb;font-style:italic;pointer-events:none;}
 #apaed p{margin:0;text-indent:.5in;}
 #apaed p.ni{text-indent:0;}
@@ -194,9 +201,8 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 /* PDF.js 3.x text layer — düzgün seçim için */
 .pdf-page-wrap .textLayer{
   position:absolute;top:0;left:0;width:100%;height:100%;
-  overflow:hidden;opacity:.25;line-height:1;z-index:3;
+  overflow:hidden;line-height:1;z-index:3;
   pointer-events:auto;
-  mix-blend-mode:multiply;
 }
 .pdf-page-wrap .textLayer span,
 .pdf-page-wrap .textLayer br{
@@ -504,11 +510,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
   </div>
 </div></div>
 
-<!-- TABLE WIZARD -->
-<div class="modal-bg" id="wiz"><div class="modal" style="width:340px">
-
 <!-- SYNC SETTINGS MODAL -->
-</div></div>
 <div class="modal-bg" id="syncmodal"><div class="modal" style="width:400px">
   <div class="mt">Ayarlar</div>
   <div id="syncinfo" style="font-size:12px;color:var(--txt2);line-height:1.7;margin-bottom:12px;">
@@ -1274,7 +1276,7 @@ function renderSinglePage(n){
           try{
             textDiv.style.setProperty('--scale-factor',String(vp.scale));
             var params={container:textDiv,viewport:vp,textDivs:[]};
-            params.textContentSource=tc;
+            params.textContent=tc;
             var task=pdfjsLib.renderTextLayer(params);
             if(task&&task.promise){
               done=true;
@@ -1778,14 +1780,12 @@ function ec(cmd,val){
 }
 function iHTML(html){
   var ed=document.getElementById('apaed');
-  // Always append to end of editor — simple and reliable
-  ed.innerHTML+=html;
-  // Place cursor at end
-  ed.focus();
-  var sel=window.getSelection();
-  var r=document.createRange();
-  r.selectNodeContents(ed);r.collapse(false);
-  sel.removeAllRanges();sel.addRange(r);
+  if(!restoreEditorSelection()){
+    ed.focus();
+    var sel=window.getSelection();
+    if(sel.rangeCount===0){var r=document.createRange();r.selectNodeContents(ed);r.collapse(false);sel.addRange(r);}
+  }
+  document.execCommand('insertHTML',false,html);
   uSt();save();
 }
 function uSt(){var ed=document.getElementById('apaed');var txt=ed.innerText||'';var words=txt.trim().split(/\s+/).filter(function(w){return w.length>0;}).length;var cites=ed.querySelectorAll('.cit').length;var refs=getUsedRefs().length;document.getElementById('tbinfo').textContent=words+' kelime';document.getElementById('sbw').textContent=words+' kelime';document.getElementById('sbc').textContent=cites+' atıf';document.getElementById('sbr2').textContent=refs+' kaynak';}
@@ -1944,32 +1944,20 @@ document.addEventListener('click',function(e){if(!e.target.closest('.dd'))cdd();
 document.addEventListener('mousedown',function(e){var t=document.getElementById('trig');if(trigOn&&!t.contains(e.target)&&!document.getElementById('apaed').contains(e.target))closeTrig();});
 
 // ── INSERT HELPERS ────────────────────────────────────────────────────────────
-function edAppend(html){
-  try{
-    var ed=document.getElementById('apaed');
-    var d=document.createElement('div');d.innerHTML=html;
-    while(d.firstChild){ed.appendChild(d.firstChild);}
-    ed.focus();
-    uSt();save();
-    // scroll to bottom
-    var sc=document.getElementById('escroll');
-    sc.scrollTop=sc.scrollHeight;
-  }catch(err){alert('Ekleme hatasi: '+err.message);}
-}
-function insRefs(){var refs=getUsedRefs();if(!refs.length)refs=sortLib(cLib());edAppend('<h1>Kaynakca</h1>'+refs.map(function(r){return '<p class="refe">'+apa7(r)+'</p>';}).join(''));}
+function insRefs(){var refs=getUsedRefs();if(!refs.length)refs=sortLib(cLib());iHTML('<h1>Kaynakca</h1>'+refs.map(function(r){return '<p class="refe">'+apa7(r)+'</p>';}).join(''));}
 function insCover(){
   var t=prompt('Makale basligi:','');if(!t)return;
   var a=prompt('Yazarlar:','')||'';
   var af=prompt('Kurum:','')||'';
   var dt=new Date().toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'});
-  edAppend('<div style="text-align:center;padding-top:192px;font-family:Times New Roman,serif;font-size:12pt;line-height:2"><p style="font-weight:bold;text-indent:0">'+t+'</p><p style="text-indent:0">'+a+'</p><p style="text-indent:0">'+af+'</p><p style="text-indent:0">'+dt+'</p></div><p><br></p>');
+  iHTML('<div style="text-align:center;padding-top:192px;font-family:Times New Roman,serif;font-size:12pt;line-height:2"><p style="font-weight:bold;text-indent:0">'+t+'</p><p style="text-indent:0">'+a+'</p><p style="text-indent:0">'+af+'</p><p style="text-indent:0">'+dt+'</p></div><p><br></p>');
 }
-function insAbstract(){edAppend('<h1>Abstract</h1><p class="ni">Ozet metni (150-250 kelime).</p><p class="ni"><em>Keywords:</em> kelime1, kelime2</p><p><br></p>');}
-function insBlkQ(){edAppend('<blockquote>Alinti metni (40+ kelime). (Yazar, Yil, s. XX)</blockquote><p><br></p>');}
+function insAbstract(){iHTML('<h1>Abstract</h1><p class="ni">Ozet metni (150-250 kelime).</p><p class="ni"><em>Keywords:</em> kelime1, kelime2</p><p><br></p>');}
+function insBlkQ(){iHTML('<blockquote>Alinti metni (40+ kelime). (Yazar, Yil, s. XX)</blockquote><p><br></p>');}
 function insFig(){
   var n=prompt('Sekil No:','1');if(!n)return;
   var t=prompt('Baslik:','')||'';
-  edAppend('<p style="text-align:center;text-indent:0">[Sekil '+n+']</p><p style="text-align:center;text-indent:0;font-style:italic">Sekil '+n+(t?' - '+t:'')+'</p><p><br></p>');
+  iHTML('<p style="text-align:center;text-indent:0">[Sekil '+n+']</p><p style="text-align:center;text-indent:0;font-style:italic">Sekil '+n+(t?' - '+t:'')+'</p><p><br></p>');
 }
 function doTable(){
   try{
@@ -1985,7 +1973,7 @@ function doTable(){
     html+='<table><thead><tr>'+hdr+'</tr></thead><tbody>'+body+'</tbody></table>';
     if(note)html+='<p class="ni"><em>Not.</em> '+note+'</p>';
     html+='<p><br></p>';
-    edAppend(html);
+    iHTML(html);
     hideM('wiz');
   }catch(err){alert('Tablo hatasi: '+err.message);}
 }
