@@ -67,7 +67,11 @@ function createWindow() {
   });
 
   mainWindow.setMenuBarVisibility(false);
-  mainWindow.loadFile(path.join(__dirname, 'academiq-research.html'));
+  // Try academiq-research.html first, then src/index.html (installed location)
+  const htmlPath = fs.existsSync(path.join(__dirname, 'academiq-research.html'))
+    ? path.join(__dirname, 'academiq-research.html')
+    : path.join(__dirname, 'src', 'index.html');
+  mainWindow.loadFile(htmlPath);
 
   // Open external links in browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -424,10 +428,11 @@ ipcMain.handle('update:download', async (_ev, origUrl) => {
     const finalName = url.split('/').pop() || 'update';
 
     if (finalName.endsWith('.html')) {
-      const target = path.join(__dirname, 'academiq-research.html');
-      const backup = target + '.bak';
-      if (fs.existsSync(target)) fs.copyFileSync(target, backup);
-      fs.writeFileSync(target, buf);
+      // Write to both possible locations
+      const target1 = path.join(__dirname, 'academiq-research.html');
+      const target2 = path.join(__dirname, 'src', 'index.html');
+      if (fs.existsSync(target1)) { fs.copyFileSync(target1, target1 + '.bak'); fs.writeFileSync(target1, buf); }
+      if (fs.existsSync(path.join(__dirname, 'src'))) { if (fs.existsSync(target2)) fs.copyFileSync(target2, target2 + '.bak'); fs.writeFileSync(target2, buf); }
       // Also try to download updated main.js and package.json
       try {
         const baseUrl = url.replace(/\/[^\/]+$/, '/');
@@ -455,10 +460,10 @@ ipcMain.handle('update:download', async (_ev, origUrl) => {
       // Last resort: treat as HTML if content looks like HTML
       const headerStr = buf.slice(0, 200).toString('utf8');
       if (headerStr.includes('<!DOCTYPE') || headerStr.includes('<html')) {
-        const target = path.join(__dirname, 'academiq-research.html');
-        const backup = target + '.bak';
-        if (fs.existsSync(target)) fs.copyFileSync(target, backup);
-        fs.writeFileSync(target, buf);
+        const t1 = path.join(__dirname, 'academiq-research.html');
+        const t2 = path.join(__dirname, 'src', 'index.html');
+        if (fs.existsSync(t1)) { fs.copyFileSync(t1, t1 + '.bak'); fs.writeFileSync(t1, buf); }
+        if (fs.existsSync(path.join(__dirname, 'src'))) { if (fs.existsSync(t2)) fs.copyFileSync(t2, t2 + '.bak'); fs.writeFileSync(t2, buf); }
         return { ok: true, type: 'html', restart: true };
       }
       return { ok: false, error: 'Unknown file type: ' + finalName + ' (url: ' + url + ')' };
