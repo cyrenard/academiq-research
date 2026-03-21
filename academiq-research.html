@@ -128,7 +128,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
 .ctx-menu .ctx-sep{height:1px;background:var(--b);margin:4px 8px;padding:0;cursor:default;}
 .ctx-menu .ctx-shortcut{float:right;color:var(--txt3);font-size:10px;margin-left:16px;}
 #apapage{width:816px;min-height:1056px;background:#fff;padding:96px;box-shadow:0 2px 20px rgba(0,0,0,.12);margin-bottom:32px;border-radius:2px;overflow:visible;position:relative;}
-#apaed{font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;color:#000;outline:none;min-height:864px;caret-color:#0044cc;word-wrap:break-word;overflow-wrap:break-word;}
+#apaed{font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;color:#000;outline:none;min-height:864px;caret-color:#0044cc;word-wrap:break-word;overflow-wrap:break-word;word-break:break-word;width:100%;max-width:100%;box-sizing:border-box;white-space:normal;overflow-x:hidden;}
 /* Page break overlay — positioned outside editor in #apapage */
 .page-break-overlay{position:absolute;left:-96px;right:-96px;height:32px;background:#d8d0c4;pointer-events:none;-webkit-user-select:none;user-select:none;display:flex;align-items:center;justify-content:center;z-index:5;box-shadow:inset 0 8px 8px -8px rgba(0,0,0,.15),inset 0 -8px 8px -8px rgba(0,0,0,.15);}
 .page-break-overlay::after{content:attr(data-label);font-family:var(--fm);font-size:9px;color:var(--txt3);letter-spacing:.05em;}
@@ -623,6 +623,16 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
   <div class="tghint">↑↓ gez · Boşluk çoklu seç · Enter metne ekle · Esc kapat</div>
 </div>
 
+<!-- CUSTOM PROMPT MODAL (Electron-compatible replacement for window.prompt) -->
+<div class="modal-bg" id="promptModal"><div class="modal" style="width:320px">
+  <div class="mt" id="promptTitle">Giriş</div>
+  <input class="minp" id="promptInput" placeholder="" onkeydown="if(event.key==='Enter')resolvePrompt(true);if(event.key==='Escape')resolvePrompt(false);"/>
+  <div class="mb">
+    <button class="mbtn s" onclick="resolvePrompt(false)">İptal</button>
+    <button class="mbtn p" onclick="resolvePrompt(true)">Tamam</button>
+  </div>
+</div></div>
+
 <!-- WORKSPACE MODAL -->
 <div class="modal-bg" id="wsm"><div class="modal">
   <div class="mt">Yeni Çalışma Alanı</div>
@@ -897,7 +907,7 @@ function rDocTabs(){
       btn.appendChild(cl);
     }
     btn.onclick=function(){switchDoc(doc.id);};
-    btn.ondblclick=function(){var n=prompt('Belge adı:',doc.name);if(n&&n.trim()){doc.name=n.trim();save();rDocTabs();}};
+    btn.ondblclick=function(){customPrompt('Belge adı:',doc.name).then(function(n){if(n&&n.trim()){doc.name=n.trim();save();rDocTabs();}});};
     bar.appendChild(btn);
   });
   var add=document.createElement('button');add.id='doctab-add';add.textContent='+';add.title='Yeni belge';
@@ -905,11 +915,12 @@ function rDocTabs(){
     var n=1;
     var existNames=S.docs.map(function(d){return d.name;});
     while(existNames.indexOf('Belge '+n)!==-1)n++;
-    var name=prompt('Belge adı:','Belge '+n);
-    if(!name||!name.trim())return;
-    var nd={id:uid(),name:name.trim(),content:''};
-    S.docs.push(nd);
-    switchDoc(nd.id);
+    customPrompt('Belge adı:','Belge '+n).then(function(name){
+      if(!name||!name.trim())return;
+      var nd={id:uid(),name:name.trim(),content:''};
+      S.docs.push(nd);
+      switchDoc(nd.id);
+    });
   };
   bar.appendChild(add);
 }
@@ -974,7 +985,7 @@ function rNB(){
       btn.appendChild(del);
     }
     btn.onclick=function(){S.curNb=nb.id;rNB();rNotes();};
-    btn.ondblclick=function(){var n=prompt('Not defteri adı:',nb.name);if(n&&n.trim()){nb.name=n.trim();save();rNB();}};
+    btn.ondblclick=function(){customPrompt('Not defteri adı:',nb.name).then(function(n){if(n&&n.trim()){nb.name=n.trim();save();rNB();}});};
     bar.appendChild(btn);
   });
   var add=document.createElement('button');add.id='nb-add';add.textContent='+';add.title='Yeni not defteri';
@@ -1267,15 +1278,17 @@ function showLabelMenu(x,y,ref){
   // New label option
   var newBtn=document.createElement('button');newBtn.className='ctxi';newBtn.textContent='+ Yeni Etiket';
   newBtn.onclick=function(){
-    var name=prompt('Etiket adı:');if(!name||!name.trim())return;
-    var colors=['#4caf50','#f44336','#2196f3','#9c27b0','#ff9800','#e91e63','#00bcd4','#795548'];
-    var color=colors[Math.floor(Math.random()*colors.length)];
-    var newLabel={name:name.trim(),color:color};
-    if(!S.customLabels)S.customLabels=[];
-    if(!S.customLabels.some(function(l){return l.name===newLabel.name;}))S.customLabels.push(newLabel);
-    if(!ref.labels)ref.labels=[];
-    ref.labels.push(newLabel);
-    save();rLib();hideCtx();
+    customPrompt('Etiket adı:','').then(function(name){
+      if(!name||!name.trim())return;
+      var colors=['#4caf50','#f44336','#2196f3','#9c27b0','#ff9800','#e91e63','#00bcd4','#795548'];
+      var color=colors[Math.floor(Math.random()*colors.length)];
+      var newLabel={name:name.trim(),color:color};
+      if(!S.customLabels)S.customLabels=[];
+      if(!S.customLabels.some(function(l){return l.name===newLabel.name;}))S.customLabels.push(newLabel);
+      if(!ref.labels)ref.labels=[];
+      ref.labels.push(newLabel);
+      save();rLib();hideCtx();
+    });
   };
   menu.appendChild(newBtn);
   // Separator + workspace move options
@@ -2055,7 +2068,7 @@ function pZO(){pdfScale=Math.max(((pdfScale||getScale())-0.15),0.3);if(curRef&&c
 function pZFit(){pdfScale=0;if(curRef&&curRef.pdfData)renderPDF(curRef.pdfData);updPgLabel();}
 function togglePDF(){var p=document.getElementById('pdfpanel');if(p.classList.contains('fullscreen')){p.classList.remove('fullscreen');document.getElementById('pdffullbtn').innerHTML='&#x26F6;';}p.classList.toggle('open');}
 function togglePdfFullscreen(){var p=document.getElementById('pdfpanel');p.classList.toggle('fullscreen');document.getElementById('pdffullbtn').innerHTML=p.classList.contains('fullscreen')?'&#x2716;':'&#x26F6;';if(p.classList.contains('fullscreen')){document.getElementById('pdfresize').style.display='none';}else{document.getElementById('pdfresize').style.display='';}if(pdfDoc&&curRef&&curRef.pdfData){pdfScale=0;renderPDF(curRef.pdfData);}}
-function goToPage(){if(!pdfTotal)return;var n=prompt('Sayfa numarasi (1-'+pdfTotal+'):',pdfPg);n=parseInt(n);if(n>=1&&n<=pdfTotal){pdfPg=n;scrollToPage(n);}}
+function goToPage(){if(!pdfTotal)return;customPrompt('Sayfa numarası (1-'+pdfTotal+'):',pdfPg).then(function(v){var n=parseInt(v);if(n>=1&&n<=pdfTotal){pdfPg=n;scrollToPage(n);}});}
 
 // ── SCROLL PAGE TRACKING ────────────────────────────────────────────────────
 // PDFViewer handles page tracking via 'pagechanging' event on the eventBus
@@ -2822,7 +2835,7 @@ function uSt(){var ed=document.getElementById('apaed');var txt=ed.innerText||'';
     goalEl.style.color=col;
   }else{goalEl.textContent='';goalEl.style.color='';}
 }
-function setWordGoal(){var g=prompt('Kelime hedefi:',S.wordGoal||'');if(g===null)return;S.wordGoal=parseInt(g)||0;save();uSt();}
+function setWordGoal(){customPrompt('Kelime hedefi:',S.wordGoal||'').then(function(g){if(g===null)return;S.wordGoal=parseInt(g)||0;save();uSt();});}
 // ── APA PASTE FORMATTING ─────────────────────────────────────────────────────
 document.getElementById('apaed').addEventListener('paste',function(e){
   var html=e.clipboardData.getData('text/html');
@@ -3431,6 +3444,34 @@ function handleImgUpload(e){
   });
 })();
 
+// ── PAGE CLICK: clicking on margin/padding area focuses editor ──────────────
+document.getElementById('apapage').addEventListener('click',function(e){
+  if(e.target===this){
+    // Clicked on margin area (not on editor or overlays)
+    var ed=document.getElementById('apaed');
+    ed.focus();
+    // Place cursor at end of content
+    var lastEl=ed.lastElementChild;
+    if(lastEl){
+      var r=document.createRange();
+      r.selectNodeContents(lastEl);r.collapse(false);
+      var s=window.getSelection();s.removeAllRanges();s.addRange(r);
+    }
+  }
+});
+// ── ESCROLL CLICK: clicking on grey area focuses editor ─────────────────────
+document.getElementById('escroll').addEventListener('click',function(e){
+  if(e.target===this){
+    var ed=document.getElementById('apaed');
+    ed.focus();
+    var lastEl=ed.lastElementChild;
+    if(lastEl){
+      var r=document.createRange();
+      r.selectNodeContents(lastEl);r.collapse(false);
+      var s=window.getSelection();s.removeAllRanges();s.addRange(r);
+    }
+  }
+});
 // ── CLICK-ANYWHERE TYPING (Word-like) ────────────────────────────────────────
 document.getElementById('apaed').addEventListener('dblclick',function(e){
   if(e.target!==this)return; // Only on empty area of editor, not on child elements
@@ -3544,7 +3585,7 @@ function scrollToHeading(idx){
 }
 
 function insBlkQ(){iHTML('<blockquote>Alinti metni (40+ kelime). (Yazar, Yil, s. XX)</blockquote><p><br></p>');}
-function insFig(){var n=prompt('Sekil No:','1');if(!n)return;var t=prompt('Baslik:','')||'';iHTML('<p style="text-align:center;text-indent:0">[Sekil '+n+']</p><p style="text-align:center;text-indent:0;font-style:italic">Sekil '+n+(t?' - '+t:'')+'</p><p><br></p>');
+function insFig(){customPrompt('Şekil No:','1').then(function(n){if(!n)return;customPrompt('Başlık:','').then(function(t){t=t||'';iHTML('<p style="text-align:center;text-indent:0">[Şekil '+n+']</p><p style="text-align:center;text-indent:0;font-style:italic">Şekil '+n+(t?' - '+t:'')+'</p><p><br></p>');});});
 }
 function doTable(){
   try{
@@ -3575,6 +3616,26 @@ function tSB(side){var el=document.getElementById(side);var btn=document.getElem
 function swR(name,btn){document.querySelectorAll('.rtab').forEach(function(t){t.classList.remove('on');});document.querySelectorAll('.rpnl').forEach(function(p){p.classList.remove('on');});if(btn)btn.classList.add('on');var el=document.getElementById('rp'+name);if(el)el.classList.add('on');}
 function showM(id){document.getElementById(id).classList.add('show');}
 function hideM(id){document.getElementById(id).classList.remove('show');var inp=document.querySelector('#'+id+' .minp');if(inp)inp.value='';}
+// ── CUSTOM PROMPT (Electron-compatible) ──────────────────────────────────────
+var _promptResolve=null;
+function customPrompt(title,defaultVal){
+  return new Promise(function(resolve){
+    _promptResolve=resolve;
+    document.getElementById('promptTitle').textContent=title||'Giriş';
+    var inp=document.getElementById('promptInput');
+    inp.value=defaultVal||'';
+    showM('promptModal');
+    setTimeout(function(){inp.focus();inp.select();},50);
+  });
+}
+function resolvePrompt(ok){
+  hideM('promptModal');
+  if(_promptResolve){
+    var val=ok?document.getElementById('promptInput').value:null;
+    _promptResolve(val);
+    _promptResolve=null;
+  }
+}
 function opdd(id,btn){saveEditorSelection();cdd();var m=document.getElementById(id);var r=btn.getBoundingClientRect();m.style.top=(r.bottom+4)+'px';m.style.left=r.left+'px';m.classList.add('open');}
 function cdd(){document.querySelectorAll('.ddm').forEach(function(m){m.classList.remove('open');});}
 function cpStr(s){var ta=document.createElement('textarea');ta.value=s;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);}
