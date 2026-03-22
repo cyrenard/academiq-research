@@ -948,8 +948,10 @@ function switchDoc(docId){
   nc=nc.replace(/<div[^>]*class="pg-spacer"[^>]*>[\s\S]*?<\/div>/gi,'');
   nc=nc.replace(/<hr[^>]*class="pg-spacer"[^>]*\/?>/gi,'');
   if(editor){
-    editor.commands.setContent(nc||'<p></p>',false);
-    editor.commands.focus('end');
+    try{
+      editor.commands.setContent(nc||'<p></p>',false);
+      setTimeout(function(){if(editor)editor.commands.focus('end');},0);
+    }catch(ex){console.warn('switchDoc setContent error:',ex);}
   }else{
     document.getElementById('apaed').innerHTML=nc;
   }
@@ -3383,17 +3385,18 @@ function insertCitation(id){
     html='<span class="cit" data-ref="'+refIds+'"> '+citText+'</span>';
   }
   if(editor){
-    // Delete /r trigger text first if present
+    // Restore focus and delete /r trigger text if present
+    editor.commands.focus();
     var state=editor.state;
     var pos=state.selection.from;
     var textBefore=state.doc.textBetween(Math.max(0,pos-10),pos,'');
     var tm=textBefore.match(/\/r[^\s]*$/);
-    if(tm){
-      editor.chain().focus().deleteRange({from:pos-tm[0].length,to:pos}).insertContent(html).run();
-    }else{
-      editor.chain().focus().insertContent(html).run();
-    }
+    var chain=editor.chain().focus();
+    if(tm){chain.deleteRange({from:pos-tm[0].length,to:pos});}
+    // Insert citation as known CitationMark
+    chain.insertContent(html,{parseOptions:{preserveWhitespace:false}}).run();
   }else{
+    if(savedRange){var sel=window.getSelection();sel.removeAllRanges();sel.addRange(savedRange);}
     document.execCommand('insertHTML',false,html);
   }
   trigSelected=[];savedRange=null;closeTrig();uSt();save();updateRefSection();
@@ -3808,7 +3811,15 @@ function customPrompt(title,defaultVal){
     var inp=document.getElementById('promptInput');
     inp.value=defaultVal||'';
     showM('promptModal');
-    setTimeout(function(){inp.focus();inp.select();},50);
+    // Focus input — retry a few times to override TipTap focus capture
+    var attempts=0;
+    function tryFocus(){
+      inp.focus();inp.select();
+      if(document.activeElement!==inp&&attempts<5){
+        attempts++;setTimeout(tryFocus,60);
+      }
+    }
+    setTimeout(tryFocus,50);
   });
 }
 function resolvePrompt(ok){
@@ -4346,6 +4357,20 @@ function initTipTapEditor(){
   var edEl=document.getElementById('apaed');
   var existingHTML=edEl.innerHTML;
 
+  // Citation mark — preserves <span class="cit" data-ref="..."> in TipTap schema
+  var CitationMark=T.Mark.create({
+    name:'citation',
+    inclusive:false,
+    addAttributes:function(){
+      return{
+        'data-ref':{default:null,parseHTML:function(el){return el.getAttribute('data-ref')||null;},renderHTML:function(a){return a['data-ref']?{'data-ref':a['data-ref']}:{}}},
+        'data-id':{default:null,parseHTML:function(el){return el.getAttribute('data-id')||null;},renderHTML:function(a){return a['data-id']?{'data-id':a['data-id']}:{}}}
+      };
+    },
+    parseHTML:function(){return[{tag:'span.cit'}];},
+    renderHTML:function(r){return['span',T.mergeAttributes({'class':'cit'},r.HTMLAttributes),0];}
+  });
+
   // APA paste extension — cleans pasted HTML
   var APAPaste=T.Extension.create({
     name:'apaPaste',
@@ -4439,6 +4464,7 @@ function initTipTapEditor(){
         T.TableRow,
         T.TableCell,
         T.TableHeader,
+        CitationMark,
         APAPaste,
         SlashRTrigger
       ],
