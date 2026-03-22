@@ -948,7 +948,8 @@ function switchDoc(docId){
   nc=nc.replace(/<div[^>]*class="pg-spacer"[^>]*>[\s\S]*?<\/div>/gi,'');
   nc=nc.replace(/<hr[^>]*class="pg-spacer"[^>]*\/?>/gi,'');
   if(editor){
-    editor.commands.setContent(nc);
+    editor.commands.setContent(nc||'<p></p>',false);
+    editor.commands.focus('end');
   }else{
     document.getElementById('apaed').innerHTML=nc;
   }
@@ -2727,31 +2728,46 @@ function rRefs(){
   if(!refs.length){el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">Metinde atıf yok.</div>';return;}
   el.innerHTML=refs.map(function(r){return '<div class="ri"><div class="ricite">'+inText(r,S.cm)+'</div><div class="rifull">'+apa7(r)+'</div><div class="riacts"><button class="rib" onclick="cpStr(\''+apa7(r).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">Kopyala</button><button class="rib" onclick="openRef(\''+r.id+'\')">PDF</button></div></div>';}).join('');
 }
+var _refUpdating=false;
 function updateRefSection(){
   rRefs();
   var refs=getUsedRefs();if(!refs.length)return;
+  if(_refUpdating)return; // prevent re-entrant calls
   if(editor){
-    // Use TipTap API to find/update Kaynakça section
-    var edDom=editor.view.dom;
-    var refH1=Array.from(edDom.querySelectorAll('h1')).find(function(h){return h.textContent.trim()==='Kaynakça';});
-    // Build ref HTML
-    var refHTML='';
-    refs.forEach(function(r){refHTML+='<p class="refe">'+apa7(r).replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/&lt;/g,'<').replace(/&gt;/g,'>')+'</p>';});
-    if(!refH1){
-      // Append Kaynakça heading + refs at end
-      editor.commands.insertContentAt(editor.state.doc.content.size-1,'<h1>Kaynakça</h1>'+refHTML);
-    }else{
-      // Remove old .refe and re-insert via DOM, then sync TipTap state
-      var node=refH1.nextSibling;
-      while(node){var next=node.nextSibling;if(node.nodeType===1&&node.classList.contains('refe'))node.parentNode.removeChild(node);node=next;}
-      var tmp=document.createElement('div');tmp.innerHTML=refHTML;
-      var after=refH1;
-      while(tmp.firstChild){if(after.nextSibling)after.parentNode.insertBefore(tmp.firstChild,after.nextSibling);else after.parentNode.appendChild(tmp.firstChild);after=after.nextSibling||after.parentNode.lastChild;}
-      // Force TipTap to re-read DOM
-      var currentHTML=edDom.innerHTML;
-      editor.commands.setContent(currentHTML);
+    _refUpdating=true;
+    try{
+      var edDom=editor.view.dom;
+      var refH1=Array.from(edDom.querySelectorAll('h1')).find(function(h){return h.textContent.trim()==='Kaynakça';});
+      var refHTML='';
+      refs.forEach(function(r){refHTML+='<p class="refe">'+apa7(r)+'</p>';});
+      // Build the full new HTML with updated references
+      var fullHTML=editor.getHTML();
+      var div=document.createElement('div');div.innerHTML=fullHTML;
+      var h1s=div.querySelectorAll('h1');
+      var kayH1=Array.from(h1s).find(function(h){return h.textContent.trim()==='Kaynakça';});
+      if(!kayH1){
+        // Append Kaynakça + refs
+        div.innerHTML+=('<h1>Kaynakça</h1>'+refHTML);
+      }else{
+        // Remove old .refe paragraphs after the h1
+        var n=kayH1.nextSibling;
+        while(n){var nx=n.nextSibling;if(n.nodeType===1&&n.classList.contains('refe'))n.remove();n=nx;}
+        // Insert new ones after h1
+        var tmp=document.createElement('div');tmp.innerHTML=refHTML;
+        var ins=kayH1;
+        while(tmp.firstChild){
+          var fc=tmp.firstChild;
+          if(ins.nextSibling)ins.parentNode.insertBefore(fc,ins.nextSibling);
+          else ins.parentNode.appendChild(fc);
+          ins=fc;
+        }
+      }
+      // setContent with emitUpdate=false to avoid infinite loop
+      editor.commands.setContent(div.innerHTML,false);
+      save();
+    }finally{
+      setTimeout(function(){_refUpdating=false;},100);
     }
-    save();
     return;
   }
   var ed=document.getElementById('apaed');
@@ -2793,8 +2809,9 @@ function ec(cmd,val){
       case 'indent':c.sinkListItem('listItem').run();break;
       case 'outdent':c.liftListItem('listItem').run();break;
       default:
-        // Fallback for unknown commands
-        document.execCommand(cmd,false,val||null);
+        // TipTap active — execCommand doesn't work; skip unknown commands
+        console.warn('Unknown TipTap command ignored:',cmd);
+        return;
     }
     uSt();updateFmtState();return;
   }
@@ -2851,7 +2868,13 @@ document.addEventListener('selectionchange',function(){
     ctxMenu=document.createElement('div');ctxMenu.className='ctx-menu';
     var items=[];
     if(hasSelection){
-      items.push({label:'Kes',key:'Ctrl+X',fn:function(){document.execCommand('cut');}});
+      items.push({label:'Kes',key:'Ctrl+X',fn:function(){
+        if(editor){
+          var txt=editor.state.doc.textBetween(editor.state.selection.from,editor.state.selection.to,' ');
+          navigator.clipboard.writeText(txt).catch(function(){});
+          editor.chain().focus().deleteSelection().run();
+        }else{document.execCommand('cut');}
+      }});
       items.push({label:'Kopyala',key:'Ctrl+C',fn:function(){document.execCommand('copy');}});
     }
     items.push({label:'Yapıştır',key:'Ctrl+V',fn:function(){navigator.clipboard.readText().then(function(t){if(editor){editor.chain().focus().insertContent(t).run();}else{document.execCommand('insertText',false,t);}}).catch(function(){});}});
@@ -3450,7 +3473,7 @@ function applyTemplate(type){
   if(editor){editor.commands.setContent(html);}else{document.getElementById('apaed').innerHTML=html;}
   uSt();save();updatePageHeight();
 }
-function insImage(){saveEditorSelection();document.getElementById('imginp').click();}
+function insImage(){if(!editor)saveEditorSelection();document.getElementById('imginp').click();}
 function handleImgUpload(e){
   var file=e.target.files[0];if(!file)return;
   var reader=new FileReader();
@@ -3796,7 +3819,7 @@ function resolvePrompt(ok){
     _promptResolve=null;
   }
 }
-function opdd(id,btn){saveEditorSelection();cdd();var m=document.getElementById(id);var r=btn.getBoundingClientRect();m.style.top=(r.bottom+4)+'px';m.style.left=r.left+'px';m.classList.add('open');}
+function opdd(id,btn){if(!editor)saveEditorSelection();cdd();var m=document.getElementById(id);var r=btn.getBoundingClientRect();m.style.top=(r.bottom+4)+'px';m.style.left=r.left+'px';m.classList.add('open');}
 function cdd(){document.querySelectorAll('.ddm').forEach(function(m){m.classList.remove('open');});}
 function cpStr(s){var ta=document.createElement('textarea');ta.value=s;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);}
 // Close modals on bg click
@@ -4170,11 +4193,14 @@ function extractTableFromSelection(){
 
 // ── FONT SIZE APPLY ──────────────────────────────────────────────────────────
 function applyFontSize(pt){
+  if(editor){
+    editor.chain().focus().setMark('textStyle',{fontSize:pt+'pt'}).run();
+    uSt();save();return;
+  }
   var ed=document.getElementById('apaed');
   ed.focus();
   var sel=window.getSelection();
   if(!sel||sel.isCollapsed)return;
-  // Use fontSize command (1-7) as base, then fix with span
   document.execCommand('fontSize',false,'7');
   ed.querySelectorAll('font[size="7"]').forEach(function(font){
     var span=document.createElement('span');
@@ -4367,17 +4393,40 @@ function initTipTapEditor(){
     }
   });
 
+  // Custom Paragraph — preserves class and style attributes (e.g. "refe", "ni")
+  var APAParagraph=T.Paragraph.extend({
+    addAttributes:function(){
+      return Object.assign({},this.parent?this.parent():{},{
+        class:{default:null,parseHTML:function(el){return el.getAttribute('class')||null;},renderHTML:function(a){return a.class?{class:a.class}:{}}},
+        style:{default:null,parseHTML:function(el){return el.getAttribute('style')||null;},renderHTML:function(a){return a.style?{style:a.style}:{}}}
+      });
+    }
+  });
+
+  // Custom Heading — preserves class and style attributes
+  var APAHeading=T.Heading.extend({
+    addAttributes:function(){
+      return Object.assign({},this.parent?this.parent():{},{
+        class:{default:null,parseHTML:function(el){return el.getAttribute('class')||null;},renderHTML:function(a){return a.class?{class:a.class}:{}}},
+        style:{default:null,parseHTML:function(el){return el.getAttribute('style')||null;},renderHTML:function(a){return a.style?{style:a.style}:{}}}
+      });
+    }
+  });
+
   try{
     // Remove contenteditable from wrapper — TipTap will set it on its own .ProseMirror div
     edEl.removeAttribute('contenteditable');
     editor=new T.Editor({
       element:edEl,
-      content:existingHTML,
+      content:existingHTML||'<p></p>',
       extensions:[
         T.StarterKit.configure({
-          heading:{levels:[1,2,3,4,5]},
+          paragraph:false,   // replaced by APAParagraph
+          heading:false,     // replaced by APAHeading
           history:{depth:100}
         }),
+        APAParagraph,
+        APAHeading.configure({levels:[1,2,3,4,5]}),
         T.Underline,
         T.TextAlign.configure({types:['heading','paragraph']}),
         T.Placeholder.configure({placeholder:'Yazmaya başlayın...'}),
@@ -4456,7 +4505,7 @@ function toggleZenMode(){
   if(zenActive){
     zenStartTime=Date.now();
     zenTimer=setInterval(updateZenTime,1000);
-    document.getElementById('apaed').focus();
+    if(editor){editor.commands.focus('end');}else{document.getElementById('apaed').focus();}
     // Mouse auto-hide for zen toolbar
     document.addEventListener('mousemove',zenMouseMove);
   }else{

@@ -3,6 +3,8 @@
 
 export { Editor, Extension, Node, Mark, mergeAttributes } from '@tiptap/core';
 export { StarterKit } from '@tiptap/starter-kit';
+export { Paragraph } from '@tiptap/extension-paragraph';
+export { Heading } from '@tiptap/extension-heading';
 export { Underline } from '@tiptap/extension-underline';
 export { TextAlign } from '@tiptap/extension-text-align';
 export { Placeholder } from '@tiptap/extension-placeholder';
