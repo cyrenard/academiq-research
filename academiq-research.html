@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <title>AcademiQ Research</title>
+<script src="tiptap-bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Playfair+Display:ital,wght@0,600;1,400&display=swap" rel="stylesheet"/>
@@ -148,6 +149,9 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:13px;d
   @page{size:letter;margin:0;}
 }
 #apaed:empty::before{content:'Yazmaya başlayın. Atıf için /r yazın...';color:#bbb;font-style:italic;pointer-events:none;}
+/* TipTap ProseMirror */
+#apaed .ProseMirror{outline:none;min-height:864px;caret-color:#0044cc;}
+#apaed .ProseMirror p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:#bbb;font-style:italic;pointer-events:none;float:left;height:0;}
 .toc-container{border:1px solid #e0d8cc;padding:12px 16px;margin:0 0 12px 0;border-radius:4px;background:#faf8f4;position:relative;}
 .toc-container .toc-delete{position:absolute;top:4px;right:4px;background:#e74c3c;color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;}
 .toc-container:hover .toc-delete{opacity:1;}
@@ -725,6 +729,9 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
+// ── TIPTAP EDITOR ─────────────────────────────────────────────────────────
+var editor = null; // TipTap editor instance (null = fallback to old contenteditable)
+
 // ── STATE ──────────────────────────────────────────────────────────────────
 var S={
   wss:[{id:'ws1',name:'Çalışma Alanı 1',lib:[]}],
@@ -767,9 +774,8 @@ function setSL(msg,cls){
 }
 
 async function syncSave(){
-  var ed=document.getElementById('apaed');
   // Save innerHTML WITHOUT mutating the editor DOM (no remove calls!)
-  var html=ed.innerHTML;
+  var html=editor?editor.getHTML():document.getElementById('apaed').innerHTML;
   // Strip legacy page-break elements and spacers from the saved string only
   html=html.replace(/<div[^>]*class="page-break[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');
   html=html.replace(/<div[^>]*class="page-top-spacer[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');
@@ -871,7 +877,11 @@ async function syncLoad(){
   rawHTML=rawHTML.replace(/<div[^>]*class="page-number[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');
   rawHTML=rawHTML.replace(/<hr[^>]*class="pg-spacer"[^>]*\/?>/gi,'');
   rawHTML=rawHTML.replace(/<div[^>]*class="pg-spacer"[^>]*>[\s\S]*?<\/div>/gi,'');
-  document.getElementById('apaed').innerHTML=rawHTML;
+  if(editor){
+    editor.commands.setContent(rawHTML);
+  }else{
+    document.getElementById('apaed').innerHTML=rawHTML;
+  }
   if(typeof updatePageHeight==='function')updatePageHeight();
 }
 
@@ -927,8 +937,8 @@ function rDocTabs(){
 function switchDoc(docId){
   // Save current doc content (cleaned)
   var cur=S.docs.find(function(d){return d.id===S.curDoc;});
-  var ed=document.getElementById('apaed');
-  if(cur){var ch=ed.innerHTML;ch=ch.replace(/<div[^>]*class="page-break[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');ch=ch.replace(/<div[^>]*class="page-top-spacer[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');ch=ch.replace(/<hr[^>]*class="pg-spacer"[^>]*\/?>/gi,'');ch=ch.replace(/<div[^>]*class="pg-spacer"[^>]*>[\s\S]*?<\/div>/gi,'');cur.content=ch;}
+  var ch=editor?editor.getHTML():document.getElementById('apaed').innerHTML;
+  if(cur){ch=ch.replace(/<div[^>]*class="page-break[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');ch=ch.replace(/<div[^>]*class="page-top-spacer[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');ch=ch.replace(/<hr[^>]*class="pg-spacer"[^>]*\/?>/gi,'');ch=ch.replace(/<div[^>]*class="pg-spacer"[^>]*>[\s\S]*?<\/div>/gi,'');cur.content=ch;}
   // Switch
   S.curDoc=docId;
   var next=S.docs.find(function(d){return d.id===docId;});
@@ -937,7 +947,11 @@ function switchDoc(docId){
   nc=nc.replace(/<div[^>]*class="page-top-spacer[^"]*"[^>]*>[\s\S]*?<\/div>/gi,'');
   nc=nc.replace(/<div[^>]*class="pg-spacer"[^>]*>[\s\S]*?<\/div>/gi,'');
   nc=nc.replace(/<hr[^>]*class="pg-spacer"[^>]*\/?>/gi,'');
-  ed.innerHTML=nc;
+  if(editor){
+    editor.commands.setContent(nc);
+  }else{
+    document.getElementById('apaed').innerHTML=nc;
+  }
   save();rDocTabs();uSt();updatePageHeight();
 }
 
@@ -2707,7 +2721,7 @@ function insCiteNote(id){var n=S.notes.find(function(x){return x.id==id;});if(!n
 function saveNote(){var txt=document.getElementById('noteta').value.trim();if(!txt)return;var tag=document.getElementById('notetag').value.trim()||'genel';S.notes.unshift({id:uid(),nbId:S.curNb,type:'m',txt:txt,q:'',src:curRef?shortRef(curRef):'',rid:curRef?curRef.id:'',tag:tag,dt:new Date().toLocaleDateString('tr-TR')});save();rNotes();document.getElementById('noteta').value='';document.getElementById('notetag').value='';}
 
 // ── REFS ──────────────────────────────────────────────────────────────────────
-function getUsedRefs(){var rawIds=Array.from(document.getElementById('apaed').querySelectorAll('.cit')).map(function(c){return c.dataset.ref;}).filter(Boolean);var allIds=[];rawIds.forEach(function(rid){rid.split(',').forEach(function(id){id=id.trim();if(id&&allIds.indexOf(id)<0)allIds.push(id);});});return sortLib(allIds.map(function(id){return findRef(id);}).filter(Boolean));}
+function getUsedRefs(){var edEl=editor?editor.view.dom:document.getElementById('apaed');var rawIds=Array.from(edEl.querySelectorAll('.cit')).map(function(c){return c.dataset.ref;}).filter(Boolean);var allIds=[];rawIds.forEach(function(rid){rid.split(',').forEach(function(id){id=id.trim();if(id&&allIds.indexOf(id)<0)allIds.push(id);});});return sortLib(allIds.map(function(id){return findRef(id);}).filter(Boolean));}
 function rRefs(){
   var refs=getUsedRefs();var el=document.getElementById('reflist');
   if(!refs.length){el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">Metinde atıf yok.</div>';return;}
@@ -2715,7 +2729,32 @@ function rRefs(){
 }
 function updateRefSection(){
   rRefs();
-  var ed=document.getElementById('apaed');var refs=getUsedRefs();if(!refs.length)return;
+  var refs=getUsedRefs();if(!refs.length)return;
+  if(editor){
+    // Use TipTap API to find/update Kaynakça section
+    var edDom=editor.view.dom;
+    var refH1=Array.from(edDom.querySelectorAll('h1')).find(function(h){return h.textContent.trim()==='Kaynakça';});
+    // Build ref HTML
+    var refHTML='';
+    refs.forEach(function(r){refHTML+='<p class="refe">'+apa7(r).replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/&lt;/g,'<').replace(/&gt;/g,'>')+'</p>';});
+    if(!refH1){
+      // Append Kaynakça heading + refs at end
+      editor.commands.insertContentAt(editor.state.doc.content.size-1,'<h1>Kaynakça</h1>'+refHTML);
+    }else{
+      // Remove old .refe and re-insert via DOM, then sync TipTap state
+      var node=refH1.nextSibling;
+      while(node){var next=node.nextSibling;if(node.nodeType===1&&node.classList.contains('refe'))node.parentNode.removeChild(node);node=next;}
+      var tmp=document.createElement('div');tmp.innerHTML=refHTML;
+      var after=refH1;
+      while(tmp.firstChild){if(after.nextSibling)after.parentNode.insertBefore(tmp.firstChild,after.nextSibling);else after.parentNode.appendChild(tmp.firstChild);after=after.nextSibling||after.parentNode.lastChild;}
+      // Force TipTap to re-read DOM
+      var currentHTML=edDom.innerHTML;
+      editor.commands.setContent(currentHTML);
+    }
+    save();
+    return;
+  }
+  var ed=document.getElementById('apaed');
   var refH1=Array.from(ed.querySelectorAll('h1')).find(function(h){return h.textContent.trim()==='Kaynakça';});
   if(!refH1){var h=document.createElement('h1');h.textContent='Kaynakça';ed.appendChild(h);refH1=h;}
   var node=refH1.nextSibling;
@@ -2726,7 +2765,41 @@ function updateRefSection(){
 }
 
 // ── EDITOR ────────────────────────────────────────────────────────────────────
-function ec(cmd,val){document.getElementById('apaed').focus();document.execCommand(cmd,false,val||null);uSt();updateFmtState();}
+function ec(cmd,val){
+  if(editor){
+    var c=editor.chain().focus();
+    switch(cmd){
+      case 'bold':c.toggleBold().run();break;
+      case 'italic':c.toggleItalic().run();break;
+      case 'underline':c.toggleUnderline().run();break;
+      case 'strikeThrough':c.toggleStrike().run();break;
+      case 'formatBlock':
+        if(val==='h1')c.toggleHeading({level:1}).run();
+        else if(val==='h2')c.toggleHeading({level:2}).run();
+        else if(val==='h3')c.toggleHeading({level:3}).run();
+        else if(val==='h4')c.toggleHeading({level:4}).run();
+        else if(val==='h5')c.toggleHeading({level:5}).run();
+        else if(val==='p')c.setParagraph().run();
+        break;
+      case 'justifyLeft':c.setTextAlign('left').run();break;
+      case 'justifyCenter':c.setTextAlign('center').run();break;
+      case 'justifyRight':c.setTextAlign('right').run();break;
+      case 'justifyFull':c.setTextAlign('justify').run();break;
+      case 'insertUnorderedList':c.toggleBulletList().run();break;
+      case 'insertOrderedList':c.toggleOrderedList().run();break;
+      case 'fontName':c.setFontFamily(val).run();break;
+      case 'foreColor':c.setColor(val).run();break;
+      case 'hiliteColor':c.toggleHighlight({color:val}).run();break;
+      case 'indent':c.sinkListItem('listItem').run();break;
+      case 'outdent':c.liftListItem('listItem').run();break;
+      default:
+        // Fallback for unknown commands
+        document.execCommand(cmd,false,val||null);
+    }
+    uSt();updateFmtState();return;
+  }
+  document.getElementById('apaed').focus();document.execCommand(cmd,false,val||null);uSt();updateFmtState();
+}
 // ── LINE SPACING ───────────────────────────────────────────────────────────
 function setLineSpacing(val){
   var ed=document.getElementById('apaed');
@@ -2745,6 +2818,11 @@ function editorZoom(delta){
 // ── FORMATTING STATE FEEDBACK ──────────────────────────────────────────────
 function updateFmtState(){
   try{
+    if(editor){
+      var checks=[{id:'btnBold',fn:function(){return editor.isActive('bold');}},{id:'btnItalic',fn:function(){return editor.isActive('italic');}},{id:'btnUnderline',fn:function(){return editor.isActive('underline');}},{id:'btnStrike',fn:function(){return editor.isActive('strike');}}];
+      checks.forEach(function(c){var btn=document.getElementById(c.id);if(btn){if(c.fn())btn.classList.add('active');else btn.classList.remove('active');}});
+      return;
+    }
     var cmds=[{id:'btnBold',cmd:'bold'},{id:'btnItalic',cmd:'italic'},{id:'btnUnderline',cmd:'underline'},{id:'btnStrike',cmd:'strikeThrough'}];
     cmds.forEach(function(c){
       var btn=document.getElementById(c.id);
@@ -2776,7 +2854,7 @@ document.addEventListener('selectionchange',function(){
       items.push({label:'Kes',key:'Ctrl+X',fn:function(){document.execCommand('cut');}});
       items.push({label:'Kopyala',key:'Ctrl+C',fn:function(){document.execCommand('copy');}});
     }
-    items.push({label:'Yapıştır',key:'Ctrl+V',fn:function(){navigator.clipboard.readText().then(function(t){document.execCommand('insertText',false,t);}).catch(function(){});}});
+    items.push({label:'Yapıştır',key:'Ctrl+V',fn:function(){navigator.clipboard.readText().then(function(t){if(editor){editor.chain().focus().insertContent(t).run();}else{document.execCommand('insertText',false,t);}}).catch(function(){});}});
     if(hasSelection){
       items.push({sep:true});
       items.push({label:'Kalın',key:'Ctrl+B',fn:function(){ec('bold');}});
@@ -2784,7 +2862,7 @@ document.addEventListener('selectionchange',function(){
       items.push({label:'Altı Çizili',key:'Ctrl+U',fn:function(){ec('underline');}});
     }
     items.push({sep:true});
-    items.push({label:'Tümünü Seç',key:'Ctrl+A',fn:function(){document.execCommand('selectAll');}});
+    items.push({label:'Tümünü Seç',key:'Ctrl+A',fn:function(){if(editor){editor.commands.selectAll();}else{document.execCommand('selectAll');}}});
     items.forEach(function(item){
       if(item.sep){var s=document.createElement('div');s.className='ctx-sep';ctxMenu.appendChild(s);return;}
       var d=document.createElement('div');
@@ -2799,6 +2877,12 @@ document.addEventListener('selectionchange',function(){
   });
 })();
 function iHTML(html){
+  if(editor){
+    editor.chain().focus().insertContent(html).run();
+    uSt();save();
+    if(typeof updatePageHeight==='function')updatePageHeight();
+    return;
+  }
   var ed=document.getElementById('apaed');
   ed.focus();
   var ok=false;
@@ -2825,7 +2909,21 @@ function iHTML(html){
   uSt();save();
   if(typeof updatePageHeight==='function')updatePageHeight();
 }
-function uSt(){var ed=document.getElementById('apaed');var txt=ed.innerText||'';var words=txt.trim().split(/\s+/).filter(function(w){return w.length>0;}).length;var cites=ed.querySelectorAll('.cit').length;var refs=getUsedRefs().length;document.getElementById('tbinfo').textContent=words+' kelime';document.getElementById('sbw').textContent=words+' kelime';document.getElementById('sbc').textContent=cites+' atıf';document.getElementById('sbr2').textContent=refs+' kaynak';
+function uSt(){var txt='';var cites=0;var refs=0;
+  if(editor){
+    txt=editor.getText();
+    // Count citations from editor DOM
+    var edEl=editor.view.dom;
+    cites=edEl.querySelectorAll('.cit').length;
+    refs=getUsedRefs().length;
+  }else{
+    var ed=document.getElementById('apaed');
+    txt=ed.innerText||'';
+    cites=ed.querySelectorAll('.cit').length;
+    refs=getUsedRefs().length;
+  }
+  var words=txt.trim().split(/\s+/).filter(function(w){return w.length>0;}).length;
+  document.getElementById('tbinfo').textContent=words+' kelime';document.getElementById('sbw').textContent=words+' kelime';document.getElementById('sbc').textContent=cites+' atıf';document.getElementById('sbr2').textContent=refs+' kaynak';
   // Word goal progress
   var goalEl=document.getElementById('sbgoal');
   if(S.wordGoal&&S.wordGoal>0){
@@ -2837,6 +2935,8 @@ function uSt(){var ed=document.getElementById('apaed');var txt=ed.innerText||'';
 }
 function setWordGoal(){customPrompt('Kelime hedefi:',S.wordGoal||'').then(function(g){if(g===null)return;S.wordGoal=parseInt(g)||0;save();uSt();});}
 // ── APA PASTE FORMATTING ─────────────────────────────────────────────────────
+// TipTap handles paste via its own extension; this listener is for fallback mode only
+if(!window.TipTap){
 document.getElementById('apaed').addEventListener('paste',function(e){
   var html=e.clipboardData.getData('text/html');
   var text=e.clipboardData.getData('text/plain');
@@ -2852,6 +2952,7 @@ document.getElementById('apaed').addEventListener('paste',function(e){
   }
   uSt();save();updatePageHeight();
 });
+}
 function cleanPastedHTML(html){
   var div=document.createElement('div');div.innerHTML=html;
   // Remove mso styles, spans with only style, comments
@@ -2904,15 +3005,17 @@ function formatPlainTextAPA(text){
 }
 
 var _refTimer=null;
+// Input listener — for fallback mode; TipTap uses onUpdate callback
+if(!window.TipTap){
 document.getElementById('apaed').addEventListener('input',function(){
   uSt();save();updatePageHeight();autoUpdateTOC();
-  // Auto-update kaynakça if it exists
   clearTimeout(_refTimer);
   _refTimer=setTimeout(function(){
     var refH1=Array.from(document.getElementById('apaed').querySelectorAll('h1')).find(function(h){return h.textContent.trim()==='Kaynakça';});
     if(refH1)updateRefSection();
   },2000);
 });
+}
 
 // ── PAGE HEIGHT AUTO-ADJUST WITH PAGE BREAKS ────────────────────────────────
 var _pgTimer=null;
@@ -2922,17 +3025,48 @@ function updatePageHeight(){
 }
 function _doUpdatePageHeight(){
   var page=document.getElementById('apapage');
-  var ed=document.getElementById('apaed');
+  var ed=editor?editor.view.dom:document.getElementById('apaed');
   if(!page||!ed)return;
+
+  // Remove old overlays from #apapage
+  page.querySelectorAll('.page-break-overlay,.page-number').forEach(function(pb){pb.remove();});
+
+  // When TipTap is active, do NOT insert spacers into the DOM — only overlays on #apapage
+  if(editor){
+    var contentH=ed.scrollHeight;
+    var pageContentH=864;
+    var numPages=Math.max(1,Math.ceil(contentH/pageContentH));
+    var pageH=1056,gapH=32;
+    page.style.minHeight=(numPages*pageH+(numPages-1)*gapH)+'px';
+    if(S.showPageNumbers){
+      for(var p=0;p<numPages;p++){
+        var pn=document.createElement('div');
+        pn.className='page-number';
+        pn.textContent=String(p+1);
+        pn.style.top=(p*(pageH+gapH)+48)+'px';
+        page.appendChild(pn);
+      }
+    }
+    if(numPages>1){
+      for(var bi=1;bi<numPages;bi++){
+        var pb=document.createElement('div');
+        pb.className='page-break-overlay';
+        pb.style.top=(bi*pageH+(bi-1)*gapH+96)+'px';
+        pb.dataset.label='Sayfa '+(bi+1);
+        page.appendChild(pb);
+      }
+    }
+    return;
+  }
+
+  // --- Fallback (non-TipTap) spacer system ---
   // Save cursor position before DOM changes
   var savedSel=null;
   try{
     var sel=window.getSelection();
     if(sel&&sel.rangeCount&&ed.contains(sel.anchorNode)){
       var range=sel.getRangeAt(0);
-      // Find the text node offset relative to non-spacer content
       savedSel={node:range.startContainer,offset:range.startOffset,collapsed:range.collapsed};
-      // If cursor is inside a spacer, move reference to adjacent content
       var spacerParent=savedSel.node.nodeType===1?(savedSel.node.closest?savedSel.node.closest('.pg-spacer'):null):(savedSel.node.parentElement&&savedSel.node.parentElement.closest?savedSel.node.parentElement.closest('.pg-spacer'):null);
       if(spacerParent){
         var adj=spacerParent.nextElementSibling||spacerParent.previousElementSibling;
@@ -2941,10 +3075,8 @@ function _doUpdatePageHeight(){
       }
     }
   }catch(ex){savedSel=null;}
-  // Remove old overlays from #apapage
-  page.querySelectorAll('.page-break-overlay,.page-number').forEach(function(pb){pb.remove();});
   // Remove old spacers from editor
-  _guardMoving=true; // prevent cursor guard from firing during DOM changes
+  _guardMoving=true;
   ed.querySelectorAll('.pg-spacer').forEach(function(s){s.remove();});
   var contentH=ed.scrollHeight;
   var pageContentH=864;
@@ -3007,6 +3139,7 @@ function _doUpdatePageHeight(){
 // ── CURSOR GUARD: prevent cursor from staying in spacers ──────────────────
 var _guardMoving=false;
 document.addEventListener('selectionchange',function(){
+  if(editor)return; // TipTap manages its own selection
   if(_guardMoving)return;
   var sel=window.getSelection();
   if(!sel||!sel.rangeCount)return;
@@ -3028,6 +3161,7 @@ document.addEventListener('selectionchange',function(){
 
 // ── SPACER PROTECTION: prevent backspace/delete from removing spacers ──────
 document.getElementById('apaed').addEventListener('keydown',function(e){
+  if(editor)return; // TipTap handles its own keydown — no spacers in TipTap mode
   if(e.key!=='Backspace'&&e.key!=='Delete')return;
   var sel=window.getSelection();
   if(!sel||!sel.rangeCount||!sel.isCollapsed)return;
@@ -3091,6 +3225,7 @@ tblDelBtn.addEventListener('click',function(e){
   }
 });
 document.getElementById('apaed').addEventListener('keydown',function(e){
+  if(editor)return; // TipTap handles its own table operations
   if(selectedTable&&(e.key==='Delete'||e.key==='Backspace')){
     if(document.getElementById('apaed').contains(selectedTable)){
       e.preventDefault();
@@ -3224,11 +3359,24 @@ function insertCitation(id){
     var refIds=refs.map(function(r){return r.id;}).join(',');
     html='<span class="cit" data-ref="'+refIds+'"> '+citText+'</span>';
   }
-  document.execCommand('insertHTML',false,html);
+  if(editor){
+    // Delete /r trigger text first if present
+    var state=editor.state;
+    var pos=state.selection.from;
+    var textBefore=state.doc.textBetween(Math.max(0,pos-10),pos,'');
+    var tm=textBefore.match(/\/r[^\s]*$/);
+    if(tm){
+      editor.chain().focus().deleteRange({from:pos-tm[0].length,to:pos}).insertContent(html).run();
+    }else{
+      editor.chain().focus().insertContent(html).run();
+    }
+  }else{
+    document.execCommand('insertHTML',false,html);
+  }
   trigSelected=[];savedRange=null;closeTrig();uSt();save();updateRefSection();
 }
-function closeTrig(){trigOn=false;trigIdx=-1;trigSelected=[];document.getElementById('trig').classList.remove('show');document.getElementById('apaed').focus();}
-function doTrigRef(){document.getElementById('apaed').focus();document.execCommand('insertText',false,'/r');checkTrig();}
+function closeTrig(){trigOn=false;trigIdx=-1;trigSelected=[];document.getElementById('trig').classList.remove('show');if(editor)editor.commands.focus();else document.getElementById('apaed').focus();}
+function doTrigRef(){if(editor){editor.chain().focus().insertContent('/r').run();}else{document.getElementById('apaed').focus();document.execCommand('insertText',false,'/r');}checkTrig();}
 function setCM(m,btn){S.cm=m;document.querySelectorAll('.tgm').forEach(function(b){b.classList.remove('on');});btn.classList.add('on');renderTrig(document.getElementById('tgs').value);rRefs();}
 document.getElementById('tgs').addEventListener('input',function(){renderTrig(this.value);});
 document.getElementById('tgs').addEventListener('keydown',function(e){
@@ -3269,18 +3417,22 @@ function doCover(){
   var ogr=document.getElementById('cvprof').value.trim();
   var dt=new Date().toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'});
   hideM('covermodal');
-  var ed=document.getElementById('apaed');
-  var div=document.createElement('div');
-  div.style.cssText='text-align:center;padding-top:192px;font-family:Times New Roman,serif;font-size:12pt;line-height:2;';
+  var coverHTML='<div style="text-align:center;padding-top:192px;font-family:Times New Roman,serif;font-size:12pt;line-height:2;">';
   var fields=[{t:t,b:true}];
   if(a)fields.push({t:a});if(af)fields.push({t:af});
   if(ders)fields.push({t:ders});if(ogr)fields.push({t:ogr});
   fields.push({t:dt});
-  fields.forEach(function(f){var p=document.createElement('p');p.style.textIndent='0';if(f.b)p.style.fontWeight='bold';p.textContent=f.t;div.appendChild(p);});
-  ed.insertBefore(div,ed.firstChild);
-  var br=document.createElement('p');br.innerHTML='<br>';
-  if(div.nextSibling)ed.insertBefore(br,div.nextSibling);else ed.appendChild(br);
-  ed.focus();uSt();save();if(typeof updatePageHeight==='function')updatePageHeight();
+  fields.forEach(function(f){coverHTML+='<p style="text-indent:0;'+(f.b?'font-weight:bold;':'')+'">'+f.t.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</p>';});
+  coverHTML+='</div><p><br></p>';
+  if(editor){
+    // Insert at the beginning
+    editor.commands.insertContentAt(0,coverHTML);
+  }else{
+    var ed=document.getElementById('apaed');
+    var tmp=document.createElement('div');tmp.innerHTML=coverHTML;
+    while(tmp.lastChild)ed.insertBefore(tmp.lastChild,ed.firstChild);
+  }
+  uSt();save();if(typeof updatePageHeight==='function')updatePageHeight();
   // Clear inputs
   ['cvtitle','cvauthor','cvinst','cvcourse','cvprof'].forEach(function(id){document.getElementById(id).value='';});
 }
@@ -3295,7 +3447,7 @@ function applyTemplate(type){
   };
   var html=templates[type];
   if(!html)return;
-  document.getElementById('apaed').innerHTML=html;
+  if(editor){editor.commands.setContent(html);}else{document.getElementById('apaed').innerHTML=html;}
   uSt();save();updatePageHeight();
 }
 function insImage(){saveEditorSelection();document.getElementById('imginp').click();}
@@ -3303,6 +3455,11 @@ function handleImgUpload(e){
   var file=e.target.files[0];if(!file)return;
   var reader=new FileReader();
   reader.onload=function(ev){
+    if(editor){
+      editor.chain().focus().setImage({src:ev.target.result,alt:file.name}).run();
+      uSt();save();updatePageHeight();
+      return;
+    }
     var ed=document.getElementById('apaed');ed.focus();
     if(editorSavedRange){try{var s=window.getSelection();s.removeAllRanges();s.addRange(editorSavedRange);}catch(ex){}editorSavedRange=null;}
     var html='<div style="text-align:left;margin:12px 0;text-indent:0"><img src="'+ev.target.result+'" style="max-width:100%;height:auto;border:1px solid var(--b);border-radius:4px;" alt="'+file.name+'"/></div><p><br></p>';
@@ -3385,7 +3542,9 @@ function handleImgUpload(e){
   function removeImgToolbar(){document.querySelectorAll('#apaed .img-toolbar').forEach(function(t){t.remove();});}
   // Delete key removes selected image
   document.addEventListener('keydown',function(e){
-    if(selectedImg&&(e.key==='Delete'||e.key==='Backspace')&&document.activeElement.id!=='apaed'){
+    var ae=document.activeElement;
+    var editorFocused=ae&&(ae.id==='apaed'||ae.classList.contains('ProseMirror')||(ae.closest&&ae.closest('#apaed')));
+    if(selectedImg&&(e.key==='Delete'||e.key==='Backspace')&&!editorFocused){
       e.preventDefault();
       var wrap=selectedImg.parentElement;
       if(wrap&&wrap!==document.getElementById('apaed'))wrap.remove();
@@ -3404,10 +3563,11 @@ function handleImgUpload(e){
     var wrap=img.parentElement;
     if(!wrap||wrap.id==='apaed')return;
     dragImg=img;dragWrap=wrap;dragStartY=e.clientY;
-    e.preventDefault();
+    // Do NOT preventDefault here — it blocks TipTap click/cursor placement
     function onMove(ev){
       if(!dragImg)return;
       if(Math.abs(ev.clientY-dragStartY)<10)return;
+      ev.preventDefault(); // only prevent default once actually dragging
       if(!dragGhost){
         dragGhost=document.createElement('div');
         dragGhost.style.cssText='position:fixed;pointer-events:none;opacity:.5;z-index:100;';
@@ -3447,10 +3607,9 @@ function handleImgUpload(e){
 // ── PAGE CLICK: clicking on margin/padding area focuses editor ──────────────
 document.getElementById('apapage').addEventListener('click',function(e){
   if(e.target===this){
-    // Clicked on margin area (not on editor or overlays)
+    if(editor){editor.commands.focus('end');return;}
     var ed=document.getElementById('apaed');
     ed.focus();
-    // Place cursor at end of content
     var lastEl=ed.lastElementChild;
     if(lastEl){
       var r=document.createRange();
@@ -3462,6 +3621,7 @@ document.getElementById('apapage').addEventListener('click',function(e){
 // ── ESCROLL CLICK: clicking on grey area focuses editor ─────────────────────
 document.getElementById('escroll').addEventListener('click',function(e){
   if(e.target===this){
+    if(editor){editor.commands.focus('end');return;}
     var ed=document.getElementById('apaed');
     ed.focus();
     var lastEl=ed.lastElementChild;
@@ -3554,7 +3714,7 @@ var _tocTimer=null;
 function autoUpdateTOC(){
   clearTimeout(_tocTimer);
   _tocTimer=setTimeout(function(){
-    var ed=document.getElementById('apaed');
+    var ed=editor?editor.view.dom:document.getElementById('apaed');
     if(!ed)return;
     var existing=ed.querySelector('.toc-container');
     if(!existing)return;
@@ -3607,7 +3767,7 @@ function doTable(){
 }
 
 // ── EXPORT ────────────────────────────────────────────────────────────────────
-function expDOC(){var h='<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:"Times New Roman",serif;font-size:12pt;line-height:2;margin:2.54cm;}h1{font-size:12pt;font-weight:bold;text-align:center;margin:0;text-indent:0;}h2{font-size:12pt;font-weight:bold;text-align:left;margin:0;text-indent:0;}h3{font-size:12pt;font-weight:bold;font-style:italic;margin:0;text-indent:0;}h4{font-size:12pt;font-weight:bold;margin:0;text-indent:.5in;}h5{font-size:12pt;font-weight:bold;font-style:italic;margin:0;text-indent:.5in;}p{margin:0;text-indent:.5in;}.ni{text-indent:0;}.cit{color:#000;border:none;}.refe{text-indent:-.5in;padding-left:.5in;margin:0;}blockquote{padding-left:.5in;text-indent:0;margin:0;}table{width:100%;border-collapse:collapse;font-size:12pt;}th{border-top:1.5px solid #000;border-bottom:1px solid #000;padding:4px 8px;}td{padding:4px 8px;}</style></head><body>'+document.getElementById('apaed').innerHTML+'</body></html>';saveAs(new Blob([h],{type:'application/msword'}),'makale.doc');}
+function expDOC(){var edHTML=editor?editor.getHTML():document.getElementById('apaed').innerHTML;var h='<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:"Times New Roman",serif;font-size:12pt;line-height:2;margin:2.54cm;}h1{font-size:12pt;font-weight:bold;text-align:center;margin:0;text-indent:0;}h2{font-size:12pt;font-weight:bold;text-align:left;margin:0;text-indent:0;}h3{font-size:12pt;font-weight:bold;font-style:italic;margin:0;text-indent:0;}h4{font-size:12pt;font-weight:bold;margin:0;text-indent:.5in;}h5{font-size:12pt;font-weight:bold;font-style:italic;margin:0;text-indent:.5in;}p{margin:0;text-indent:.5in;}.ni{text-indent:0;}.cit{color:#000;border:none;}.refe{text-indent:-.5in;padding-left:.5in;margin:0;}blockquote{padding-left:.5in;text-indent:0;margin:0;}table{width:100%;border-collapse:collapse;font-size:12pt;}th{border-top:1.5px solid #000;border-bottom:1px solid #000;padding:4px 8px;}td{padding:4px 8px;}</style></head><body>'+edHTML+'</body></html>';saveAs(new Blob([h],{type:'application/msword'}),'makale.doc');}
 function expNotes(){var t=S.notes.map(function(n,i){var nb=S.notebooks.find(function(x){return x.id===n.nbId;});return (i+1)+'. ['+(nb?nb.name:'?')+'] '+(n.src?'('+n.src+') ':'')+'\n'+(n.txt||'')+(n.q?'\nAlıntı: "'+n.q+'"':'');}).join('\n\n');saveAs(new Blob([t],{type:'text/plain;charset=utf-8'}),'notlar.txt');}
 function expLib(){var c=[];S.wss.forEach(function(ws){(ws.lib||[]).forEach(function(r){var x=Object.assign({},r);delete x.pdfData;c.push(x);});});saveAs(new Blob([JSON.stringify(c,null,2)],{type:'application/json'}),'kutuphane.json');}
 
@@ -4153,9 +4313,120 @@ function autoCheckUpdate(){
   },5000); // 5 saniye sonra kontrol et
 }
 
+// ── TIPTAP INIT ──────────────────────────────────────────────────────────────
+function initTipTapEditor(){
+  if(!window.TipTap){console.warn('TipTap bundle not loaded, using fallback contenteditable');return;}
+  var T=window.TipTap;
+  var edEl=document.getElementById('apaed');
+  var existingHTML=edEl.innerHTML;
+
+  // APA paste extension — cleans pasted HTML
+  var APAPaste=T.Extension.create({
+    name:'apaPaste',
+    addProseMirrorPlugins:function(){
+      var _this=this;
+      return [new T.PmPlugin({
+        key:new T.PmPluginKey('apaPaste'),
+        props:{
+          handlePaste:function(view,event,slice){
+            var html=event.clipboardData.getData('text/html');
+            var text=event.clipboardData.getData('text/plain');
+            if(html&&html.includes('class="cit"'))return false;// let TipTap handle AcademiQ format
+            if(html&&!event.shiftKey){
+              var cleaned=cleanPastedHTML(html);
+              _this.editor.commands.insertContent(cleaned);
+              uSt();save();updatePageHeight();
+              return true;
+            }
+            if(text){
+              var formatted=formatPlainTextAPA(text);
+              _this.editor.commands.insertContent(formatted);
+              uSt();save();updatePageHeight();
+              return true;
+            }
+            return false;
+          }
+        }
+      })];
+    }
+  });
+
+  // /r trigger extension — watches for /r pattern to open citation popup
+  var SlashRTrigger=T.Extension.create({
+    name:'slashRTrigger',
+    addProseMirrorPlugins:function(){
+      return [new T.PmPlugin({
+        key:new T.PmPluginKey('slashRTrigger'),
+        props:{
+          handleKeyDown:function(view,event){
+            // Let the existing keydown listeners handle /r trigger
+            return false;
+          }
+        }
+      })];
+    }
+  });
+
+  try{
+    // Remove contenteditable from wrapper — TipTap will set it on its own .ProseMirror div
+    edEl.removeAttribute('contenteditable');
+    editor=new T.Editor({
+      element:edEl,
+      content:existingHTML,
+      extensions:[
+        T.StarterKit.configure({
+          heading:{levels:[1,2,3,4,5]},
+          history:{depth:100}
+        }),
+        T.Underline,
+        T.TextAlign.configure({types:['heading','paragraph']}),
+        T.Placeholder.configure({placeholder:'Yazmaya başlayın...'}),
+        T.TextStyle,
+        T.FontFamily,
+        T.Color,
+        T.Highlight.configure({multicolor:true}),
+        T.Image.configure({inline:false,allowBase64:true}),
+        T.Table.configure({resizable:true}),
+        T.TableRow,
+        T.TableCell,
+        T.TableHeader,
+        APAPaste,
+        SlashRTrigger
+      ],
+      editorProps:{
+        attributes:{
+          class:'ProseMirror',
+          spellcheck:'true'
+        }
+      },
+      onUpdate:function(ctx){
+        uSt();save();
+        if(typeof updatePageHeight==='function')updatePageHeight();
+        if(typeof autoUpdateTOC==='function')autoUpdateTOC();
+        clearTimeout(_refTimer);
+        _refTimer=setTimeout(function(){
+          var edDom=ctx.editor.view.dom;
+          var refH1=Array.from(edDom.querySelectorAll('h1')).find(function(h){return h.textContent.trim()==='Kaynakça';});
+          if(refH1&&typeof updateRefSection==='function')updateRefSection();
+        },2000);
+      },
+      onSelectionUpdate:function(){
+        if(typeof updateFmtState==='function')updateFmtState();
+      }
+    });
+    console.log('TipTap editor initialized successfully');
+  }catch(e){
+    console.error('TipTap init failed, using fallback:',e);
+    editor=null;
+    edEl.setAttribute('contenteditable','true');
+  }
+}
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
 syncLoad().then(function(){
   rWS();rNB();rLib();rNotes();rRefs();uSt();rDocTabs();
+  // Initialize TipTap editor after content is loaded
+  initTipTapEditor();
   // Electron: uygulama bilgisi
   if(typeof window.electronAPI!=='undefined'){
     window.electronAPI.getAppInfo().then(function(info){
@@ -4207,7 +4478,7 @@ function updateZenTime(){
   var el=document.getElementById('zentime');
   if(el)el.textContent=m+'dk '+String(s).padStart(2,'0')+'sn';
   var wEl=document.getElementById('zenwords');
-  if(wEl){var txt=document.getElementById('apaed').innerText||'';var w=txt.trim().split(/\s+/).filter(function(x){return x.length>0;}).length;wEl.textContent=w+' kelime';}
+  if(wEl){var txt=editor?editor.getText():(document.getElementById('apaed').innerText||'');var w=txt.trim().split(/\s+/).filter(function(x){return x.length>0;}).length;wEl.textContent=w+' kelime';}
 }
 </script>
 
