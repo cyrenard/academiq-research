@@ -1,0 +1,66 @@
+{
+  "name": "academiq-research",
+  "version": "1.0.0",
+  "description": "AcademiQ Research - Akademik Yazim ve Kaynak Yonetim Uygulamasi",
+  "main": "main.js",
+  "author": "AcademiQ",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "test": "C:\\Progra~1\\nodejs\\node.exe --test --test-concurrency=1 --test-isolation=none tests/*.test.js",
+    "build": "electron-builder --win --x64",
+    "build:dir": "electron-builder --win --x64 --dir"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "28.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.academiq.research",
+    "productName": "AcademiQ Research",
+    "copyright": "Copyright (c) 2024 AcademiQ",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "academiq-research.html",
+      "tiptap-bundle.js",
+      "icon.ico",
+      "icon.png",
+      "package.json",
+      "src/**/*"
+    ],
+    "extraResources": [],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icon.ico",
+      "artifactName": "AcademiQ-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeaderIcon": "icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AcademiQ Research",
+      "displayLanguageSelector": false,
+      "language": "1055",
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true
+    },
+    "publish": null
+  }
+}
