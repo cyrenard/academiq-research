@@ -99,12 +99,13 @@ function createWindow() {
 
   mainWindow.setMenuBarVisibility(false);
   // Prefer downloaded UI override so "Check update" applies immediately.
+  // In development (npm start / unpackaged), always use bundled files directly.
   // Fall back to bundled UI, then legacy src/index.html.
   const bundledHtml = path.join(__dirname, 'academiq-research.html');
   const updatedHtml = path.join(storage.appDir, 'academiq-research.html');
   const fallbackHtml = path.join(__dirname, 'src', 'index.html');
   let htmlPath = fallbackHtml;
-  if (fs.existsSync(updatedHtml)) htmlPath = updatedHtml;
+  if (app.isPackaged && fs.existsSync(updatedHtml)) htmlPath = updatedHtml;
   else if (fs.existsSync(bundledHtml)) htmlPath = bundledHtml;
   mainWindow.loadFile(htmlPath);
 

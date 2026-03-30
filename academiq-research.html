@@ -216,9 +216,9 @@ button,input,select,textarea{font-family:var(--f),var(--fsym);}
 .efmt.heading-active{background:var(--acc)!important;color:#fff!important;border-color:var(--acc-d)!important;}
 .toc-container{border:none;padding:0;margin:0 0 14px 0;border-radius:0;background:transparent;position:relative;box-shadow:none;}
 .toc-container .toc-delete{display:none!important;}
-.toc-entry{color:#000;text-decoration:none;display:flex;align-items:flex-end;gap:8px;}
-.toc-entry .toc-dots{flex:1 1 auto;}
-.toc-entry .toc-page{float:none;color:#000;font-size:12pt;margin-left:auto;min-width:2.5ch;text-align:right;}
+.toc-entry{color:#000;text-decoration:none;display:block;position:relative;}
+.toc-entry .toc-dots{position:absolute;bottom:0;overflow:hidden;white-space:nowrap;}
+.toc-entry .toc-page{position:absolute;right:0;bottom:0;background:#fff;padding-left:4px;white-space:nowrap;color:#000;font-size:12pt;}
 .toc-entry:hover{color:#000;text-decoration:none;}
 .find-hl{background:rgba(255,165,0,.35);border-radius:2px;}
 .find-hl-active{background:rgba(255,100,0,.6);outline:2px solid #ff6400;border-radius:2px;}
