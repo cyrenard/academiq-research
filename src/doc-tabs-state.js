@@ -8,7 +8,11 @@
     return {
       id: doc.id || ('doc' + (index + 1)),
       name: String(doc.name || ('Belge ' + (index + 1))).trim(),
-      content: sanitize(doc.content || blankDoc())
+      content: sanitize(doc.content || blankDoc()),
+      bibliographyHTML: typeof doc.bibliographyHTML === 'string' ? doc.bibliographyHTML : '',
+      bibliographyManual: !!doc.bibliographyManual,
+      coverHTML: typeof doc.coverHTML === 'string' ? doc.coverHTML : '',
+      tocHTML: typeof doc.tocHTML === 'string' ? doc.tocHTML : ''
     };
   }
 
@@ -44,7 +48,11 @@
         linked = {
           id: uid(),
           name: ws.name || ('Belge ' + (index + 1)),
-          content: sanitize(index === 0 ? (next.doc || blankDoc()) : blankDoc())
+          content: sanitize(index === 0 ? (next.doc || blankDoc()) : blankDoc()),
+          bibliographyHTML: '',
+          bibliographyManual: false,
+          coverHTML: '',
+          tocHTML: ''
         };
         next.docs.push(linked);
         docsById[linked.id] = linked;
@@ -87,7 +95,11 @@
     var doc = {
       id: uid(),
       name: wsName,
-      content: sanitize(blankDoc())
+      content: sanitize(blankDoc()),
+      bibliographyHTML: '',
+      bibliographyManual: false,
+      coverHTML: '',
+      tocHTML: ''
     };
     var ws = {
       id: wsInput.id || uid(),
@@ -154,7 +166,11 @@
     var doc = {
       id: uid(),
       name: trimmed,
-      content: sanitize(blankDoc())
+      content: sanitize(blankDoc()),
+      bibliographyHTML: '',
+      bibliographyManual: false,
+      coverHTML: '',
+      tocHTML: ''
     };
     next.docs = Array.isArray(next.docs) ? next.docs.slice() : [];
     next.docs.push(doc);

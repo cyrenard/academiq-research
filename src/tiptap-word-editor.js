@@ -214,7 +214,9 @@
           spellcheck:'true',
           'data-gramm':'true',
           'data-gramm_editor':'true',
-          'data-enable-grammarly':'true'
+          'data-enable-grammarly':'true',
+          'data-grammarly-part':'true',
+          'data-grammarly-integration':'true'
         }
       },
       onUpdate:function(ctx){

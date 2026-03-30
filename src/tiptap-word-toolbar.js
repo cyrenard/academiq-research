@@ -108,6 +108,16 @@
     if(txtColor) txtColor.value = normalizeColorValue(attrs.color, '#000000');
     var hlAttrs = editor.getAttributes('highlight') || {};
     if(hlColor) hlColor.value = normalizeColorValue(hlAttrs.color, '#ffff00');
+    for(var _lvl=1;_lvl<=5;_lvl++){
+      var _btn=doc.getElementById('btnH'+_lvl);
+      if(_btn){
+        if(editor.isActive('heading',{level:_lvl})){
+          _btn.classList.add('heading-active');
+        }else{
+          _btn.classList.remove('heading-active');
+        }
+      }
+    }
     return true;
   }
 

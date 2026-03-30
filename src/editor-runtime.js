@@ -25,6 +25,27 @@
     return undefined;
   }
 
+  function ensureEditorWritableState(editorRef){
+    var ed = editorRef || getEditor();
+    if(!ed) return false;
+    try{
+      if(typeof ed.setEditable === 'function' && ed.isEditable === false){
+        ed.setEditable(true);
+      }
+    }catch(e){}
+    try{
+      if(!ed.state || !ed.state.doc || !ed.commands || typeof ed.commands.setContent !== 'function') return false;
+      var dom = ed.view && ed.view.dom ? ed.view.dom : null;
+      var hasWritableBlock = !!(dom && dom.querySelector && dom.querySelector('p,h1,h2,h3,h4,h5,blockquote,ul,ol,table'));
+      var text = String(ed.state.doc.textContent || '').replace(/\u00a0/g, ' ').trim();
+      if(!hasWritableBlock && !text){
+        ed.commands.setContent('<p></p>', false);
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+
   function syncPageLayout(){
     if(typeof root.updatePageHeight === 'function'){
       safeCall(root.updatePageHeight);
@@ -98,6 +119,7 @@ function syncReferenceSectionDeferred(delay){
       if(options.renderRefs && typeof root.rRefs === 'function'){
         safeCall(root.rRefs);
       }
+      ensureEditorWritableState(options.editor || null);
       if(options.normalize !== false){
         if(typeof root.normalizeCitationSpans === 'function'){
           try{ root.normalizeCitationSpans(options.target || undefined); }catch(e){}
@@ -155,6 +177,7 @@ function syncReferenceSectionDeferred(delay){
       if(options.syncChrome !== false){
         syncEditorChrome();
       }
+      ensureEditorWritableState(options.editor || null);
       if(options.layout !== false){
         syncPageLayout();
       }
@@ -167,6 +190,7 @@ function syncReferenceSectionDeferred(delay){
 
   function onEditorUpdate(ctx){
     if(root.__aqDocSwitching) return;
+    ensureEditorWritableState(ctx && ctx.editor ? ctx.editor : null);
     syncEditorChrome();
     normalizeCitationSpansDeferred(ctx && ctx.editor && ctx.editor.view ? ctx.editor.view.dom : null, 0);
     syncPageLayout();

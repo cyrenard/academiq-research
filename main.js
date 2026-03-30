@@ -1,6 +1,7 @@
 ﻿const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { execFile } = require('child_process');
 const { createStorageService } = require('./src/main-process-storage.js');
 const {
   buildUpdateCheckResult,
@@ -15,6 +16,68 @@ const storage = createStorageService({ appDir: APP_DIR });
 
 // â”€â”€ WINDOW â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 let mainWindow;
+
+function psQuote(value) {
+  return "'" + String(value || '').replace(/'/g, "''") + "'";
+}
+
+function runPowerShell(command, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    execFile(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', command],
+      {
+        windowsHide: true,
+        timeout: Math.max(5000, Math.min(parseInt(timeoutMs, 10) || 45000, 180000)),
+        maxBuffer: 10 * 1024 * 1024
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          const msg = (stderr || error.message || '').toString().trim() || 'PowerShell failed';
+          reject(new Error(msg));
+          return;
+        }
+        resolve(String(stdout || '').trim());
+      }
+    );
+  });
+}
+
+async function convertWordWithOfficeComToHtml(inputPath) {
+  const inPath = path.resolve(String(inputPath || ''));
+  if (!inPath || !fs.existsSync(inPath)) throw new Error('Word dosyasi bulunamadi');
+  const tempHtml = path.join(app.getPath('temp'), `aq_word_import_${Date.now()}_${Math.random().toString(16).slice(2)}.html`);
+  const script = [
+    "$ErrorActionPreference='Stop'",
+    `$inPath=${psQuote(inPath)}`,
+    `$outPath=${psQuote(tempHtml)}`,
+    "$word=$null",
+    "$doc=$null",
+    "try {",
+    "  $word = New-Object -ComObject Word.Application",
+    "  $word.Visible = $false",
+    "  $word.DisplayAlerts = 0",
+    "  $doc = $word.Documents.Open($inPath, $false, $true)",
+    "  $wdFormatFilteredHTML = 10",
+    "  $doc.SaveAs([ref]$outPath, [ref]$wdFormatFilteredHTML)",
+    "} finally {",
+    "  if($doc -ne $null){ try { $doc.Close([ref]0) } catch {} }",
+    "  if($word -ne $null){ try { $word.Quit() } catch {} }",
+    "}",
+    "Write-Output $outPath"
+  ].join(';');
+  const outPath = await runPowerShell(script, 120000);
+  const finalPath = outPath && fs.existsSync(outPath) ? outPath : (fs.existsSync(tempHtml) ? tempHtml : '');
+  if (!finalPath) throw new Error('Office COM HTML donusumu basarisiz');
+  const raw = fs.readFileSync(finalPath);
+  let html = raw.toString('utf8');
+  const head = html.slice(0, 2000).toLowerCase();
+  if (head.includes('charset=windows-1254') || head.includes('charset=iso-8859-9')) {
+    try { html = new TextDecoder('windows-1254').decode(raw); } catch (_e) {}
+  }
+  try { fs.unlinkSync(finalPath); } catch (_e) {}
+  return html;
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -112,17 +175,80 @@ ipcMain.handle('pdf:delete', async (_ev, refId) => {
 
 ipcMain.handle('pdf:syncAll', async () => storage.syncAllPDFs());
 
-ipcMain.handle('pdf:download', async (_ev, url, refId) => {
-  try {
-    const buf = await followRedirects(url);
-    if (buf.length < 100) return { ok: false, error: 'Too small: ' + buf.length + ' bytes' };
-    const headerStr = buf.slice(0, 1024).toString('ascii');
-    const pdfIdx = headerStr.indexOf('%PDF-');
-    if (pdfIdx < 0 || pdfIdx > 64) {
-      const isHTML = headerStr.toLowerCase().includes('<html') || headerStr.toLowerCase().includes('<!doctype');
-      return { ok: false, error: isHTML ? 'HTML page, not PDF' : 'No PDF header in first 64 bytes' };
+ipcMain.handle('pdf:download', async (_ev, url, refId, options = {}) => {
+  function extractPdfCandidatesFromHTML(html, baseUrl) {
+    const out = [];
+    const seen = new Set();
+    if (!html || typeof html !== 'string') return out;
+    function pushCandidate(link) {
+      try {
+        if (!link || typeof link !== 'string') return;
+        const normalized = new URL(link, baseUrl).href;
+        if (!/^https?:\/\//i.test(normalized)) return;
+        if (seen.has(normalized)) return;
+        seen.add(normalized);
+        out.push(normalized);
+      } catch (_e) {}
     }
-    const pdfBuf = pdfIdx > 0 ? buf.slice(pdfIdx) : buf;
+    const hrefRe = /href\s*=\s*["']([^"']+)["']/ig;
+    let match;
+    while ((match = hrefRe.exec(html))) {
+      const link = String(match[1] || '').trim();
+      if (!link) continue;
+      if (/\.pdf($|[?#])/i.test(link)) pushCandidate(link);
+      else if (/\/pdf(\/|$|[?#])/i.test(link)) pushCandidate(link);
+      else if (/download/i.test(link) && /article|paper|fulltext|file|view/i.test(link)) pushCandidate(link);
+    }
+    const metaPdfRe = /<meta[^>]+(?:name|property)\s*=\s*["'](?:citation_pdf_url|dc\.identifier|og:pdf|twitter:image:src)["'][^>]+content\s*=\s*["']([^"']+)["']/ig;
+    while ((match = metaPdfRe.exec(html))) {
+      const link = String(match[1] || '').trim();
+      if (!link) continue;
+      if (/\.pdf($|[?#])/i.test(link) || /\/pdf(\/|$|[?#])/i.test(link)) pushCandidate(link);
+    }
+    const dataPdfRe = /"(?:pdfUrl|pdf_url|citation_pdf_url)"\s*:\s*"([^"]+)"/ig;
+    while ((match = dataPdfRe.exec(html))) {
+      const raw = String(match[1] || '').replace(/\\\//g, '/').trim();
+      if (!raw) continue;
+      pushCandidate(raw);
+    }
+    return out;
+  }
+  async function fetchPdfBufferWithFallback(startUrl, timeoutMs) {
+    const visited = new Set();
+    async function tryUrl(targetUrl, depth) {
+      if (!targetUrl || visited.has(targetUrl) || depth > 2) return { ok: false, error: 'No PDF candidate succeeded' };
+      visited.add(targetUrl);
+      const meta = await followRedirects(targetUrl, 8, { timeout: timeoutMs, returnMeta: true });
+      const buf = meta && meta.buffer ? meta.buffer : meta;
+      if (!buf || !Buffer.isBuffer(buf)) return { ok: false, error: 'Invalid response buffer' };
+      if (buf.length < 100) return { ok: false, error: 'Too small: ' + buf.length + ' bytes' };
+      const headerStr = buf.slice(0, 4096).toString('ascii');
+      const pdfIdx = headerStr.indexOf('%PDF-');
+      if (pdfIdx >= 0) {
+        return { ok: true, buffer: pdfIdx > 0 ? buf.slice(pdfIdx) : buf };
+      }
+      const isHTML = headerStr.toLowerCase().includes('<html') || headerStr.toLowerCase().includes('<!doctype');
+      if (!isHTML) {
+        return { ok: false, error: 'No PDF header found in first 4096 bytes' };
+      }
+      const finalUrl = (meta && meta.finalUrl) || targetUrl;
+      const html = buf.slice(0, Math.min(buf.length, 300000)).toString('utf8');
+      const candidates = extractPdfCandidatesFromHTML(html, finalUrl).slice(0, 10);
+      for (const cand of candidates) {
+        const tried = await tryUrl(cand, depth + 1);
+        if (tried && tried.ok) return tried;
+      }
+      return { ok: false, error: 'HTML page, no PDF link candidate' };
+    }
+    return tryUrl(startUrl, 0);
+  }
+  try {
+    const timeoutMs = Math.max(5000, Math.min(Number(options.timeoutMs) || 30000, 90000));
+    const fetched = await fetchPdfBufferWithFallback(url, timeoutMs);
+    if (!fetched || !fetched.ok || !fetched.buffer) {
+      return { ok: false, error: (fetched && fetched.error) ? fetched.error : 'PDF download failed' };
+    }
+    const pdfBuf = fetched.buffer;
     storage.savePDF(refId, pdfBuf);
     return { ok: true, size: pdfBuf.length };
   } catch (e) { return { ok: false, error: e.message }; }
@@ -145,6 +271,39 @@ ipcMain.handle('dialog:openPDF', async () => {
     });
   }
   return { ok: true, files };
+});
+
+ipcMain.handle('word:toHtml', async (_ev, filePath) => {
+  try {
+    const html = await convertWordWithOfficeComToHtml(filePath);
+    return { ok: true, html };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('export:pdf', async (event, options = {}) => {
+  try {
+    const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+    if (!win) return { ok: false, error: 'Pencere bulunamadi' };
+    const saveResult = await dialog.showSaveDialog(win, {
+      title: 'PDF Olarak Kaydet',
+      defaultPath: String(options.defaultPath || 'makale.pdf'),
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    });
+    if (saveResult.canceled || !saveResult.filePath) return { ok: false, canceled: true };
+    const pdfBuffer = await win.webContents.printToPDF({
+      printBackground: true,
+      pageSize: 'A4',
+      landscape: false,
+      preferCSSPageSize: true,
+      margins: { top: 0, right: 0, bottom: 0, left: 0 }
+    });
+    fs.writeFileSync(saveResult.filePath, pdfBuffer);
+    return { ok: true, filePath: saveResult.filePath, size: pdfBuffer.length };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
 });
 
 // â”€â”€ IPC: SYNC SETTINGS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

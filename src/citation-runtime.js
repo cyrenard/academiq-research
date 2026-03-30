@@ -203,10 +203,10 @@
       if(!state) return null;
       const pos = state.selection.from;
       const txt = state.doc.textBetween(Math.max(0,pos-128),pos,' ',' ');
-      const m = txt.match(/\/r([^\s]*)$/);
+      const m = txt.match(/\/r(?:\s*([^\n\r]*))?$/i);
       if(!m) return null;
       return {
-        query: m[1] || '',
+        query: (m[1] || '').trim(),
         full: m[0],
         from: Math.max(0,pos-m[0].length),
         to: pos
@@ -218,10 +218,10 @@
     const node = range.startContainer;
     if(!node || node.nodeType !== 3) return null;
     const txt2 = node.textContent.substring(0, range.startOffset);
-    const m2 = txt2.match(/\/r([^\s]*)$/);
+    const m2 = txt2.match(/\/r(?:\s*([^\n\r]*))?$/i);
     if(!m2) return null;
     return {
-      query: m2[1] || '',
+      query: (m2[1] || '').trim(),
       full: m2[0],
       domRange: range.cloneRange()
     };
@@ -738,7 +738,7 @@
           if((!trigRange || trigRange.from == null || trigRange.to == null) && ed.state && ed.state.selection){
             const pos = ed.state.selection.from;
             const txt = ed.state.doc.textBetween(Math.max(0, pos - 128), pos, ' ', ' ');
-            const m = txt.match(/\/r([^\s]*)$/);
+            const m = txt.match(/\/r(?:\s*([^\n\r]*))?$/i);
             if(m){
               fallbackRange = {
                 from: Math.max(0, pos - m[0].length),

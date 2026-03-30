@@ -1,5 +1,5 @@
 (function(root){
-  var SCHEMA_VERSION = 1;
+  var SCHEMA_VERSION = 2;
 
   function clone(value){
     if(Array.isArray(value)) return value.map(clone);
@@ -52,7 +52,9 @@
       name: doc.name || ('Belge ' + (idx + 1)),
       content: sanitize(doc.content || blankDoc()),
       bibliographyHTML: typeof doc.bibliographyHTML === 'string' ? doc.bibliographyHTML : '',
-      bibliographyManual: !!doc.bibliographyManual
+      bibliographyManual: !!doc.bibliographyManual,
+      coverHTML: typeof doc.coverHTML === 'string' ? doc.coverHTML : '',
+      tocHTML: typeof doc.tocHTML === 'string' ? doc.tocHTML : ''
     };
   }
 

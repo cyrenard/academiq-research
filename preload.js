@@ -12,13 +12,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deletePDF:      (refId)     => ipcRenderer.invoke('pdf:delete', refId),
 
   // PDF download (CORS-free, Node.js redirect following)
-  downloadPDFfromURL: (url, refId) => ipcRenderer.invoke('pdf:download', url, refId),
+  downloadPDFfromURL: (url, refId, options) => ipcRenderer.invoke('pdf:download', url, refId, options || {}),
 
   // PDF sync
   pdfSyncAll:     ()         => ipcRenderer.invoke('pdf:syncAll'),
 
   // File dialogs
   openPDFDialog:  ()          => ipcRenderer.invoke('dialog:openPDF'),
+  wordToHtml:     (filePath)  => ipcRenderer.invoke('word:toHtml', filePath),
+  exportPDF:      (options)   => ipcRenderer.invoke('export:pdf', options || {}),
 
   // Sync settings
   getSyncSettings: ()         => ipcRenderer.invoke('sync:getSettings'),

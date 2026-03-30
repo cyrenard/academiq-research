@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 function createStorageService(options) {
   const appDir = options.appDir;
@@ -12,6 +13,26 @@ function createStorageService(options) {
 
   function ensureDir(dir) {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  }
+
+  function buildPdfFileName(refId) {
+    const raw = String(refId || '');
+    const base = (raw || 'ref')
+      .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+      .replace(/\s+/g, ' ')
+      .trim() || 'ref';
+    const trimmed = base.length > 80 ? base.slice(0, 80) : base;
+    const hash = crypto.createHash('sha1').update(raw).digest('hex').slice(0, 10);
+    return `${trimmed}__${hash}.pdf`;
+  }
+
+  function resolvePdfPaths(dir, refId) {
+    const safeName = buildPdfFileName(refId);
+    const legacyName = String(refId || '') + '.pdf';
+    return {
+      safe: path.join(dir, safeName),
+      legacy: path.join(dir, legacyName)
+    };
   }
 
   function loadSettings() {
@@ -79,26 +100,33 @@ function createStorageService(options) {
 
   function savePDF(refId, buffer) {
     const buf = Buffer.from(buffer);
-    const localFp = path.join(localPdfDir, refId + '.pdf');
-    fs.writeFileSync(localFp, buf);
+    const localPaths = resolvePdfPaths(localPdfDir, refId);
+    fs.writeFileSync(localPaths.safe, buf);
     if (settings.syncDir) {
-      const syncFp = path.join(getSyncPDFDir(), refId + '.pdf');
-      try { fs.writeFileSync(syncFp, buf); } catch (e) { console.warn('Sync PDF write failed:', e.message); }
+      const syncPaths = resolvePdfPaths(getSyncPDFDir(), refId);
+      try { fs.writeFileSync(syncPaths.safe, buf); } catch (e) { console.warn('Sync PDF write failed:', e.message); }
     }
     return { ok: true };
   }
 
   function loadPDF(refId) {
-    const localFp = path.join(localPdfDir, refId + '.pdf');
-    if (fs.existsSync(localFp)) {
-      const buf = fs.readFileSync(localFp);
+    const localPaths = resolvePdfPaths(localPdfDir, refId);
+    if (fs.existsSync(localPaths.safe)) {
+      const buf = fs.readFileSync(localPaths.safe);
+      return { ok: true, buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
+    }
+    // Legacy filename migration (old builds used refId + '.pdf' directly)
+    if (fs.existsSync(localPaths.legacy)) {
+      const buf = fs.readFileSync(localPaths.legacy);
+      try { fs.writeFileSync(localPaths.safe, buf); } catch (e) {}
       return { ok: true, buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
     }
     if (settings.syncDir) {
-      const syncFp = path.join(getSyncPDFDir(), refId + '.pdf');
-      if (fs.existsSync(syncFp)) {
+      const syncPaths = resolvePdfPaths(getSyncPDFDir(), refId);
+      const syncFp = fs.existsSync(syncPaths.safe) ? syncPaths.safe : (fs.existsSync(syncPaths.legacy) ? syncPaths.legacy : null);
+      if (syncFp) {
         const buf = fs.readFileSync(syncFp);
-        try { fs.writeFileSync(localFp, buf); } catch (e) {}
+        try { fs.writeFileSync(localPaths.safe, buf); } catch (e) {}
         return { ok: true, buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
       }
     }
@@ -106,18 +134,23 @@ function createStorageService(options) {
   }
 
   function pdfExists(refId) {
-    const localFp = path.join(localPdfDir, refId + '.pdf');
-    if (fs.existsSync(localFp)) return true;
-    if (settings.syncDir) return fs.existsSync(path.join(getSyncPDFDir(), refId + '.pdf'));
+    const localPaths = resolvePdfPaths(localPdfDir, refId);
+    if (fs.existsSync(localPaths.safe) || fs.existsSync(localPaths.legacy)) return true;
+    if (settings.syncDir) {
+      const syncPaths = resolvePdfPaths(getSyncPDFDir(), refId);
+      return fs.existsSync(syncPaths.safe) || fs.existsSync(syncPaths.legacy);
+    }
     return false;
   }
 
   function deletePDF(refId) {
-    const localFp = path.join(localPdfDir, refId + '.pdf');
-    if (fs.existsSync(localFp)) fs.unlinkSync(localFp);
+    const localPaths = resolvePdfPaths(localPdfDir, refId);
+    if (fs.existsSync(localPaths.safe)) fs.unlinkSync(localPaths.safe);
+    if (fs.existsSync(localPaths.legacy)) fs.unlinkSync(localPaths.legacy);
     if (settings.syncDir) {
-      const syncFp = path.join(getSyncPDFDir(), refId + '.pdf');
-      if (fs.existsSync(syncFp)) fs.unlinkSync(syncFp);
+      const syncPaths = resolvePdfPaths(getSyncPDFDir(), refId);
+      if (fs.existsSync(syncPaths.safe)) fs.unlinkSync(syncPaths.safe);
+      if (fs.existsSync(syncPaths.legacy)) fs.unlinkSync(syncPaths.legacy);
     }
     return { ok: true };
   }

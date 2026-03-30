@@ -180,17 +180,18 @@ button,input,select,textarea{font-family:var(--f),var(--fsym);}
 #apapage{width:var(--aq-page-shell-width);min-height:var(--aq-page-height);padding:0;overflow:visible;position:relative;background:transparent;box-shadow:none;border:none;border-radius:0;margin-bottom:44px;}
 #apapage-bg{position:absolute;inset:0;z-index:0;pointer-events:none;}
 .aq-page-sheet{position:absolute;left:var(--aq-page-shell-offset);width:var(--aq-page-width);height:var(--aq-page-height);background:#fff;box-shadow:0 24px 54px rgba(42,29,12,.10);border:none;border-radius:0;}
-#bibpage{width:var(--aq-page-width);min-height:var(--aq-page-height);padding:var(--aq-page-margin);overflow:visible;position:relative;background:#fff;box-shadow:0 24px 54px rgba(42,29,12,.10);border:none;border-radius:0;margin-bottom:44px;display:none;box-sizing:border-box;}
-#apaed,#bibbody{font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;color:#000;outline:none;word-wrap:break-word;overflow-wrap:break-word;word-break:break-word;box-sizing:border-box;white-space:normal;overflow-x:hidden;}
+#coverpage,#tocpage,#bibpage{width:var(--aq-page-width);min-height:var(--aq-page-height);padding:var(--aq-page-margin);overflow:visible;position:relative;background:#fff;box-shadow:0 24px 54px rgba(42,29,12,.10);border:none;border-radius:0;margin-bottom:44px;display:none;box-sizing:border-box;}
+#apaed,#coverbody,#tocbody,#bibbody{font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;color:#000;outline:none;word-wrap:break-word;overflow-wrap:break-word;word-break:break-word;box-sizing:border-box;white-space:normal;overflow-x:hidden;}
 #apaed{width:var(--aq-page-width);max-width:var(--aq-page-width);min-height:var(--aq-page-height);margin:0 auto;caret-color:#0044cc;position:relative;z-index:1;}
 #aq-tiptap-shell{display:block!important;width:var(--aq-page-width)!important;max-width:100%!important;min-height:var(--aq-page-height)!important;padding:var(--aq-page-margin)!important;box-sizing:border-box!important;position:relative!important;margin:0 auto!important;}
 #aq-tiptap-body{display:block!important;width:var(--aq-page-content-width)!important;max-width:100%!important;min-height:var(--aq-page-content-height)!important;margin:0 auto!important;position:relative!important;pointer-events:auto!important;}
 #aq-tiptap-content{display:block!important;width:100%!important;max-width:100%!important;min-height:var(--aq-page-content-height)!important;position:relative!important;pointer-events:auto!important;cursor:text!important;}
 #aq-tiptap-content.ProseMirror,#aq-tiptap-content .ProseMirror{display:block!important;width:100%!important;max-width:100%!important;min-height:var(--aq-page-content-height)!important;pointer-events:auto!important;cursor:text!important;}
-#bibbody{width:100%;max-width:var(--aq-page-content-width);min-height:var(--aq-page-content-height);margin:0 auto;}
+#coverbody,#tocbody,#bibbody{width:100%;max-width:var(--aq-page-content-width);min-height:var(--aq-page-content-height);margin:0 auto;}
 #bibbody[contenteditable="true"]{cursor:text;caret-color:#0044cc;}
 #bibbody h1{font-size:12pt;font-weight:bold;text-align:center;margin:0;text-indent:0;line-height:2;display:block;}
 #bibbody .refe{margin:0;text-indent:-.5in;padding-left:.5in;font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;color:#000;display:block;text-align:left;}
+#tocbody .toc-container{margin:0;}
 /* Page break overlay â€” positioned outside editor in #apapage */
 .page-break-overlay{display:none!important;}
 /* Page number overlay */
@@ -212,10 +213,12 @@ button,input,select,textarea{font-family:var(--f),var(--fsym);}
 #aq-tiptap-content .ProseMirror>*{max-width:100%;box-sizing:border-box;}
 #aq-tiptap-content .ProseMirror p,#aq-tiptap-content .ProseMirror h1,#aq-tiptap-content .ProseMirror h2,#aq-tiptap-content .ProseMirror h3,#aq-tiptap-content .ProseMirror h4,#aq-tiptap-content .ProseMirror h5,#aq-tiptap-content .ProseMirror blockquote,#aq-tiptap-content .ProseMirror ul,#aq-tiptap-content .ProseMirror ol{width:100%;max-width:100%;}
 #aq-tiptap-content .ProseMirror p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:#bbb;font-style:italic;pointer-events:none;float:left;height:0;}
+.efmt.heading-active{background:var(--acc)!important;color:#fff!important;border-color:var(--acc-d)!important;}
 .toc-container{border:none;padding:0;margin:0 0 14px 0;border-radius:0;background:transparent;position:relative;box-shadow:none;}
 .toc-container .toc-delete{display:none!important;}
-.toc-entry{color:#000;text-decoration:none;}
-.toc-entry .toc-page{float:right;color:#000;font-size:12pt;}
+.toc-entry{color:#000;text-decoration:none;display:flex;align-items:flex-end;gap:8px;}
+.toc-entry .toc-dots{flex:1 1 auto;}
+.toc-entry .toc-page{float:none;color:#000;font-size:12pt;margin-left:auto;min-width:2.5ch;text-align:right;}
 .toc-entry:hover{color:#000;text-decoration:none;}
 .find-hl{background:rgba(255,165,0,.35);border-radius:2px;}
 .find-hl-active{background:rgba(255,100,0,.6);outline:2px solid #ff6400;border-radius:2px;}
@@ -440,12 +443,16 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
       <button class="ddi" onclick="applyTemplate('makale');cdd()">AraÅŸtÄ±rma Makalesi</button>
       <button class="ddi" onclick="applyTemplate('rapor');cdd()">Rapor</button>
       <button class="ddi" onclick="applyTemplate('literatur');cdd()">LiteratÃ¼r TaramasÄ±</button>
+      <div class="dds"></div>
+      <button class="ddi" data-aq="word-import" onclick="document.getElementById('wordinp').click();cdd()">Word Ä°Ã§e Aktar</button>
     </div>
   </div>
   <div class="dd"><button class="btn prim" onclick="opdd('ddexp',this)">DÄ±ÅŸa Aktar â–¾</button>
     <div class="ddm" id="ddexp">
       <button class="ddi" onclick="window.print();cdd()">PDF (YazdÄ±r)</button>
       <button class="ddi" onclick="expDOC();cdd()">DOC (Word)</button>
+      <button class="ddi" data-aq="bib" onclick="expBIB();cdd()">BIB</button>
+      <button class="ddi" data-aq="ris" onclick="expRIS();cdd()">RIS</button>
       <button class="ddi" onclick="expNotes();cdd()">Notlar TXT</button>
       <button class="ddi" onclick="expLib();cdd()">KÃ¼tÃ¼phane JSON</button>
     </div>
@@ -498,11 +505,11 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
     <div class="tbgrp">
       <span class="tbgrp-title">BiÃ§im</span>
       <button class="efmt" onclick="ec('formatBlock','p')">Â¶</button>
-      <button class="efmt" onclick="ec('formatBlock','h1')" title="DÃ¼zey 1: OrtalÄ±, KalÄ±n">H1</button>
-      <button class="efmt" onclick="ec('formatBlock','h2')" title="DÃ¼zey 2: Sola, KalÄ±n">H2</button>
-      <button class="efmt" onclick="ec('formatBlock','h3')" title="DÃ¼zey 3: Sola, KalÄ±n Ä°talik">H3</button>
-      <button class="efmt" onclick="ec('formatBlock','h4')" title="DÃ¼zey 4: Girintili, KalÄ±n">H4</button>
-      <button class="efmt" onclick="ec('formatBlock','h5')" title="DÃ¼zey 5: Girintili, KalÄ±n Ä°talik">H5</button>
+      <button class="efmt" id="btnH1" onclick="ec('formatBlock','h1')" title="Birinci derece baslik (H1)" aria-label="Birinci derece baslik">H1</button>
+      <button class="efmt" id="btnH2" onclick="ec('formatBlock','h2')" title="Ikinci derece baslik (H2)" aria-label="Ikinci derece baslik">H2</button>
+      <button class="efmt" id="btnH3" onclick="ec('formatBlock','h3')" title="Ucuncu derece baslik (H3)" aria-label="Ucuncu derece baslik">H3</button>
+      <button class="efmt" id="btnH4" onclick="ec('formatBlock','h4')" title="Dorduncu derece baslik (H4)" aria-label="Dorduncu derece baslik">H4</button>
+      <button class="efmt" id="btnH5" onclick="ec('formatBlock','h5')" title="Besinci derece baslik (H5)" aria-label="Besinci derece baslik">H5</button>
       <button class="efmt" onclick="insBlkQ()">&#10077;</button>
     </div>
     <div class="tbgrp">
@@ -542,6 +549,12 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
         <option value="36">36</option>
       </select>
     </div>
+    <div class="tbgrp" id="tocgrp">
+      <span class="tbgrp-title">Icindekiler</span>
+      <button class="efmt" onclick="insertTOC()" title="Icindekiler ekle">Ekle</button>
+      <button class="efmt" onclick="insertTOC()" title="Icindekileri guncelle">Guncelle</button>
+      <button class="efmt" onclick="removeTOC()" title="Icindekileri sil">Sil</button>
+    </div>
     <div class="tb-break"></div>
     <div class="tbgrp">
       <span class="tbgrp-title">Medya</span>
@@ -570,9 +583,15 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
     </div>
   </div>
   <div id="escroll">
+    <div id="coverpage">
+      <div id="coverbody"></div>
+    </div>
+    <div id="tocpage">
+      <div id="tocbody"></div>
+    </div>
     <div id="apapage">
       <div id="apapage-bg"></div>
-      <div id="apaed" spellcheck="true" data-gramm="true" data-gramm_editor="true" data-enable-grammarly="true"></div>
+      <div id="apaed" spellcheck="true" data-gramm="true" data-gramm_editor="true" data-enable-grammarly="true" data-grammarly-part="true" data-grammarly-integration="true"></div>
     </div>
     <div id="bibpage">
       <div id="bibbody"></div>
@@ -839,7 +858,7 @@ var S={
   notes:[],  // {id, nbId, type, txt, q, src, rid, tag, dt, hlColor}
   doc:'',
   cm:'inline',
-  docs:[{id:'doc1',name:'Ã‡alÄ±ÅŸma AlanÄ± 1',content:''}],
+  docs:[{id:'doc1',name:'Ã‡alÄ±ÅŸma AlanÄ± 1',content:'',bibliographyHTML:'',bibliographyManual:false,coverHTML:'',tocHTML:''}],
   curDoc:'doc1',
   showPageNumbers:false,
   customLabels:[]
@@ -958,16 +977,18 @@ async function syncLoad(){
     rawHTML=rawHTML.replace(/<div[^>]*class="pg-spacer"[^>]*>[\s\S]*?<\/div>/gi,'');
   }
   applyCurrentEditorHTML(rawHTML,{normalize:false,layout:true,syncChrome:false,refreshTrigger:false});
+  syncAuxiliaryPages();
 }
 
 function uid(){return 'x'+Date.now().toString(36)+Math.random().toString(36).slice(2);}
 function ensureWorkspaceDocs(){
   if(window.AQDocTabsState&&typeof window.AQDocTabsState.ensureWorkspaceDocsState==='function'){
     window.AQDocTabsState.ensureWorkspaceDocsState(S,{uid:uid,sanitize:sanitizeDocHTML});
+    (S.docs||[]).forEach(ensureDocAuxFields);
     return;
   }
   if(!S.wss||!S.wss.length)S.wss=[{id:'ws1',name:'Ã‡alÄ±ÅŸma AlanÄ± 1',lib:[],docId:'doc1'}];
-  if(!S.docs||!S.docs.length)S.docs=[{id:'doc1',name:(S.wss[0]&&S.wss[0].name)||'Belge 1',content:sanitizeDocHTML(S.doc||'<p></p>')}];
+  if(!S.docs||!S.docs.length)S.docs=[{id:'doc1',name:(S.wss[0]&&S.wss[0].name)||'Belge 1',content:sanitizeDocHTML(S.doc||'<p></p>'),bibliographyHTML:'',bibliographyManual:false,coverHTML:'',tocHTML:''}];
   S.wss.forEach(function(ws,idx){
     if(!ws.docId||!S.docs.some(function(doc){return doc.id===ws.docId;})){
       var doc=S.docs[idx]||{id:uid(),name:ws.name,content:idx===0?sanitizeDocHTML(S.doc||'<p></p>'):'<p></p>'};
@@ -976,6 +997,7 @@ function ensureWorkspaceDocs(){
       doc.name=ws.name;
     }
   });
+  (S.docs||[]).forEach(ensureDocAuxFields);
   if(!S.cur||!S.wss.some(function(ws){return ws.id===S.cur;}))S.cur=S.wss[0].id;
   var currentWs=S.wss.find(function(ws){return ws.id===S.cur;})||S.wss[0];
   var currentDoc=currentWs&&S.docs.find(function(doc){return doc.id===currentWs.docId;});
@@ -1228,8 +1250,9 @@ function createDoc(){
     __aqCommitActiveDoc();
     var nd=window.AQDocTabsState&&typeof window.AQDocTabsState.createDocState==='function'
       ? window.AQDocTabsState.createDocState(S,name,{uid:uid,sanitize:sanitizeDocHTML})
-      : {id:uid(),name:name,content:__aqBlankDocHTML()};
+      : {id:uid(),name:name,content:__aqBlankDocHTML(),bibliographyHTML:'',bibliographyManual:false,coverHTML:'',tocHTML:''};
     if(!nd)return;
+    ensureDocAuxFields(nd);
     if(!(window.AQDocTabsState&&typeof window.AQDocTabsState.createDocState==='function')){
       S.docs=(S.docs||[]).concat([nd]);
       S.curDoc=nd.id;
@@ -1372,7 +1395,7 @@ function doAddWs(){
     ? window.AQDocTabsState.addWorkspaceWithDocState(S,{id:uid(),name:n,lib:[]},{uid:uid,sanitize:sanitizeDocHTML})
     : null;
   if(!created){
-    var doc={id:uid(),name:n,content:__aqBlankDocHTML()};
+    var doc={id:uid(),name:n,content:__aqBlankDocHTML(),bibliographyHTML:'',bibliographyManual:false,coverHTML:'',tocHTML:''};
     var ws={id:uid(),name:n,lib:[],docId:doc.id};
     S.docs=(S.docs||[]).concat([doc]);
     S.wss.push(ws);
@@ -3519,6 +3542,21 @@ function updateFmtState(){
       });
     }
   }catch(e){}
+  try{
+    if(editor){
+      ['H1','H2','H3','H4','H5'].forEach(function(h){
+        var btn=document.getElementById('btn'+h);
+        if(btn)btn.classList.remove('heading-active');
+      });
+      for(var _lvl=1;_lvl<=5;_lvl++){
+        if(editor.isActive('heading',{level:_lvl})){
+          var _btn=document.getElementById('btnH'+_lvl);
+          if(_btn)_btn.classList.add('heading-active');
+          break;
+        }
+      }
+    }
+  }catch(e){}
 }
 function uSt(){
   if(window.AQTipTapWordToolbar&&typeof window.AQTipTapWordToolbar.syncStatusUI==='function'){
@@ -3657,18 +3695,6 @@ document.addEventListener('click',function(e){if(!e.target.closest('.dd'))cdd();
 // â”€â”€ INSERT HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function insCover(){showM('covermodal');}
 function doCover(){
-  if(window.AQTipTapWordContent&&typeof window.AQTipTapWordContent.insertCoverFromForm==='function'){
-    if(window.AQTipTapWordContent.insertCoverFromForm({
-      documentObj:document,
-      modalId:'covermodal',
-      editor:editor||null,
-      host:document.getElementById('apaed'),
-      hideModal:hideM,
-      getDateText:function(){
-        return new Date().toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'});
-      }
-    })) return;
-  }
   var t=(document.getElementById('cvtitle').value||'').trim();
   if(!t){document.getElementById('cvtitle').focus();return;}
   var a=document.getElementById('cvauthor').value.trim();
@@ -3687,14 +3713,16 @@ function doCover(){
         dateText:dt
       })
     : '<div style="text-align:center;padding-top:192px;font-family:Times New Roman,serif;font-size:12pt;line-height:2;"><p style="text-indent:0;font-weight:bold;">'+t.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</p></div><p><br></p>';
-  if(editor){
-    editor.commands.insertContentAt(0,coverHTML);
-    runEditorMutationEffects({layout:true,syncChrome:true});
-  }else{
-    var ed=document.getElementById('apaed');
-    var tmp=document.createElement('div');tmp.innerHTML=coverHTML;
-    while(tmp.lastChild)ed.insertBefore(tmp.lastChild,ed.firstChild);
-    runEditorMutationEffects({layout:true,syncChrome:true});
+  var doc=getCurrentDocRecord();
+  if(doc){
+    ensureDocAuxFields(doc);
+    doc.coverHTML=sanitizeAuxPageHTML(coverHTML);
+    syncAuxiliaryPages();
+    save();
+    var coverPage=document.getElementById('coverpage');
+    if(coverPage&&coverPage.style.display!=='none'&&typeof coverPage.scrollIntoView==='function'){
+      setTimeout(function(){coverPage.scrollIntoView({behavior:'smooth',block:'start'});},0);
+    }
   }
   // Clear inputs
   ['cvtitle','cvauthor','cvinst','cvcourse','cvprof'].forEach(function(id){document.getElementById(id).value='';});
@@ -3821,6 +3849,15 @@ function expDOC(){
   saveAs(new Blob([getExportDocHTML()],{type:'application/msword'}),'makale.doc');
 }
 function expPDF(){
+  if(window.electronAPI&&typeof window.electronAPI.exportPDF==='function'){
+    window.electronAPI.exportPDF({defaultPath:'makale.pdf'}).then(function(result){
+      if(!result||result.ok||result.canceled)return;
+      alert('PDF dışa aktarma hatası: '+(result.error||'Bilinmeyen hata'));
+    }).catch(function(err){
+      alert('PDF dışa aktarma hatası: '+(err&&err.message?err.message:'Bilinmeyen hata'));
+    });
+    return;
+  }
   var page=document.getElementById('apapage');
   if(!page)return;
   if(window.html2pdf){
@@ -3871,12 +3908,53 @@ function importWordFile(e){
       refreshTrigger:false
     });
   }
-  if(/\.docx$/i.test(file.name)&&window.mammoth){
-    file.arrayBuffer().then(function(buf){
-      return window.mammoth.convertToHtml({arrayBuffer:buf});
-    }).then(function(result){
-      applyImportedHTML(result.value);
-    }).catch(function(){
+  if(/\.(doc|docx)$/i.test(file.name)){
+    var fallbackImport=function(){
+      return file.arrayBuffer().then(function(buf){
+        var bytes=new Uint8Array(buf||new ArrayBuffer(0));
+        var isZip=bytes.length>=4&&bytes[0]===0x50&&bytes[1]===0x4B&&bytes[2]===0x03&&bytes[3]===0x04;
+        if(isZip&&window.mammoth&&typeof window.mammoth.convertToHtml==='function'){
+          return window.mammoth.convertToHtml({arrayBuffer:buf}).then(function(result){
+            applyImportedHTML(result&&result.value?result.value:'');
+            return true;
+          });
+        }
+        var decoded='';
+        try{decoded=new TextDecoder('utf-8').decode(bytes);}catch(_e){}
+        if(!decoded||decoded.indexOf('{\\rtf')!==0){
+          try{decoded=new TextDecoder('windows-1254').decode(bytes);}catch(_e2){}
+        }
+        if(decoded&&decoded.indexOf('{\\rtf')===0){
+          if(window.AQTipTapWordIO&&typeof window.AQTipTapWordIO.normalizeImportHTML==='function'){
+            applyImportedHTML(window.AQTipTapWordIO.normalizeImportHTML(decoded,formatPlainTextAPA));
+          }else{
+            applyImportedHTML(formatPlainTextAPA(decoded));
+          }
+          return true;
+        }
+        if(/\.doc$/i.test(file.name)){
+          alert('Eski .doc biçimi sınırlı destekleniyor. En iyi sonuç için dosyayı Word’de .docx olarak kaydedip yeniden içe aktarın.');
+          return false;
+        }
+        throw new Error('Word dosyasi okunamadi.');
+      });
+    };
+    var nativePath=(file&&typeof file.path==='string')?file.path.trim():'';
+    if(nativePath&&window.electronAPI&&typeof window.electronAPI.wordToHtml==='function'){
+      window.electronAPI.wordToHtml(nativePath).then(function(res){
+        if(res&&res.ok&&res.html){
+          applyImportedHTML(res.html);
+          return;
+        }
+        return fallbackImport();
+      }).catch(function(){
+        return fallbackImport();
+      }).catch(function(){
+        alert('Word dosyasi okunamadi.');
+      }).finally(function(){e.target.value='';});
+      return;
+    }
+    fallbackImport().catch(function(){
       alert('Word dosyasi okunamadi.');
     }).finally(function(){e.target.value='';});
     return;
@@ -3980,14 +4058,6 @@ function expLib(){var c=[];S.wss.forEach(function(ws){(ws.lib||[]).forEach(funct
 // â”€â”€ UI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function enhanceMenus(){
   var insertMenu=document.getElementById('ddins');
-  if(insertMenu&&!insertMenu.querySelector('[data-aq="toc"]')){
-    var btn=document.createElement('button');
-    btn.className='ddi';
-    btn.dataset.aq='toc';
-    btn.textContent='Ä°Ã§indekiler';
-    btn.onclick=function(){insertTOC();cdd();};
-    insertMenu.insertBefore(btn,insertMenu.children[1]||null);
-  }
   if(insertMenu&&!insertMenu.querySelector('[data-aq="word-import"]')){
     var wbtn=document.createElement('button');
     wbtn.className='ddi';
@@ -4241,123 +4311,573 @@ async function doPdfSync(){
 }
 
 // â”€â”€ MULTI-SOURCE OA PDF FETCH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-async function fetchOAUrls(doi){
-  var urls=[];
-  var clean=doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i,'').trim();
-  var promises=[];
-  // 1. Unpaywall â€” en bÃ¼yÃ¼k OA link veritabanÄ±
-  promises.push(fetch('https://api.unpaywall.org/v2/'+encodeURIComponent(clean)+'?email=academiq@example.com').then(function(r){return r.ok?r.json():null;}).then(function(ua){
-    if(ua){
-      if(ua.best_oa_location&&ua.best_oa_location.url_for_pdf)urls.push(ua.best_oa_location.url_for_pdf);
-      if(ua.best_oa_location&&ua.best_oa_location.url)urls.push(ua.best_oa_location.url);
-      (ua.oa_locations||[]).forEach(function(loc){if(loc.url_for_pdf)urls.push(loc.url_for_pdf);if(loc.url)urls.push(loc.url);});
-    }
-  }).catch(function(){}));
-  // 2. Semantic Scholar
-  promises.push(fetch('https://api.semanticscholar.org/graph/v1/paper/DOI:'+encodeURIComponent(clean)+'?fields=openAccessPdf').then(function(r){return r.ok?r.json():null;}).then(function(s2){
-    if(s2&&s2.openAccessPdf&&s2.openAccessPdf.url)urls.push(s2.openAccessPdf.url);
-  }).catch(function(){}));
-  // 3. OpenAlex â€” aÃ§Ä±k eriÅŸim lokasyonlarÄ±
-  promises.push(fetch('https://api.openalex.org/works/doi:'+clean,{headers:{'Accept':'application/json','User-Agent':'AcademiQ/2.0 (mailto:academiq@example.com)'}}).then(function(r){return r.ok?r.json():null;}).then(function(oa){
-    if(oa){
-      if(oa.open_access&&oa.open_access.oa_url)urls.push(oa.open_access.oa_url);
-      (oa.locations||[]).forEach(function(loc){if(loc.pdf_url)urls.push(loc.pdf_url);if(loc.landing_page_url)urls.push(loc.landing_page_url);});
-    }
-  }).catch(function(){}));
-  // 4. CORE â€” dÃ¼nyanÄ±n en bÃ¼yÃ¼k OA deposu (core.ac.uk)
-  promises.push(fetch('https://api.core.ac.uk/v3/search/works/?q=doi:'+encodeURIComponent(clean)+'&limit=3',{headers:{'Accept':'application/json'}}).then(function(r){return r.ok?r.json():null;}).then(function(core){
-    if(core&&core.results){
-      core.results.forEach(function(item){
-        if(item.downloadUrl)urls.push(item.downloadUrl);
-        if(item.sourceFulltextUrls)(Array.isArray(item.sourceFulltextUrls)?item.sourceFulltextUrls:[item.sourceFulltextUrls]).forEach(function(u){urls.push(u);});
-      });
-    }
-  }).catch(function(){}));
-  // 5. Europe PMC â€” Avrupa'nÄ±n OA deposu
-  promises.push(fetch('https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:'+encodeURIComponent(clean)+'&format=json&resultType=core').then(function(r){return r.ok?r.json():null;}).then(function(epmc){
-    if(epmc&&epmc.resultList&&epmc.resultList.result){
-      epmc.resultList.result.forEach(function(item){
-        if(item.fullTextUrlList&&item.fullTextUrlList.fullTextUrl){
-          item.fullTextUrlList.fullTextUrl.forEach(function(fu){
-            if(fu.documentStyle==='pdf'&&fu.url)urls.push(fu.url);
-            else if(fu.availability==='Open access'&&fu.url)urls.push(fu.url);
-          });
-        }
-        if(item.pmcid)urls.push('https://europepmc.org/backend/ptpmcrender.fcgi?accid='+item.pmcid+'&blobtype=pdf');
-      });
-    }
-  }).catch(function(){}));
-  // 6. PubMed Central â€” biyomedikal tam metin
-  promises.push(fetch('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pmc&term='+encodeURIComponent(clean)+'[doi]&retmode=json').then(function(r){return r.ok?r.json():null;}).then(function(pmc){
-    if(pmc&&pmc.esearchresult&&pmc.esearchresult.idlist){
-      pmc.esearchresult.idlist.forEach(function(pmcid){
-        urls.push('https://www.ncbi.nlm.nih.gov/pmc/articles/PMC'+pmcid+'/pdf/');
-        urls.push('https://europepmc.org/backend/ptpmcrender.fcgi?accid=PMC'+pmcid+'&blobtype=pdf');
-      });
-    }
-  }).catch(function(){}));
-  // 7. DOAJ â€” aÃ§Ä±k eriÅŸim dergi dizini
-  promises.push(fetch('https://doaj.org/api/search/articles/doi:'+encodeURIComponent(clean)).then(function(r){return r.ok?r.json():null;}).then(function(doaj){
-    if(doaj&&doaj.results){
-      doaj.results.forEach(function(item){
-        if(item.bibjson&&item.bibjson.link){
-          item.bibjson.link.forEach(function(link){
-            if(link.type==='fulltext'&&link.url)urls.push(link.url);
-          });
-        }
-      });
-    }
-  }).catch(function(){}));
-  // 8. Crossref funder mandate check â€” OA zorunlu fonlama bilgisi
-  promises.push(fetch('https://api.crossref.org/works/'+encodeURIComponent(clean)+'?mailto=academiq@example.com').then(function(r){return r.ok?r.json():null;}).then(function(cr){
-    if(cr&&cr.message){
-      // Check for open access links in Crossref
-      (cr.message.link||[]).forEach(function(lnk){
-        if(lnk['content-type']==='application/pdf'&&lnk.URL)urls.push(lnk.URL);
-        if(lnk['intended-application']==='text-mining'&&lnk.URL)urls.push(lnk.URL);
-      });
-    }
-  }).catch(function(){}));
-  await Promise.allSettled(promises);
-  var seen={};
-  return urls.filter(function(u){if(!u||seen[u])return false;seen[u]=true;return true;});
+var __oaUrlCache={};
+function __oaCleanDoi(doi){
+  return (doi||'').replace(/^https?:\/\/(dx\.)?doi\.org\//i,'').trim();
 }
-
+function __oaBuildDoiVariants(doi){
+  var raw=__oaCleanDoi(doi);
+  var variants=[];
+  function push(v){
+    if(typeof v!=='string')return;
+    v=v.trim();
+    if(!v)return;
+    if(!/^10\.\d{4,9}\//i.test(v))return;
+    if(variants.indexOf(v)<0)variants.push(v);
+  }
+  var compact=raw
+    .replace(/^doi:\s*/i,'')
+    .replace(/\s+/g,'')
+    .replace(/[\u200B-\u200D\uFEFF]/g,'');
+  push(compact);
+  push(compact.replace(/[?#].*$/,''));
+  var extracted=(compact.match(/\b10\.\d{4,9}\/[-._;()/:A-Z0-9]+\b/i)||[])[0]||'';
+  push(extracted);
+  var seed=variants.slice(0);
+  seed.forEach(function(v){
+    push(v.replace(/[)\].,;:]+$/g,''));
+    // OCR/import gürültüsü: DOI sonuna tek harf segment yapışabiliyor (örn. /B)
+    push(v.replace(/\/[A-Za-z]$/,''));
+    // Sık görülen dışa aktarım sonekleri (örn. /BIBTEX, .RIS)
+    push(v.replace(/(?:\/|\.)(BIBTEX|RIS|ABSTRACT|FULLTEXT|FULL|PDF|XML|HTML|EPUB)$/i,''));
+    push(v.replace(/(?:\/|\.)(BIBTEX|RIS|ABSTRACT|FULLTEXT|FULL|PDF|XML|HTML|EPUB)$/i,'').replace(/[)\].,;:]+$/g,''));
+  });
+  return __oaDedup(variants).sort(function(a,b){
+    function score(v){
+      var s=0;
+      if(!/\/[A-Za-z]$/.test(v))s+=3;
+      if(!/[)\].,;:]$/.test(v))s+=2;
+      if(!/\s/.test(v))s+=1;
+      s-=Math.max(0,v.length-32)*0.01;
+      return s;
+    }
+    return score(b)-score(a);
+  });
+}
+function __oaPushUrl(urls,u){
+  if(typeof u!=='string')return;
+  u=u.trim();
+  if(!u||!/^https?:\/\//i.test(u))return;
+  urls.push(u);
+}
+function __oaDedup(urls){
+  var seen={};
+  return (urls||[]).filter(function(u){
+    var key=(u||'').trim();
+    if(!key||seen[key])return false;
+    seen[key]=true;
+    return true;
+  });
+}
+function __oaPdfScore(url){
+  var u=(url||'').toLowerCase();
+  if(!u)return -999;
+  var score=0;
+  if(/\.pdf($|[?#])/i.test(u))score+=9;
+  if(/\/pdf(\/|$|[?#])/i.test(u))score+=7;
+  if(/blobtype=pdf|content[-_]?type=application%2fpdf|type=printable|download=1/i.test(u))score+=5;
+  if(/https?:\/\/(dx\.)?doi\.org\/10\./i.test(u))score+=8;
+  if(/(europepmc|ncbi\.nlm\.nih\.gov\/pmc|arxiv|biorxiv|medrxiv|plos|mdpi|frontiersin)/i.test(u))score+=2;
+  if(/scholar\.google|semanticscholar\.org\/search|dergipark\.org\.tr\/.*search/i.test(u))score-=12;
+  return score;
+}
+function __oaSortUrlsByPdfLikely(urls){
+  return (urls||[])
+    .map(function(u,idx){return {u:u,idx:idx,score:__oaPdfScore(u)};})
+    .sort(function(a,b){
+      if(b.score!==a.score)return b.score-a.score;
+      return a.idx-b.idx;
+    })
+    .map(function(item){return item.u;});
+}
+function __oaBuildHeuristicUrlsForDoi(doi){
+  var variants=__oaBuildDoiVariants(doi);
+  var urls=[];
+  variants.forEach(function(v){
+    var lower=v.toLowerCase();
+    __oaPushUrl(urls,'https://doi.org/'+v);
+    __oaPushUrl(urls,'https://dx.doi.org/'+v);
+    // Frontiers DOI pattern fallback
+    if(/^10\.3389\/[a-z0-9.]+$/i.test(lower)){
+      __oaPushUrl(urls,'https://www.frontiersin.org/articles/'+v+'/pdf');
+      __oaPushUrl(urls,'https://www.frontiersin.org/articles/'+v+'/full');
+    }
+    // DergiPark fallback (search pages - HTML parser may discover direct pdf links)
+    __oaPushUrl(urls,'https://dergipark.org.tr/tr/search?q='+encodeURIComponent(v));
+    __oaPushUrl(urls,'https://dergipark.org.tr/en/search?q='+encodeURIComponent(v));
+    // Scholar-like discovery fallbacks
+    __oaPushUrl(urls,'https://www.semanticscholar.org/search?q='+encodeURIComponent(v));
+  });
+  return __oaSortUrlsByPdfLikely(__oaDedup(urls));
+}
+function __oaFetchJSON(url,options,timeoutMs){
+  var opts=Object.assign({},options||{});
+  var ms=Math.max(2500,Math.min(parseInt(timeoutMs,10)||7000,20000));
+  var controller=(typeof AbortController!=='undefined')?new AbortController():null;
+  if(controller)opts.signal=controller.signal;
+  return new Promise(function(resolve){
+    var done=false;
+    var timer=setTimeout(function(){
+      if(done)return;
+      done=true;
+      try{if(controller)controller.abort();}catch(e){}
+      resolve(null);
+    },ms);
+    fetch(url,opts)
+      .then(function(r){
+        if(done)return;
+        if(!r||!r.ok){done=true;clearTimeout(timer);resolve(null);return;}
+        r.json().then(function(data){
+          if(done)return;
+          done=true;
+          clearTimeout(timer);
+          resolve(data||null);
+        }).catch(function(){
+          if(done)return;
+          done=true;
+          clearTimeout(timer);
+          resolve(null);
+        });
+      })
+      .catch(function(){
+        if(done)return;
+        done=true;
+        clearTimeout(timer);
+        resolve(null);
+      });
+  });
+}
+function __oaFetchText(url,options,timeoutMs){
+  var opts=Object.assign({},options||{});
+  var ms=Math.max(2500,Math.min(parseInt(timeoutMs,10)||7000,20000));
+  var controller=(typeof AbortController!=='undefined')?new AbortController():null;
+  if(controller)opts.signal=controller.signal;
+  return new Promise(function(resolve){
+    var done=false;
+    var timer=setTimeout(function(){
+      if(done)return;
+      done=true;
+      try{if(controller)controller.abort();}catch(e){}
+      resolve('');
+    },ms);
+    fetch(url,opts)
+      .then(function(r){
+        if(done)return;
+        if(!r||!r.ok){done=true;clearTimeout(timer);resolve('');return;}
+        r.text().then(function(txt){
+          if(done)return;
+          done=true;
+          clearTimeout(timer);
+          resolve(txt||'');
+        }).catch(function(){
+          if(done)return;
+          done=true;
+          clearTimeout(timer);
+          resolve('');
+        });
+      })
+      .catch(function(){
+        if(done)return;
+        done=true;
+        clearTimeout(timer);
+        resolve('');
+      });
+  });
+}
+function __oaExtractHttpUrls(text,baseUrl){
+  if(typeof text!=='string'||!text.trim())return [];
+  var urls=[];
+  var seen={};
+  function push(u){
+    if(!u||typeof u!=='string')return;
+    var val=u.replace(/&amp;/g,'&').trim();
+    try{val=new URL(val,baseUrl||'https://example.com').href;}catch(e){return;}
+    if(!/^https?:\/\//i.test(val))return;
+    if(seen[val])return;
+    seen[val]=true;
+    urls.push(val);
+  }
+  var absRe=/https?:\/\/[^\s"'<>\\]+/ig;
+  var m;
+  while((m=absRe.exec(text)))push(m[0]);
+  var hrefRe=/href\s*=\s*["']([^"']+)["']/ig;
+  while((m=hrefRe.exec(text)))push(m[1]);
+  var xmlUrlRe=/<url[^>]*>([^<]+)<\/url>/ig;
+  while((m=xmlUrlRe.exec(text)))push(m[1]);
+  return urls;
+}
+async function fetchOAUrls(doi){
+  var clean=__oaCleanDoi(doi);
+  if(!clean)return [];
+  if(__oaUrlCache[clean])return __oaUrlCache[clean].slice(0);
+  var urls=[];
+  __oaBuildHeuristicUrlsForDoi(clean).forEach(function(u){__oaPushUrl(urls,u);});
+  var primary=[];
+  // 1. Unpaywall
+  primary.push(__oaFetchJSON('https://api.unpaywall.org/v2/'+encodeURIComponent(clean)+'?email=academiq@example.com',null,7000).then(function(ua){
+    if(!ua)return;
+    if(ua.best_oa_location){
+      __oaPushUrl(urls,ua.best_oa_location.url_for_pdf);
+      __oaPushUrl(urls,ua.best_oa_location.url);
+    }
+    (ua.oa_locations||[]).forEach(function(loc){
+      __oaPushUrl(urls,loc&&loc.url_for_pdf);
+      __oaPushUrl(urls,loc&&loc.url);
+    });
+  }));
+  // 2. Semantic Scholar
+  primary.push(__oaFetchJSON('https://api.semanticscholar.org/graph/v1/paper/DOI:'+encodeURIComponent(clean)+'?fields=openAccessPdf',null,7000).then(function(s2){
+    __oaPushUrl(urls,s2&&s2.openAccessPdf&&s2.openAccessPdf.url);
+  }));
+  // 3. OpenAlex
+  primary.push(__oaFetchJSON('https://api.openalex.org/works/doi:'+encodeURIComponent(clean),{headers:{'Accept':'application/json','User-Agent':'AcademiQ/2.0 (mailto:academiq@example.com)'}},7000).then(function(oa){
+    if(!oa)return;
+    __oaPushUrl(urls,oa.open_access&&oa.open_access.oa_url);
+    (oa.locations||[]).forEach(function(loc){
+      __oaPushUrl(urls,loc&&loc.pdf_url);
+      __oaPushUrl(urls,loc&&loc.landing_page_url);
+    });
+  }));
+  // 4. Crossref
+  primary.push(__oaFetchJSON('https://api.crossref.org/works/'+encodeURIComponent(clean)+'?mailto=academiq@example.com',null,7000).then(function(cr){
+    var links=(cr&&cr.message&&cr.message.link)||[];
+    links.forEach(function(lnk){
+      if(!lnk)return;
+      if(lnk['content-type']==='application/pdf')__oaPushUrl(urls,lnk.URL);
+      if(lnk['intended-application']==='text-mining')__oaPushUrl(urls,lnk.URL);
+    });
+  }));
+  await Promise.allSettled(primary);
+  var secondary=[];
+  // 5. CORE
+  secondary.push(__oaFetchJSON('https://api.core.ac.uk/v3/search/works/?q=doi:'+encodeURIComponent(clean)+'&limit=3',{headers:{'Accept':'application/json'}},6000).then(function(core){
+    if(!core||!core.results)return;
+    core.results.forEach(function(item){
+      __oaPushUrl(urls,item&&item.downloadUrl);
+      var extra=item&&item.sourceFulltextUrls;
+      if(extra)(Array.isArray(extra)?extra:[extra]).forEach(function(u){__oaPushUrl(urls,u);});
+    });
+  }));
+  // 6. Europe PMC
+  secondary.push(__oaFetchJSON('https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:'+encodeURIComponent(clean)+'&format=json&resultType=core',null,6000).then(function(epmc){
+    var rows=epmc&&epmc.resultList&&epmc.resultList.result;
+    if(!rows)return;
+    rows.forEach(function(item){
+      var list=item&&item.fullTextUrlList&&item.fullTextUrlList.fullTextUrl;
+      if(Array.isArray(list)){
+        list.forEach(function(fu){
+          if(!fu)return;
+          if(fu.documentStyle==='pdf')__oaPushUrl(urls,fu.url);
+          else if(fu.availability==='Open access')__oaPushUrl(urls,fu.url);
+        });
+      }
+      if(item&&item.pmcid)__oaPushUrl(urls,'https://europepmc.org/backend/ptpmcrender.fcgi?accid='+item.pmcid+'&blobtype=pdf');
+    });
+  }));
+  // 7. PubMed Central
+  secondary.push(__oaFetchJSON('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pmc&term='+encodeURIComponent(clean)+'[doi]&retmode=json',null,6000).then(function(pmc){
+    var ids=pmc&&pmc.esearchresult&&pmc.esearchresult.idlist;
+    if(!Array.isArray(ids))return;
+    ids.forEach(function(pmcid){
+      __oaPushUrl(urls,'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC'+pmcid+'/pdf/');
+      __oaPushUrl(urls,'https://europepmc.org/backend/ptpmcrender.fcgi?accid=PMC'+pmcid+'&blobtype=pdf');
+    });
+  }));
+  // 8. DOAJ
+  secondary.push(__oaFetchJSON('https://doaj.org/api/search/articles/doi:'+encodeURIComponent(clean),null,6000).then(function(doaj){
+    var rows=doaj&&doaj.results;
+    if(!Array.isArray(rows))return;
+    rows.forEach(function(item){
+      var links=item&&item.bibjson&&item.bibjson.link;
+      if(!Array.isArray(links))return;
+      links.forEach(function(link){
+        if(link&&link.type==='fulltext')__oaPushUrl(urls,link.url);
+      });
+    });
+  }));
+  // 9. NCBI DOI conversion (PubMed/PMC bridge)
+  secondary.push(__oaFetchJSON('https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids='+encodeURIComponent(clean)+'&format=json',null,6000).then(function(conv){
+    var records=(conv&&conv.records)||[];
+    if(!Array.isArray(records))return;
+    records.forEach(function(rec){
+      var pmcid=rec&&rec.pmcid;
+      var pmid=rec&&rec.pmid;
+      if(pmcid){
+        var pmcOnly=String(pmcid).replace(/^PMC/i,'');
+        __oaPushUrl(urls,'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC'+pmcOnly+'/pdf/');
+        __oaPushUrl(urls,'https://europepmc.org/backend/ptpmcrender.fcgi?accid=PMC'+pmcOnly+'&blobtype=pdf');
+      }
+      if(pmid){
+        __oaPushUrl(urls,'https://pubmed.ncbi.nlm.nih.gov/'+pmid+'/');
+      }
+    });
+  }));
+  // 10. PubMed E-utilities search + PubMed->PMC linking
+  secondary.push(__oaFetchJSON('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term='+encodeURIComponent(clean)+'[aid]&retmode=json',null,6000).then(async function(pub){
+    var pmids=pub&&pub.esearchresult&&pub.esearchresult.idlist;
+    if(!Array.isArray(pmids)||!pmids.length)return;
+    pmids.slice(0,6).forEach(function(pmid){
+      __oaPushUrl(urls,'https://pubmed.ncbi.nlm.nih.gov/'+pmid+'/');
+    });
+    try{
+      var elink=await __oaFetchJSON('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi?dbfrom=pubmed&db=pmc&id='+encodeURIComponent(pmids.slice(0,6).join(','))+'&retmode=json',null,6000);
+      var linksets=(elink&&elink.linksets)||[];
+      if(Array.isArray(linksets)){
+        linksets.forEach(function(set){
+          var dbs=set&&set.linksetdb;
+          if(!Array.isArray(dbs))return;
+          dbs.forEach(function(db){
+            var links=(db&&db.links)||[];
+            if(!Array.isArray(links))return;
+            links.forEach(function(pmcid){
+              __oaPushUrl(urls,'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC'+pmcid+'/pdf/');
+              __oaPushUrl(urls,'https://europepmc.org/backend/ptpmcrender.fcgi?accid=PMC'+pmcid+'&blobtype=pdf');
+            });
+          });
+        });
+      }
+    }catch(e){}
+  }));
+  // 11. DergiPark query expansion by DOI variants
+  secondary.push(Promise.resolve().then(function(){
+    __oaBuildDoiVariants(clean).forEach(function(v){
+      __oaPushUrl(urls,'https://dergipark.org.tr/tr/search?q='+encodeURIComponent(v));
+      __oaPushUrl(urls,'https://dergipark.org.tr/en/search?q='+encodeURIComponent(v));
+    });
+  }));
+  // 12. OpenAIRE (XML endpoint)
+  secondary.push(__oaFetchText('https://api.openaire.eu/search/publications?doi='+encodeURIComponent(clean)+'&size=10',null,7000).then(function(xml){
+    __oaExtractHttpUrls(xml,'https://api.openaire.eu').forEach(function(u){__oaPushUrl(urls,u);});
+  }));
+  // 13. DataCite DOI metadata
+  secondary.push(__oaFetchJSON('https://api.datacite.org/dois/'+encodeURIComponent(clean),null,7000).then(function(dc){
+    var attrs=dc&&dc.data&&dc.data.attributes;
+    if(!attrs)return;
+    __oaPushUrl(urls,attrs.url);
+    var related=attrs.relatedIdentifiers||attrs.related_identifiers||[];
+    if(Array.isArray(related)){
+      related.forEach(function(rel){
+        __oaPushUrl(urls,(rel&&rel.relatedIdentifier)||rel&&rel.relatedIdentifierValue||rel&&rel.url);
+      });
+    }
+  }));
+  // 14. Zenodo by DOI
+  secondary.push(__oaFetchJSON('https://zenodo.org/api/records?q='+encodeURIComponent('doi:"'+clean+'"')+'&size=5',null,7000).then(function(zen){
+    var hits=zen&&zen.hits&&zen.hits.hits;
+    if(!Array.isArray(hits))return;
+    hits.forEach(function(item){
+      var files=(item&&item.files)||[];
+      if(Array.isArray(files)){
+        files.forEach(function(f){
+          __oaPushUrl(urls,f&&f.links&&f.links.download);
+          __oaPushUrl(urls,f&&f.links&&f.links.self);
+        });
+      }
+      __oaPushUrl(urls,item&&item.links&&item.links.self_html);
+      __oaPushUrl(urls,item&&item.links&&item.links.self);
+    });
+  }));
+  // 15. DOI landing-page scrape (meta/href urls)
+  secondary.push(__oaFetchText('https://doi.org/'+clean,null,7000).then(function(html){
+    __oaExtractHttpUrls(html,'https://doi.org/'+clean).forEach(function(u){__oaPushUrl(urls,u);});
+  }));
+  await Promise.allSettled(secondary);
+  var unique=__oaSortUrlsByPdfLikely(__oaDedup(urls)).slice(0,120);
+  __oaUrlCache[clean]=unique;
+  return unique.slice(0);
+}
+var __oaLastDownloadFailure='';
+async function __oaTryDownloadRefFromUrls(ref,baseUrls,maxAttempts){
+  var failure='';
+  if(!ref||!ref.id){
+    failure='Gecersiz referans kimligi';
+    __oaLastDownloadFailure=failure;
+    return {ok:false,reason:failure};
+  }
+  var allUrls=[];
+  (baseUrls||[]).forEach(function(u){
+    buildPDFUrls(u).forEach(function(v){if(allUrls.indexOf(v)<0)allUrls.push(v);});
+  });
+  allUrls=__oaSortUrlsByPdfLikely(allUrls);
+  var targetAttempts=parseInt(maxAttempts,10);
+  if(!targetAttempts||targetAttempts<1)targetAttempts=allUrls.length;
+  var cap=Math.min(allUrls.length,targetAttempts);
+  var lastFailureLow=false;
+  function isLowSignalUrl(u){
+    return /\/search\?|scholar\.google|semanticscholar\.org\/search|dergipark\.org\.tr\/.*search/i.test(String(u||'').toLowerCase());
+  }
+  function setFailure(msg,url){
+    var low=isLowSignalUrl(url);
+    if(low&&failure&&!lastFailureLow)return;
+    failure=String(msg||'Indirme basarisiz').slice(0,180)+' @ '+String(url||'').slice(0,96);
+    lastFailureLow=low;
+  }
+  if(cap<1){
+    failure='Uygun OA URL bulunamadi';
+    __oaLastDownloadFailure=failure;
+    return {ok:false,reason:failure};
+  }
+  for(var j=0;j<cap;j++){
+    var triedUrl=allUrls[j];
+    try{
+      var timeoutMs=20000;
+      if(/https?:\/\/(dx\.)?doi\.org\/10\./i.test(triedUrl))timeoutMs=14000;
+      else if(isLowSignalUrl(triedUrl))timeoutMs=12000;
+      var res=await window.electronAPI.downloadPDFfromURL(triedUrl,ref.id,{timeoutMs:timeoutMs});
+      if(res&&res.ok){
+        if(!ref.pdfUrl)ref.pdfUrl=triedUrl;
+        var hydrated=await hydrateRefPDF(ref);
+        if(hydrated&&ref.pdfData)return {ok:true,url:triedUrl};
+        try{
+          var direct=await window.electronAPI.loadPDF(ref.id);
+          if(direct&&direct.ok&&direct.buffer){ref.pdfData=direct.buffer;return {ok:true,url:triedUrl};}
+        }catch(e){}
+        setFailure('PDF kaydedildi ama yuklenemedi',triedUrl);
+      }else{
+        var errMsg=(res&&res.error)?String(res.error):'Indirme basarisiz';
+        setFailure(errMsg,triedUrl);
+      }
+    }catch(e){
+      setFailure((e&&e.message)?e.message:String(e),triedUrl);
+    }
+  }
+  if(!failure)failure='Bilinmeyen indirme hatasi';
+  __oaLastDownloadFailure=failure;
+  return {ok:false,reason:failure};
+}
+async function __oaResolveUrlsForRef(ref){
+  var reason='';
+  var oaUrls=await fetchOAUrls(ref.doi);
+  var doiVariants=__oaBuildDoiVariants(ref.doi);
+  if((!oaUrls||!oaUrls.length)&&doiVariants.length>1){
+    for(var dv=0;dv<doiVariants.length;dv++){
+      var candDoi=dv===0?null:doiVariants[dv];
+      if(!candDoi)continue;
+      try{
+        var more=await fetchOAUrls(candDoi);
+        if(more&&more.length){
+          oaUrls=(oaUrls||[]).concat(more);
+          break;
+        }
+      }catch(e){}
+    }
+  }
+  if(!oaUrls||!oaUrls.length){
+    if(doiVariants.length){
+      oaUrls=[];
+      doiVariants.forEach(function(doiPath){
+        oaUrls.push('https://doi.org/'+doiPath);
+        oaUrls.push('https://dx.doi.org/'+doiPath);
+      });
+      oaUrls=__oaDedup(oaUrls);
+      reason='OA URL servisleri yanit vermedi; DOI resolver fallback deneniyor';
+    }else{
+      reason='OA URL bulunamadi (DOI temizlenemedi)';
+    }
+  }
+  if(ref.pdfUrl&&oaUrls&&oaUrls.indexOf(ref.pdfUrl)<0)oaUrls.unshift(ref.pdfUrl);
+  return {urls:oaUrls||[],reason:reason};
+}
+async function __oaDownloadOneRef(ref){
+  var attempt={ok:false,reason:''};
+  var reason='';
+  try{
+    if(ref.pdfUrl){
+      attempt=await __oaTryDownloadRefFromUrls(ref,[ref.pdfUrl],8);
+      if(attempt.ok)return {ok:true};
+      reason=attempt.reason||reason;
+    }
+    var resolved=await __oaResolveUrlsForRef(ref);
+    if(resolved.reason)reason=resolved.reason;
+    if(resolved.urls&&resolved.urls.length){
+      attempt=await __oaTryDownloadRefFromUrls(ref,resolved.urls,28);
+      if(attempt.ok)return {ok:true};
+      reason=attempt.reason||reason;
+    }
+    if(ref&&ref.doi){
+      try{
+        delete __oaUrlCache[__oaCleanDoi(ref.doi)];
+        var retryUrls=await fetchOAUrls(ref.doi);
+        if(retryUrls.length){
+          attempt=await __oaTryDownloadRefFromUrls(ref,retryUrls,28);
+          if(attempt.ok)return {ok:true};
+          reason=attempt.reason||reason;
+        }
+      }catch(e){}
+    }
+  }catch(e){
+    reason=(e&&e.message)?e.message:String(e);
+  }
+  return {ok:false,reason:reason||'Bilinmeyen hata'};
+}
 async function batchDownloadOA(){
   if(typeof window.electronAPI==='undefined'){setDst('Electron gerekli.','er');return;}
   var allRefs=[];
   S.wss.forEach(function(ws){allRefs=allRefs.concat(ws.lib||[]);});
-  var queue=allRefs.filter(function(r){return r.doi&&!r.pdfData;});
-  if(!queue.length){setDst('Tum kaynaklarda PDF mevcut veya DOI yok.','ok');setTimeout(function(){setDst('','');},4000);return;}
-  setDst('Toplu indirme: 0/'+queue.length,'ld');
-  var done=0;
-  for(var i=0;i<queue.length;i++){
-    var r=queue[i];
-    setDst('Indiriliyor '+(i+1)+'/'+queue.length+': '+shortRef(r),'ld');
+  var rawQueue=allRefs.filter(function(r){return r&&r.doi&&!r.pdfData;});
+  if(!rawQueue.length){setDst('Tum kaynaklarda PDF mevcut veya DOI yok.','ok');setTimeout(function(){setDst('','');},4000);return;}
+  var queue=[];
+  var seen={};
+  var alreadyLocal=0;
+  for(var i=0;i<rawQueue.length;i++){
+    var r=rawQueue[i];
+    if(!r||!r.id||seen[r.id])continue;
+    seen[r.id]=true;
+    var exists=false;
     try{
-      var oaUrls=await fetchOAUrls(r.doi);
-      if(r.pdfUrl&&oaUrls.indexOf(r.pdfUrl)<0)oaUrls.unshift(r.pdfUrl);
-      if(oaUrls.length>0){
-        var allUrls=[];
-        oaUrls.forEach(function(u){buildPDFUrls(u).forEach(function(v){if(allUrls.indexOf(v)<0)allUrls.push(v);});});
-        for(var j=0;j<allUrls.length;j++){
-          try{
-            var res=await window.electronAPI.downloadPDFfromURL(allUrls[j],r.id);
-            if(res.ok){
-              if(!r.pdfUrl)r.pdfUrl=allUrls[j];
-              var hydrated=await hydrateRefPDF(r);
-              if(hydrated&&r.pdfData){done++;save();break;}
-            }
-          }catch(e){}
-        }
+      if(typeof window.electronAPI.pdfExists==='function'){
+        exists=await window.electronAPI.pdfExists(r.id);
       }
     }catch(e){}
-    // Rate limit: 500ms between refs
-    await new Promise(function(resolve){setTimeout(resolve,500);});
+    if(exists){
+      alreadyLocal++;
+      if(!r.pdfData){try{await hydrateRefPDF(r);}catch(e){}}
+      continue;
+    }
+    queue.push(r);
   }
+  if(!queue.length){
+    setDst('Toplu indirme: yeni indirilecek PDF yok ('+alreadyLocal+' adet zaten mevcut).','ok');
+    setTimeout(function(){setDst('','');},5000);
+    return;
+  }
+  var hw=((typeof navigator!=='undefined'&&navigator.hardwareConcurrency)?navigator.hardwareConcurrency:4);
+  var concurrency=Math.min(queue.length,Math.max(2,Math.min(6,Math.ceil(hw/2))));
+  setDst('Toplu indirme basladi: 0/'+queue.length+(alreadyLocal?(' (mevcut atlandi: '+alreadyLocal+')'):''),'ld');
+  var done=0,fail=0,failReasons=[],completed=0,nextIdx=0;
+  async function worker(){
+    while(true){
+      var qi=nextIdx++;
+      if(qi>=queue.length)return;
+      var ref=queue[qi];
+      var result=await __oaDownloadOneRef(ref);
+      if(result&&result.ok){
+        done++;
+        save();
+      }else{
+        fail++;
+        if(failReasons.length<3){
+          failReasons.push((shortRef(ref)||'Kaynak')+': '+((result&&result.reason)||'Bilinmeyen hata'));
+        }
+      }
+      completed++;
+      if(completed===queue.length||completed%2===0){
+        setDst('Toplu indirme devam: '+completed+'/'+queue.length+' (basarili '+done+', basarisiz '+fail+')','ld');
+      }
+    }
+  }
+  var workers=[];
+  for(var wi=0;wi<concurrency;wi++)workers.push(worker());
+  await Promise.allSettled(workers);
   save();rLib();
-  setDst('Toplu indirme: '+done+'/'+queue.length+' basarili',done>0?'ok':'er');
-  setTimeout(function(){setDst('','');},5000);
+  var msg='Toplu indirme bitti: '+done+'/'+queue.length+' basarili';
+  if(fail>0)msg+=', '+fail+' basarisiz';
+  if(alreadyLocal>0)msg+=', '+alreadyLocal+' zaten mevcuttu';
+  if(failReasons.length){
+    msg+=' | '+failReasons[0].slice(0,170);
+  }
+  setDst(msg,done>0?'ok':'er');
+  setTimeout(function(){setDst('','');},6500);
 }
 
 // â”€â”€ THUMBNAIL SIDEBAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -4768,26 +5288,50 @@ function rRefs(){
 function buildTOCHTML(ed,headings){
   if(window.AQTipTapWordTOC&&typeof window.AQTipTapWordTOC.buildTOCHTML==='function'){
     return window.AQTipTapWordTOC.buildTOCHTML(ed,headings,{
-      pageContentHeight:864,
+      pageTotalHeight:1155,
       idFactory:function(index){return 'hdg-'+index+'-'+uid().slice(-6);}
     });
   }
-  var pageContentH=864;
+  var pageTotalH=1155;
+  var tocLevelIndent={1:0,2:36,3:72,4:108,5:144};
+  var normalizeLevel=function(level){
+    var parsed=parseInt(level,10);
+    if(!Number.isFinite(parsed))return 1;
+    if(parsed<1)return 1;
+    if(parsed>5)return 5;
+    return parsed;
+  };
+  var computeLeader=function(text,level){
+    var compact=String(text||'').replace(/\s+/g,' ').trim();
+    var depthPenalty=(normalizeLevel(level)-1)*6;
+    var count=130-Math.min(compact.length,72)-depthPenalty;
+    count=Math.max(44,Math.min(170,count));
+    var dots='';for(var i=0;i<count;i++)dots+='.';
+    return dots;
+  };
   var tocHTML='<div class="toc-container" data-aq-toc="1">';
   tocHTML+='<h1 style="text-align:center;font-weight:bold;color:#000;font-family:&quot;Times New Roman&quot;,Times,serif;font-size:12pt;line-height:2;margin:0 0 8px 0;">Ä°Ã§indekiler</h1>';
   var realIdx=0;
   headings.forEach(function(h){
-    var level=parseInt(h.tagName.charAt(1),10);
+    var level=normalizeLevel(String(h.tagName||'').charAt(1));
     var text=h.textContent.trim();
     if(!text||text==='Ä°Ã§indekiler'||text==='KaynakÃ§a')return;
     if(!h.id)h.id='hdg-'+realIdx+'-'+uid().slice(-6);
-    var indent=(level-1)*24;
-    var pageNum=Math.max(1,Math.floor((h.offsetTop||0)/pageContentH)+1);
-    tocHTML+='<p class="ni toc-entry" style="text-indent:0;padding-left:'+indent+'px;cursor:pointer;margin:0;display:flex;gap:8px;align-items:flex-end;color:#000;background:transparent;border:none;box-shadow:none;font-family:&quot;Times New Roman&quot;,Times,serif;font-size:12pt;line-height:2;text-decoration:none;" data-toc-idx="'+realIdx+'" data-target-id="'+h.id+'"><span class="toc-text" style="white-space:nowrap;">'+text+'</span><span style="flex:1;border-bottom:1px dotted #000;transform:translateY(-4px);"></span><span class="toc-page">'+pageNum+'</span></p>';
+    var indent=(Object.prototype.hasOwnProperty.call(tocLevelIndent,level)?tocLevelIndent[level]:0);
+    var pageNum=Math.max(1,Math.floor((h.offsetTop||0)/pageTotalH)+1);
+    var leader=computeLeader(text,level);
+    tocHTML+='<p class="ni toc-entry" style="position:relative;word-break:normal;text-indent:0;padding-left:'+indent+'px;cursor:pointer;margin:0;color:#000;background:transparent;border:none;box-shadow:none;font-family:&quot;Times New Roman&quot;,Times,serif;font-size:12pt;line-height:2;" data-toc-idx="'+realIdx+'" data-heading-idx="'+realIdx+'" data-target-id="'+h.id+'" data-heading-text="'+text.replace(/"/g,'&quot;')+'" data-toc-level="'+level+'"><span class="toc-text-wrap" style="display:block;word-break:normal;overflow-wrap:break-word;padding-right:32px;"><span class="toc-text" style="display:inline;">'+text+'</span></span><span class="toc-dots" style="position:absolute;bottom:0;left:0;right:28px;overflow:hidden;white-space:nowrap;display:none;" aria-hidden="true"></span><span class="toc-page" style="position:absolute;right:0;bottom:0;background:#fff;padding-left:4px;white-space:nowrap;">'+pageNum+'</span></p>';
     realIdx++;
   });
   tocHTML+='</div>';
   return tocHTML;
+}
+function stripTOCArtifactsFromHTML(html){
+  html=String(html||'');
+  html=html.replace(/<div\b[^>]*class=(["'])[^"'<>]*\btoc-container\b[^"'<>]*\1[^>]*>[\s\S]*?<\/div>/gi,'');
+  html=html.replace(/<p\b[^>]*class=(["'])[^"'<>]*\btoc-entry\b[^"'<>]*\1[^>]*>[\s\S]*?<\/p>/gi,'');
+  html=html.replace(/<span\b[^>]*class=(["'])[^"'<>]*\btoc-(?:text|dots|page)\b[^"'<>]*\1[^>]*>[\s\S]*?<\/span>/gi,'');
+  return html;
 }
 function replaceTOCInEditorHTML(tocHTML){
   if(window.AQTipTapWordTOC&&typeof window.AQTipTapWordTOC.replaceTOCInHTML==='function'){
@@ -4795,85 +5339,57 @@ function replaceTOCInEditorHTML(tocHTML){
     applyCurrentEditorHTML(nextHTML,{syncChrome:true,layout:true});
     return;
   }
-  var fullHTML=getCurrentEditorHTML();
+  var fullHTML=stripTOCArtifactsFromHTML(getCurrentEditorHTML());
   var div=document.createElement('div');
   div.innerHTML=fullHTML;
-  var existing=div.querySelector('.toc-container');
-  if(existing){
-    var temp=document.createElement('div');
-    temp.innerHTML=tocHTML;
-    existing.replaceWith(temp.firstChild);
-  }else{
-    div.insertAdjacentHTML('afterbegin',tocHTML);
-  }
+  Array.from(div.querySelectorAll('.toc-container,.toc-entry')).forEach(function(node){node.remove();});
+  div.insertAdjacentHTML('afterbegin',tocHTML);
   applyCurrentEditorHTML(div.innerHTML,{syncChrome:true,layout:true});
 }
+function stripLegacyTOCFromEditor(){
+  var fullHTML=getCurrentEditorHTML();
+  var stripped=stripTOCArtifactsFromHTML(fullHTML);
+  if(stripped===fullHTML)return false;
+  applyCurrentEditorHTML(stripped||'<p></p>',{syncChrome:true,layout:false});
+  return true;
+}
 function insertTOC(){
-  if(window.AQTipTapWordTOC&&typeof window.AQTipTapWordTOC.insertTOC==='function'){
-    if(window.AQTipTapWordTOC.insertTOC({
-      getEditorRoot:function(){return editor?editor.view.dom:document.getElementById('apaed');},
-      getHTML:function(){return getCurrentEditorHTML();},
-      applyHTML:function(nextHTML){
-        applyCurrentEditorHTML(nextHTML,{syncChrome:true,layout:true});
-      },
-      afterApply:function(){},
-      onNoHeadings:function(){alert('Belgede başlık bulunamadı. Önce H1-H5 başlıkları ekleyin.');},
-      pageContentHeight:864,
-      idFactory:function(index){return 'hdg-'+index+'-'+uid().slice(-6);}
-    }))return;
-  }
   var ed=editor?editor.view.dom:document.getElementById('apaed');
+  if(!ed)return;
+  stripLegacyTOCFromEditor();
   var headings=ed.querySelectorAll('h1,h2,h3,h4,h5');
   if(!headings.length){alert('Belgede baÅŸlÄ±k bulunamadÄ±. Ã–nce H1-H5 baÅŸlÄ±klarÄ± ekleyin.');return;}
   var tocHTML=buildTOCHTML(ed,headings);
-  replaceTOCInEditorHTML(tocHTML);
+  var doc=getCurrentDocRecord();
+  if(!doc)return;
+  ensureDocAuxFields(doc);
+  doc.tocHTML=sanitizeAuxPageHTML(tocHTML);
+  syncAuxiliaryPages();
+  save();
+  var tocPage=document.getElementById('tocpage');
+  if(tocPage&&tocPage.style.display!=='none'&&typeof tocPage.scrollIntoView==='function'){
+    setTimeout(function(){tocPage.scrollIntoView({behavior:'smooth',block:'start'});},0);
+  }
 }
 function removeTOC(){
-  if(window.AQTipTapWordTOC&&typeof window.AQTipTapWordTOC.removeTOC==='function'){
-    if(window.AQTipTapWordTOC.removeTOC({
-      getHTML:function(){return getCurrentEditorHTML();},
-      applyHTML:function(nextHTML){
-        applyCurrentEditorHTML(nextHTML,{syncChrome:true,layout:false});
-      }
-    }))return;
+  var doc=getCurrentDocRecord();
+  if(doc){
+    ensureDocAuxFields(doc);
+    doc.tocHTML='';
   }
-  if(window.AQTipTapWordTOC&&typeof window.AQTipTapWordTOC.removeTOCFromHTML==='function'){
-    var nextHTML=window.AQTipTapWordTOC.removeTOCFromHTML(getCurrentEditorHTML());
-    if(nextHTML===null)return;
-    applyCurrentEditorHTML(nextHTML,{syncChrome:true,layout:false});
-    return;
-  }
-  var fullHTML=getCurrentEditorHTML();
-  var div=document.createElement('div');
-  div.innerHTML=fullHTML;
-  var toc=div.querySelector('.toc-container');
-  if(!toc)return;
-  toc.remove();
-  applyCurrentEditorHTML(div.innerHTML||'<p></p>',{syncChrome:true,layout:false});
+  stripLegacyTOCFromEditor();
+  syncAuxiliaryPages();
+  save();
 }
 function autoUpdateTOC(){
-  if(window.AQTipTapWordTOC&&typeof window.AQTipTapWordTOC.autoUpdateTOC==='function'){
-    window.AQTipTapWordTOC.autoUpdateTOC({
-      delay:1500,
-      getEditorRoot:function(){return editor?editor.view.dom:document.getElementById('apaed');},
-      getHTML:function(){return getCurrentEditorHTML();},
-      applyHTML:function(nextHTML){
-        applyCurrentEditorHTML(nextHTML,{syncChrome:true,layout:false});
-      },
-      isEditorFocused:function(){
-        var pm=document.querySelector('#apaed .ProseMirror');
-        var active=document.activeElement;
-        return !!(pm&&active&&(active===pm||pm.contains(active)));
-      },
-      pageContentHeight:864,
-      idFactory:function(index){return 'hdg-'+index+'-'+uid().slice(-6);}
-    });
-    return;
-  }
   clearTimeout(_tocTimer);
   _tocTimer=setTimeout(function(){
+    var doc=getCurrentDocRecord();
+    if(!doc)return;
+    ensureDocAuxFields(doc);
+    if(!String(doc.tocHTML||'').trim())return;
     var ed=editor?editor.view.dom:document.getElementById('apaed');
-    if(!ed||!ed.querySelector('.toc-container'))return;
+    if(!ed)return;
     var headings=ed.querySelectorAll('h1,h2,h3,h4,h5');
     if(!headings.length)return;
     var pm=document.querySelector('#apaed .ProseMirror');
@@ -4882,19 +5398,71 @@ function autoUpdateTOC(){
       autoUpdateTOC();
       return;
     }
-    replaceTOCInEditorHTML(buildTOCHTML(ed,headings));
+    doc.tocHTML=sanitizeAuxPageHTML(buildTOCHTML(ed,headings));
+    syncAuxiliaryPages();
+    save();
   },1500);
+}
+function fixTOCDots(container){
+  if(!container)return;
+  try{
+    var tmp=document.createElement('span');
+    tmp.style.cssText='position:fixed;visibility:hidden;white-space:nowrap;font-family:"Times New Roman",Times,serif;font-size:12pt;';
+    tmp.textContent='..........';
+    document.body.appendChild(tmp);
+    var dotW=tmp.getBoundingClientRect().width/10||4;
+    document.body.removeChild(tmp);
+    container.querySelectorAll('.toc-entry').forEach(function(entry){
+      var textSpan=entry.querySelector('.toc-text');
+      var dotsSpan=entry.querySelector('.toc-dots');
+      var pageSpan=entry.querySelector('.toc-page');
+      if(!textSpan||!dotsSpan||!pageSpan)return;
+      var textRects=textSpan.getClientRects();
+      if(!textRects.length)return;
+      var lastRect=textRects[textRects.length-1];
+      var entryRect=entry.getBoundingClientRect();
+      var pageRect=pageSpan.getBoundingClientRect();
+      var dotsLeft=lastRect.right-entryRect.left;
+      var available=pageRect.left-lastRect.right-4;
+      var count=Math.max(3,Math.floor(available/dotW));
+      dotsSpan.style.left=dotsLeft+'px';
+      dotsSpan.style.display='block';
+      dotsSpan.textContent=new Array(count+1).join('.');
+    });
+  }catch(e){}
 }
 function scrollToHeading(idx){
   var ed=editor?editor.view.dom:document.getElementById('apaed');
-  if(window.AQTipTapWordTOC&&typeof window.AQTipTapWordTOC.scrollToHeading==='function'){
-    if(window.AQTipTapWordTOC.scrollToHeading(ed,idx))return;
+  if(!ed)return;
+  var tocBody=document.getElementById('tocbody');
+  var entry=(tocBody&&tocBody.querySelector('.toc-entry[data-toc-idx="'+idx+'"]'))||ed.querySelector('.toc-entry[data-toc-idx="'+idx+'"]');
+  var headings=Array.from(ed.querySelectorAll('h1,h2,h3,h4,h5')).filter(function(h){
+    var tx=(h.textContent||'').trim().toLowerCase();
+    return tx&&tx!=='içindekiler'&&tx!=='i̇çindekiler'&&tx!=='kaynakça';
+  });
+  var target=null;
+  var headingText=entry&&entry.dataset?entry.dataset.headingText:'';
+  if(headingText){
+    target=headings.find(function(h){ return (h.textContent||'').trim()===headingText; })||null;
   }
-  var entry=ed.querySelector('.toc-entry[data-toc-idx="'+idx+'"]');
-  var targetId=entry&&entry.dataset?entry.dataset.targetId:'';
-  var target=targetId?ed.querySelector('#'+targetId):null;
+  if(!target){
+    var headingIdx=entry&&entry.dataset?parseInt(entry.dataset.headingIdx,10):parseInt(idx,10);
+    target=(Number.isFinite(headingIdx)&&headings[headingIdx])?headings[headingIdx]:null;
+  }
+  if(!target){
+    var targetId=entry&&entry.dataset?entry.dataset.targetId:'';
+    target=targetId?ed.querySelector('#'+targetId):null;
+  }
   if(!target)return;
-  target.scrollIntoView({behavior:'smooth',block:'center'});
+  var scroll=document.getElementById('escroll');
+  if(scroll&&typeof scroll.scrollTo==='function'){
+    var sr=scroll.getBoundingClientRect();
+    var tr=target.getBoundingClientRect();
+    var top=Math.max(0,scroll.scrollTop+(tr.top-sr.top)-36);
+    scroll.scrollTo({top:top,behavior:'smooth'});
+  }else{
+    target.scrollIntoView({behavior:'smooth',block:'center'});
+  }
   target.style.background='rgba(179,131,58,.2)';
   setTimeout(function(){target.style.background='';},1500);
 }
@@ -4902,7 +5470,15 @@ document.addEventListener('click',function(e){
   if(window.AQTipTapWordTOC&&typeof window.AQTipTapWordTOC.handleDocumentClick==='function'){
     if(window.AQTipTapWordTOC.handleDocumentClick(e,{scrollToHeading:scrollToHeading}))return;
   }
-  var entry=e.target.closest&&e.target.closest('.toc-entry');
+  var target=e.target&&e.target.nodeType===3?e.target.parentElement:e.target;
+  var entry=target&&target.closest&&target.closest('.toc-entry');
+  if(!entry)return;
+  e.preventDefault();
+  scrollToHeading(entry.dataset.tocIdx);
+});
+document.addEventListener('mousedown',function(e){
+  var target=e.target&&e.target.nodeType===3?e.target.parentElement:e.target;
+  var entry=target&&target.closest&&target.closest('.toc-entry');
   if(!entry)return;
   e.preventDefault();
   scrollToHeading(entry.dataset.tocIdx);
@@ -5277,14 +5853,44 @@ function insRefs(){
     setTimeout(function(){bibPage.scrollIntoView({behavior:'smooth',block:'start'});},0);
   }
 }
+function sanitizeAuxPageHTML(html){
+  var holder=document.createElement('div');
+  holder.innerHTML=String(html||'');
+  holder.querySelectorAll('script,iframe,object,embed').forEach(function(node){node.remove();});
+  holder.querySelectorAll('*').forEach(function(node){
+    Array.from(node.attributes||[]).forEach(function(attr){
+      if(/^on/i.test(attr.name))node.removeAttribute(attr.name);
+    });
+  });
+  return holder.innerHTML.trim();
+}
+function ensureDocAuxFields(doc){
+  if(!doc||typeof doc!=='object')return null;
+  if(typeof doc.coverHTML!=='string')doc.coverHTML='';
+  if(typeof doc.tocHTML!=='string')doc.tocHTML='';
+  return doc;
+}
+function syncAuxiliaryPages(){
+  var doc=ensureDocAuxFields(getCurrentDocRecord());
+  var coverPage=document.getElementById('coverpage');
+  var coverBody=document.getElementById('coverbody');
+  var tocPage=document.getElementById('tocpage');
+  var tocBody=document.getElementById('tocbody');
+  var coverHTML=doc?String(doc.coverHTML||'').trim():'';
+  var tocHTML=doc?String(doc.tocHTML||'').trim():'';
+  if(coverBody)coverBody.innerHTML=coverHTML||'';
+  if(coverPage)coverPage.style.display=coverHTML?'block':'none';
+  if(tocBody){tocBody.innerHTML=tocHTML||'';if(tocHTML)setTimeout(function(){fixTOCDots(tocBody);},0);}
+  if(tocPage)tocPage.style.display=tocHTML?'block':'none';
+}
 function getCurrentDocRecord(){
   if(window.AQBibliographyState&&typeof window.AQBibliographyState.getCurrentDocumentFromState==='function'){
-    return window.AQBibliographyState.getCurrentDocumentFromState(S,S.curDoc);
+    return ensureDocAuxFields(window.AQBibliographyState.getCurrentDocumentFromState(S,S.curDoc));
   }
   if(window.AQBibliographyState&&typeof window.AQBibliographyState.getCurrentDocument==='function'){
-    return window.AQBibliographyState.getCurrentDocument(S.docs||[],S.curDoc);
+    return ensureDocAuxFields(window.AQBibliographyState.getCurrentDocument(S.docs||[],S.curDoc));
   }
-  return (S.docs||[]).find(function(doc){return doc&&doc.id===S.curDoc;})||null;
+  return ensureDocAuxFields((S.docs||[]).find(function(doc){return doc&&doc.id===S.curDoc;})||null);
 }
 function bindBibliographySurface(){
   if(window.AQBibliographyState&&typeof window.AQBibliographyState.bindBibliographySurfaceForState==='function'){
@@ -5700,10 +6306,13 @@ function __aqSetEditorDoc(html,focusAtEnd){
       focusToEndFn:function(){ if(editor)editor.commands.focus('end'); },
       focusSurfaceFn:function(){ focusEditorSurface(true); },
       normalize:normalizeCitationSpans,
-      syncRefs:updateRefSection,
+      syncRefs:function(){
+        updateRefSection();
+        syncAuxiliaryPages();
+      },
       syncChrome:uSt,
       updatePageHeight:updatePageHeight,
-      afterLayout:function(){ rDocTabs(); }
+      afterLayout:function(){ rDocTabs(); syncAuxiliaryPages(); }
     });
   }
   if(window.AQTipTapWordDocument&&typeof window.AQTipTapWordDocument.loadEditorDocumentWithState==='function'){
@@ -5728,13 +6337,16 @@ function __aqSetEditorDoc(html,focusAtEnd){
       focusToEndFn:function(){ if(editor)editor.commands.focus('end'); },
       focusSurfaceFn:function(){ focusEditorSurface(true); },
       normalize:normalizeCitationSpans,
-      syncRefs:updateRefSection,
+      syncRefs:function(){
+        updateRefSection();
+        syncAuxiliaryPages();
+      },
       syncChrome:uSt,
       syncLayout:function(){
         if(window.AQEditorRuntime&&typeof window.AQEditorRuntime.syncPageLayout==='function')window.AQEditorRuntime.syncPageLayout();
         else updatePageHeight();
       },
-      afterLayout:function(){ rDocTabs(); }
+      afterLayout:function(){ rDocTabs(); syncAuxiliaryPages(); }
     });
   }
   if(window.AQTipTapWordDocument&&typeof window.AQTipTapWordDocument.prepareLoadedHTML==='function'){
@@ -5755,7 +6367,7 @@ function __aqSetEditorDoc(html,focusAtEnd){
         focusToEndFn:function(){ if(editor)editor.commands.focus('end'); },
         focusSurface:!!focusAtEnd&&!editor,
         focusSurfaceFn:function(){ focusEditorSurface(true); },
-        afterLayout:function(){ rDocTabs(); }
+        afterLayout:function(){ rDocTabs(); syncAuxiliaryPages(); }
       });
       return;
     }
@@ -5766,6 +6378,7 @@ function __aqSetEditorDoc(html,focusAtEnd){
     if(focusAtEnd&&editor)editor.commands.focus('end');
     else if(focusAtEnd&&!editor)focusEditorSurface(true);
     updateRefSection();
+    syncAuxiliaryPages();
     uSt();
     if(window.AQEditorRuntime&&typeof window.AQEditorRuntime.syncPageLayout==='function')window.AQEditorRuntime.syncPageLayout();
     else updatePageHeight();

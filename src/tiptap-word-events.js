@@ -8,7 +8,10 @@
   var state = {
     initialized: false,
     observer: null,
-    ctxMenu: null
+    ctxMenu: null,
+    ctxDocBound: false,
+    ctxHostBound: false,
+    watchRetryTimer: null
   };
 
   function getSurface(){
@@ -50,6 +53,7 @@
       node.setAttribute('data-gramm_editor','true');
       node.setAttribute('data-enable-grammarly','true');
       node.setAttribute('data-grammarly-part','true');
+      node.setAttribute('data-grammarly-integration','true');
     });
     return !!targets.length;
   }
@@ -100,11 +104,13 @@
     var page = getPage();
     var scroll = getScroll();
     if(host){
+      host.addEventListener('focusin', function(){
+        try{ host.dispatchEvent(new Event('input', { bubbles:true })); }catch(e){}
+      });
       host.addEventListener('mousedown', function(e){
         if(!window.__aqEditorArchitectureV1 || !window.AQEditorCore) return;
         if(e.target && e.target.closest && e.target.closest('.img-toolbar,.img-resize-handle,.toc-delete,.ctx-menu')) return;
         if(e.target && e.target.closest && e.target.closest('.pdf-annot')) return;
-        // Let ProseMirror place caret naturally on text clicks.
         if(e.target !== host) return;
         setTimeout(function(){ window.AQEditorCore.focus(false); }, 0);
       });
@@ -173,15 +179,15 @@
       items.push({ kind:'action', action:'cut', label:'Kes', key:'Ctrl+X' });
       items.push({ kind:'action', action:'copy', label:'Kopyala', key:'Ctrl+C' });
     }
-    items.push({ kind:'action', action:'paste', label:'Yapıştır', key:'Ctrl+V' });
+    items.push({ kind:'action', action:'paste', label:'Yapistir', key:'Ctrl+V' });
     if(hasSelection){
       items.push({ kind:'sep' });
-      items.push({ kind:'action', action:'bold', label:'Kalın', key:'Ctrl+B' });
-      items.push({ kind:'action', action:'italic', label:'İtalik', key:'Ctrl+I' });
-      items.push({ kind:'action', action:'underline', label:'Altı Çizili', key:'Ctrl+U' });
+      items.push({ kind:'action', action:'bold', label:'Kalin', key:'Ctrl+B' });
+      items.push({ kind:'action', action:'italic', label:'Italik', key:'Ctrl+I' });
+      items.push({ kind:'action', action:'underline', label:'Alti Cizili', key:'Ctrl+U' });
     }
     items.push({ kind:'sep' });
-    items.push({ kind:'action', action:'selectAll', label:'Tümünü Seç', key:'Ctrl+A' });
+    items.push({ kind:'action', action:'selectAll', label:'Tumunu Sec', key:'Ctrl+A' });
     return items;
   }
 
@@ -232,39 +238,50 @@
 
   function bindContextMenu(){
     if(typeof document === 'undefined') return;
-    var host = getHost();
-    if(!host) return;
-    document.addEventListener('click', hideContextMenu);
-    document.addEventListener('keydown', hideContextMenu);
-    document.addEventListener('contextmenu', function(e){
-      var toc = e.target && e.target.closest ? e.target.closest('.toc-container') : null;
-      if(!toc) return;
-      e.preventDefault();
-      hideContextMenu();
-      var menu = document.getElementById('ctxmenu');
-      if(!menu) return;
-      menu.innerHTML = '';
-      [
-        { label:'İçindekileri Güncelle', fn:function(){ if(typeof window.insertTOC === 'function') window.insertTOC(); } },
-        { label:'İçindekileri Sil', fn:function(){ if(typeof window.removeTOC === 'function') window.removeTOC(); } }
-      ].forEach(function(item){
-        var btn = document.createElement('button');
-        btn.className = 'ctxi';
-        btn.textContent = item.label;
-        btn.addEventListener('click', function(ev){
-          ev.preventDefault();
-          ev.stopPropagation();
-          hideContextMenu();
-          item.fn();
+
+    if(!state.ctxDocBound){
+      state.ctxDocBound = true;
+      document.addEventListener('click', hideContextMenu);
+      document.addEventListener('keydown', hideContextMenu);
+      document.addEventListener('contextmenu', function(e){
+        var t = e && e.target;
+        if(t && t.nodeType === 3) t = t.parentElement;
+        var toc = t && t.closest ? t.closest('.toc-container') : null;
+        if(!toc) return;
+        e.preventDefault();
+        hideContextMenu();
+        var menu = document.getElementById('ctxmenu');
+        if(!menu) return;
+        menu.innerHTML = '';
+        [
+          { label:'İçindekileri Güncelle', fn:function(){ if(typeof window.insertTOC === 'function') window.insertTOC(); } },
+          { label:'İçindekileri Sil', fn:function(){ if(typeof window.removeTOC === 'function') window.removeTOC(); } }
+        ].forEach(function(item){
+          var btn = document.createElement('button');
+          btn.className = 'ctxi';
+          btn.textContent = item.label;
+          btn.addEventListener('click', function(ev){
+            ev.preventDefault();
+            ev.stopPropagation();
+            hideContextMenu();
+            item.fn();
+          });
+          menu.appendChild(btn);
         });
-        menu.appendChild(btn);
+        menu.style.left = Math.min(e.clientX, window.innerWidth - 220) + 'px';
+        menu.style.top = Math.min(e.clientY, window.innerHeight - 120) + 'px';
+        menu.classList.add('show');
       });
-      menu.style.left = Math.min(e.clientX, window.innerWidth - 220) + 'px';
-      menu.style.top = Math.min(e.clientY, window.innerHeight - 120) + 'px';
-      menu.classList.add('show');
-    });
+    }
+
+    var host = getHost();
+    if(!host || state.ctxHostBound) return;
+    state.ctxHostBound = true;
+
     host.addEventListener('contextmenu', function(e){
-      if(e.target && e.target.closest && e.target.closest('.toc-container')) return;
+      var t = e && e.target;
+      if(t && t.nodeType === 3) t = t.parentElement;
+      if(t && t.closest && t.closest('.toc-container')) return;
       e.preventDefault();
       hideContextMenu();
       var editor = typeof window !== 'undefined' ? (window.editor || null) : null;
@@ -326,13 +343,23 @@
   function watchSurface(){
     if(typeof MutationObserver === 'undefined') return;
     var host = getHost();
-    if(!host) return;
+    if(!host){
+      if(!state.watchRetryTimer){
+        state.watchRetryTimer = setTimeout(function(){
+          state.watchRetryTimer = null;
+          bindContextMenu();
+          watchSurface();
+        }, 300);
+      }
+      return;
+    }
     if(state.observer) state.observer.disconnect();
     applySurfaceAttributes(host);
     state.observer = new MutationObserver(function(){
       applySurfaceAttributes(host);
     });
     state.observer.observe(host, { childList:true, subtree:true, attributes:false });
+    bindContextMenu();
   }
 
   function init(){
