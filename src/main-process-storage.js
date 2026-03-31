@@ -28,10 +28,14 @@ function createStorageService(options) {
 
   function resolvePdfPaths(dir, refId) {
     const safeName = buildPdfFileName(refId);
-    const legacyName = String(refId || '') + '.pdf';
+    const legacySafe = String(refId || '').replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').replace(/\.\.+/g, '_') || 'ref';
+    const legacyName = legacySafe + '.pdf';
+    const safeResolved = path.resolve(path.join(dir, safeName));
+    const legacyResolved = path.resolve(path.join(dir, legacyName));
+    const dirResolved = path.resolve(dir);
     return {
-      safe: path.join(dir, safeName),
-      legacy: path.join(dir, legacyName)
+      safe: safeResolved.startsWith(dirResolved) ? safeResolved : path.join(dir, 'ref__invalid.pdf'),
+      legacy: legacyResolved.startsWith(dirResolved) ? legacyResolved : path.join(dir, 'ref__invalid_legacy.pdf')
     };
   }
 
@@ -230,7 +234,7 @@ function createStorageService(options) {
       appDir,
       syncDir: settings.syncDir || '',
       pdfDir: localPdfDir,
-      pdfCount: fs.readdirSync(localPdfDir).filter(file => file.endsWith('.pdf')).length
+      pdfCount: (() => { try { return fs.readdirSync(localPdfDir).filter(f => f.endsWith('.pdf')).length; } catch(e) { return 0; } })()
     };
   }
 

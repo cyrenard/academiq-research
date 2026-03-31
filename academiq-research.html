@@ -2,6 +2,7 @@
 <html lang="tr">
 <head>
 <meta charset="UTF-8"/>
+<meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; object-src 'none'; base-uri 'self'; form-action 'none';">
 <title>AcademiQ Research</title>
 <script src="tiptap-bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -222,6 +223,7 @@ button,input,select,textarea{font-family:var(--f),var(--fsym);}
 .toc-entry:hover{color:#000;text-decoration:none;}
 .find-hl{background:rgba(255,165,0,.35);border-radius:2px;}
 .find-hl-active{background:rgba(255,100,0,.6);outline:2px solid #ff6400;border-radius:2px;}
+.aq-scroll-flash{background:rgba(179,131,58,.2)!important;transition:background .4s;}
 /* Zen Mode */
 body.zen #tb{display:none!important;}
 body.zen #sbl{width:0!important;opacity:0!important;pointer-events:none!important;overflow:hidden!important;}
@@ -5463,8 +5465,13 @@ function scrollToHeading(idx){
   }else{
     target.scrollIntoView({behavior:'smooth',block:'center'});
   }
-  target.style.background='rgba(179,131,58,.2)';
-  setTimeout(function(){target.style.background='';},1500);
+  requestAnimationFrame(function(){
+    var tr=target.getBoundingClientRect();
+    var fl=document.createElement('div');
+    fl.style.cssText='position:fixed;pointer-events:none;z-index:9999;border-radius:2px;transition:opacity .5s;background:rgba(179,131,58,.2);left:'+tr.left+'px;top:'+tr.top+'px;width:'+tr.width+'px;height:'+tr.height+'px;';
+    document.body.appendChild(fl);
+    setTimeout(function(){fl.style.opacity='0';setTimeout(function(){if(fl.parentNode)fl.parentNode.removeChild(fl);},500);},1000);
+  });
 }
 document.addEventListener('click',function(e){
   if(window.AQTipTapWordTOC&&typeof window.AQTipTapWordTOC.handleDocumentClick==='function'){
@@ -5559,6 +5566,18 @@ function sanitizeDocHTML(html){
     html=html.replace(/<p><\/p>/gi,'<p></p>');
   }
   html=html.replace(/<\/div>\s*(?=(?:<div[^>]*class="aq-pe-page)|$)/gi,'');
+  // Strip scroll-flash class and any persisted background from paragraphs/headings
+  try{
+    var _tmp=document.createElement('div');
+    _tmp.innerHTML=html;
+    _tmp.querySelectorAll('p,h1,h2,h3,h4,h5,h6').forEach(function(el){
+      el.classList.remove('aq-scroll-flash');
+      if(el.style.background)el.style.background='';
+      if(el.style.backgroundColor)el.style.backgroundColor='';
+      if(el.getAttribute('style')==='')el.removeAttribute('style');
+    });
+    html=_tmp.innerHTML;
+  }catch(e){}
   return html.trim()||'<p></p>';
 }
 function getCurrentEditorHTML(){

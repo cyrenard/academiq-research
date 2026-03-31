@@ -33,12 +33,17 @@ function buildUpdateCheckResult(data, currentVersion) {
   };
 }
 
+const ALLOWED_UPDATE_HOST = /^https:\/\/(raw\.githubusercontent\.com\/cyrenard|github\.com\/cyrenard|api\.github\.com\/repos\/cyrenard)\//i;
+
 function normalizeDownloadUrl(origUrl) {
   if (!origUrl) return '';
   let url = origUrl;
   if (url.includes('/releases/tag/')) {
-    const tag = url.split('/releases/tag/').pop();
+    const tag = url.split('/releases/tag/').pop().replace(/[^a-zA-Z0-9._-]/g, '');
     url = 'https://raw.githubusercontent.com/cyrenard/academiq-research/' + tag + '/academiq-research.html';
+  }
+  if (!ALLOWED_UPDATE_HOST.test(url)) {
+    return 'https://raw.githubusercontent.com/cyrenard/academiq-research/main/academiq-research.html';
   }
   const fileName = url.split('/').pop() || 'update';
   const isKnownType = fileName.endsWith('.html') || fileName.endsWith('.zip');
@@ -79,7 +84,11 @@ async function applyDownloadedUpdate(options) {
           fs.writeFileSync(mt, mainBuf);
         }
         const preBuf = await fetchBuffer(baseUrl + 'preload.js');
-        if (preBuf && preBuf.length > 10) fs.writeFileSync(path.join(dirname, 'preload.js'), preBuf);
+        if (preBuf && preBuf.length > 10) {
+          const prePath = path.join(dirname, 'preload.js');
+          if (fs.existsSync(prePath)) fs.copyFileSync(prePath, prePath + '.bak');
+          fs.writeFileSync(prePath, preBuf);
+        }
       } catch (e) {}
     }
     return { ok: true, type: 'html', restart: true };

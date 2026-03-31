@@ -93,7 +93,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      webSecurity: false   // PDF fetch CORS bypass
+      webSecurity: false   // file:// → https:// fetch için (CDN, DOI, Crossref API)
     }
   });
 
@@ -111,7 +111,7 @@ function createWindow() {
 
   // Open external links in browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
 
@@ -177,6 +177,7 @@ ipcMain.handle('pdf:delete', async (_ev, refId) => {
 ipcMain.handle('pdf:syncAll', async () => storage.syncAllPDFs());
 
 ipcMain.handle('pdf:download', async (_ev, url, refId, options = {}) => {
+  if (!url || !/^https?:\/\//i.test(url)) return { ok: false, error: 'Geçersiz URL şeması' };
   function extractPdfCandidatesFromHTML(html, baseUrl) {
     const out = [];
     const seen = new Set();
@@ -276,7 +277,9 @@ ipcMain.handle('dialog:openPDF', async () => {
 
 ipcMain.handle('word:toHtml', async (_ev, filePath) => {
   try {
-    const html = await convertWordWithOfficeComToHtml(filePath);
+    const resolved = path.resolve(String(filePath || ''));
+    if (!/\.(docx?|rtf)$/i.test(resolved)) return { ok: false, error: 'Desteklenmeyen dosya türü (.doc/.docx/.rtf gerekli)' };
+    const html = await convertWordWithOfficeComToHtml(resolved);
     return { ok: true, html };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -347,6 +350,9 @@ ipcMain.handle('update:check', async () => {
 ipcMain.handle('update:download', async (_ev, origUrl) => {
   try {
     if (!origUrl) return { ok: false, error: 'No URL' };
+    if (!/^https:\/\/(raw\.githubusercontent\.com\/cyrenard|github\.com\/cyrenard|api\.github\.com\/repos\/cyrenard)\//i.test(origUrl)) {
+      return { ok: false, error: 'Güncelleme yalnızca github.com/cyrenard adresinden yapılabilir' };
+    }
     const url = normalizeDownloadUrl(origUrl);
     console.log('[UPDATE] Downloading from:', url, '(original:', origUrl, ')');
     const buf = await followRedirects(url);
@@ -363,6 +369,9 @@ ipcMain.handle('update:download', async (_ev, origUrl) => {
 });
 
 ipcMain.handle('update:setUrl', async (_ev, url) => {
+  if (url && !/^https:\/\/api\.github\.com\//i.test(url)) {
+    return { ok: false, error: 'Güncelleme URL\'si https://api.github.com/ ile başlamalı' };
+  }
   return storage.setUpdateUrl(url);
 });
 

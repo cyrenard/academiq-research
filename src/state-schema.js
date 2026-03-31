@@ -111,6 +111,13 @@
     var currentWs = state.wss.find(function(ws){ return ws.id === state.cur; }) || state.wss[0];
     state.curDoc = currentWs ? currentWs.docId : state.docs[0].id;
     var currentDoc = state.docs.find(function(doc){ return doc.id === state.curDoc; }) || state.docs[0];
+
+    // Migration: if current doc has blank content but legacy state.doc has real content, recover it
+    var legacyDoc = state.doc && state.doc.trim() && state.doc.trim() !== blankDoc() ? state.doc.trim() : '';
+    if(legacyDoc && currentDoc && (!currentDoc.content || currentDoc.content.trim() === blankDoc())){
+      currentDoc.content = sanitize(legacyDoc);
+    }
+
     state.doc = sanitize(state.doc || ((currentDoc && currentDoc.content) || blankDoc()));
   }
 

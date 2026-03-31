@@ -88,7 +88,9 @@ function fetchJSON(url, options = {}) {
     }, (res) => {
       if ([301, 302, 307, 308].includes(res.statusCode)) {
         const loc = res.headers.location;
+        res.resume();
         if (loc) return fetchJSON(loc, options).then(resolve).catch(reject);
+        return reject(new Error('Redirect without location'));
       }
       if (res.statusCode !== 200) {
         res.resume();

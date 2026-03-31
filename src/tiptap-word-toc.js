@@ -143,16 +143,17 @@
     return true;
   }
 
-  function autoUpdateTOC(deps){
+  function autoUpdateTOC(deps, _retries){
     deps = deps || {};
+    _retries = (_retries || 0);
     clearTimeout(state.timer);
     state.timer = setTimeout(function(){
       var editorRoot = typeof deps.getEditorRoot === 'function' ? deps.getEditorRoot() : null;
       if(!editorRoot || !editorRoot.querySelector('.toc-container')) return;
       var headings = editorRoot.querySelectorAll('h1,h2,h3,h4,h5');
       if(!headings.length) return;
-      if(typeof deps.isEditorFocused === 'function' && deps.isEditorFocused()){
-        autoUpdateTOC(deps);
+      if(typeof deps.isEditorFocused === 'function' && deps.isEditorFocused() && _retries < 20){
+        autoUpdateTOC(deps, _retries + 1);
         return;
       }
       var tocHTML = buildTOCHTML(editorRoot, headings, deps);

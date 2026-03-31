@@ -140,8 +140,8 @@
       var clickY = e.clientY - hostRect.top;
       var contentHeight = host.scrollHeight;
       if(clickY <= contentHeight) return;
-      var lineHeight = parseFloat(getComputedStyle(host).lineHeight) || 32;
-      var needed = Math.ceil((clickY - contentHeight) / lineHeight);
+      var lineHeight = Math.max(8, parseFloat(getComputedStyle(host).lineHeight) || 32);
+      var needed = Math.min(10, Math.ceil((clickY - contentHeight) / lineHeight));
       for(var i = 0; i < needed; i++){
         var p = document.createElement('p');
         p.innerHTML = '<br>';
