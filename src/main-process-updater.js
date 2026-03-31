@@ -67,6 +67,24 @@ async function applyDownloadedUpdate(options) {
     const bakTarget = target + '.bak';
     if (fs.existsSync(target)) fs.copyFileSync(target, bakTarget);
     fs.writeFileSync(target, buf);
+    // Copy local JS dependencies so AppData HTML can load them
+    try {
+      const localDeps = ['tiptap-bundle.js', 'icon.ico'];
+      for (const dep of localDeps) {
+        const src = path.join(dirname, dep);
+        const dst = path.join(appDir, dep);
+        if (fs.existsSync(src)) fs.copyFileSync(src, dst);
+      }
+      // Copy src/ directory (tiptap-word-*.js, state-schema.js, etc.)
+      const srcDir = path.join(dirname, 'src');
+      const dstSrcDir = path.join(appDir, 'src');
+      if (fs.existsSync(srcDir)) {
+        try { fs.mkdirSync(dstSrcDir, { recursive: true }); } catch (_e) {}
+        fs.readdirSync(srcDir).forEach(function(file) {
+          try { fs.copyFileSync(path.join(srcDir, file), path.join(dstSrcDir, file)); } catch (_e) {}
+        });
+      }
+    } catch (_e) {}
     if (!isPackaged) {
       try {
         const baseUrl = url.replace(/\/[^\/]+$/, '/');
