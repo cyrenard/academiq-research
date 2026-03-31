@@ -18,7 +18,7 @@
     var div = (options.createContainer || defaultCreateContainer)(html);
     var bibliographyTitle = options.bibliographyTitle || 'Kaynakça';
     var titleMatcher = options.titleMatcher || function(text){
-      return text === 'Kaynakça' || text === 'KaynakÃ§a';
+      return text === 'Kaynakça' || text === 'Kaynakça';
     };
     var heading = Array.from(div.querySelectorAll('h1')).find(function(node){
       return titleMatcher((node.textContent || '').trim());

@@ -178,7 +178,7 @@ button,input,select,textarea{font-family:var(--f),var(--fsym);}
 .ctx-menu div:hover{background:var(--bg3);}
 .ctx-menu .ctx-sep{height:1px;background:var(--b);margin:4px 8px;padding:0;cursor:default;}
 .ctx-menu .ctx-shortcut{float:right;color:var(--txt3);font-size:10px;margin-left:16px;}
-#apapage{width:var(--aq-page-shell-width);min-height:var(--aq-page-height);padding:0;overflow:visible;position:relative;background:transparent;box-shadow:none;border:none;border-radius:0;margin-bottom:44px;}
+#apapage{width:var(--aq-page-shell-width);min-height:var(--aq-page-height);padding:0;overflow:visible;position:relative;background:#fff;box-shadow:none;border:none;border-radius:0;margin-bottom:44px;}
 #apapage-bg{position:absolute;inset:0;z-index:0;pointer-events:none;}
 .aq-page-sheet{position:absolute;left:var(--aq-page-shell-offset);width:var(--aq-page-width);height:var(--aq-page-height);background:#fff;box-shadow:0 24px 54px rgba(42,29,12,.10);border:none;border-radius:0;}
 #coverpage,#tocpage,#bibpage{width:var(--aq-page-width);min-height:var(--aq-page-height);padding:var(--aq-page-margin);overflow:visible;position:relative;background:#fff;box-shadow:0 24px 54px rgba(42,29,12,.10);border:none;border-radius:0;margin-bottom:44px;display:none;box-sizing:border-box;}
@@ -193,7 +193,7 @@ button,input,select,textarea{font-family:var(--f),var(--fsym);}
 #bibbody h1{font-size:12pt;font-weight:bold;text-align:center;margin:0;text-indent:0;line-height:2;display:block;}
 #bibbody .refe{margin:0;text-indent:-.5in;padding-left:.5in;font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;color:#000;display:block;text-align:left;}
 #tocbody .toc-container{margin:0;}
-/* Page break overlay â€” positioned outside editor in #apapage */
+/* Page break overlay — positioned outside editor in #apapage */
 .page-break-overlay{display:none!important;}
 /* Page number overlay */
 .page-number{position:absolute;right:calc(var(--aq-page-shell-offset) + var(--aq-page-margin));font-family:'Times New Roman',Times,serif;font-size:12pt;color:#000;pointer-events:none;user-select:none;z-index:5;line-height:2;}
@@ -361,7 +361,7 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
 .pdf-page-wrap .textLayer span{position:absolute;color:transparent;white-space:pre;cursor:text;transform-origin:0% 0%;-webkit-user-select:text;user-select:text;pointer-events:auto;line-height:1;}
 .pdf-page-wrap .textLayer span::selection{background:rgba(37,99,235,.7);color:transparent;}
 .pdf-page-wrap .textLayer span::-moz-selection{background:rgba(37,99,235,.7);color:transparent;}
-/* Highlight overlay: text layer ALTINDA, pointer-events kapalÄ± */
+/* Highlight overlay: text layer ALTINDA, pointer-events kapalı */
 .hl-overlay{
   position:absolute;top:0;left:0;
   width:100%;height:100%;
@@ -427,45 +427,45 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
   <button class="btn efmt" onclick="ec('formatBlock','h1')">H1</button>
   <button class="btn efmt" onclick="ec('formatBlock','h2')">H2</button>
   <button class="btn efmt" onclick="ec('formatBlock','h3')">H3</button>
-  <button class="btn efmt" onclick="ec('formatBlock','p')">Â¶</button>
+  <button class="btn efmt" onclick="ec('formatBlock','p')">¶</button>
   <span class="sep"></span>
-  <div class="dd"><button class="btn" onclick="opdd('ddins',this)">Ekle â–¾</button>
+  <div class="dd"><button class="btn" onclick="opdd('ddins',this)">Ekle ▾</button>
     <div class="ddm" id="ddins">
-      <button class="ddi" onclick="doTrigRef();cdd()">/ AtÄ±f Ekle</button>
+      <button class="ddi" onclick="doTrigRef();cdd()">/ Atıf Ekle</button>
       <div class="dds"></div>
       <button class="ddi" onclick="showM('wiz');cdd()">Tablo (APA 7)</button>
-      <button class="ddi" onclick="insBlkQ();cdd()">Blok AlÄ±ntÄ±</button>
-      <button class="ddi" onclick="insFig();cdd()">Åekil Yeri</button>
+      <button class="ddi" onclick="insBlkQ();cdd()">Blok Alıntı</button>
+      <button class="ddi" onclick="insFig();cdd()">Şekil Yeri</button>
       <div class="dds"></div>
-      <button class="ddi" onclick="insCover();cdd()">Kapak SayfasÄ±</button>
-      <button class="ddi" onclick="insAbstract();cdd()">Abstract / Ã–zet</button>
-      <button class="ddi" onclick="insRefs();cdd()">KaynakÃ§a BÃ¶lÃ¼mÃ¼</button>
+      <button class="ddi" onclick="insCover();cdd()">Kapak Sayfası</button>
+      <button class="ddi" onclick="insAbstract();cdd()">Abstract / Özet</button>
+      <button class="ddi" onclick="insRefs();cdd()">Kaynakça Bölümü</button>
       <div class="dds"></div>
-      <button class="ddi" onclick="applyTemplate('tez');cdd()">Tez Åablonu</button>
-      <button class="ddi" onclick="applyTemplate('makale');cdd()">AraÅŸtÄ±rma Makalesi</button>
+      <button class="ddi" onclick="applyTemplate('tez');cdd()">Tez Şablonu</button>
+      <button class="ddi" onclick="applyTemplate('makale');cdd()">Araştırma Makalesi</button>
       <button class="ddi" onclick="applyTemplate('rapor');cdd()">Rapor</button>
-      <button class="ddi" onclick="applyTemplate('literatur');cdd()">LiteratÃ¼r TaramasÄ±</button>
+      <button class="ddi" onclick="applyTemplate('literatur');cdd()">Literatür Taraması</button>
       <div class="dds"></div>
-      <button class="ddi" data-aq="word-import" onclick="document.getElementById('wordinp').click();cdd()">Word Ä°Ã§e Aktar</button>
+      <button class="ddi" data-aq="word-import" onclick="document.getElementById('wordinp').click();cdd()">Word İçe Aktar</button>
     </div>
   </div>
-  <div class="dd"><button class="btn prim" onclick="opdd('ddexp',this)">DÄ±ÅŸa Aktar â–¾</button>
+  <div class="dd"><button class="btn prim" onclick="opdd('ddexp',this)">Dışa Aktar ▾</button>
     <div class="ddm" id="ddexp">
-      <button class="ddi" onclick="window.print();cdd()">PDF (YazdÄ±r)</button>
+      <button class="ddi" onclick="window.print();cdd()">PDF (Yazdır)</button>
       <button class="ddi" onclick="expDOC();cdd()">DOC (Word)</button>
       <button class="ddi" data-aq="bib" onclick="expBIB();cdd()">BIB</button>
       <button class="ddi" data-aq="ris" onclick="expRIS();cdd()">RIS</button>
       <button class="ddi" onclick="expNotes();cdd()">Notlar TXT</button>
-      <button class="ddi" onclick="expLib();cdd()">KÃ¼tÃ¼phane JSON</button>
+      <button class="ddi" onclick="expLib();cdd()">Kütüphane JSON</button>
     </div>
   </div>
   <span class="sp"></span>
   <span id="synclbl"></span>
-  <button class="btn" style="font-size:14px;padding:4px 8px;" onclick="toggleTheme()" id="themebtn" title="Tema deÄŸiÅŸtir">Tema</button>
+  <button class="btn" style="font-size:14px;padding:4px 8px;" onclick="toggleTheme()" id="themebtn" title="Tema değiştir">Tema</button>
   <button class="btn" onclick="toggleZenMode()" title="Odak Modu (F10)" id="zenbtn" style="font-size:11px;">Odak</button>
-  <button class="btn" style="font-size:11px;" onclick="showSyncSettings()" title="Ayarlar">âš™ Ayarlar</button>
+  <button class="btn" style="font-size:11px;" onclick="showSyncSettings()" title="Ayarlar">⚙ Ayarlar</button>
   <button class="btn" style="border:1px solid var(--acc-d);color:var(--acc);" onclick="togglePDF()">PDF</button>
-  <button class="btn tog on" id="btnsbl" onclick="tSB('sbl')">KÃ¼tÃ¼phane</button>
+  <button class="btn tog on" id="btnsbl" onclick="tSB('sbl')">Kütüphane</button>
   <button class="btn tog on" id="btnsbr" onclick="tSB('sbr')">Not & Refs</button>
   <span class="sep"></span>
   <span id="tbinfo">0 kelime</span>
@@ -477,15 +477,15 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
   <div id="wsbar"><div id="wsrow"></div></div>
   <div class="addrow">
     <input class="doinp" id="doiinp" placeholder="DOI gir..." onkeydown="if(event.key==='Enter')addDOI()"/>
-    <button class="addbtn" onclick="addDOI()">Ã‡ek</button>
+    <button class="addbtn" onclick="addDOI()">Çek</button>
   </div>
   <div id="dst"></div>
   <input class="srch" id="libsrch" placeholder="Filtrele..." oninput="rLib()"/>
   <div id="labelfilt" style="padding:0 8px 4px;display:flex;gap:3px;flex-wrap:wrap;"></div>
-  <button class="pdfupbtn" onclick="document.getElementById('lfinp').click()">+ PDF YÃ¼kle</button>
-  <button class="pdfupbtn" onclick="batchDownloadOA()" title="DOI'si olan tÃ¼m kaynaklarÄ±n OA PDF'lerini indir" style="background:var(--bg3);color:var(--blue);border:1px solid var(--b);">&#8595; TÃ¼m OA PDF'leri Ä°ndir</button>
-  <button class="pdfupbtn" onclick="batchFetchCitations()" style="background:var(--bg3);color:var(--txt2);border:1px solid var(--b);">AtÄ±f SayÄ±larÄ±nÄ± GÃ¼ncelle</button>
-  <button class="pdfupbtn" onclick="document.getElementById('bibinp').click()" style="color:var(--txt2);">KaynakÃ§a Ä°Ã§e Aktar (.bib/.ris)</button>
+  <button class="pdfupbtn" onclick="document.getElementById('lfinp').click()">+ PDF Yükle</button>
+  <button class="pdfupbtn" onclick="batchDownloadOA()" title="DOI'si olan tüm kaynakların OA PDF'lerini indir" style="background:var(--bg3);color:var(--blue);border:1px solid var(--b);">&#8595; Tüm OA PDF'leri İndir</button>
+  <button class="pdfupbtn" onclick="batchFetchCitations()" style="background:var(--bg3);color:var(--txt2);border:1px solid var(--b);">Atıf Sayılarını Güncelle</button>
+  <button class="pdfupbtn" onclick="document.getElementById('bibinp').click()" style="color:var(--txt2);">Kaynakça İçe Aktar (.bib/.ris)</button>
   <input type="file" id="bibinp" accept=".bib,.ris,.enw" style="display:none" onchange="importBib(event)"/>
   <input type="file" id="lfinp" accept=".pdf" multiple style="display:none" onchange="hPDFs(event)"/>
   <div id="liblist"></div>
@@ -497,16 +497,16 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
   <div id="etb">
     <div class="tbgrp">
       <span class="tbgrp-title">Metin</span>
-      <button class="efmt efmt-state" id="btnBold" onclick="ec('bold')" title="KalÄ±n (Ctrl+B)"><b>B</b></button>
-      <button class="efmt efmt-state" id="btnItalic" onclick="ec('italic')" title="Ä°talik (Ctrl+I)"><i>I</i></button>
-      <button class="efmt efmt-state" id="btnUnderline" onclick="ec('underline')" title="AltÄ± Ã§izili (Ctrl+U)"><u>U</u></button>
-      <button class="efmt efmt-state" id="btnStrike" onclick="ec('strikeThrough')" title="ÃœstÃ¼ Ã§izili (Ctrl+D)"><s>S</s></button>
-      <input type="color" id="txtColor" value="#000000" title="YazÄ± rengi" style="width:24px;height:22px;border:1px solid var(--b);border-radius:3px;cursor:pointer;padding:0;" onchange="ec('foreColor',this.value)"/>
+      <button class="efmt efmt-state" id="btnBold" onclick="ec('bold')" title="Kalın (Ctrl+B)"><b>B</b></button>
+      <button class="efmt efmt-state" id="btnItalic" onclick="ec('italic')" title="İtalik (Ctrl+I)"><i>I</i></button>
+      <button class="efmt efmt-state" id="btnUnderline" onclick="ec('underline')" title="Altı çizili (Ctrl+U)"><u>U</u></button>
+      <button class="efmt efmt-state" id="btnStrike" onclick="ec('strikeThrough')" title="Üstü çizili (Ctrl+D)"><s>S</s></button>
+      <input type="color" id="txtColor" value="#000000" title="Yazı rengi" style="width:24px;height:22px;border:1px solid var(--b);border-radius:3px;cursor:pointer;padding:0;" onchange="ec('foreColor',this.value)"/>
       <input type="color" id="hlColor" value="#FFFF00" title="Vurgulama rengi" style="width:24px;height:22px;border:1px solid var(--b);border-radius:3px;cursor:pointer;padding:0;" onchange="ec('hiliteColor',this.value)"/>
     </div>
     <div class="tbgrp">
-      <span class="tbgrp-title">BiÃ§im</span>
-      <button class="efmt" onclick="ec('formatBlock','p')">Â¶</button>
+      <span class="tbgrp-title">Biçim</span>
+      <button class="efmt" onclick="ec('formatBlock','p')">¶</button>
       <button class="efmt" id="btnH1" onclick="ec('formatBlock','h1')" title="Birinci derece baslik (H1)" aria-label="Birinci derece baslik">H1</button>
       <button class="efmt" id="btnH2" onclick="ec('formatBlock','h2')" title="Ikinci derece baslik (H2)" aria-label="Ikinci derece baslik">H2</button>
       <button class="efmt" id="btnH3" onclick="ec('formatBlock','h3')" title="Ucuncu derece baslik (H3)" aria-label="Ucuncu derece baslik">H3</button>
@@ -515,8 +515,8 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
       <button class="efmt" onclick="insBlkQ()">&#10077;</button>
     </div>
     <div class="tbgrp">
-      <span class="tbgrp-title">YerleÅŸim</span>
-      <select class="efmt" id="lineSpacing" onchange="setLineSpacing(this.value)" style="padding:2px 4px;font-size:10px;background:var(--bg);color:var(--txt2);border:1px solid var(--b);border-radius:3px;width:48px;cursor:pointer;" title="SatÄ±r aralÄ±ÄŸÄ±">
+      <span class="tbgrp-title">Yerleşim</span>
+      <select class="efmt" id="lineSpacing" onchange="setLineSpacing(this.value)" style="padding:2px 4px;font-size:10px;background:var(--bg);color:var(--txt2);border:1px solid var(--b);border-radius:3px;width:48px;cursor:pointer;" title="Satır aralığı">
         <option value="1">1.0</option>
         <option value="1.5">1.5</option>
         <option value="2" selected>2.0</option>
@@ -525,7 +525,7 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
       </select>
       <button class="efmt" onclick="ec('justifyLeft')" title="Sola hizala">&#8676;</button>
       <button class="efmt" onclick="ec('justifyCenter')" title="Ortala">&#8596;</button>
-      <button class="efmt" onclick="ec('justifyRight')" title="SaÄŸa hizala">&#8677;</button>
+      <button class="efmt" onclick="ec('justifyRight')" title="Sağa hizala">&#8677;</button>
       <button class="efmt" onclick="ec('insertUnorderedList')" title="Madde i&#351;areti">&#8226;</button>
       <button class="efmt" onclick="ec('insertOrderedList')" title="Numaral&#305; liste">1.</button>
     </div>
@@ -561,7 +561,7 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
     <div class="tbgrp">
       <span class="tbgrp-title">Medya</span>
       <button class="efmt" onclick="insImage()" title="G&#246;rsel ekle">&#128247;</button>
-      <button class="efmt" style="color:var(--acc);border:1px solid var(--acc-d);padding:2px 8px;" onclick="doTrigRef()">/r AtÄ±f</button>
+      <button class="efmt" style="color:var(--acc);border:1px solid var(--acc-d);padding:2px 8px;" onclick="doTrigRef()">/r Atıf</button>
     </div>
     <input type="file" id="imginp" accept="image/*" style="display:none" onchange="handleImgUpload(event)"/>
     <input type="file" id="wordinp" accept=".doc,.docx,.html,.htm,.rtf,.txt" style="display:none" onchange="importWordFile(event)"/>
@@ -571,17 +571,17 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
       <span style="font-family:var(--fm);font-size:10px;color:var(--txt3);min-width:28px;">Bul:</span>
       <input type="text" id="findinp" placeholder="Ara..." style="flex:1;background:var(--bg);border:1px solid var(--b);border-radius:4px;color:var(--txt);font-family:var(--fm);font-size:12px;padding:4px 8px;outline:none;"/>
       <label style="font-family:var(--fm);font-size:10px;color:var(--txt3);display:flex;align-items:center;gap:3px;cursor:pointer;"><input type="checkbox" id="findregex"/> Regex</label>
-      <label style="font-family:var(--fm);font-size:10px;color:var(--txt3);display:flex;align-items:center;gap:3px;cursor:pointer;"><input type="checkbox" id="findcase"/> BÃ¼yÃ¼k/kÃ¼Ã§Ã¼k</label>
+      <label style="font-family:var(--fm);font-size:10px;color:var(--txt3);display:flex;align-items:center;gap:3px;cursor:pointer;"><input type="checkbox" id="findcase"/> Büyük/küçük</label>
       <span id="findcount" style="font-family:var(--fm);font-size:10px;color:var(--txt3);min-width:40px;text-align:center;">--</span>
-      <button class="efmt" onclick="findPrev()" title="Ã–nceki">&#9650;</button>
+      <button class="efmt" onclick="findPrev()" title="Önceki">&#9650;</button>
       <button class="efmt" onclick="findNext()" title="Sonraki">&#9660;</button>
       <button class="efmt" onclick="closeFindBar()">&#10005;</button>
     </div>
     <div style="display:flex;align-items:center;gap:6px;">
-      <span style="font-family:var(--fm);font-size:10px;color:var(--txt3);min-width:28px;">DeÄŸ:</span>
-      <input type="text" id="replaceinp" placeholder="DeÄŸiÅŸtir..." style="flex:1;background:var(--bg);border:1px solid var(--b);border-radius:4px;color:var(--txt);font-family:var(--fm);font-size:12px;padding:4px 8px;outline:none;"/>
-      <button class="efmt" onclick="replaceCurrent()" style="font-size:11px;">DeÄŸiÅŸtir</button>
-      <button class="efmt" onclick="replaceAll()" style="font-size:11px;">TÃ¼mÃ¼nÃ¼</button>
+      <span style="font-family:var(--fm);font-size:10px;color:var(--txt3);min-width:28px;">Değ:</span>
+      <input type="text" id="replaceinp" placeholder="Değiştir..." style="flex:1;background:var(--bg);border:1px solid var(--b);border-radius:4px;color:var(--txt);font-family:var(--fm);font-size:12px;padding:4px 8px;outline:none;"/>
+      <button class="efmt" onclick="replaceCurrent()" style="font-size:11px;">Değiştir</button>
+      <button class="efmt" onclick="replaceAll()" style="font-size:11px;">Tümünü</button>
     </div>
   </div>
   <div id="escroll">
@@ -600,9 +600,9 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
     </div>
   </div>
   <div id="zoomBar">
-    <button onclick="editorZoom(-10)" title="KÃ¼Ã§Ã¼lt">âˆ’</button>
+    <button onclick="editorZoom(-10)" title="Küçült">−</button>
     <span id="zoomLbl">100%</span>
-    <button onclick="editorZoom(10)" title="BÃ¼yÃ¼t">+</button>
+    <button onclick="editorZoom(10)" title="Büyüt">+</button>
   </div>
 </div>
 
@@ -613,7 +613,7 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
   <!-- Note / Refs type switch -->
   <div id="rtype">
     <button class="rtab on" onclick="swR('notes',this)">Notlar</button>
-    <button class="rtab" onclick="swR('refs',this)">KaynakÃ§a</button>
+    <button class="rtab" onclick="swR('refs',this)">Kaynakça</button>
   </div>
   <div class="rpnl on" id="rpnotes">
     <div id="notelist"></div>
@@ -627,7 +627,7 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
   </div>
   <div class="rpnl" id="rprefs">
     <div id="refhead">
-      <span class="plbl">KullanÄ±lan Kaynaklar</span>
+      <span class="plbl">Kullanılan Kaynaklar</span>
       <button class="rib" onclick="refreshBibliographyManual()">Kaynakçayı Güncelle</button>
       <button class="rib" onclick="resetBibliographyManual()">Otomatiğe Dön</button>
       <button class="rib" onclick="insRefs()">Belgeye Git</button>
@@ -639,13 +639,13 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
 
 <div id="sbar">
   <span id="sbw" class="sv">0 kelime</span><div class="ss"></div>
-  <span id="sbc" class="sv">0 atÄ±f</span><div class="ss"></div>
+  <span id="sbc" class="sv">0 atıf</span><div class="ss"></div>
   <span id="sbr2" class="sv">0 kaynak</span><div class="ss"></div>
   <span id="sbgoal" class="sv" style="cursor:pointer" onclick="setWordGoal()" title="Kelime hedefi belirle"></span>
   <div class="ss"></div>
-  <span class="sh">/r â†’ atÄ±f</span>
+  <span class="sh">/r → atıf</span>
   <div style="flex:1"></div>
-  <span style="color:var(--txt3)">APA 7 | Times New Roman 12pt | Ã‡ift aralÄ±k</span>
+  <span style="color:var(--txt3)">APA 7 | Times New Roman 12pt | Çift aralık</span>
 </div>
 
 <!-- PDF PANEL -->
@@ -707,72 +707,72 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
 <div id="hltip">
   <button class="htb" onclick="doHL(true)">Nota Kaydet</button>
   <button class="htb" onclick="doHL(false)">Highlight</button>
-  <button class="htb" onclick="hideHLtip()">âœ•</button>
+  <button class="htb" onclick="hideHLtip()">✕</button>
 </div>
 
 <!-- /r TRIGGER -->
 <div id="trig">
-  <div class="tgh"><span class="tgtag">Kaynak SeÃ§</span><span id="tgq" style="flex:1"></span><span id="tgsel" style="font-family:var(--fm);font-size:10px;color:var(--acc);display:none"></span></div>
+  <div class="tgh"><span class="tgtag">Kaynak Seç</span><span id="tgq" style="flex:1"></span><span id="tgsel" style="font-family:var(--fm);font-size:10px;color:var(--acc);display:none"></span></div>
   <div class="tgmodes">
-    <button class="tgm on" onclick="setCM('inline',this)">(Yazar, YÄ±l)</button>
+    <button class="tgm on" onclick="setCM('inline',this)">(Yazar, Yıl)</button>
     <button class="tgm" onclick="setCM('footnote',this)">Dipnot*</button>
   </div>
-  <input type="text" id="tgs" placeholder="Yazar, baÅŸlÄ±k, yÄ±l..."/>
+  <input type="text" id="tgs" placeholder="Yazar, başlık, yıl..."/>
   <div id="tgl"></div>
-  <div class="tghint">â†‘â†“ gez Â· BoÅŸluk Ã§oklu seÃ§ Â· Enter metne ekle Â· Esc kapat</div>
+  <div class="tghint">↑↓ gez · Boşluk çoklu seç · Enter metne ekle · Esc kapat</div>
 </div>
 
 <!-- CUSTOM PROMPT MODAL (Electron-compatible replacement for window.prompt) -->
 <div class="modal-bg" id="promptModal"><div class="modal" style="width:320px">
-  <div class="mt" id="promptTitle">GiriÅŸ</div>
+  <div class="mt" id="promptTitle">Giriş</div>
   <input class="minp" id="promptInput" placeholder="" onkeydown="if(event.key==='Enter')resolvePrompt(true);if(event.key==='Escape')resolvePrompt(false);"/>
   <div class="mb">
-    <button class="mbtn s" onclick="resolvePrompt(false)">Ä°ptal</button>
+    <button class="mbtn s" onclick="resolvePrompt(false)">İptal</button>
     <button class="mbtn p" onclick="resolvePrompt(true)">Tamam</button>
   </div>
 </div></div>
 
 <div class="modal-bg" id="refMetaModal"><div class="modal" style="width:560px;max-width:calc(100vw - 32px);">
-  <div class="mt">Makale KÃ¼nyesi</div>
-  <div class="wr"><div class="wf"><label>BaÅŸlÄ±k</label><input type="text" class="minp" id="refMetaTitle" placeholder="Makale baÅŸlÄ±ÄŸÄ±"/></div></div>
+  <div class="mt">Makale Künyesi</div>
+  <div class="wr"><div class="wf"><label>Başlık</label><input type="text" class="minp" id="refMetaTitle" placeholder="Makale başlığı"/></div></div>
   <div class="wr"><div class="wf"><label>Yazar(lar)</label><input type="text" class="minp" id="refMetaAuthors" placeholder="Yazar, A.; Yazar, B."/></div></div>
   <div class="wr">
-    <div class="wf"><label>YÄ±l</label><input type="text" id="refMetaYear" placeholder="2026"/></div>
-    <div class="wf"><label>Dergi / YayÄ±n</label><input type="text" id="refMetaJournal" placeholder="Journal adÄ±"/></div>
+    <div class="wf"><label>Yıl</label><input type="text" id="refMetaYear" placeholder="2026"/></div>
+    <div class="wf"><label>Dergi / Yayın</label><input type="text" id="refMetaJournal" placeholder="Journal adı"/></div>
   </div>
   <div class="wr">
     <div class="wf"><label>Cilt</label><input type="text" id="refMetaVolume" placeholder="12"/></div>
-    <div class="wf"><label>SayÄ±</label><input type="text" id="refMetaIssue" placeholder="3"/></div>
+    <div class="wf"><label>Sayı</label><input type="text" id="refMetaIssue" placeholder="3"/></div>
   </div>
   <div class="wr">
-    <div class="wf"><label>Ä°lk sayfa</label><input type="text" id="refMetaFp" placeholder="101"/></div>
+    <div class="wf"><label>İlk sayfa</label><input type="text" id="refMetaFp" placeholder="101"/></div>
     <div class="wf"><label>Son sayfa</label><input type="text" id="refMetaLp" placeholder="128"/></div>
   </div>
   <div class="wr"><div class="wf"><label>DOI</label><input type="text" id="refMetaDoi" placeholder="10.xxxx/xxxx"/></div></div>
   <div class="wr"><div class="wf"><label>URL</label><input type="text" id="refMetaUrl" placeholder="https://..."/></div></div>
   <div class="mb">
-    <button class="mbtn s" onclick="closeRefMetadataModal(false)">Ä°ptal</button>
+    <button class="mbtn s" onclick="closeRefMetadataModal(false)">İptal</button>
     <button class="mbtn p" onclick="closeRefMetadataModal(true)">Kaydet</button>
   </div>
 </div></div>
 
 <!-- WORKSPACE MODAL -->
 <div class="modal-bg" id="wsm"><div class="modal">
-  <div class="mt">Yeni Ã‡alÄ±ÅŸma AlanÄ±</div>
-  <input class="minp" id="wsminp" placeholder="Alan adÄ± (Ã¶r. Tez BÃ¶lÃ¼m 1)" onkeydown="if(event.key==='Enter')doAddWs()"/>
+  <div class="mt">Yeni Çalışma Alanı</div>
+  <input class="minp" id="wsminp" placeholder="Alan adı (ör. Tez Bölüm 1)" onkeydown="if(event.key==='Enter')doAddWs()"/>
   <div class="mb">
-    <button class="mbtn s" onclick="hideM('wsm')">Ä°ptal</button>
-    <button class="mbtn p" onclick="doAddWs()">OluÅŸtur</button>
+    <button class="mbtn s" onclick="hideM('wsm')">İptal</button>
+    <button class="mbtn p" onclick="doAddWs()">Oluştur</button>
   </div>
 </div></div>
 
 <!-- NOTEBOOK MODAL -->
 <div class="modal-bg" id="nbm"><div class="modal">
   <div class="mt">Yeni Not Defteri</div>
-  <input class="minp" id="nbminp" placeholder="Not defteri adÄ± (Ã¶r. LiteratÃ¼r NotlarÄ±)" onkeydown="if(event.key==='Enter')doAddNb()"/>
+  <input class="minp" id="nbminp" placeholder="Not defteri adı (ör. Literatür Notları)" onkeydown="if(event.key==='Enter')doAddNb()"/>
   <div class="mb">
-    <button class="mbtn s" onclick="hideM('nbm')">Ä°ptal</button>
-    <button class="mbtn p" onclick="doAddNb()">OluÅŸtur</button>
+    <button class="mbtn s" onclick="hideM('nbm')">İptal</button>
+    <button class="mbtn p" onclick="doAddNb()">Oluştur</button>
   </div>
 </div></div>
 
@@ -782,7 +782,7 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
   <div id="syncinfo" style="font-size:12px;color:var(--txt2);line-height:1.7;margin-bottom:12px;">
     <div id="syncstatus" style="padding:8px;background:var(--bg);border:1px solid var(--b);border-radius:4px;margin-bottom:8px;">
       <div style="font-family:var(--fm);font-size:10px;color:var(--txt3);">Uygulama Bilgisi</div>
-      <div id="syncdirshow" style="font-size:11px;color:var(--acc);margin-top:3px;">YÃ¼kleniyor...</div>
+      <div id="syncdirshow" style="font-size:11px;color:var(--acc);margin-top:3px;">Yükleniyor...</div>
     </div>
     <div id="syncappinfo" style="font-family:var(--fm);font-size:9.5px;color:var(--txt3);line-height:1.7;"></div>
   </div>
@@ -790,7 +790,7 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
   <div style="margin-bottom:12px;padding:8px;background:var(--bg);border:1px solid var(--b);border-radius:4px;">
     <div style="font-family:var(--fm);font-size:9.5px;color:var(--acc);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;">EDITOR TERCIHLERI</div>
     <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--txt2);cursor:pointer;">
-      <input type="checkbox" id="prefPageNum" onchange="S.showPageNumbers=this.checked;save();updatePageHeight();"/> Sayfa numaralarÄ±nÄ± gÃ¶ster
+      <input type="checkbox" id="prefPageNum" onchange="S.showPageNumbers=this.checked;save();updatePageHeight();"/> Sayfa numaralarını göster
     </label>
   </div>
   <div class="mb" style="flex-wrap:wrap;gap:6px;">
@@ -817,28 +817,28 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
   <div class="mt">APA 7 Tablo Ekle</div>
   <div class="wr">
     <div class="wf"><label>No</label><input type="number" id="wtn" value="1" min="1"/></div>
-    <div class="wf"><label>SÃ¼tun</label><input type="number" id="wtc" value="3" min="2" max="10"/></div>
-    <div class="wf"><label>SatÄ±r</label><input type="number" id="wtr" value="4" min="2" max="30"/></div>
+    <div class="wf"><label>Sütun</label><input type="number" id="wtc" value="3" min="2" max="10"/></div>
+    <div class="wf"><label>Satır</label><input type="number" id="wtr" value="4" min="2" max="30"/></div>
   </div>
-  <div class="wr"><div class="wf"><label>BaÅŸlÄ±k</label><input type="text" id="wtt" placeholder="Tablo baÅŸlÄ±ÄŸÄ±"/></div></div>
+  <div class="wr"><div class="wf"><label>Başlık</label><input type="text" id="wtt" placeholder="Tablo başlığı"/></div></div>
   <div class="wr"><div class="wf"><label>Not</label><input type="text" id="wtn2" placeholder="Not. n = 120."/></div></div>
   <div class="mb">
-    <button class="mbtn s" onclick="hideM('wiz')">Ä°ptal</button>
+    <button class="mbtn s" onclick="hideM('wiz')">İptal</button>
     <button class="mbtn p" onclick="doTable()">Ekle</button>
   </div>
 </div></div>
 
 <div class="modal-bg" id="covermodal"><div class="modal" style="width:360px">
-  <div class="mt">APA 7 Kapak SayfasÄ±</div>
-  <div class="wr"><div class="wf"><label>Makale BaÅŸlÄ±ÄŸÄ± *</label><input type="text" id="cvtitle" placeholder="BaÅŸlÄ±k giriniz"/></div></div>
+  <div class="mt">APA 7 Kapak Sayfası</div>
+  <div class="wr"><div class="wf"><label>Makale Başlığı *</label><input type="text" id="cvtitle" placeholder="Başlık giriniz"/></div></div>
   <div class="wr"><div class="wf"><label>Yazar(lar)</label><input type="text" id="cvauthor" placeholder="Ad Soyad"/></div></div>
-  <div class="wr"><div class="wf"><label>Kurum</label><input type="text" id="cvinst" placeholder="Ãœniversite / Kurum"/></div></div>
+  <div class="wr"><div class="wf"><label>Kurum</label><input type="text" id="cvinst" placeholder="Üniversite / Kurum"/></div></div>
   <div class="wr">
-    <div class="wf"><label>Ders</label><input type="text" id="cvcourse" placeholder="Ders adÄ±"/></div>
-    <div class="wf"><label>Ã–ÄŸretim Ãœyesi</label><input type="text" id="cvprof" placeholder="Prof. Dr. ..."/></div>
+    <div class="wf"><label>Ders</label><input type="text" id="cvcourse" placeholder="Ders adı"/></div>
+    <div class="wf"><label>Öğretim Üyesi</label><input type="text" id="cvprof" placeholder="Prof. Dr. ..."/></div>
   </div>
   <div class="mb">
-    <button class="mbtn s" onclick="hideM('covermodal')">Ä°ptal</button>
+    <button class="mbtn s" onclick="hideM('covermodal')">İptal</button>
     <button class="mbtn p" onclick="doCover()">Ekle</button>
   </div>
 </div></div>
@@ -848,26 +848,26 @@ body.zen #zentb{display:flex;align-items:center;gap:6px;}
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-// â”€â”€ TIPTAP EDITOR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── TIPTAP EDITOR ─────────────────────────────────────────────────────────
 var editor = null;
 
-// â”€â”€ STATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── STATE ──────────────────────────────────────────────────────────────────
 var S={
-  wss:[{id:'ws1',name:'Ã‡alÄ±ÅŸma AlanÄ± 1',lib:[],docId:'doc1'}],
+  wss:[{id:'ws1',name:'Çalışma Alanı 1',lib:[],docId:'doc1'}],
   cur:'ws1',
   notebooks:[{id:'nb1',name:'Genel Notlar'}],
   curNb:'nb1',
   notes:[],  // {id, nbId, type, txt, q, src, rid, tag, dt, hlColor}
   doc:'',
   cm:'inline',
-  docs:[{id:'doc1',name:'Ã‡alÄ±ÅŸma AlanÄ± 1',content:'',bibliographyHTML:'',bibliographyManual:false,coverHTML:'',tocHTML:''}],
+  docs:[{id:'doc1',name:'Çalışma Alanı 1',content:'',bibliographyHTML:'',bibliographyManual:false,coverHTML:'',tocHTML:''}],
   curDoc:'doc1',
   showPageNumbers:false,
   customLabels:[]
 };
 var defaultLabels=[
   {name:'Okudum',color:'#4caf50'},
-  {name:'Ã–nemli',color:'#f44336'},
+  {name:'Önemli',color:'#f44336'},
   {name:'Metodoloji',color:'#2196f3'},
   {name:'Teori',color:'#9c27b0'},
   {name:'Sonra Oku',color:'#ff9800'},
@@ -878,15 +878,15 @@ var activeLabelFilter=null;
 var pdfDoc=null,pdfPg=1,pdfTotal=0,pdfScale=0,curRef=null; // 0=auto
 var pdfTabs=[],activeTabId=null; // {id,title,refId,pdfData,scrollPos,hlData,annots}
 var trigOn=false,trigIdx=-1,savedRange=null;
-var trigSelected=[]; // Ã§oklu atÄ±f seÃ§im listesi
+var trigSelected=[]; // çoklu atıf seçim listesi
 var editorTrigRange=null;
 var hlColor='#fef08a';
 var selText='',selPageNum=1,selRangeObj=null;
-var hlData=[]; // [{page,color,rects}] â€” highlight kalÄ±cÄ± veri
+var hlData=[]; // [{page,color,rects}] — highlight kalıcı veri
 var syncTimer=null,syncDirty=false,syncInFlight=null;
 
 
-// â”€â”€ SYNC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── SYNC ─────────────────────────────────────────────────────────────────────
 function setSL(msg,cls){
   var e=document.getElementById('synclbl');
   if(!msg){e.textContent='';e.className='';return;}
@@ -898,10 +898,10 @@ async function syncLoad(){
   // Electron: dosyadan oku
   if(typeof window.electronAPI!=='undefined'){
     try{
-      setSL('â†“ yÃ¼kleniyor...','ld');
+      setSL('↓ yükleniyor...','ld');
       var res=await window.electronAPI.loadData();
       if(res.ok&&res.data)d=JSON.parse(res.data);
-      if(res.dir)document.title='AcademiQ â€” '+res.dir;
+      if(res.dir)document.title='AcademiQ — '+res.dir;
       if(res.restoredFromBackup){
         setSL('Yedek veri dosyasi yuklendi','ld');
         setTimeout(function(){setSL('','');},4000);
@@ -910,7 +910,7 @@ async function syncLoad(){
       }
     }catch(e){setSL('','');}
   } else if(typeof window.storage!=='undefined'){
-    try{setSL('â†“ yÃ¼kleniyor...','ld');var res2=await window.storage.get('aq_v2');if(res2&&res2.value)d=JSON.parse(res2.value);setSL('','');}catch(e){setSL('','');}
+    try{setSL('↓ yükleniyor...','ld');var res2=await window.storage.get('aq_v2');if(res2&&res2.value)d=JSON.parse(res2.value);setSL('','');}catch(e){setSL('','');}
   }
   if(!d){try{var ls=localStorage.getItem('aqR2');if(ls)d=JSON.parse(ls);}catch(e){}}
   if(d&&d.wss){
@@ -922,7 +922,7 @@ async function syncLoad(){
       if(!S.notebooks||!S.notebooks.length)S.notebooks=[{id:'nb1',name:'Genel Notlar'}];
       if(!S.curNb)S.curNb=S.notebooks[0].id;
     }
-    // PDF'leri yÃ¼kle
+    // PDF'leri yükle
     if(typeof window.electronAPI!=='undefined'){
       try{await window.electronAPI.pdfSyncAll();}catch(e){}
       // Electron: dosya sisteminden
@@ -955,14 +955,14 @@ async function syncLoad(){
       });
     });
   }
-  if(!S.wss||!S.wss.length)S.wss=[{id:'ws1',name:'Ã‡alÄ±ÅŸma AlanÄ± 1',lib:[],docId:'doc1'}];
+  if(!S.wss||!S.wss.length)S.wss=[{id:'ws1',name:'Çalışma Alanı 1',lib:[],docId:'doc1'}];
   if(!S.cur)S.cur=S.wss[0].id;
   if(!S.notebooks||!S.notebooks.length)S.notebooks=[{id:'nb1',name:'Genel Notlar'}];
   if(!S.curNb)S.curNb=S.notebooks[0].id;
   ensureWorkspaceDocs();
   if(typeof S.showPageNumbers==='undefined')S.showPageNumbers=false;
   if(!S.customLabels)S.customLabels=[];
-  // Load current doc content â€” clean legacy page-break elements BEFORE setting innerHTML
+  // Load current doc content — clean legacy page-break elements BEFORE setting innerHTML
   var curD=S.docs.find(function(d){return d.id===S.curDoc;});
   var rawHTML=curD&&curD.content?curD.content:(S.doc||'');
   if(window.AQTipTapWordDocument&&typeof window.AQTipTapWordDocument.prepareLoadedHTML==='function'){
@@ -989,7 +989,7 @@ function ensureWorkspaceDocs(){
     (S.docs||[]).forEach(ensureDocAuxFields);
     return;
   }
-  if(!S.wss||!S.wss.length)S.wss=[{id:'ws1',name:'Ã‡alÄ±ÅŸma AlanÄ± 1',lib:[],docId:'doc1'}];
+  if(!S.wss||!S.wss.length)S.wss=[{id:'ws1',name:'Çalışma Alanı 1',lib:[],docId:'doc1'}];
   if(!S.docs||!S.docs.length)S.docs=[{id:'doc1',name:(S.wss[0]&&S.wss[0].name)||'Belge 1',content:sanitizeDocHTML(S.doc||'<p></p>'),bibliographyHTML:'',bibliographyManual:false,coverHTML:'',tocHTML:''}];
   S.wss.forEach(function(ws,idx){
     if(!ws.docId||!S.docs.some(function(doc){return doc.id===ws.docId;})){
@@ -1127,7 +1127,7 @@ function normalizeLoadedState(){
   S.wss=S.wss.map(function(ws,idx){
     ws=ws||{};
     if(!ws.id)ws.id='ws'+(idx+1);
-    if(!ws.name)ws.name='Ã‡alÄ±ÅŸma AlanÄ± '+(idx+1);
+    if(!ws.name)ws.name='Çalışma Alanı '+(idx+1);
     if(!Array.isArray(ws.lib))ws.lib=[];
     var seen={};
     ws.lib=ws.lib.map(function(ref){
@@ -1207,7 +1207,7 @@ function filterRefsForQuery(refs,q){
 }
 function curNotes(){return S.notes.filter(function(n){return n.nbId===S.curNb;});}
 
-// â”€â”€ DOCUMENT TABS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── DOCUMENT TABS ────────────────────────────────────────────────────────────
 function rDocTabs(){
   ensureWorkspaceDocs();
   var bar=document.getElementById('doctabs');if(!bar)return;
@@ -1322,10 +1322,10 @@ function showWsMenu(x,y,wsId){
   menu.style.top=Math.min(y,window.innerHeight-120)+'px';
   menu.classList.add('show');
 }
-// â”€â”€ APA 7 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── APA 7 ─────────────────────────────────────────────────────────────────────
 function fa(r){if(!r)return'';r=r.trim();if(r.includes(',')){var p=r.split(',');var l=p[0].trim();var rest=(p[1]||'').trim();if(!rest)return l;return l+', '+rest.split(/\s+/).filter(Boolean).map(function(n){return n[0].toUpperCase()+'.'}).join(' ');}var p=r.split(/\s+/);if(p.length===1)return p[0];var l=p[p.length-1];return l+', '+p.slice(0,-1).map(function(n){return n[0].toUpperCase()+'.'}).join(' ');}
 function fal(a){if(!a||!a.length)return'';var f=a.map(fa).filter(Boolean);if(f.length===1)return f[0];if(f.length<=20)return f.slice(0,-1).join(', ')+' & '+f[f.length-1];return f.slice(0,19).join(', ')+', . . . & '+f[f.length-1];}
-function fT(t){if(!t)return'';return t.toLowerCase().replace(/(^|\.\s+|:\s*)([a-zÃ§ÄŸÄ±Ã¶ÅŸÃ¼Ã¢Ã®Ã»])/g,function(m,p,c){return p+c.toUpperCase();});}
+function fT(t){if(!t)return'';return t.toLowerCase().replace(/(^|\.\s+|:\s*)([a-zçğıöşüâîû])/g,function(m,p,c){return p+c.toUpperCase();});}
 function apa7(d){var c='';var a=fal(d.authors||[]);if(a)c+=a+' ';c+='('+(d.year||'t.y.')+('). ');c+=fT(d.title||'')+'. ';if(d.journal){c+=d.journal;if(d.volume){c+=', '+d.volume;if(d.issue)c+='('+d.issue+')';}if(d.fp){c+=', '+d.fp;if(d.lp)c+='\u2013'+d.lp;}c+='. ';}if(d.doi)c+='https://doi.org/'+d.doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i,'');else if(d.url)c+=d.url;return c.trim();}
 function inText(d,mode){var au=(d.authors||[]).map(fa).filter(Boolean);var ls=au.map(function(a){return a.split(',')[0].trim();});var ap=ls.length===0?'Bilinmeyen':ls.length===1?ls[0]:ls.length===2?ls[0]+' & '+ls[1]:ls[0]+' vd.';var yr=d.year||'t.y.';return mode==='footnote_explicit'?ap+', '+yr+'.':'('+ap+', '+yr+')';}
 function getInlineCitationText(ref){
@@ -1356,7 +1356,7 @@ function sortLib(refs){
   });
 }
 
-// â”€â”€ WORKSPACES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── WORKSPACES ─────────────────────────────────────────────────────────────────
 function rWS(){
   var bar=document.getElementById('wsbar');
   if(bar)bar.style.display='none';
@@ -1412,7 +1412,7 @@ function doAddWs(){
   if(active)__aqSetEditorDoc(active.content||__aqBlankDocHTML(),false);
 }
 
-// â”€â”€ NOTEBOOKS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── NOTEBOOKS ─────────────────────────────────────────────────────────────────
 function rNB(){
   var bar=document.getElementById('nbtabs');bar.innerHTML='';
   var notebooks=(window.AQNotebookState&&typeof window.AQNotebookState.buildNotebookViewModel==='function')
@@ -1426,7 +1426,7 @@ function rNB(){
     // Delete button (visible on hover)
     if(nb.deletable){
       var del=document.createElement('span');
-      del.textContent='Ã—';del.title='Sil';
+      del.textContent='×';del.title='Sil';
       del.style.cssText='font-size:12px;color:var(--txt3);cursor:pointer;padding:0 2px;display:none;';
       btn.addEventListener('mouseenter',function(){del.style.display='inline';});
       btn.addEventListener('mouseleave',function(){del.style.display='none';});
@@ -1447,7 +1447,7 @@ function rNB(){
       S.notebooks=next.notebooks;S.curNb=next.currentNotebookId;rNB();rNotes();
     };
     btn.ondblclick=function(){
-      customPrompt('Not defteri adÄ±:',nb.name).then(function(n){
+      customPrompt('Not defteri adı:',nb.name).then(function(n){
         if(n&&n.trim()){
           var next=(window.AQNotebookState&&typeof window.AQNotebookState.renameNotebook==='function')
             ? window.AQNotebookState.renameNotebook({notebooks:S.notebooks,currentNotebookId:S.curNb},nb.id,n)
@@ -1473,7 +1473,7 @@ function doAddNb(){
   hideM('nbm');save();rNB();rNotes();
 }
 
-// â”€â”€ CROSSREF â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── CROSSREF ─────────────────────────────────────────────────────────────────
 function fetchCR(doi,cb){
   var clean=doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i,'').trim();
   fetch('https://api.crossref.org/works/'+encodeURIComponent(clean)+'?mailto=academiq@example.com')
@@ -1489,7 +1489,7 @@ function fetchCR(doi,cb){
         journal:(w['container-title']&&w['container-title'][0])||'',
         volume:w.volume||'',issue:w.issue||'',fp:fp,lp:lp,
         doi:clean,url:'',pdfData:null,pdfUrl:null,wsId:S.cur};
-      setDst('âœ“ Metadata alÄ±ndÄ±, OA aranÄ±yor...','ld');
+      setDst('✓ Metadata alındı, OA aranıyor...','ld');
       fetch('https://api.unpaywall.org/v2/'+encodeURIComponent(clean)+'?email=academiq@example.com')
         .then(function(r2){return r2.ok?r2.json():null;})
         .then(function(ua){
@@ -1514,7 +1514,7 @@ function fetchCR(doi,cb){
           cb(null,ref);
         })
         .catch(function(e){
-          // Unpaywall baÅŸarÄ±sÄ±z â€” metadata ile devam
+          // Unpaywall başarısız — metadata ile devam
           cb(null,ref);
         });
     }).catch(function(e){cb(e);});
@@ -1522,13 +1522,13 @@ function fetchCR(doi,cb){
 
 function addDOI(){
   var doi=document.getElementById('doiinp').value.trim();
-  if(!doi){setDst('DOI boÅŸ.','er');return;}
+  if(!doi){setDst('DOI boş.','er');return;}
   // DOI temizle
   doi=doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i,'').trim();
-  setDst('â³ CrossRef sorgulanÄ±yor...','ld');
+  setDst('⏳ CrossRef sorgulanıyor...','ld');
   // Timeout: 15 saniye sonra hata
   var timedOut=false;
-  var timer=setTimeout(function(){timedOut=true;setDst('âš  BaÄŸlantÄ± zaman aÅŸÄ±mÄ± â€” aÄŸ eriÅŸimi engellenmiÅŸ olabilir.','er');},15000);
+  var timer=setTimeout(function(){timedOut=true;setDst('⚠ Bağlantı zaman aşımı — ağ erişimi engellenmiş olabilir.','er');},15000);
   fetchCR(doi,async function(err,ref){
     clearTimeout(timer);
     if(timedOut)return;
@@ -1552,7 +1552,7 @@ function addDOI(){
       oaUrls.forEach(function(u){buildPDFUrls(u).forEach(function(v){if(allUrls.indexOf(v)<0)allUrls.push(v);});});
       tryFetch(allUrls[0],ref.id);
     }else{
-      setDst(shortRef(ref)+' Â· OA PDF bulunamadi','er');
+      setDst(shortRef(ref)+' · OA PDF bulunamadi','er');
       showNoPDF(ref);
       setTimeout(function(){setDst('','');},5000);
     }
@@ -1560,7 +1560,7 @@ function addDOI(){
     fetchCitationCount(ref);
   });
 }
-// â”€â”€ CITATION COUNT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── CITATION COUNT ───────────────────────────────────────────────────────────
 async function fetchCitationCount(ref){
   if(!ref.doi)return;
   try{
@@ -1579,13 +1579,13 @@ async function batchFetchCitations(){
   if(!ws||!ws.lib||!ws.lib.length){setDst('Kaynak yok.','er');return;}
   var refs=ws.lib.filter(function(r){return r.doi;});
   if(!refs.length){setDst('DOI olan kaynak yok.','er');return;}
-  setDst('AtÄ±f sayÄ±larÄ± gÃ¼ncelleniyor (0/'+refs.length+')...','ld');
+  setDst('Atıf sayıları güncelleniyor (0/'+refs.length+')...','ld');
   for(var i=0;i<refs.length;i++){
-    setDst('AtÄ±f gÃ¼ncelleniyor ('+(i+1)+'/'+refs.length+')...','ld');
+    setDst('Atıf güncelleniyor ('+(i+1)+'/'+refs.length+')...','ld');
     await fetchCitationCount(refs[i]);
     if(i<refs.length-1)await new Promise(function(res){setTimeout(res,500);});
   }
-  setDst('AtÄ±f sayÄ±larÄ± gÃ¼ncellendi.','ok');
+  setDst('Atıf sayıları güncellendi.','ok');
   setTimeout(function(){setDst('','');},3000);
 }
 function setDst(m,c){var e=document.getElementById('dst');e.textContent=m;e.className=c;}
@@ -1622,7 +1622,7 @@ function addToLib(ref){
   return ref;
 }
 
-// â”€â”€ LIBRARY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── LIBRARY ─────────────────────────────────────────────────────────────────
 function deleteCustomLabel(name){
   var labelName=String(name||'').trim();
   if(!labelName)return;
@@ -1653,7 +1653,7 @@ function downloadPDF(id,overrideUrl){
     if(!r.url&&eq.url)r.url=eq.url;
   }
   var fetchUrl=overrideUrl||( r&&r.pdfUrl)||null;
-  if(!r||!fetchUrl){setDst('Ä°ndirilecek URL yok.','er');return;}
+  if(!r||!fetchUrl){setDst('İndirilecek URL yok.','er');return;}
   if(!r.pdfUrl&&fetchUrl)r.pdfUrl=fetchUrl;
   setDst('PDF indiriliyor...','ld');
   document.getElementById('pdfpanel').classList.add('open');
@@ -1678,12 +1678,12 @@ function downloadPDF(id,overrideUrl){
     persistBorrowedPDF(r);
     save();
   }
-  // Electron: CORS bypass ile indir (Node.js Ã¼zerinden)
+  // Electron: CORS bypass ile indir (Node.js üzerinden)
   if(typeof window.electronAPI!=='undefined'){
     window.electronAPI.downloadPDFfromURL(fetchUrl, r.id).then(function(res){
       if(res.ok){
         window.electronAPI.loadPDF(r.id).then(function(pr){
-          if(pr.ok){propagatePDF(pr.buffer);curRef=r;rLib();renderPDF(pr.buffer);setDst('âœ“ PDF indirildi (Electron)','ok');setTimeout(function(){setDst('','');},3000);}
+          if(pr.ok){propagatePDF(pr.buffer);curRef=r;rLib();renderPDF(pr.buffer);setDst('✓ PDF indirildi (Electron)','ok');setTimeout(function(){setDst('','');},3000);}
         });
       } else {
         setDst('Electron indirme hatasi: '+res.error,'er');
@@ -1699,7 +1699,7 @@ function downloadPDF(id,overrideUrl){
       return res.arrayBuffer();
     })
     .then(function(buf){
-      // Ã–nbelleÄŸe al (bu cihazda)
+      // Önbelleğe al (bu cihazda)
       propagatePDF(buf);
       // localStorage'a kaydet
       try{
@@ -1710,21 +1710,21 @@ function downloadPDF(id,overrideUrl){
       curRef=r;
       rLib();rRefs();
       renderPDF(buf);
-      setDst('âœ“ PDF indirildi ve Ã¶nbelleÄŸe alÄ±ndÄ±','ok');
+      setDst('✓ PDF indirildi ve önbelleğe alındı','ok');
       setTimeout(function(){setDst('','');},3000);
     })
     .catch(function(e){
-      // CORS engeli veya baÄŸlantÄ± sorunu
+      // CORS engeli veya bağlantı sorunu
       sc.innerHTML='';
       var d=document.createElement('div');
       d.style.cssText='padding:24px;text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center;';
-      d.innerHTML='<div style="font-size:24px">âš ï¸</div>'+
-        '<div style="color:var(--txt2);font-size:12px;">PDF doÄŸrudan indirilemedi (CORS engeli).</div>'+
-        '<a href="'+r.pdfUrl+'" target="_blank" download style="background:var(--acc);color:#0d1117;border:none;border-radius:6px;padding:10px 16px;font-size:12px;font-weight:600;text-decoration:none;display:block;">TarayÄ±cÄ±dan Ä°ndir</a>'+
-        (r.doi?'<a href="https://doi.org/'+r.doi+'" target="_blank" style="color:var(--txt3);font-size:11px;text-decoration:none;">YayÄ±ncÄ± sayfasÄ± â†—</a>':'')+
-        '<div style="font-size:10px;color:var(--txt3);">Ä°ndirilen PDF dosyasini surukle birak ile yukle.</div>';
+      d.innerHTML='<div style="font-size:24px">⚠️</div>'+
+        '<div style="color:var(--txt2);font-size:12px;">PDF doğrudan indirilemedi (CORS engeli).</div>'+
+        '<a href="'+r.pdfUrl+'" target="_blank" download style="background:var(--acc);color:#0d1117;border:none;border-radius:6px;padding:10px 16px;font-size:12px;font-weight:600;text-decoration:none;display:block;">Tarayıcıdan İndir</a>'+
+        (r.doi?'<a href="https://doi.org/'+r.doi+'" target="_blank" style="color:var(--txt3);font-size:11px;text-decoration:none;">Yayıncı sayfası ↗</a>':'')+
+        '<div style="font-size:10px;color:var(--txt3);">İndirilen PDF dosyasini surukle birak ile yukle.</div>';
       sc.appendChild(d);
-      setDst('CORS engeli â€” tarayÄ±cÄ±dan indir','er');
+      setDst('CORS engeli — tarayıcıdan indir','er');
       setTimeout(function(){setDst('','');},6000);
     });
 }
@@ -1768,7 +1768,7 @@ function dRefIn(id,wsId){
 function showLabelMenu(x,y,ref){
   var menu=document.getElementById('ctxmenu');
   menu.innerHTML='';
-  var editBtn=document.createElement('button');editBtn.className='ctxi';editBtn.textContent='KÃ¼nyeyi DÃ¼zenle';
+  var editBtn=document.createElement('button');editBtn.className='ctxi';editBtn.textContent='Künyeyi Düzenle';
   editBtn.onclick=function(){hideCtx();editRefMetadata(ref);};
   menu.appendChild(editBtn);
   var sepTop=document.createElement('div');sepTop.style.cssText='border-top:1px solid var(--b);margin:4px 0;';menu.appendChild(sepTop);
@@ -1780,7 +1780,7 @@ function showLabelMenu(x,y,ref){
   allLabels.forEach(function(l){
     var hasLabel=ref.labels.some(function(rl){return rl.name===l.name;});
     var btn=document.createElement('button');btn.className='ctxi';
-    btn.innerHTML=(hasLabel?'âœ“ ':'')+'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+l.color+';margin-right:4px;"></span>'+l.name;
+    btn.innerHTML=(hasLabel?'✓ ':'')+'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+l.color+';margin-right:4px;"></span>'+l.name;
     btn.onclick=function(){
       if(hasLabel){ref.labels=ref.labels.filter(function(rl){return rl.name!==l.name;});}
       else{ref.labels.push({name:l.name,color:l.color});}
@@ -1791,7 +1791,7 @@ function showLabelMenu(x,y,ref){
   // New label option
   var newBtn=document.createElement('button');newBtn.className='ctxi';newBtn.textContent='+ Yeni Etiket';
   newBtn.onclick=function(){
-    customPrompt('Etiket adÄ±:','').then(function(name){
+    customPrompt('Etiket adı:','').then(function(name){
       if(!name||!name.trim())return;
       var colors=['#4caf50','#f44336','#2196f3','#9c27b0','#ff9800','#e91e63','#00bcd4','#795548'];
       var color=colors[Math.floor(Math.random()*colors.length)];
@@ -1845,7 +1845,7 @@ function showMoveMenuItems(menu,ref,fromWsId){
   S.wss.forEach(function(ws){
     if(ws.id===fromWsId)return;
     var btn=document.createElement('button');btn.className='ctxi';
-    btn.textContent='â†’ '+ws.name;
+    btn.textContent='→ '+ws.name;
     btn.onclick=function(){moveRefToWs(ref,fromWsId,ws.id);hideCtx();};
     menu.appendChild(btn);
   });
@@ -1856,7 +1856,7 @@ function showMoveMenu(x,y,ref,fromWsId){
   S.wss.forEach(function(ws){
     if(ws.id===fromWsId)return;
     var btn=document.createElement('button');btn.className='ctxi';
-    btn.textContent='â†’ '+ws.name+' alanÄ±na gÃ¶nder';
+    btn.textContent='→ '+ws.name+' alanına gönder';
     btn.onclick=function(){moveRefToWs(ref,fromWsId,ws.id);hideCtx();};
     menu.appendChild(btn);
   });
@@ -1864,7 +1864,7 @@ function showMoveMenu(x,y,ref,fromWsId){
   S.wss.forEach(function(ws){
     if(ws.id===fromWsId)return;
     var btn=document.createElement('button');btn.className='ctxi';
-    btn.textContent='âŠ• '+ws.name+' alanÄ±na kopyala';
+    btn.textContent='⊕ '+ws.name+' alanına kopyala';
     btn.onclick=function(){copyRefToWs(ref,ws.id);hideCtx();};
     menu.appendChild(btn);
   });
@@ -1925,7 +1925,7 @@ function copyRefToWs(ref,toWsId){
   save();rLib();
 }
 
-// â”€â”€ PDF UPLOAD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PDF UPLOAD ────────────────────────────────────────────────────────────────
 function hPDFs(e){Array.from(e.target.files).forEach(pPF);}
 function hDrop(e){e.preventDefault();Array.from(e.dataTransfer.files).filter(function(f){return f.type==='application/pdf';}).forEach(pPF);}
 function pPF(file){
@@ -1973,10 +1973,10 @@ function pPF(file){
               window.electronAPI.savePDF(curRef.id,orig).catch(function(e){console.warn('PDF kayit:',e);});
             }
             save();rLib();rRefs();
-            setDst('âœ“ PDF eklendi'+(curRef.doi?' + metadata':''),'ok');
+            setDst('✓ PDF eklendi'+(curRef.doi?' + metadata':''),'ok');
             setTimeout(function(){setDst('','');},3000);
           }
-          if(doi){setDst('DOI bulundu, metadata Ã§ekiliyor...','ld');fetchCR(doi,function(err,cr){if(!err){ref.title=cr.title||ref.title;ref.authors=cr.authors.length?cr.authors:[];ref.year=cr.year||'';ref.journal=cr.journal||'';ref.volume=cr.volume;ref.issue=cr.issue;ref.fp=cr.fp;ref.lp=cr.lp;}finish(ref);});}
+          if(doi){setDst('DOI bulundu, metadata çekiliyor...','ld');fetchCR(doi,function(err,cr){if(!err){ref.title=cr.title||ref.title;ref.authors=cr.authors.length?cr.authors:[];ref.year=cr.year||'';ref.journal=cr.journal||'';ref.volume=cr.volume;ref.issue=cr.issue;ref.fp=cr.fp;ref.lp=cr.lp;}finish(ref);});}
           else{finish(ref);}
         });
       }).catch(function(){
@@ -1988,9 +1988,9 @@ function pPF(file){
           window.electronAPI.savePDF(curRef.id,orig).catch(function(e){console.warn('PDF kayit:',e);});
         }
         save();rLib();rRefs();
-        setDst('âœ“ PDF eklendi','ok');setTimeout(function(){setDst('','');},3000);
+        setDst('✓ PDF eklendi','ok');setTimeout(function(){setDst('','');},3000);
       });
-    }).catch(function(e){setDst('PDF aÃ§Ä±lamadÄ±: '+e.message,'er');});
+    }).catch(function(e){setDst('PDF açılamadı: '+e.message,'er');});
   };
   reader.readAsArrayBuffer(file);
 }
@@ -2010,7 +2010,7 @@ function extractDOI(pdf,cb){
   })(i);}
 }
 
-// â”€â”€ OA PDF URL helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── OA PDF URL helpers ────────────────────────────────────────────────────────
 function buildPDFUrls(url){
   if(!url) return [];
   var urls=[url];
@@ -2069,10 +2069,10 @@ function buildPDFUrls(url){
 
 function tryFetchChain(urls,idx,refId){
   if(idx>=urls.length){
-    // TÃ¼m URL'ler baÅŸarÄ±sÄ±z
+    // Tüm URL'ler başarısız
     var ref=findRef(refId);
     showNoPDF(ref||{doi:'',pdfUrl:urls[0]||'',title:''});
-    setDst('OA PDF aÃ§Ä±lamadÄ± (CORS). PDF dosyasÄ±nÄ± indirip yÃ¼kleyin.','er');
+    setDst('OA PDF açılamadı (CORS). PDF dosyasını indirip yükleyin.','er');
     setTimeout(function(){setDst('','');},7000);
     return;
   }
@@ -2081,19 +2081,19 @@ function tryFetchChain(urls,idx,refId){
     .then(function(r){
       if(!r.ok) throw new Error('HTTP '+r.status);
       var ct=(r.headers.get('content-type')||'').toLowerCase();
-      if(ct.indexOf('pdf')<0&&ct.indexOf('octet')<0&&ct.indexOf('binary')<0) throw new Error('PDF deÄŸil: '+ct);
+      if(ct.indexOf('pdf')<0&&ct.indexOf('octet')<0&&ct.indexOf('binary')<0) throw new Error('PDF değil: '+ct);
       return r.arrayBuffer();
     })
     .then(function(buf){
-      if(!buf||buf.byteLength<1000) throw new Error('Ã‡ok kÃ¼Ã§Ã¼k dosya');
-      // Ä°lk birkaÃ§ byte'Ä± kontrol et â€” PDF mi?
+      if(!buf||buf.byteLength<1000) throw new Error('Çok küçük dosya');
+      // İlk birkaç byte'ı kontrol et — PDF mi?
       var header=new Uint8Array(buf.slice(0,5));
       var sig=String.fromCharCode.apply(null,header);
       if(sig!=='%PDF-') throw new Error('PDF header yok');
       attachFetchedPDF(refId,buf.slice(0),u);
       var ref=findRef(refId);
       addPdfTab((ref&&ref.title)||'PDF',buf,refId);
-      setDst('âœ“ OA PDF yÃ¼klendi','ok');
+      setDst('✓ OA PDF yüklendi','ok');
       setTimeout(function(){setDst('','');},3000);
     })
     .catch(function(err){
@@ -2104,9 +2104,9 @@ function tryFetchChain(urls,idx,refId){
 
 function tryFetch(url,refId){
   if(!url){var ref=findRef(refId);showNoPDF(ref||{});return;}
-  // Her iki modda da URL alternatifleri oluÅŸtur
+  // Her iki modda da URL alternatifleri oluştur
   var urls=buildPDFUrls(url);
-  // Electron: Node.js ile sÄ±rayla dene
+  // Electron: Node.js ile sırayla dene
   if(typeof window.electronAPI!=='undefined'){
     clearPDFView();
     var scEl=document.getElementById('pdfscroll');
@@ -2175,7 +2175,7 @@ function electronFetchChain(urls,idx,refId){
     });
 }
 
-// â”€â”€ PDF RENDER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PDF RENDER ───────────────────────────────────────────────────────────────
 var renderedPages={};
 var lazyObserver=null;
 
@@ -2226,9 +2226,9 @@ function renderPDF(buf){
     });
   }).catch(function(e){
     console.error('PDF render error:',e);
-    setDst('PDF aÃ§Ä±lamadÄ±: '+e.message,'er');
+    setDst('PDF açılamadı: '+e.message,'er');
     var sc=document.getElementById('pdfscroll');
-    if(sc)sc.innerHTML='<div style="color:var(--red);font-size:12px;padding:20px;text-align:center;width:100%;">PDF aÃ§Ä±lamadÄ±: '+e.message+'</div>';
+    if(sc)sc.innerHTML='<div style="color:var(--red);font-size:12px;padding:20px;text-align:center;width:100%;">PDF açılamadı: '+e.message+'</div>';
   });
 }
 
@@ -2336,7 +2336,7 @@ function clearPDFView(){
   var sc=document.getElementById('pdfscroll');if(sc)sc.innerHTML='';
 }
 
-// â”€â”€ PDF TABS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PDF TABS ──────────────────────────────────────────────────────────────────
 function addPdfTab(title,pdfData,refId){
   // Save current tab state before switching
   saveCurrentTabState();
@@ -2495,7 +2495,7 @@ function switchWsPdfTabs(){
   }
 }
 
-// â”€â”€ PDF ANNOTATIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PDF ANNOTATIONS ──────────────────────────────────────────────────────────
 function addPdfAnnot(pageNum,x,y){
   var wrap=document.querySelector('.pdf-page-wrap[data-page="'+pageNum+'"]');
   if(!wrap)return;
@@ -2515,11 +2515,11 @@ function addPdfAnnot(pageNum,x,y){
   body.spellcheck=true;
   body.rows=3;
   el.appendChild(body);
-  el.setAttribute('placeholder','Not yazÄ±n...');
+  el.setAttribute('placeholder','Not yazın...');
   // Delete button
   var del=document.createElement('span');
   del.className='pdf-annot-del';
-  del.textContent='Ã—';
+  del.textContent='×';
   del.onclick=function(e){e.stopPropagation();el.remove();saveAnnotsToTab();};
   el.appendChild(del);
   // Drag support
@@ -2539,10 +2539,10 @@ function makeDraggable(el,container){
   el.addEventListener('mousedown',function(e){
     if(e.target.className==='pdf-annot-del')return;
     if(e.target.closest('.pdf-annot-body'))return;
-    // If already focused (editing mode), allow text selection â€” don't drag
+    // If already focused (editing mode), allow text selection — don't drag
     var body=el.querySelector('.pdf-annot-body');
     if(body&&document.activeElement===body)return;
-    // Record potential drag start, but DON'T preventDefault â€” allow natural focus
+    // Record potential drag start, but DON'T preventDefault — allow natural focus
     mayDrag=true;startX=e.clientX;startY=e.clientY;
     origX=parseInt(el.style.left)||0;origY=parseInt(el.style.top)||0;
   });
@@ -2613,7 +2613,7 @@ function restoreAnnots(annots){
     el.appendChild(body);
     var del=document.createElement('span');
     del.className='pdf-annot-del';
-    del.textContent='Ã—';
+    del.textContent='×';
     del.onclick=function(e){e.stopPropagation();el.remove();saveAnnotsToTab();};
     el.appendChild(del);
     makeDraggable(el,wrap);
@@ -2633,7 +2633,7 @@ document.addEventListener('keydown',function(e){
     var active=document.activeElement;
     var annot=active&&active.closest?active.closest('.pdf-annot'):null;
     if(annot){
-      var text=(active.innerText||'').replace(/Ã—/g,'').trim();
+      var text=(active.innerText||'').replace(/×/g,'').trim();
       // Delete if annotation is empty, or if user presses Shift+Delete
       if(!text||e.shiftKey){
         e.preventDefault();
@@ -2656,7 +2656,7 @@ document.addEventListener('keydown',function(e){
   }
 });
 
-// â”€â”€ PDF DRAWING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PDF DRAWING ──────────────────────────────────────────────────────────────
 function setupDrawOnPage(wrap){
   var drawCanvas=document.createElement('canvas');
   drawCanvas.className='draw-overlay';
@@ -2755,11 +2755,11 @@ function showNoPDF(ref){
     (title?'<div style="font-size:11px;color:var(--txt2);max-width:360px;line-height:1.5">'+title.substring(0,80)+'</div>':'')+
     (doi?'<div style="font-family:var(--fm);font-size:10px;color:var(--txt3)">DOI: '+doi+'</div>':'')+
     '<div style="width:100%;max-width:320px;display:flex;flex-direction:column;gap:7px;margin-top:8px;">'+
-    '<button onclick="document.getElementById(\'lfinp\').click()" style="background:var(--acc);color:#0d1117;border:none;border-radius:6px;padding:10px;cursor:pointer;font-size:12px;font-weight:600;font-family:var(--f);">+ PDF DosyasÄ± YÃ¼kle</button>'+
-    (oaUrl?'<button onclick="downloadPDF(\''+((ref&&ref.id)||'')+'\',\''+oaUrl+'\')" style="background:var(--bg3);color:var(--blue);border:1px solid var(--b);border-radius:6px;padding:9px;font-size:11px;cursor:pointer;font-family:var(--f);display:block;width:100%;">OA PDF Otomatik Ä°ndir</button>':'<div style="font-size:11px;color:var(--txt3)">AÃ§Ä±k eriÅŸim PDF yok</div>')+
-    (doi?'<a href="https://doi.org/'+doi+'" target="_blank" style="color:var(--txt3);font-size:11px;text-decoration:none;">YayÄ±ncÄ± sayfasÄ± â†—</a>':'')+
+    '<button onclick="document.getElementById(\'lfinp\').click()" style="background:var(--acc);color:#0d1117;border:none;border-radius:6px;padding:10px;cursor:pointer;font-size:12px;font-weight:600;font-family:var(--f);">+ PDF Dosyası Yükle</button>'+
+    (oaUrl?'<button onclick="downloadPDF(\''+((ref&&ref.id)||'')+'\',\''+oaUrl+'\')" style="background:var(--bg3);color:var(--blue);border:1px solid var(--b);border-radius:6px;padding:9px;font-size:11px;cursor:pointer;font-family:var(--f);display:block;width:100%;">OA PDF Otomatik İndir</button>':'<div style="font-size:11px;color:var(--txt3)">Açık erişim PDF yok</div>')+
+    (doi?'<a href="https://doi.org/'+doi+'" target="_blank" style="color:var(--txt3);font-size:11px;text-decoration:none;">Yayıncı sayfası ↗</a>':'')+
     '</div>'+
-    '<div style="font-size:10px;color:var(--txt3);margin-top:6px;line-height:1.7">PDF indirip "PDF YÃ¼kle" butonuna tÄ±klayÄ±n.</div>';
+    '<div style="font-size:10px;color:var(--txt3);margin-top:6px;line-height:1.7">PDF indirip "PDF Yükle" butonuna tıklayın.</div>';
   sc.appendChild(d);
 }
 
@@ -2777,13 +2777,13 @@ function pZO(){pdfScale=Math.max(((pdfScale||getScale())-0.15),0.3);if(curRef&&c
 function pZFit(){pdfScale=0;if(curRef&&curRef.pdfData)renderPDF(curRef.pdfData);updPgLabel();}
 function togglePDF(){var p=document.getElementById('pdfpanel');if(p.classList.contains('fullscreen')){p.classList.remove('fullscreen');document.getElementById('pdffullbtn').innerHTML='&#x26F6;';}p.classList.toggle('open');}
 function togglePdfFullscreen(){var p=document.getElementById('pdfpanel');p.classList.toggle('fullscreen');document.getElementById('pdffullbtn').innerHTML=p.classList.contains('fullscreen')?'&#x2716;':'&#x26F6;';if(p.classList.contains('fullscreen')){document.getElementById('pdfresize').style.display='none';}else{document.getElementById('pdfresize').style.display='';}if(pdfDoc&&curRef&&curRef.pdfData){pdfScale=0;renderPDF(curRef.pdfData);}}
-function goToPage(){if(!pdfTotal)return;customPrompt('Sayfa numarasÄ± (1-'+pdfTotal+'):',pdfPg).then(function(v){var n=parseInt(v);if(n>=1&&n<=pdfTotal){pdfPg=n;scrollToPage(n);}});}
+function goToPage(){if(!pdfTotal)return;customPrompt('Sayfa numarası (1-'+pdfTotal+'):',pdfPg).then(function(v){var n=parseInt(v);if(n>=1&&n<=pdfTotal){pdfPg=n;scrollToPage(n);}});}
 
-// â”€â”€ SCROLL PAGE TRACKING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── SCROLL PAGE TRACKING ────────────────────────────────────────────────────
 // PDFViewer handles page tracking via 'pagechanging' event on the eventBus
 var pageObserver=null;
 
-// â”€â”€ PANEL RESIZE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PANEL RESIZE ────────────────────────────────────────────────────────────
 (function(){
   var handle=document.getElementById('pdfresize');
   var panel=document.getElementById('pdfpanel');
@@ -2804,7 +2804,7 @@ var pageObserver=null;
   });
 })();
 
-// â”€â”€ PDF SEARCH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PDF SEARCH ──────────────────────────────────────────────────────────────
 var pdfSearchResults=[];  // [{page,itemIdx,text}]
 var pdfSearchIdx=-1;
 var pdfTextCache={};  // {pageNum: [{str,transform,...}]}
@@ -2914,7 +2914,7 @@ var searchTimer=null;
   });
 })();
 
-// â”€â”€ FIND & REPLACE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── FIND & REPLACE ──────────────────────────────────────────────────────────
 var findState={matches:[],index:-1};
 function toggleFindBar(){
   if(window.AQTipTapWordFind&&typeof window.AQTipTapWordFind.toggleSearchWithState==='function'){
@@ -3054,7 +3054,7 @@ function replaceAll(){
   if(ri){ri.addEventListener('keydown',function(e){if(e.key==='Escape'){e.preventDefault();closeFindBar();}});}
 })();
 
-// â”€â”€ KEYBOARD SHORTCUTS (Word-like) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── KEYBOARD SHORTCUTS (Word-like) ──────────────────────────────────────────
 document.addEventListener('keydown',function(e){
   var shortcuts=window.AQTipTapWordShortcuts||null;
   if(shortcuts&&typeof shortcuts.handleAppDocumentShortcut==='function'){
@@ -3065,7 +3065,7 @@ document.addEventListener('keydown',function(e){
       actions:{
       toggleFindBar:function(){e.preventDefault();toggleFindBar();},
       toggleZenMode:function(){e.preventDefault();toggleZenMode();},
-      save:function(){e.preventDefault();syncSave();setSL('âœ“ Kaydedildi','ok');setTimeout(function(){setSL('','');},2000);},
+      save:function(){e.preventDefault();syncSave();setSL('✓ Kaydedildi','ok');setTimeout(function(){setSL('','');},2000);},
       editorZoom:function(delta){e.preventDefault();editorZoom(delta);},
       resetEditorZoom:function(){
         e.preventDefault();
@@ -3137,7 +3137,7 @@ document.addEventListener('keydown',function(e){
   },{passive:false});
 })();
 
-// â”€â”€ HIGHLIGHT PERSISTENCE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── HIGHLIGHT PERSISTENCE ───────────────────────────────────────────────────
 // hlData per-ref: save in ref object, restore on open
 function saveHLData(){
   if(!curRef) return;
@@ -3154,7 +3154,7 @@ function loadHLData(){
     : ((curRef&&curRef._hlData)?curRef._hlData.slice():[]);
 }
 
-// â”€â”€ HIGHLIGHT â€” works on text layer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── HIGHLIGHT — works on text layer ──────────────────────────────────────────
 function setHLC(el){document.querySelectorAll('.hlc').forEach(function(e){e.classList.remove('on');});el.classList.add('on');hlColor=el.dataset.c;}
 
 // Listen for text selection AND highlight clicks in PDF panel
@@ -3347,7 +3347,7 @@ function hlRemove(){
 
 function drawHL(){
   if(!selRangeObj) return;
-  // SeÃ§ili sayfanÄ±n wrap div'ini bul
+  // Seçili sayfanın wrap div'ini bul
   var wrap=document.querySelector('.pdf-page-wrap[data-page="'+selPageNum+'"]');
   if(!wrap) return;
   var hlCanvas=wrap.querySelector('.hl-overlay');
@@ -3357,12 +3357,12 @@ function drawHL(){
   var saved=[];
   rects.forEach(function(r){
     if(r.width<2||r.height<2) return;
-    // viewport â†’ canvas koordinatÄ± (normalize 0-1)
+    // viewport → canvas koordinatı (normalize 0-1)
     var x=(r.left-wRect.left)/wRect.width;
     var y=(r.top-wRect.top)/wRect.height;
     var w=r.width/wRect.width;
     var hh=r.height/wRect.height;
-    // SÄ±nÄ±r kontrolÃ¼
+    // Sınır kontrolü
     if(x>1||y>1||x+w<0||y+hh<0) return;
     saved.push({x:x,y:y,w:w,h:hh});
   });
@@ -3389,7 +3389,7 @@ function paintHL(hlCanvas,pageNum){
   });
 }
 
-// â”€â”€ NOTES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── NOTES ──────────────────────────────────────────────────────────────────────
 function rNotes(){
   var el=document.getElementById('notelist');
   var notes=curNotes();
@@ -3412,7 +3412,7 @@ function rNotes(){
     return;
   }
   if(!notes.length){
-    el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">PDF\'ten metin seÃ§ â†’ Nota Kaydet<br/>veya aÅŸaÄŸÄ±dan yaz.</div>';
+    el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">PDF\'ten metin seç → Nota Kaydet<br/>veya aşağıdan yaz.</div>';
     return;
   }
 }
@@ -3441,7 +3441,7 @@ function saveNote(){
   S.notes.unshift(note);save();rNotes();document.getElementById('noteta').value='';document.getElementById('notetag').value='';
 }
 
-// â”€â”€ REFS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── REFS ──────────────────────────────────────────────────────────────────────
 function getUsedRefs(){
   if(window.AQTipTapWordCitation&&typeof window.AQTipTapWordCitation.collectUsedReferences==='function'){
     return window.AQTipTapWordCitation.collectUsedReferences(editor?editor.view.dom:document.getElementById('apaed'),{
@@ -3482,7 +3482,7 @@ function ec(cmd,val){
   }
   console.warn('TipTap editor not ready, command ignored:',cmd);
 }
-// â”€â”€ LINE SPACING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── LINE SPACING ───────────────────────────────────────────────────────────
 function setLineSpacing(val){
   if(window.AQTipTapWordCommands&&typeof window.AQTipTapWordCommands.runLineSpacing==='function'){
     window.AQTipTapWordCommands.runLineSpacing({
@@ -3521,7 +3521,7 @@ function editorZoom(delta){
     return;
   }
 }
-// â”€â”€ FORMATTING STATE FEEDBACK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── FORMATTING STATE FEEDBACK ──────────────────────────────────────────────
 function updateFmtState(){
   try{
     if(window.AQTipTapWordToolbar&&typeof window.AQTipTapWordToolbar.syncFormatUI==='function'){
@@ -3588,7 +3588,7 @@ function setWordGoal(){
   }
   customPrompt('Kelime hedefi:',S.wordGoal||'').then(function(g){if(g===null)return;S.wordGoal=parseInt(g)||0;save();uSt();});
 }
-// â”€â”€ APA PASTE FORMATTING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── APA PASTE FORMATTING ─────────────────────────────────────────────────────
 function cleanPastedHTML(html){
   if(window.AQTipTapWordPaste&&typeof window.AQTipTapWordPaste.cleanPastedHTML==='function'){
     return window.AQTipTapWordPaste.cleanPastedHTML(html);
@@ -3606,7 +3606,7 @@ function formatPlainTextAPA(text){
 
 var _refTimer=null;
 
-// â”€â”€ PAGE HEIGHT AUTO-ADJUST WITH PAGE BREAKS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PAGE HEIGHT AUTO-ADJUST WITH PAGE BREAKS ────────────────────────────────
 var _pgTimer=null;
 function updatePageHeight(){
   if(window.AQTipTapWordLayout&&typeof window.AQTipTapWordLayout.schedulePageSync==='function'){
@@ -3694,7 +3694,7 @@ function setCM(m,btn){
 }
 document.addEventListener('click',function(e){if(!e.target.closest('.dd'))cdd();});
 
-// â”€â”€ INSERT HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── INSERT HELPERS ────────────────────────────────────────────────────────────
 function insCover(){showM('covermodal');}
 function doCover(){
   var t=(document.getElementById('cvtitle').value||'').trim();
@@ -3783,7 +3783,7 @@ function handleImgUpload(e){
   reader.readAsDataURL(file);
   e.target.value='';
 }
-// â”€â”€ Ä°Ã‡Ä°NDEKÄ°LER (TABLE OF CONTENTS) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── İÇİNDEKİLER (TABLE OF CONTENTS) ─────────────────────────────────────────
 function insBlkQ(){
   if(window.AQTipTapWordContent&&typeof window.AQTipTapWordContent.insertCommandBuiltBlockWithBridge==='function'){
     if(window.AQTipTapWordContent.insertCommandBuiltBlockWithBridge({
@@ -3803,7 +3803,7 @@ function insBlkQ(){
     : '<blockquote>Alinti metni (40+ kelime). (Yazar, Yil, s. XX)</blockquote><p><br></p>';
   iHTML(html);
 }
-function insFig(){customPrompt('Åekil No:','1').then(function(n){if(!n)return;customPrompt('BaÅŸlÄ±k:','').then(function(t){t=t||'';if(window.AQTipTapWordContent&&typeof window.AQTipTapWordContent.insertCommandBuiltBlockWithBridge==='function'){if(window.AQTipTapWordContent.insertCommandBuiltBlockWithBridge({builderName:'buildFigureHTML',builderArgs:[n,t],editor:editor||null,host:document.getElementById('apaed'),bridgeApi:window.AQTipTapWordBridge||null,documentApi:window.AQTipTapWordDocument||null,runtimeApi:window.AQEditorRuntime||null,sanitizeHTML:sanitizeDocHTML,getSavedRange:function(){ return editorSavedRange; },setSavedRange:function(v){ editorSavedRange=v; }}))return; }var html=window.AQTipTapWordCommands&&typeof window.AQTipTapWordCommands.buildFigureHTML==='function'?window.AQTipTapWordCommands.buildFigureHTML(n,t):'<p style="text-align:center;text-indent:0">[Åekil '+n+']</p><p style="text-align:center;text-indent:0;font-style:italic">Åekil '+n+(t?' - '+t:'')+'</p><p><br></p>';iHTML(html);});});
+function insFig(){customPrompt('Şekil No:','1').then(function(n){if(!n)return;customPrompt('Başlık:','').then(function(t){t=t||'';if(window.AQTipTapWordContent&&typeof window.AQTipTapWordContent.insertCommandBuiltBlockWithBridge==='function'){if(window.AQTipTapWordContent.insertCommandBuiltBlockWithBridge({builderName:'buildFigureHTML',builderArgs:[n,t],editor:editor||null,host:document.getElementById('apaed'),bridgeApi:window.AQTipTapWordBridge||null,documentApi:window.AQTipTapWordDocument||null,runtimeApi:window.AQEditorRuntime||null,sanitizeHTML:sanitizeDocHTML,getSavedRange:function(){ return editorSavedRange; },setSavedRange:function(v){ editorSavedRange=v; }}))return; }var html=window.AQTipTapWordCommands&&typeof window.AQTipTapWordCommands.buildFigureHTML==='function'?window.AQTipTapWordCommands.buildFigureHTML(n,t):'<p style="text-align:center;text-indent:0">[Şekil '+n+']</p><p style="text-align:center;text-indent:0;font-style:italic">Şekil '+n+(t?' - '+t:'')+'</p><p><br></p>';iHTML(html);});});
 }
 function doTable(){
   try{
@@ -3839,7 +3839,7 @@ function doTable(){
   }catch(err){alert('Tablo hatasi: '+err.message);}
 }
 
-// â”€â”€ EXPORT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── EXPORT ────────────────────────────────────────────────────────────────────
 function getExportDocHTML(){
   var edHTML=sanitizeDocHTML(getCurrentEditorHTML());
   if(window.AQTipTapWordDocument&&typeof window.AQTipTapWordDocument.buildExportDocHTML==='function'){
@@ -4054,17 +4054,17 @@ function transformSelectedText(mode){
   document.execCommand('insertText',false,transform(txt2));
   runEditorMutationEffects({layout:true,syncChrome:true,refreshTrigger:false});
 }
-function expNotes(){var t=S.notes.map(function(n,i){var nb=S.notebooks.find(function(x){return x.id===n.nbId;});return (i+1)+'. ['+(nb?nb.name:'?')+'] '+(n.src?'('+n.src+') ':'')+'\n'+(n.txt||'')+(n.q?'\nAlÄ±ntÄ±: "'+n.q+'"':'');}).join('\n\n');saveAs(new Blob([t],{type:'text/plain;charset=utf-8'}),'notlar.txt');}
+function expNotes(){var t=S.notes.map(function(n,i){var nb=S.notebooks.find(function(x){return x.id===n.nbId;});return (i+1)+'. ['+(nb?nb.name:'?')+'] '+(n.src?'('+n.src+') ':'')+'\n'+(n.txt||'')+(n.q?'\nAlıntı: "'+n.q+'"':'');}).join('\n\n');saveAs(new Blob([t],{type:'text/plain;charset=utf-8'}),'notlar.txt');}
 function expLib(){var c=[];S.wss.forEach(function(ws){(ws.lib||[]).forEach(function(r){var x=Object.assign({},r);delete x.pdfData;c.push(x);});});saveAs(new Blob([JSON.stringify(c,null,2)],{type:'application/json'}),'kutuphane.json');}
 
-// â”€â”€ UI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── UI ────────────────────────────────────────────────────────────────────────
 function enhanceMenus(){
   var insertMenu=document.getElementById('ddins');
   if(insertMenu&&!insertMenu.querySelector('[data-aq="word-import"]')){
     var wbtn=document.createElement('button');
     wbtn.className='ddi';
     wbtn.dataset.aq='word-import';
-    wbtn.textContent='Word Ä°Ã§e Aktar';
+    wbtn.textContent='Word İçe Aktar';
     wbtn.onclick=function(){document.getElementById('wordinp').click();cdd();};
     insertMenu.appendChild(document.createElement('div')).className='dds';
     insertMenu.appendChild(wbtn);
@@ -4104,24 +4104,24 @@ function enhanceToolbar(){
   };
   tb.appendChild(mk('X²','Üst simge',function(){ec('superscript');},'sup'));
   tb.appendChild(mk('X₂','Alt simge',function(){ec('subscript');},'sub'));
-  tb.appendChild(mk('AA','TÃ¼mÃ¼nÃ¼ bÃ¼yÃ¼k harf',function(){transformSelectedText('upper');},'upper'));
-  tb.appendChild(mk('Aa','Kelime baÅŸlarÄ±nÄ± bÃ¼yÃ¼t',function(){transformSelectedText('title');},'title'));
-  tb.appendChild(mk('aa','TÃ¼mÃ¼nÃ¼ kÃ¼Ã§Ã¼k harf',function(){transformSelectedText('lower');},'lower'));
+  tb.appendChild(mk('AA','Tümünü büyük harf',function(){transformSelectedText('upper');},'upper'));
+  tb.appendChild(mk('Aa','Kelime başlarını büyüt',function(){transformSelectedText('title');},'title'));
+  tb.appendChild(mk('aa','Tümünü küçük harf',function(){transformSelectedText('lower');},'lower'));
 }
 function tSB(side){var el=document.getElementById(side);var btn=document.getElementById('btn'+side);el.classList.toggle('closed');btn.classList.toggle('on');}
 function swR(name,btn){document.querySelectorAll('.rtab').forEach(function(t){t.classList.remove('on');});document.querySelectorAll('.rpnl').forEach(function(p){p.classList.remove('on');});if(btn)btn.classList.add('on');var el=document.getElementById('rp'+name);if(el)el.classList.add('on');}
 function showM(id){document.getElementById(id).classList.add('show');}
 function hideM(id){document.getElementById(id).classList.remove('show');var inp=document.querySelector('#'+id+' .minp');if(inp)inp.value='';}
-// â”€â”€ CUSTOM PROMPT (Electron-compatible) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── CUSTOM PROMPT (Electron-compatible) ──────────────────────────────────────
 var _promptResolve=null;
 function customPrompt(title,defaultVal){
   return new Promise(function(resolve){
     _promptResolve=resolve;
-    document.getElementById('promptTitle').textContent=title||'GiriÅŸ';
+    document.getElementById('promptTitle').textContent=title||'Giriş';
     var inp=document.getElementById('promptInput');
     inp.value=defaultVal||'';
     showM('promptModal');
-    // Focus input â€” retry a few times to override TipTap focus capture
+    // Focus input — retry a few times to override TipTap focus capture
     var attempts=0;
     function tryFocus(){
       inp.focus();inp.select();
@@ -4196,7 +4196,7 @@ function cpStr(s){var ta=document.createElement('textarea');ta.value=s;ta.style.
 // Close modals on bg click
 document.querySelectorAll('.modal-bg').forEach(function(bg){bg.addEventListener('click',function(e){if(e.target===bg)bg.classList.remove('show');});});
 
-// â”€â”€ SYNC SETTINGS UI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── SYNC SETTINGS UI ─────────────────────────────────────────────────────────
 async function showSyncSettings(){
   showM('syncmodal');
   // Update preference checkboxes
@@ -4224,7 +4224,7 @@ async function doClearSyncDir(){
   }catch(e){}
 }
 
-// â”€â”€ UPDATE FUNCTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── UPDATE FUNCTIONS ────────────────────────────────────────────────────────
 var latestUpdateUrl='';
 
 async function checkForUpdate(){
@@ -4287,7 +4287,7 @@ async function saveUpdateUrl(){
   }
 }
 
-// â”€â”€ PDF SYNC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PDF SYNC ──────────────────────────────────────────────────────────────────
 async function doPdfSync(){
   if(typeof window.electronAPI==='undefined'){document.getElementById('pdfsyncstatus').innerHTML='<span style="color:var(--txt3)">Electron gerekli.</span>';return;}
   document.getElementById('pdfsyncstatus').innerHTML='<span style="color:var(--acc)">Senkronize ediliyor...</span>';
@@ -4312,7 +4312,7 @@ async function doPdfSync(){
   }catch(e){document.getElementById('pdfsyncstatus').innerHTML='<span style="color:var(--red)">Hata: '+e.message+'</span>';}
 }
 
-// â”€â”€ MULTI-SOURCE OA PDF FETCH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── MULTI-SOURCE OA PDF FETCH ────────────────────────────────────────────────
 var __oaUrlCache={};
 function __oaCleanDoi(doi){
   return (doi||'').replace(/^https?:\/\/(dx\.)?doi\.org\//i,'').trim();
@@ -4882,7 +4882,7 @@ async function batchDownloadOA(){
   setTimeout(function(){setDst('','');},6500);
 }
 
-// â”€â”€ THUMBNAIL SIDEBAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── THUMBNAIL SIDEBAR ────────────────────────────────────────────────────────
 function toggleThumbs(){
   var el=document.getElementById('pdfthumbs');
   var vis=el.style.display==='none';
@@ -4925,7 +4925,7 @@ function updateThumbHL(){
   });
 }
 
-// â”€â”€ OUTLINE / TOC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── OUTLINE / TOC ────────────────────────────────────────────────────────────
 function toggleOutline(){
   var el=document.getElementById('pdfoutline');
   el.style.display=el.style.display==='none'?'block':'none';
@@ -4969,7 +4969,7 @@ function renderOutlineItems(items,container,depth){
   });
 }
 
-// â”€â”€ COPY TEXT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── COPY TEXT ────────────────────────────────────────────────────────────────
 function cpSelText(){
   if(selText){
     if(navigator.clipboard&&navigator.clipboard.writeText){
@@ -4979,13 +4979,13 @@ function cpSelText(){
   hideHLtip();
 }
 
-// â”€â”€ PDF TABLE EXTRACTION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PDF TABLE EXTRACTION ─────────────────────────────────────────────────────
 function extractTableFromSelection(){
   if(!selText){hideHLtip();return;}
   var text=selText;
   hideHLtip();
   var lines=text.split('\n').filter(function(l){return l.trim().length>0;});
-  if(lines.length<2){alert('Tablo iÃ§in en az 2 satÄ±r gerekli. PDF\'te tabloyu seÃ§in.');return;}
+  if(lines.length<2){alert('Tablo için en az 2 satır gerekli. PDF\'te tabloyu seçin.');return;}
   function splitRow(line){
     if(line.includes('\t'))return line.split('\t').map(function(c){return c.trim();}).filter(Boolean);
     var parts=line.split(/\s{3,}/).map(function(c){return c.trim();}).filter(Boolean);
@@ -5012,11 +5012,11 @@ function extractTableFromSelection(){
   });
   html+='</tbody></table><p><br></p>';
   iHTML(html);
-  setDst('Tablo editÃ¶re eklendi ('+bodyCells.length+' satÄ±r, '+maxCols+' sÃ¼tun)','ok');
+  setDst('Tablo editöre eklendi ('+bodyCells.length+' satır, '+maxCols+' sütun)','ok');
   setTimeout(function(){setDst('','');},3000);
 }
 
-// â”€â”€ FONT SIZE APPLY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── FONT SIZE APPLY ──────────────────────────────────────────────────────────
 function applyFontSize(pt){
   if(window.AQTipTapWordCommands&&typeof window.AQTipTapWordCommands.runFontSize==='function'){
     if(window.AQTipTapWordCommands.runFontSize({
@@ -5056,7 +5056,7 @@ function applyFontSize(pt){
   runEditorMutationEffects({layout:true,syncChrome:true,refreshTrigger:false});
 }
 
-// â”€â”€ EDITOR SELECTION PRESERVE (fix dropdown insert) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── EDITOR SELECTION PRESERVE (fix dropdown insert) ──────────────────────────
 var editorSavedRange=null;
 function saveEditorSelection(){
   var sel=window.getSelection();
@@ -5081,7 +5081,7 @@ function restoreEditorSelection(){
   return false;
 }
 
-// â”€â”€ BIBTEX / RIS IMPORT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── BIBTEX / RIS IMPORT ──────────────────────────────────────────────────────
 function parseBibTeX(text){
   var entries=[];var re=/@(\w+)\s*\{([^,]*),\s*([\s\S]*?)\n\s*\}/g;
   var m;
@@ -5142,7 +5142,7 @@ function importBib(e){
     var entries=[];
     if(file.name.endsWith('.bib'))entries=parseBibTeX(text);
     else entries=parseRIS(text);
-    if(!entries.length){setDst('Kaynak bulunamadÄ±.','er');return;}
+    if(!entries.length){setDst('Kaynak bulunamadı.','er');return;}
     var added=0;
     var merged=0;
     entries.forEach(function(ref){
@@ -5159,14 +5159,14 @@ function importBib(e){
       added++;
     });
     save();rLib();rRefs();
-    setDst(added+' yeni, '+merged+' birleÅŸtirildi','ok');
+    setDst(added+' yeni, '+merged+' birleştirildi','ok');
     setTimeout(function(){setDst('','');},4000);
   };
   reader.readAsText(file);
   e.target.value='';
 }
 
-// â”€â”€ DARK THEME â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── DARK THEME ────────────────────────────────────────────────────────────────
 function updateThemeButton(){
   var btn=document.getElementById('themebtn');
   if(!btn)return;
@@ -5201,10 +5201,10 @@ function autoCheckUpdate(){
   },5000); // 5 saniye sonra kontrol et
 }
 
-// â”€â”€ TIPTAP INIT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── TIPTAP INIT ──────────────────────────────────────────────────────────────
 function initPdfAnnotBody(body,el){
   if(!body)return;
-  body.placeholder='Not yazÄ±n...';
+  body.placeholder='Not yazın...';
   body.spellcheck=true;
   body.readOnly=false;
   body.disabled=false;
@@ -5281,7 +5281,7 @@ function rRefs(){
     });
   }
   var refs=getUsedRefs();
-  if(!refs.length){el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">Metinde atÄ±f yok.</div>';return;}
+  if(!refs.length){el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">Metinde atıf yok.</div>';return;}
   el.innerHTML=refs.map(function(r){
     return '<div class="ri"><div class="ricite">'+getInlineCitationText(r)+'</div><div class="rifull">'+apa7(r)+'</div><div class="riacts"><button class="rib" onclick="cpStr(\''+escJS(apa7(r))+'\')">Kopyala</button><button class="rib" onclick="openRef(\''+r.id+'\')">PDF</button></div></div>';
   }).join('');
@@ -5312,12 +5312,12 @@ function buildTOCHTML(ed,headings){
     return dots;
   };
   var tocHTML='<div class="toc-container" data-aq-toc="1">';
-  tocHTML+='<h1 style="text-align:center;font-weight:bold;color:#000;font-family:&quot;Times New Roman&quot;,Times,serif;font-size:12pt;line-height:2;margin:0 0 8px 0;">Ä°Ã§indekiler</h1>';
+  tocHTML+='<h1 style="text-align:center;font-weight:bold;color:#000;font-family:&quot;Times New Roman&quot;,Times,serif;font-size:12pt;line-height:2;margin:0 0 8px 0;">İçindekiler</h1>';
   var realIdx=0;
   headings.forEach(function(h){
     var level=normalizeLevel(String(h.tagName||'').charAt(1));
     var text=h.textContent.trim();
-    if(!text||text==='Ä°Ã§indekiler'||text==='KaynakÃ§a')return;
+    if(!text||text==='İçindekiler'||text==='Kaynakça')return;
     if(!h.id)h.id='hdg-'+realIdx+'-'+uid().slice(-6);
     var indent=(Object.prototype.hasOwnProperty.call(tocLevelIndent,level)?tocLevelIndent[level]:0);
     var pageNum=Math.max(1,Math.floor((h.offsetTop||0)/pageTotalH)+1);
@@ -5360,7 +5360,7 @@ function insertTOC(){
   if(!ed)return;
   stripLegacyTOCFromEditor();
   var headings=ed.querySelectorAll('h1,h2,h3,h4,h5');
-  if(!headings.length){alert('Belgede baÅŸlÄ±k bulunamadÄ±. Ã–nce H1-H5 baÅŸlÄ±klarÄ± ekleyin.');return;}
+  if(!headings.length){alert('Belgede başlık bulunamadı. Önce H1-H5 başlıkları ekleyin.');return;}
   var tocHTML=buildTOCHTML(ed,headings);
   var doc=getCurrentDocRecord();
   if(!doc)return;
@@ -5508,7 +5508,7 @@ function rLabelFilter(){
     btn.appendChild(label);
     if(isCustom){
       var del=document.createElement('span');
-      del.textContent='Ã—';
+      del.textContent='×';
       del.style.cssText='font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:999px;background:'+l.color+'22;';
       del.title='Etiketi sil';
       del.onclick=function(e){
@@ -5533,7 +5533,7 @@ setTimeout(function(){
   var tb=document.getElementById('etb');
   if(tb){
     Array.from(tb.querySelectorAll('button')).forEach(function(btn){
-      if((btn.textContent||'').trim()==='Ä°Ã§indekiler')btn.remove();
+      if((btn.textContent||'').trim()==='İçindekiler')btn.remove();
     });
   }
   ['txtColor','hlColor'].forEach(function(id){
@@ -6027,7 +6027,7 @@ function applyTemplate(type){
       focusEditorSurface:focusEditorSurface
     })) return;
   }
-  if(!confirm('Mevcut belge iÃ§eriÄŸi silinecek. Devam etmek istiyor musunuz?'))return;
+  if(!confirm('Mevcut belge içeriği silinecek. Devam etmek istiyor musunuz?'))return;
   var html=window.AQTipTapWordTemplates&&typeof window.AQTipTapWordTemplates.getTemplate==='function'
     ? window.AQTipTapWordTemplates.getTemplate(type)
     : '';
@@ -6053,7 +6053,7 @@ function initTipTapEditor(){
   console.warn('TipTap word init module missing');
 }
 
-// â”€â”€ INIT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── INIT ──────────────────────────────────────────────────────────────────────
 syncLoad().then(function(){
   rWS();rNB();rLib();rNotes();rRefs();uSt();rDocTabs();
   enhanceMenus();
@@ -6115,7 +6115,7 @@ document.addEventListener('visibilitychange',function(){
   }catch(e){}
 });
 autoCheckUpdate();
-// â”€â”€ ZEN MODE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── ZEN MODE ─────────────────────────────────────────────────────────────────
 function toggleZenMode(){
   if(window.AQTipTapWordChrome&&typeof window.AQTipTapWordChrome.toggleZenMode==='function'){
     window.AQTipTapWordChrome.toggleZenMode({
@@ -6214,7 +6214,7 @@ function rLib(){
   el.innerHTML='';
   rLabelFilter();
   var ws=S.wss.find(function(x){return x.id===S.cur;});
-  if(!ws){el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">Ã‡alÄ±ÅŸma alanÄ± yok.</div>';return;}
+  if(!ws){el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">Çalışma alanı yok.</div>';return;}
   function labelName(l){return typeof l==='string'?l:((l&&l.name)||'');}
   function labelColor(l){return typeof l==='string'?'#b6873f':((l&&l.color)||'#b6873f');}
   var fl=window.AQLibraryState&&typeof window.AQLibraryState.filterLibraryItems==='function'
@@ -6224,7 +6224,7 @@ function rLib(){
         if(activeLabelFilter&&!(r.labels||[]).some(function(l){return labelName(l)===activeLabelFilter;}))return false;
         return true;
       });
-  if(!fl.length){el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">'+(q||activeLabelFilter?'EÅŸleÅŸme yok.':'DOI gir veya PDF yÃ¼kle.')+'</div>';return;}
+  if(!fl.length){el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">'+(q||activeLabelFilter?'Eşleşme yok.':'DOI gir veya PDF yükle.')+'</div>';return;}
   fl.forEach(function(r){
     var a=r.authors&&r.authors[0]?r.authors[0].split(',')[0]:'?';
     if(r.authors&&r.authors.length>1)a+=' et al.';
@@ -6232,26 +6232,26 @@ function rLib(){
     div.className='lcard'+(curRef&&curRef.id===r.id?' on':'');
     var hasPDFlocal=!!r.pdfData;
     var hasOAurl=!!(r.pdfUrl);
-    var pdfStatus=hasPDFlocal?'<span class="lbadge pdf">PDF âœ“</span>':(hasOAurl?'<span class="lbadge oa">OA â†“</span>':'');
+    var pdfStatus=hasPDFlocal?'<span class="lbadge pdf">PDF ✓</span>':(hasOAurl?'<span class="lbadge oa">OA ↓</span>':'');
     var labelHTML=(r.labels||[]).map(function(l){
       var nm=labelName(l);if(!nm)return '';
       var color=labelColor(l);
       return '<span class="lbadge" style="color:'+color+';border-color:'+color+';background:'+color+'15;">'+nm+'</span>';
     }).join('');
     var citeStr='';
-    if(typeof r.citationCount==='number')citeStr='<span class="lbadge" style="color:var(--txt2);border-color:var(--b);background:var(--bg);" title="AtÄ±f sayÄ±sÄ±">'+r.citationCount+' atÄ±f</span>';
-    div.innerHTML='<div class="ltitle">'+(r.title||'BaÅŸlÄ±ksÄ±z').substring(0,62)+'</div>'+'<div class="lmeta">'+a+' '+(r.year||'t.y.')+(r.journal?' Â· '+r.journal.substring(0,22):'')+(r.volume?(' Â· '+r.volume+(r.issue?'('+r.issue+')':'')):'')+'</div>'+'<div class="lbadges">'+pdfStatus+(r.doi?'<span class="lbadge doi">DOI</span>':'')+citeStr+labelHTML+'</div>';
+    if(typeof r.citationCount==='number')citeStr='<span class="lbadge" style="color:var(--txt2);border-color:var(--b);background:var(--bg);" title="Atıf sayısı">'+r.citationCount+' atıf</span>';
+    div.innerHTML='<div class="ltitle">'+(r.title||'Başlıksız').substring(0,62)+'</div>'+'<div class="lmeta">'+a+' '+(r.year||'t.y.')+(r.journal?' · '+r.journal.substring(0,22):'')+(r.volume?(' · '+r.volume+(r.issue?'('+r.issue+')':'')):'')+'</div>'+'<div class="lbadges">'+pdfStatus+(r.doi?'<span class="lbadge doi">DOI</span>':'')+citeStr+labelHTML+'</div>';
     if(hasOAurl&&!hasPDFlocal){
       var dlBtn=document.createElement('button');
       dlBtn.style.cssText='position:absolute;bottom:6px;right:7px;background:var(--acc);color:#0d1117;border:none;border-radius:3px;font-family:var(--fm);font-size:9px;padding:2px 7px;cursor:pointer;opacity:0;transition:opacity .15s;';
-      dlBtn.textContent='â†“ Ä°ndir';
+      dlBtn.textContent='↓ İndir';
       dlBtn.title='PDF bu cihaza indirilir';
       div.addEventListener('mouseenter',function(){dlBtn.style.opacity='1';});
       div.addEventListener('mouseleave',function(){dlBtn.style.opacity='0';});
       dlBtn.addEventListener('click',function(e){e.stopPropagation();downloadPDF(r.id);});
       div.appendChild(dlBtn);
     }
-    var del=document.createElement('button');del.className='ldel';del.textContent='Ã—';
+    var del=document.createElement('button');del.className='ldel';del.textContent='×';
     del.addEventListener('click',function(e){e.stopPropagation();dRefIn(r.id,S.cur);});
     div.appendChild(del);
     div.addEventListener('contextmenu',function(e){e.preventDefault();showLabelMenu(e.clientX,e.clientY,r);});
@@ -6622,7 +6622,7 @@ window.addEventListener('load', function(){
   <span class="sep"></span>
   <span style="font-family:var(--fm);font-size:10px;color:var(--txt3);" id="zentime"></span>
   <span class="sep"></span>
-  <button class="btn" onclick="toggleZenMode()" style="font-size:11px;">âœ• Ã‡Ä±k</button>
+  <button class="btn" onclick="toggleZenMode()" style="font-size:11px;">✕ Çık</button>
 </div>
 
 </body>

@@ -313,7 +313,7 @@
         var figureArgs = Array.isArray(value) ? value : [];
         var number = figureArgs[0] || '1';
         var title = figureArgs[1] || '';
-        return '<p style="text-align:center;text-indent:0">[Åekil ' + number + ']</p><p style="text-align:center;text-indent:0;font-style:italic">Åekil ' + number + (title ? ' - ' + title : '') + '</p><p><br></p>';
+        return '<p style="text-align:center;text-indent:0">[Şekil ' + number + ']</p><p style="text-align:center;text-indent:0;font-style:italic">Şekil ' + number + (title ? ' - ' + title : '') + '</p><p><br></p>';
       }
       case 'buildTableHTML': {
         var table = value || {};
