@@ -105,8 +105,25 @@ function createWindow() {
   const updatedHtml = path.join(storage.appDir, 'academiq-research.html');
   const fallbackHtml = path.join(__dirname, 'src', 'index.html');
   let htmlPath = fallbackHtml;
-  if (app.isPackaged && fs.existsSync(updatedHtml)) htmlPath = updatedHtml;
-  else if (fs.existsSync(bundledHtml)) htmlPath = bundledHtml;
+  if (app.isPackaged && fs.existsSync(updatedHtml)) {
+    // Ensure JS dependencies exist alongside the AppData HTML
+    const bundleDst = path.join(storage.appDir, 'tiptap-bundle.js');
+    if (!fs.existsSync(bundleDst)) {
+      try {
+        const bundleSrc = path.join(__dirname, 'tiptap-bundle.js');
+        if (fs.existsSync(bundleSrc)) fs.copyFileSync(bundleSrc, bundleDst);
+        const srcDir = path.join(__dirname, 'src');
+        const dstSrcDir = path.join(storage.appDir, 'src');
+        if (fs.existsSync(srcDir)) {
+          try { fs.mkdirSync(dstSrcDir, { recursive: true }); } catch (_e) {}
+          fs.readdirSync(srcDir).forEach(function(file) {
+            try { fs.copyFileSync(path.join(srcDir, file), path.join(dstSrcDir, file)); } catch (_e) {}
+          });
+        }
+      } catch (_e) {}
+    }
+    htmlPath = updatedHtml;
+  } else if (fs.existsSync(bundledHtml)) htmlPath = bundledHtml;
   mainWindow.loadFile(htmlPath);
 
   // Open external links in browser
