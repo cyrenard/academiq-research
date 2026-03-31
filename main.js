@@ -106,18 +106,21 @@ function createWindow() {
   const fallbackHtml = path.join(__dirname, 'src', 'index.html');
   let htmlPath = fallbackHtml;
   if (app.isPackaged && fs.existsSync(updatedHtml)) {
-    // Ensure JS dependencies exist alongside the AppData HTML
+    // Ensure JS dependencies exist alongside the AppData HTML.
+    // Use readFileSync+writeFileSync (not copyFileSync) so it works from inside ASAR archives.
     const bundleDst = path.join(storage.appDir, 'tiptap-bundle.js');
     if (!fs.existsSync(bundleDst)) {
       try {
         const bundleSrc = path.join(__dirname, 'tiptap-bundle.js');
-        if (fs.existsSync(bundleSrc)) fs.copyFileSync(bundleSrc, bundleDst);
+        if (fs.existsSync(bundleSrc)) fs.writeFileSync(bundleDst, fs.readFileSync(bundleSrc));
         const srcDir = path.join(__dirname, 'src');
         const dstSrcDir = path.join(storage.appDir, 'src');
         if (fs.existsSync(srcDir)) {
           try { fs.mkdirSync(dstSrcDir, { recursive: true }); } catch (_e) {}
           fs.readdirSync(srcDir).forEach(function(file) {
-            try { fs.copyFileSync(path.join(srcDir, file), path.join(dstSrcDir, file)); } catch (_e) {}
+            try {
+              fs.writeFileSync(path.join(dstSrcDir, file), fs.readFileSync(path.join(srcDir, file)));
+            } catch (_e) {}
           });
         }
       } catch (_e) {}

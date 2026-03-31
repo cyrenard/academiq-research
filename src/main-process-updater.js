@@ -67,13 +67,14 @@ async function applyDownloadedUpdate(options) {
     const bakTarget = target + '.bak';
     if (fs.existsSync(target)) fs.copyFileSync(target, bakTarget);
     fs.writeFileSync(target, buf);
-    // Copy local JS dependencies so AppData HTML can load them
+    // Copy local JS dependencies so AppData HTML can load them.
+    // Use readFileSync+writeFileSync (not copyFileSync) to support ASAR archives.
     try {
-      const localDeps = ['tiptap-bundle.js', 'icon.ico'];
+      const localDeps = ['tiptap-bundle.js'];
       for (const dep of localDeps) {
         const src = path.join(dirname, dep);
         const dst = path.join(appDir, dep);
-        if (fs.existsSync(src)) fs.copyFileSync(src, dst);
+        if (fs.existsSync(src)) fs.writeFileSync(dst, fs.readFileSync(src));
       }
       // Copy src/ directory (tiptap-word-*.js, state-schema.js, etc.)
       const srcDir = path.join(dirname, 'src');
@@ -81,7 +82,9 @@ async function applyDownloadedUpdate(options) {
       if (fs.existsSync(srcDir)) {
         try { fs.mkdirSync(dstSrcDir, { recursive: true }); } catch (_e) {}
         fs.readdirSync(srcDir).forEach(function(file) {
-          try { fs.copyFileSync(path.join(srcDir, file), path.join(dstSrcDir, file)); } catch (_e) {}
+          try {
+            fs.writeFileSync(path.join(dstSrcDir, file), fs.readFileSync(path.join(srcDir, file)));
+          } catch (_e) {}
         });
       }
     } catch (_e) {}
