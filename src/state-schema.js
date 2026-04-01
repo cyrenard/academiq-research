@@ -86,7 +86,7 @@
         }else{
           candidate = normalizeDoc({
             name: ws.name,
-            content: idx === 0 ? state.doc : blankDoc()
+            content: blankDoc()
           }, state.docs.length, sanitize);
           state.docs.push(candidate);
           docsById[candidate.id] = candidate;
@@ -112,13 +112,15 @@
     state.curDoc = currentWs ? currentWs.docId : state.docs[0].id;
     var currentDoc = state.docs.find(function(doc){ return doc.id === state.curDoc; }) || state.docs[0];
 
-    // Migration: if current doc has blank content but legacy state.doc has real content, recover it
-    var legacyDoc = state.doc && state.doc.trim() && state.doc.trim() !== blankDoc() ? state.doc.trim() : '';
-    if(legacyDoc && currentDoc && (!currentDoc.content || currentDoc.content.trim() === blankDoc())){
-      currentDoc.content = sanitize(legacyDoc);
+    // Migration: only recover from legacy state.doc if schemaVersion is missing (pre-v2 data)
+    if(!state.schemaVersion){
+      var legacyDoc = state.doc && state.doc.trim() && state.doc.trim() !== blankDoc() ? state.doc.trim() : '';
+      if(legacyDoc && currentDoc && (!currentDoc.content || currentDoc.content.trim() === '' || currentDoc.content.trim() === blankDoc())){
+        currentDoc.content = sanitize(legacyDoc);
+      }
     }
-
-    state.doc = sanitize(state.doc || ((currentDoc && currentDoc.content) || blankDoc()));
+    // state.doc always reflects current doc's content
+    state.doc = sanitize((currentDoc && currentDoc.content) || blankDoc());
   }
 
   function serialize(state, options){

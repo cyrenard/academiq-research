@@ -178,7 +178,7 @@ button,input,select,textarea{font-family:var(--f),var(--fsym);}
 .ctx-menu div:hover{background:var(--bg3);}
 .ctx-menu .ctx-sep{height:1px;background:var(--b);margin:4px 8px;padding:0;cursor:default;}
 .ctx-menu .ctx-shortcut{float:right;color:var(--txt3);font-size:10px;margin-left:16px;}
-#apapage{width:var(--aq-page-shell-width);min-height:var(--aq-page-height);padding:0;overflow:visible;position:relative;background:#fff;box-shadow:none;border:none;border-radius:0;margin-bottom:44px;}
+#apapage{width:var(--aq-page-shell-width);min-height:var(--aq-page-height);padding:0;overflow:visible;position:relative;background:transparent;box-shadow:none;border:none;border-radius:0;margin-bottom:44px;}
 #apapage-bg{position:absolute;inset:0;z-index:0;pointer-events:none;}
 .aq-page-sheet{position:absolute;left:var(--aq-page-shell-offset);width:var(--aq-page-width);height:var(--aq-page-height);background:#fff;box-shadow:0 24px 54px rgba(42,29,12,.10);border:none;border-radius:0;}
 #coverpage,#tocpage,#bibpage{width:var(--aq-page-width);min-height:var(--aq-page-height);padding:var(--aq-page-margin);overflow:visible;position:relative;background:#fff;box-shadow:0 24px 54px rgba(42,29,12,.10);border:none;border-radius:0;margin-bottom:44px;display:none;box-sizing:border-box;}
@@ -193,8 +193,8 @@ button,input,select,textarea{font-family:var(--f),var(--fsym);}
 #bibbody h1{font-size:12pt;font-weight:bold;text-align:center;margin:0;text-indent:0;line-height:2;display:block;}
 #bibbody .refe{margin:0;text-indent:-.5in;padding-left:.5in;font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:2;color:#000;display:block;text-align:left;}
 #tocbody .toc-container{margin:0;}
-/* Page break overlay — positioned outside editor in #apapage */
-.page-break-overlay{display:none!important;}
+/* Page break overlay — visual gap between pages */
+.page-break-overlay{position:absolute;left:0;width:100%;z-index:2;pointer-events:auto;cursor:default;background:#ddd0bc;box-shadow:inset 0 10px 16px -8px rgba(42,29,12,.18),inset 0 -10px 16px -8px rgba(42,29,12,.18);}
 /* Page number overlay */
 .page-number{position:absolute;right:calc(var(--aq-page-shell-offset) + var(--aq-page-margin));font-family:'Times New Roman',Times,serif;font-size:12pt;color:#000;pointer-events:none;user-select:none;z-index:5;line-height:2;}
 /* Legacy cleanup */
@@ -210,6 +210,7 @@ button,input,select,textarea{font-family:var(--f),var(--fsym);}
 }
 #aq-tiptap-content:empty::before{content:'Yazmaya başlayın. Atıf için /r yazın...';color:#bbb;font-style:italic;pointer-events:none;}
 /* TipTap ProseMirror */
+#apaed:focus,#aq-tiptap-shell:focus,#aq-tiptap-body:focus,#aq-tiptap-content:focus,#aq-tiptap-content .ProseMirror:focus{outline:none!important;border:none!important;box-shadow:none!important;}
 #aq-tiptap-content .ProseMirror{outline:none;min-height:var(--aq-page-content-height);caret-color:#0044cc;width:100%;max-width:100%;min-width:0;overflow-x:hidden;overflow-wrap:anywhere;white-space:normal;position:relative;}
 #aq-tiptap-content .ProseMirror>*{max-width:100%;box-sizing:border-box;}
 #aq-tiptap-content .ProseMirror p,#aq-tiptap-content .ProseMirror h1,#aq-tiptap-content .ProseMirror h2,#aq-tiptap-content .ProseMirror h3,#aq-tiptap-content .ProseMirror h4,#aq-tiptap-content .ProseMirror h5,#aq-tiptap-content .ProseMirror blockquote,#aq-tiptap-content .ProseMirror ul,#aq-tiptap-content .ProseMirror ol{width:100%;max-width:100%;}
@@ -912,7 +913,13 @@ async function syncLoad(){
   } else if(typeof window.storage!=='undefined'){
     try{setSL('↓ yükleniyor...','ld');var res2=await window.storage.get('aq_v2');if(res2&&res2.value)d=JSON.parse(res2.value);setSL('','');}catch(e){setSL('','');}
   }
-  if(!d){try{var ls=localStorage.getItem('aqR2');if(ls)d=JSON.parse(ls);}catch(e){}}
+  if(!d){
+    try{var ls=localStorage.getItem('aqR2');if(ls)d=JSON.parse(ls);}catch(e){}
+    // If we got data from Electron file but it was empty, don't fallback to stale localStorage
+    if(typeof window.electronAPI!=='undefined' && d){
+      try{localStorage.removeItem('aqR2');}catch(e){}
+    }
+  }
   if(d&&d.wss){
     if(window.AQStateSchema&&typeof window.AQStateSchema.hydrate==='function'){
       S=window.AQStateSchema.hydrate(d,{sanitize:sanitizeDocHTML});
@@ -959,12 +966,19 @@ async function syncLoad(){
   if(!S.cur)S.cur=S.wss[0].id;
   if(!S.notebooks||!S.notebooks.length)S.notebooks=[{id:'nb1',name:'Genel Notlar'}];
   if(!S.curNb)S.curNb=S.notebooks[0].id;
-  ensureWorkspaceDocs();
+  // Only run ensureWorkspaceDocs if hydrate was NOT used (hydrate already handles workspace-doc linking)
+  if(!(window.AQStateSchema&&typeof window.AQStateSchema.hydrate==='function')){
+    ensureWorkspaceDocs();
+  }else{
+    (S.docs||[]).forEach(ensureDocAuxFields);
+  }
   if(typeof S.showPageNumbers==='undefined')S.showPageNumbers=false;
   if(!S.customLabels)S.customLabels=[];
   // Load current doc content — clean legacy page-break elements BEFORE setting innerHTML
   var curD=S.docs.find(function(d){return d.id===S.curDoc;});
   var rawHTML=curD&&curD.content?curD.content:(S.doc||'');
+  // Strip shell wrappers from saved content (legacy bug fix)
+  rawHTML=sanitizeDocHTML(rawHTML);
   if(window.AQTipTapWordDocument&&typeof window.AQTipTapWordDocument.prepareLoadedHTML==='function'){
     rawHTML=window.AQTipTapWordDocument.prepareLoadedHTML(rawHTML,'<p></p>');
   }else if(window.AQTipTapWordDocument&&typeof window.AQTipTapWordDocument.stripLegacyEditorArtifacts==='function'){
@@ -990,10 +1004,10 @@ function ensureWorkspaceDocs(){
     return;
   }
   if(!S.wss||!S.wss.length)S.wss=[{id:'ws1',name:'Çalışma Alanı 1',lib:[],docId:'doc1'}];
-  if(!S.docs||!S.docs.length)S.docs=[{id:'doc1',name:(S.wss[0]&&S.wss[0].name)||'Belge 1',content:sanitizeDocHTML(S.doc||'<p></p>'),bibliographyHTML:'',bibliographyManual:false,coverHTML:'',tocHTML:''}];
+  if(!S.docs||!S.docs.length)S.docs=[{id:'doc1',name:(S.wss[0]&&S.wss[0].name)||'Belge 1',content:'<p></p>',bibliographyHTML:'',bibliographyManual:false,coverHTML:'',tocHTML:''}];
   S.wss.forEach(function(ws,idx){
     if(!ws.docId||!S.docs.some(function(doc){return doc.id===ws.docId;})){
-      var doc=S.docs[idx]||{id:uid(),name:ws.name,content:idx===0?sanitizeDocHTML(S.doc||'<p></p>'):'<p></p>'};
+      var doc=S.docs[idx]||{id:uid(),name:ws.name,content:'<p></p>'};
       if(!S.docs.some(function(existing){return existing.id===doc.id;}))S.docs.push(doc);
       ws.docId=doc.id;
       doc.name=ws.name;
@@ -1009,6 +1023,15 @@ function ensureWorkspaceDocs(){
   }
 }
 function switchWs(wsId){
+  console.log('[SW] switching to', wsId, 'from', S.cur, 'curDoc:', S.curDoc);
+  // 1. Save current doc content to its record BEFORE changing curDoc
+  var oldHtml=getCurrentEditorHTML();
+  console.log('[SW] old editor html len:', (oldHtml||'').length, 'preview:', (oldHtml||'').substring(0,80));
+  oldHtml=sanitizeDocHTML(oldHtml);
+  var oldDoc=(S.docs||[]).find(function(d){return d.id===S.curDoc;});
+  if(oldDoc)oldDoc.content=oldHtml;
+
+  // 2. Switch workspace
   var next=(window.AQDocTabsState&&typeof window.AQDocTabsState.switchWorkspaceState==='function')
     ? window.AQDocTabsState.switchWorkspaceState(S,wsId,{sanitize:sanitizeDocHTML})
     : null;
@@ -1024,14 +1047,27 @@ function switchWs(wsId){
       S.doc=doc.content;
     }
   }
-  save();
-  rWS();
-  rLib();
-  rRefs();
-  switchWsPdfTabs();
+
+  // 3. Load new doc into editor with switching guard
   var active=(S.docs||[]).find(function(doc){return doc.id===S.curDoc;});
-  if(active)__aqSetEditorDoc(active.content||__aqBlankDocHTML(),false);
-  rDocTabs();
+  var newHtml=active&&active.content?active.content:__aqBlankDocHTML();
+  console.log('[SW] new curDoc:', S.curDoc, 'active?', !!active, 'newHtml:', (newHtml||'').substring(0,80), 'editor?', !!editor);
+  __aqDocSwitching=true;
+  suppressDocSave=true;
+  if(editor&&editor.commands&&typeof editor.commands.setContent==='function'){
+    editor.commands.setContent(newHtml,false);
+  }else{
+    setCurrentEditorHTML(newHtml);
+  }
+  S.doc=newHtml;
+  __aqDocSwitching=false;
+  suppressDocSave=false;
+  console.log('[SW] after setContent, editor html:', (editor?editor.getHTML():'no-editor').substring(0,80));
+
+  // 4. Save and update UI
+  save();
+  rWS();rLib();rRefs();switchWsPdfTabs();rDocTabs();
+  updatePageHeight();
 }
 function curWs(){return S.wss.find(function(x){return x.id===S.cur;})||null;}
 function cLib(){var w=curWs();return w?w.lib:[];}
@@ -1393,6 +1429,12 @@ function promptAddWs(){
 function doAddWs(){
   var n=document.getElementById('wsminp').value.trim();
   if(!n)return;
+  // Save current doc BEFORE changing curDoc
+  var oldHtml=getCurrentEditorHTML();
+  oldHtml=sanitizeDocHTML(oldHtml);
+  var oldDoc=(S.docs||[]).find(function(d){return d.id===S.curDoc;});
+  if(oldDoc)oldDoc.content=oldHtml;
+
   var created=(window.AQDocTabsState&&typeof window.AQDocTabsState.addWorkspaceWithDocState==='function')
     ? window.AQDocTabsState.addWorkspaceWithDocState(S,{id:uid(),name:n,lib:[]},{uid:uid,sanitize:sanitizeDocHTML})
     : null;
@@ -1405,11 +1447,20 @@ function doAddWs(){
     S.curDoc=doc.id;
     S.doc=doc.content;
   }
+  // Set editor to blank with switching guard
+  __aqDocSwitching=true;
+  suppressDocSave=true;
+  if(editor&&editor.commands&&typeof editor.commands.setContent==='function'){
+    editor.commands.setContent(__aqBlankDocHTML(),false);
+  }else{
+    setCurrentEditorHTML(__aqBlankDocHTML());
+  }
+  __aqDocSwitching=false;
+  suppressDocSave=false;
   hideM('wsm');
   save();
   rWS();rLib();rRefs();rDocTabs();switchWsPdfTabs();uSt();
-  var active=(S.docs||[]).find(function(doc){return doc.id===S.curDoc;});
-  if(active)__aqSetEditorDoc(active.content||__aqBlankDocHTML(),false);
+  updatePageHeight();
 }
 
 // ── NOTEBOOKS ─────────────────────────────────────────────────────────────────
@@ -3645,6 +3696,14 @@ function _doUpdatePageHeight(){
   var contentH=Math.max(ed.scrollHeight||0,ed.offsetHeight||0,864);
   page.style.minHeight=Math.max(1056,contentH+192)+'px';
   var numPages=Math.max(1,Math.ceil(contentH/864));
+  var _pageH=1123,_pageGap=32,_pageTotalH=1155;
+  for(var g=0;g<numPages-1;g++){
+    var ov=document.createElement('div');
+    ov.className='page-break-overlay';
+    ov.style.top=(g*_pageTotalH+_pageH)+'px';
+    ov.style.height=_pageGap+'px';
+    page.appendChild(ov);
+  }
   if(!S.showPageNumbers)return;
   for(var p=0;p<numPages;p++){
     var pn=document.createElement('div');
@@ -5553,6 +5612,25 @@ function sanitizeDocHTML(html){
     html=window.AQDocumentState.sanitizeDocHTML(html);
   }
   html=String(html||'');
+  // Strip shell wrapper divs that may leak into saved content
+  try{
+    var _s=document.createElement('div');
+    _s.innerHTML=html;
+    var _pm=_s.querySelector('.ProseMirror');
+    if(_pm)html=_pm.innerHTML;
+    else{
+      var _tc=_s.querySelector('#aq-tiptap-content');
+      if(_tc)html=_tc.innerHTML;
+      else{
+        var _tb=_s.querySelector('#aq-tiptap-body');
+        if(_tb)html=_tb.innerHTML;
+        else{
+          var _ts=_s.querySelector('#aq-tiptap-shell');
+          if(_ts)html=_ts.innerHTML;
+        }
+      }
+    }
+  }catch(e){}
   html=html.replace(/<div[^>]*class="aq-pe-page[^"]*"[^>]*>/gi,'');
   if(window.AQTipTapWordDocument&&typeof window.AQTipTapWordDocument.stripLegacyEditorArtifacts==='function'){
     html=window.AQTipTapWordDocument.stripLegacyEditorArtifacts(html);
@@ -5594,8 +5672,18 @@ function getCurrentEditorHTML(){
   if(window.AQTipTapShell&&typeof window.AQTipTapShell.getHTML==='function'){
     return window.AQTipTapShell.getHTML();
   }
+  // Fallback: extract content from innermost ProseMirror/tiptap-content, strip shell wrappers
   var ed=document.getElementById('apaed');
-  return ed?ed.innerHTML:'<p></p>';
+  if(!ed)return '<p></p>';
+  var pm=ed.querySelector('.ProseMirror');
+  if(pm)return pm.innerHTML||'<p></p>';
+  var tc=ed.querySelector('#aq-tiptap-content');
+  if(tc)return tc.innerHTML||'<p></p>';
+  var tb=ed.querySelector('#aq-tiptap-body');
+  if(tb)return tb.innerHTML||'<p></p>';
+  var ts=ed.querySelector('#aq-tiptap-shell');
+  if(ts)return ts.innerHTML||'<p></p>';
+  return ed.innerHTML||'<p></p>';
 }
 function setCurrentEditorHTML(html){
   if(window.AQTipTapWordBridge&&typeof window.AQTipTapWordBridge.setCurrentEditorHTML==='function'){
@@ -6074,14 +6162,6 @@ syncLoad().then(function(){
   }else{
     if(window.AQEditorLifecycle && typeof window.AQEditorLifecycle.initTipTap === 'function') window.AQEditorLifecycle.initTipTap();
     else initTipTapEditor();
-    setTimeout(function(){
-      try{
-        if(typeof __aqSetEditorDoc==='function'){
-          var cur=(S.docs||[]).find(function(d){return d.id===S.curDoc;});
-          __aqSetEditorDoc(cur&&cur.content?cur.content:(S.doc||'<p></p>'),false);
-        }
-      }catch(e){}
-    },60);
   }
   // Electron: uygulama bilgisi
   if(typeof window.electronAPI!=='undefined'){
@@ -6443,7 +6523,8 @@ syncSave=async function(){
       : window.AQStateSchema&&typeof window.AQStateSchema.serialize==='function'
       ? window.AQStateSchema.serialize(S,{sanitize:sanitizeDocHTML})
       : {
-          wss:S.wss.map(function(ws){return {id:ws.id,name:ws.name,lib:(ws.lib||[]).map(function(r){var c=Object.assign({},r);delete c.pdfData;return c;})};}),
+          schemaVersion:2,
+          wss:S.wss.map(function(ws){return {id:ws.id,name:ws.name,docId:ws.docId,lib:(ws.lib||[]).map(function(r){var c=Object.assign({},r);delete c.pdfData;return c;})};}),
           cur:S.cur,notebooks:S.notebooks,curNb:S.curNb,notes:S.notes,doc:html,cm:S.cm,
           docs:S.docs,curDoc:S.curDoc,showPageNumbers:S.showPageNumbers,customLabels:S.customLabels||[]
         };
@@ -6451,7 +6532,7 @@ syncSave=async function(){
     if(typeof window.electronAPI!=='undefined'){
       try{await window.electronAPI.saveData(json);}catch(e){}
     }
-    try{localStorage.setItem('aqR2',json);}catch(e){}
+    if(typeof window.electronAPI==='undefined'){try{localStorage.setItem('aqR2',json);}catch(e){}}
     try{
       var pm=window.AQSyncState&&typeof window.AQSyncState.buildPDFCacheMap==='function'
         ? window.AQSyncState.buildPDFCacheMap(S.wss)

@@ -173,6 +173,13 @@
       pageStep: pageTotalHeight
     });
     page.querySelectorAll('.aq-page-gap-cover').forEach(function(el){ el.remove(); });
+    for(var p = 0; p < pageCount - 1; p++){
+      var overlay = document.createElement('div');
+      overlay.className = 'page-break-overlay';
+      overlay.style.top = (p * pageTotalHeight + pageHeight) + 'px';
+      overlay.style.height = pageGap + 'px';
+      page.appendChild(overlay);
+    }
     if(showPageNumbers){
       buildPageNumberTops(pageCount, pageTotalHeight, 24).forEach(function(top, index){
         var num = document.createElement('div');

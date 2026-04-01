@@ -53,6 +53,7 @@
         return enableFallbackEditable(edEl, existingHTML || '<p></p>');
       }
       edEl.removeAttribute('contenteditable');
+      mountEl.innerHTML = '';
       window.editor = factory.createEditor(T, {
         element: mountEl,
         content: existingHTML || '<p></p>',
