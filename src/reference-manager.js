@@ -19,8 +19,7 @@
   }
 
   function findReference(id, workspaceId){
-    return call('findRef', [id, workspaceId != null ? workspaceId : getWorkspaceId()], null)
-      || call('findRef', [id], null);
+    return call('findRef', [id, workspaceId != null ? workspaceId : getWorkspaceId()], null);
   }
 
   function sortReferences(refs){

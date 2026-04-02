@@ -5,13 +5,28 @@
   }
   root.AQTipTapWordIO = factory();
 })(typeof window !== 'undefined' ? window : globalThis, function(){
+  function stripDangerousTags(html){
+    return String(html || '')
+      .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+      .replace(/<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi, '')
+      .replace(/<object[\s\S]*?>[\s\S]*?<\/object>/gi, '')
+      .replace(/<embed[\s\S]*?>[\s\S]*?<\/embed>/gi, '');
+  }
+
+  function normalizeInputText(text){
+    return String(text || '')
+      .replace(/^\uFEFF/, '')
+      .replace(/\0/g, '')
+      .replace(/\r\n?/g, '\n');
+  }
+
   function looksLikeHTML(text){
     return /<\/?[a-z][\s\S]*>/i.test(String(text || ''));
   }
 
   function normalizeImportHTML(text, formatPlainTextAPA){
-    var value = String(text || '');
-    if(looksLikeHTML(value)) return value;
+    var value = normalizeInputText(text);
+    if(looksLikeHTML(value)) return stripDangerousTags(value);
     if(typeof formatPlainTextAPA === 'function') return formatPlainTextAPA(value || '');
     return '<p>' + value.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>';
   }

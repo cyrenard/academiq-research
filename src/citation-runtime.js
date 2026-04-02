@@ -356,6 +356,9 @@
 
   function deferReferenceSectionSync(preservedTop, options){
     options = options || {};
+    if(options.syncToken != null && runtime && typeof runtime.isActiveSyncCycle === 'function' && !runtime.isActiveSyncCycle(options.syncToken)){
+      return false;
+    }
     if(typeof preservedTop === 'number') runtime.setScrollTop(preservedTop);
     else runtime.saveScroll();
     if(window.AQEditorRuntime && typeof window.AQEditorRuntime.runContentApplyEffects === 'function'){
@@ -379,11 +382,20 @@
       }
     }
     if(options.restoreFocus){
-      setTimeout(function(){ focusEditorWithoutScroll(); }, 0);
+      if(runtime && typeof runtime.queueSyncTask === 'function'){
+        runtime.queueSyncTask(0, options.syncToken, function(){ focusEditorWithoutScroll(); });
+      }else{
+        setTimeout(function(){ focusEditorWithoutScroll(); }, 0);
+      }
     }
     if(options.selectionBookmark){
-      setTimeout(function(){ restoreEditorSelectionBookmark(options.selectionBookmark); }, 0);
+      if(runtime && typeof runtime.queueSyncTask === 'function'){
+        runtime.queueSyncTask(0, options.syncToken, function(){ restoreEditorSelectionBookmark(options.selectionBookmark); });
+      }else{
+        setTimeout(function(){ restoreEditorSelectionBookmark(options.selectionBookmark); }, 0);
+      }
     }
+    return true;
   }
 
   function syncLegacyState(){
@@ -405,7 +417,9 @@
       results: [],
       originalUpdateRefSection: null,
       originalScheduleRefSectionSync: null,
-      scrollGuard: null
+      scrollGuard: null,
+      syncToken: 0,
+      syncTimers: []
     },
 
     publicApi: {
@@ -433,6 +447,41 @@
       runtime.state.scrollTop = typeof top === 'number' ? top : runtime.state.scrollTop;
     },
 
+    clearPendingSyncTimers: function(){
+      if(!Array.isArray(runtime.state.syncTimers)) runtime.state.syncTimers = [];
+      runtime.state.syncTimers.forEach(function(timerId){
+        try{ clearTimeout(timerId); }catch(e){}
+      });
+      runtime.state.syncTimers = [];
+    },
+
+    beginSyncCycle: function(){
+      runtime.clearPendingSyncTimers();
+      runtime.state.syncToken = (parseInt(runtime.state.syncToken, 10) || 0) + 1;
+      return runtime.state.syncToken;
+    },
+
+    isActiveSyncCycle: function(token){
+      if(token == null) return true;
+      return token === runtime.state.syncToken;
+    },
+
+    queueSyncTask: function(delay, token, fn){
+      var ms = Math.max(0, parseInt(delay, 10) || 0);
+      var timerId = null;
+      timerId = setTimeout(function(){
+        runtime.state.syncTimers = (runtime.state.syncTimers || []).filter(function(id){
+          return id !== timerId;
+        });
+        if(!runtime.isActiveSyncCycle(token)) return;
+        try{
+          fn();
+        }catch(e){}
+      }, ms);
+      runtime.state.syncTimers.push(timerId);
+      return timerId;
+    },
+
     cancelScrollGuard: function(){
       if(runtime.state.scrollGuard && runtime.state.scrollGuard.cleanup){
         try{ runtime.state.scrollGuard.cleanup(); }catch(e){}
@@ -440,10 +489,11 @@
       runtime.state.scrollGuard = null;
     },
 
-    restoreScroll: function(delays){
+    restoreScroll: function(delays, token){
       const sc = getScrollEl();
       const top = runtime.state.scrollTop;
       if(!sc) return;
+      if(token != null && !runtime.isActiveSyncCycle(token)) return;
       runtime.cancelScrollGuard();
       const guard = { cancelled:false, handlers:[] };
       runtime.state.scrollGuard = guard;
@@ -470,6 +520,10 @@
       const d = Array.isArray(delays) && delays.length ? delays : [0,24,80];
       d.forEach(function(ms){
         setTimeout(function(){
+          if(token != null && !runtime.isActiveSyncCycle(token)){
+            cancel();
+            return;
+          }
           if(guard.cancelled) return;
           if(Math.abs((sc.scrollTop || 0) - top) <= 1) return;
           try{ sc.scrollTop = top; }catch(e){}
@@ -690,8 +744,9 @@
       var caretPos = captureEditorCaretPos();
       if(window.cleanupSlashRArtifacts) window.cleanupSlashRArtifacts();
       if(options.forceAuto){
+        var syncToken = runtime.beginSyncCycle();
         [0, 90, 220].forEach(function(ms, index){
-          setTimeout(function(){
+          runtime.queueSyncTask(ms, syncToken, function(){
             if(typeof window.rRefs === 'function'){
               try{ window.rRefs(); }catch(e){}
             }
@@ -700,15 +755,18 @@
               restoreScroll: options.restoreScroll !== false && index === 0,
               forceAuto: true,
               selectionBookmark: bookmark,
-              caretPos: caretPos
+              caretPos: caretPos,
+              syncToken: syncToken
             });
-          }, ms);
+          });
         });
       }else{
+        var deferredSyncToken = runtime.beginSyncCycle();
         deferReferenceSectionSync(runtime.state.scrollTop, {
           restoreFocus:true,
           restoreScroll: options.restoreScroll !== false,
-          selectionBookmark: bookmark
+          selectionBookmark: bookmark,
+          syncToken: deferredSyncToken
         });
       }
       restoreEditorInteraction();
@@ -724,7 +782,7 @@
       const refs = normalizeCitationRefs(finalIds.map(function(id){
         const rm = getReferenceManager();
         if(rm && typeof rm.findReference === 'function') return rm.findReference(id, window.S && window.S.cur);
-        if(window.findRef) return window.findRef(id, window.S && window.S.cur) || window.findRef(id);
+        if(window.findRef) return window.findRef(id, window.S && window.S.cur);
         return null;
       }).filter(Boolean));
       if(!refs.length) return;
@@ -761,6 +819,7 @@
       }
       const caretPos = captureEditorCaretPos();
       const bookmark = captureEditorSelectionBookmark();
+      const syncToken = runtime.beginSyncCycle();
       runtime.close(true);
       window.__aqCitationSyncInProgress = true;
       setTimeout(function(){ window.__aqCitationSyncInProgress = false; }, 900);
@@ -782,7 +841,7 @@
         }
       }
       [0, 90, 220].forEach(function(ms, index){
-        setTimeout(function(){
+        runtime.queueSyncTask(ms, syncToken, function(){
           if(typeof window.rRefs === 'function'){
             try{ window.rRefs(); }catch(e){}
           }
@@ -791,11 +850,12 @@
             restoreFocus:false,
             forceAuto:true,
             caretPos: caretPos,
-            selectionBookmark: bookmark
+            selectionBookmark: bookmark,
+            syncToken: syncToken
           });
           restoreEditorCaretPos(caretPos);
           restoreEditorSelectionBookmark(bookmark);
-        }, ms);
+        });
       });
     },
 
@@ -806,7 +866,7 @@
       const rm = getReferenceManager();
       const ref = rm && typeof rm.findReference === 'function'
         ? rm.findReference(note.rid, window.S && window.S.cur)
-        : (window.findRef ? (window.findRef(note.rid, window.S && window.S.cur) || window.findRef(note.rid)) : null);
+        : (window.findRef ? window.findRef(note.rid, window.S && window.S.cur) : null);
       if(!ref) return false;
       let html = '';
       const quoteSource = String(note.q || note.txt || '').trim();
@@ -831,6 +891,9 @@
 
     syncReferenceSection: function(preservedTop, options){
       options = options || {};
+      if(options.syncToken != null && !runtime.isActiveSyncCycle(options.syncToken)){
+        return false;
+      }
       var bookmark = options.selectionBookmark || captureEditorSelectionBookmark();
       var caretPos = options.caretPos != null ? options.caretPos : captureEditorCaretPos();
       if(typeof preservedTop === 'number') runtime.setScrollTop(preservedTop);
@@ -846,22 +909,23 @@
       }
       if(bookmark){
         [0, 24, 96].forEach(function(ms){
-          setTimeout(function(){
+          runtime.queueSyncTask(ms, options.syncToken, function(){
             restoreEditorCaretPos(caretPos);
             restoreEditorSelectionBookmark(bookmark);
-          }, ms);
+          });
         });
       }
       if(options.restoreScroll !== false){
-        runtime.restoreScroll([0,24]);
+        runtime.restoreScroll([0,24], options.syncToken);
       }
       if(options.restoreFocus){
         [0, 24, 96].forEach(function(ms){
-          setTimeout(function(){
+          runtime.queueSyncTask(ms, options.syncToken, function(){
             restoreEditorCaretPos(caretPos);
-          }, ms);
+          });
         });
       }
+      return true;
     },
 
     installReferenceSyncGuard: function(){

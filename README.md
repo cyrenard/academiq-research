@@ -1,58 +1,71 @@
-# AcademiQ Research — Windows Uygulaması
+# AcademiQ Research
 
-Akademik yazım ve kaynak yönetim uygulaması.
+Electron-based desktop app for academic writing, citations, references, notes, and PDF workflows.
 
-## Hızlı Kurulum
+## Hardened Baseline (v1.1.0)
 
-1. Tüm dosyaları aynı klasöre indirin
-2. `AcademiQ-Kur.bat` dosyasına çift tıklayın
-3. Kurulum otomatik tamamlanır (~5 dakika)
-4. Masaüstündeki **AcademiQ Research** kısayoluna tıklayın
+This release is a security and maintainability baseline. Behavior is preserved as much as possible.
 
-### Gerekli Dosyalar
+### Security hardening delivered
+
+- CSP tightened:
+  - `script-src 'self'`
+  - `connect-src 'self'`
+  - `unsafe-inline` removed for scripts
+  - `unsafe-eval` removed
+- Renderer security:
+  - `webSecurity: true`
+  - `contextIsolation: true`
+  - `nodeIntegration: false`
+  - `sandbox: true`
+- Network ownership:
+  - Renderer external fetch flows moved behind preload/main IPC APIs
+  - Main process network routes restricted with allowlisted hosts
+- Inline handler cleanup:
+  - Inline HTML event attributes removed from UI markup
+  - Event wiring centralized in `src/ui-event-bindings.js`
+- External dependency control:
+  - CDN script/CSS dependencies moved to local `vendor/`
+  - Local `pdfjs` worker path in runtime
+
+### Why this baseline matters
+
+- Reduces XSS impact by removing inline script execution paths.
+- Reduces exfiltration risk by blocking direct renderer network access.
+- Shrinks trust boundary: privileged/network operations are now explicit and narrow.
+- Improves release reproducibility by bundling runtime web dependencies locally.
+
+## Core files in hardened baseline
+
+- `academiq-research.html`
+- `main.js`
+- `preload.js`
+- `src/ui-event-bindings.js`
+- `src/legacy-runtime.js`
+- `src/app-bootstrap.js`
+- `vendor/`
+
+## Validate and build
+
+```bash
+npm test
+npm run gate:release
+npm run build:dir
 ```
-AcademiQ-Kur.bat          ← Çift tıkla (başlatıcı)
-AcademiQ-Kur.ps1          ← Kurulum scripti
-main.js                   ← Electron ana process
-preload.js                ← IPC köprüsü
-package.json              ← Bağımlılıklar
-academiq-research.html    ← Uygulama (src/index.html olur)
+
+For baseline release prep:
+
+```bash
+npm run release:baseline
 ```
 
-## Cihazlar Arası Sync
+## Packaging notes
 
-1. Uygulamada araç çubuğundaki **🔄 Sync** butonuna tıklayın
-2. Bulut klasörünüzü seçin (OneDrive, Proton Drive, Google Drive, Dropbox)
-3. Veriler otomatik olarak `SeçilenKlasör\AcademiQ\academiq-data.json` dosyasına kaydedilir
-4. Aynı klasörü diğer Windows bilgisayarlarda da seçin — veriler senkronize olur
+- `vendor/**/*` is included in `electron-builder` file list.
+- Packaged mode sync now copies both `src/` and `vendor/` assets to app override directory when needed.
 
-**Not:** PDF dosyaları boyut nedeniyle senkronize edilmez, her cihazda yerel kalır.
+## Breaking changes
 
-## Kurulum Detayları
+No intentional user-facing breaking changes.
 
-Uygulama `%LOCALAPPDATA%\AcademiQ\` dizinine kurulur:
-```
-%LOCALAPPDATA%\AcademiQ\
-├── main.js              ← Electron ana process
-├── preload.js           ← IPC köprüsü
-├── package.json
-├── AcademiQ.bat         ← Başlatıcı
-├── settings.json        ← Sync ayarları
-├── academiq-data.json   ← Yerel veri (sync yoksa)
-├── node\                ← Portable Node.js v20
-├── node_modules\        ← Electron
-├── pdfs\                ← PDF önbelleği
-└── src\
-    └── index.html       ← Uygulama
-```
-
-Yönetici yetkisi gerektirmez. Toplam ~110 MB (Node.js + Electron).
-
-## Özellikler
-
-- **Kütüphane:** DOI ile otomatik metadata (CrossRef) + açık erişim PDF (Unpaywall)
-- **APA 7 Editör:** Türkçe atıf, çoklu kaynak seçimi, otomatik kaynakça
-- **PDF Reader:** Metin seçimi, highlight, nota kaydetme
-- **Not Defteri:** Çoklu defterler, PDF'ten alıntı, etiketleme
-- **Dışa Aktarma:** DOC (Word), PDF (yazdır), notlar TXT, kütüphane JSON
-- **Sync:** OneDrive / Proton Drive / Google Drive ile cihazlar arası senkronizasyon
+This baseline is a hardening release with behavior parity goals.

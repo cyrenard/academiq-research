@@ -46,6 +46,14 @@
       console.error('TipTap shell mount missing');
       return enableFallbackEditable(edEl, existingHTML || '<p></p>');
     }
+    var shellEl = tiptapShell && typeof tiptapShell.getShellEl === 'function'
+      ? tiptapShell.getShellEl()
+      : null;
+    if(edEl && shellEl && shellEl.parentElement === edEl && edEl.children && edEl.children.length > 1){
+      Array.prototype.slice.call(edEl.children).forEach(function(child){
+        if(child !== shellEl) child.remove();
+      });
+    }
 
     try{
       if(!factory || typeof factory.createEditor !== 'function'){

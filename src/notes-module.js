@@ -114,7 +114,7 @@
     }
     if(typeof window.findRef === 'function'){
       try{
-        return window.findRef(note.rid, workspaceId) || window.findRef(note.rid);
+        return window.findRef(note.rid, workspaceId);
       }catch(e){}
     }
     return null;

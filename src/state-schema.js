@@ -17,11 +17,49 @@
     return '<p></p>';
   }
 
+  function normalizeDoi(value){
+    var raw = String(value || '').trim();
+    if(!raw) return '';
+    try{ raw = decodeURIComponent(raw); }catch(e){}
+    raw = raw
+      .replace(/^doi:\s*/i, '')
+      .replace(/^https?:\/\/(dx\.)?doi\.org\//i, '')
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .replace(/\s+/g, '')
+      .replace(/[)\].,;:]+$/g, '');
+    var match = raw.match(/10\.\d{4,9}\/[-._;()/:A-Z0-9]+/i);
+    var doi = (match && match[0]) ? match[0] : raw;
+    doi = doi
+      .replace(/(?:\/|\.)(BIBTEX|RIS|ABSTRACT|FULLTEXT|FULL|PDF|XML|HTML|EPUB)$/i, '')
+      .replace(/\/[A-Za-z]$/i, '')
+      .replace(/[)\].,;:]+$/g, '')
+      .toLowerCase();
+    if(!/^10\.\d{4,9}\//i.test(doi)) return '';
+    return doi;
+  }
+
+  function normalizeYear(value){
+    var text = String(value || '').trim();
+    if(!text) return '';
+    var match = text.match(/\b(19|20)\d{2}\b/);
+    return match ? match[0] : text;
+  }
+
+  function normalizeText(value){
+    return String(value || '').replace(/\s+/g, ' ').trim();
+  }
+
   function normalizeReference(ref){
     ref = ref || {};
     if(!ref.id && root && typeof root.uid === 'function') ref.id = root.uid();
     if(!Array.isArray(ref.authors)) ref.authors = ref.authors ? [String(ref.authors)] : [];
+    ref.authors = ref.authors.map(function(author){ return normalizeText(author); }).filter(Boolean);
     if(!Array.isArray(ref.labels)) ref.labels = [];
+    ref.labels = ref.labels.map(function(label){
+      if(typeof label === 'string') return normalizeText(label);
+      if(label && typeof label === 'object' && label.name) return normalizeText(label.name);
+      return '';
+    }).filter(Boolean);
     if(typeof ref.title !== 'string') ref.title = ref.title ? String(ref.title) : '';
     if(typeof ref.year !== 'string') ref.year = ref.year ? String(ref.year) : '';
     if(typeof ref.journal !== 'string') ref.journal = ref.journal ? String(ref.journal) : '';
@@ -32,6 +70,16 @@
     if(typeof ref.doi !== 'string') ref.doi = ref.doi ? String(ref.doi) : '';
     if(typeof ref.url !== 'string') ref.url = ref.url ? String(ref.url) : '';
     if(typeof ref.pdfUrl !== 'string') ref.pdfUrl = ref.pdfUrl ? String(ref.pdfUrl) : '';
+    ref.title = normalizeText(ref.title);
+    ref.year = normalizeYear(ref.year);
+    ref.journal = normalizeText(ref.journal);
+    ref.volume = normalizeText(ref.volume);
+    ref.issue = normalizeText(ref.issue);
+    ref.fp = normalizeText(ref.fp);
+    ref.lp = normalizeText(ref.lp);
+    ref.url = normalizeText(ref.url);
+    ref.pdfUrl = normalizeText(ref.pdfUrl);
+    ref.doi = normalizeDoi(ref.doi || ref.url || '');
     return ref;
   }
 

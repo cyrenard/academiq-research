@@ -1,4 +1,5 @@
 ﻿const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { execFile } = require('child_process');
@@ -16,9 +17,242 @@ const storage = createStorageService({ appDir: APP_DIR });
 
 // â”€â”€ WINDOW â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 let mainWindow;
+const UPDATE_ALLOWED_HOSTS = [
+  /^api\.github\.com$/i,
+  /^github\.com$/i,
+  /^raw\.githubusercontent\.com$/i,
+  /^objects\.githubusercontent\.com$/i,
+  /^release-assets\.githubusercontent\.com$/i,
+  /^github-releases\.githubusercontent\.com$/i,
+  /^codeload\.github\.com$/i
+];
+const NET_ALLOWED_HOSTS = [
+  /^api\.crossref\.org$/i,
+  /^api\.unpaywall\.org$/i,
+  /^api\.semanticscholar\.org$/i,
+  /^www\.semanticscholar\.org$/i,
+  /^api\.openalex\.org$/i,
+  /^api\.core\.ac\.uk$/i,
+  /^www\.ebi\.ac\.uk$/i,
+  /^eutils\.ncbi\.nlm\.nih\.gov$/i,
+  /^www\.ncbi\.nlm\.nih\.gov$/i,
+  /^pubmed\.ncbi\.nlm\.nih\.gov$/i,
+  /^doaj\.org$/i,
+  /^api\.openaire\.eu$/i,
+  /^api\.datacite\.org$/i,
+  /^zenodo\.org$/i,
+  /^doi\.org$/i,
+  /^dx\.doi\.org$/i,
+  /^dergipark\.org\.tr$/i,
+  /^www\.dergipark\.org\.tr$/i,
+  /^europepmc\.org$/i
+];
 
 function psQuote(value) {
   return "'" + String(value || '').replace(/'/g, "''") + "'";
+}
+
+function normalizeHost(hostname) {
+  return String(hostname || '').trim().toLowerCase().replace(/\.$/, '');
+}
+
+function isBlockedHost(hostname) {
+  const host = normalizeHost(hostname);
+  if (!host) return true;
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  if (host === '0.0.0.0') return true;
+  if (host === '::1' || host === '[::1]') return true;
+  if (host.endsWith('.local')) return true;
+  return false;
+}
+
+function isSafeHttpURL(rawUrl, options = {}) {
+  try {
+    const parsed = new URL(String(rawUrl || '').trim());
+    const protocol = String(parsed.protocol || '').toLowerCase();
+    if (protocol !== 'https:' && protocol !== 'http:') return false;
+    if (options.httpsOnly && protocol !== 'https:') return false;
+    if (isBlockedHost(parsed.hostname)) return false;
+    return true;
+  } catch (_e) {
+    return false;
+  }
+}
+
+function normalizeRefId(refId) {
+  const value = String(refId || '').trim();
+  if (!value) throw new Error('Geçersiz referans kimliği');
+  if (value.length > 320) throw new Error('Referans kimliği çok uzun');
+  return value;
+}
+
+function safeDecodeURIComponent(value) {
+  const raw = String(value || '');
+  try { return decodeURIComponent(raw); } catch (_e) { return raw; }
+}
+
+function normalizeDoi(value) {
+  let doi = String(value || '').trim().toLowerCase();
+  if (!doi) return '';
+  doi = safeDecodeURIComponent(doi);
+  doi = doi.replace(/^doi:\s*/i, '');
+  doi = doi.replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '');
+  doi = doi.replace(/\s+/g, '');
+  doi = doi.replace(/[)\].,;:]+$/g, '');
+  const match = doi.match(/10\.\d{4,9}\/[-._;()/:a-z0-9]+/i);
+  doi = (match && match[0] ? match[0] : doi).toLowerCase();
+  doi = doi
+    .replace(/(?:\/|\.)(bibtex|ris|abstract|fulltext|full|pdf|xml|html|epub)$/i, '')
+    .replace(/\/[a-z]$/i, '')
+    .replace(/[)\].,;:]+$/g, '');
+  if (!/^10\.\d{4,9}\//i.test(doi)) return '';
+  return doi;
+}
+
+function textHasExpectedDoi(text, expectedDoi) {
+  const expected = normalizeDoi(expectedDoi);
+  if (!expected) return false;
+  const hay = String(text || '').toLowerCase();
+  if (!hay) return false;
+  if (hay.includes(expected)) return true;
+  const encoded = expected.replace(/\//g, '%2f');
+  if (hay.includes(encoded)) return true;
+  const escaped = expected.replace(/\//g, '\\/');
+  if (hay.includes(escaped)) return true;
+  return false;
+}
+
+function urlLikelyMatchesExpectedDoi(url, expectedDoi) {
+  const expected = normalizeDoi(expectedDoi);
+  if (!expected) return false;
+  const raw = String(url || '');
+  if (textHasExpectedDoi(raw, expected)) return true;
+  return textHasExpectedDoi(safeDecodeURIComponent(raw), expected);
+}
+
+function urlContainsDifferentDoi(url, expectedDoi) {
+  const expected = normalizeDoi(expectedDoi);
+  if (!expected) return false;
+  const hay = safeDecodeURIComponent(String(url || '').toLowerCase());
+  const match = hay.match(/10\.\d{4,9}\/[-._;()/:a-z0-9]+/i);
+  if (!match || !match[0]) return false;
+  return normalizeDoi(match[0]) !== expected;
+}
+
+function bufferLikelyMatchesExpectedDoi(buffer, expectedDoi) {
+  const expected = normalizeDoi(expectedDoi);
+  if (!expected || !Buffer.isBuffer(buffer)) return false;
+  const sampleSize = Math.min(buffer.length, 2 * 1024 * 1024);
+  const sample = buffer.slice(0, sampleSize).toString('latin1');
+  return textHasExpectedDoi(sample, expected);
+}
+
+function normalizeTitleText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[“”"'"`´’]/g, ' ')
+    .replace(/[^a-z0-9çğıöşü\s-]/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildTitleTokens(value) {
+  const stop = new Set([
+    'the', 'and', 'for', 'with', 'from', 'into', 'between', 'among', 'over', 'under',
+    'study', 'analysis', 'effects', 'effect', 'using', 'use', 'based', 'open', 'access',
+    'bir', 've', 'ile', 'için', 'olarak', 'üzerine', 'çalışma', 'araştırma', 'etkisi'
+  ]);
+  const parts = normalizeTitleText(value).split(' ').filter(Boolean);
+  const out = [];
+  const seen = new Set();
+  for (const part of parts) {
+    if (part.length < 4) continue;
+    if (stop.has(part)) continue;
+    if (seen.has(part)) continue;
+    seen.add(part);
+    out.push(part);
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+function bufferLikelyMatchesExpectedTitle(buffer, expectedTitle) {
+  const tokens = buildTitleTokens(expectedTitle);
+  if (!tokens.length || !Buffer.isBuffer(buffer)) return false;
+  const sampleSize = Math.min(buffer.length, 3 * 1024 * 1024);
+  const sample = normalizeTitleText(buffer.slice(0, sampleSize).toString('latin1'));
+  if (!sample) return false;
+  let hits = 0;
+  for (const token of tokens) {
+    if (sample.includes(token)) hits += 1;
+  }
+  if (tokens.length >= 5) return hits >= 3;
+  if (tokens.length >= 3) return hits >= 2;
+  return hits >= 1;
+}
+
+function extractDoiCandidates(text) {
+  const out = [];
+  const seen = new Set();
+  const src = String(text || '');
+  const re = /10\.\d{4,9}\/[-._;()/:a-z0-9]+/ig;
+  let m;
+  while ((m = re.exec(src))) {
+    const norm = normalizeDoi(m[0]);
+    if (!norm || seen.has(norm)) continue;
+    seen.add(norm);
+    out.push(norm);
+  }
+  return out;
+}
+
+function isLowSignalDiscoveryURL(url) {
+  const value = String(url || '').toLowerCase();
+  if (!value) return false;
+  return (
+    /scholar\.google/.test(value) ||
+    /semanticscholar\.org\/search/.test(value) ||
+    /dergipark\.org\.tr\/.*search/.test(value) ||
+    /\/search\?/.test(value) ||
+    /[?&]q=/.test(value)
+  );
+}
+
+function sanitizeDataPayload(json) {
+  if (typeof json !== 'string') throw new Error('Kayit verisi metin olmalidir');
+  const maxLen = 60 * 1024 * 1024;
+  if (json.length > maxLen) throw new Error('Kayit verisi cok buyuk');
+  return json;
+}
+
+function sanitizePDFBuffer(buffer) {
+  if (Buffer.isBuffer(buffer)) return buffer;
+  if (buffer instanceof ArrayBuffer) return Buffer.from(buffer);
+  if (ArrayBuffer.isView(buffer)) return Buffer.from(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  throw new Error('Gecersiz PDF veri formati');
+}
+
+function sanitizeDownloadOptions(input) {
+  const src = input && typeof input === 'object' ? input : {};
+  const out = {};
+  if (src.timeoutMs != null && Number.isFinite(Number(src.timeoutMs))) out.timeoutMs = Number(src.timeoutMs);
+  if (src.maxBytes != null && Number.isFinite(Number(src.maxBytes))) out.maxBytes = Number(src.maxBytes);
+  if (src.expectedDoi != null) out.expectedDoi = String(src.expectedDoi || '').slice(0, 256);
+  if (src.expectedTitle != null) out.expectedTitle = String(src.expectedTitle || '').slice(0, 1024);
+  if (src.requireDoiEvidence != null) out.requireDoiEvidence = !!src.requireDoiEvidence;
+  return out;
+}
+
+function sanitizeNetFetchOptions(input) {
+  const src = input && typeof input === 'object' ? input : {};
+  const out = {};
+  if (src.timeoutMs != null && Number.isFinite(Number(src.timeoutMs))) {
+    out.timeoutMs = Number(src.timeoutMs);
+  }
+  if (src.maxBytes != null && Number.isFinite(Number(src.maxBytes))) {
+    out.maxBytes = Number(src.maxBytes);
+  }
+  return out;
 }
 
 function runPowerShell(command, timeoutMs) {
@@ -92,8 +326,10 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
-      webSecurity: false   // file:// → https:// fetch için (CDN, DOI, Crossref API)
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      webviewTag: false
     }
   });
 
@@ -122,6 +358,16 @@ function createWindow() {
           } catch (_e) {}
         });
       }
+      const vendorDir = path.join(__dirname, 'vendor');
+      const dstVendorDir = path.join(storage.appDir, 'vendor');
+      if (fs.existsSync(vendorDir)) {
+        try { fs.mkdirSync(dstVendorDir, { recursive: true }); } catch (_e) {}
+        fs.readdirSync(vendorDir).forEach(function(file) {
+          try {
+            fs.writeFileSync(path.join(dstVendorDir, file), fs.readFileSync(path.join(vendorDir, file)));
+          } catch (_e) {}
+        });
+      }
     } catch (_e) {}
     htmlPath = updatedHtml;
   } else if (fs.existsSync(bundledHtml)) htmlPath = bundledHtml;
@@ -129,8 +375,20 @@ function createWindow() {
 
   // Open external links in browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    if (isSafeHttpURL(url)) shell.openExternal(url);
     return { action: 'deny' };
+  });
+
+  // Never navigate away from local UI inside the app window.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const currentUrl = mainWindow && mainWindow.webContents ? mainWindow.webContents.getURL() : '';
+    if (url === currentUrl) return;
+    event.preventDefault();
+    if (isSafeHttpURL(url)) shell.openExternal(url);
+  });
+
+  mainWindow.webContents.on('will-attach-webview', (event) => {
+    event.preventDefault();
   });
 
   // Close confirmation â€” ask user if they want to save
@@ -164,6 +422,12 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('will-attach-webview', (event) => {
+      event.preventDefault();
+    });
+  });
+
   app.on('second-instance', () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
@@ -173,6 +437,11 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
+    try {
+      session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+        callback(permission === 'clipboard-sanitized-write');
+      });
+    } catch (_e) {}
     storage.loadSettings();
     createWindow();
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
@@ -187,28 +456,51 @@ ipcMain.handle('data:load', async () => {
 });
 
 ipcMain.handle('data:save', async (_ev, json) => {
-  try { return storage.saveData(json); } catch (e) { return { ok: false, error: e.message }; }
+  try { return storage.saveData(sanitizeDataPayload(json)); } catch (e) { return { ok: false, error: e.message }; }
 });
 
 // â”€â”€ IPC: PDF FILES (dual-write: local cache + sync folder) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 ipcMain.handle('pdf:save', async (_ev, refId, buffer) => {
-  try { return storage.savePDF(refId, buffer); } catch (e) { return { ok: false, error: e.message }; }
+  try {
+    normalizeRefId(refId);
+    const pdfBuffer = sanitizePDFBuffer(buffer);
+    if (pdfBuffer.length > 150 * 1024 * 1024) throw new Error('PDF dosyasi cok buyuk');
+    return storage.savePDF(refId, pdfBuffer);
+  } catch (e) { return { ok: false, error: e.message }; }
 });
 
 ipcMain.handle('pdf:load', async (_ev, refId) => {
-  try { return storage.loadPDF(refId); } catch (e) { return { ok: false, error: e.message }; }
+  try {
+    normalizeRefId(refId);
+    return storage.loadPDF(refId);
+  } catch (e) { return { ok: false, error: e.message }; }
 });
 
-ipcMain.handle('pdf:exists', async (_ev, refId) => storage.pdfExists(refId));
+ipcMain.handle('pdf:exists', async (_ev, refId) => {
+  try {
+    normalizeRefId(refId);
+    return storage.pdfExists(refId);
+  } catch (_e) {
+    return false;
+  }
+});
 
 ipcMain.handle('pdf:delete', async (_ev, refId) => {
-  try { return storage.deletePDF(refId); } catch (e) { return { ok: false, error: e.message }; }
+  try {
+    normalizeRefId(refId);
+    return storage.deletePDF(refId);
+  } catch (e) { return { ok: false, error: e.message }; }
 });
 
 ipcMain.handle('pdf:syncAll', async () => storage.syncAllPDFs());
 
 ipcMain.handle('pdf:download', async (_ev, url, refId, options = {}) => {
-  if (!url || !/^https?:\/\//i.test(url)) return { ok: false, error: 'Geçersiz URL şeması' };
+  if (!isSafeHttpURL(url)) return { ok: false, error: 'Geçersiz veya güvenli olmayan URL' };
+  try { normalizeRefId(refId); } catch (e) { return { ok: false, error: e.message }; }
+  const safeOptions = sanitizeDownloadOptions(options);
+  const expectedDoi = normalizeDoi(safeOptions.expectedDoi || '');
+  const expectedTitle = String(safeOptions.expectedTitle || '').trim();
+  const requireDoiEvidence = expectedDoi ? (safeOptions.requireDoiEvidence !== false) : false;
   function extractPdfCandidatesFromHTML(html, baseUrl) {
     const out = [];
     const seen = new Set();
@@ -247,26 +539,79 @@ ipcMain.handle('pdf:download', async (_ev, url, refId, options = {}) => {
     return out;
   }
   async function fetchPdfBufferWithFallback(startUrl, timeoutMs) {
+    const maxBytes = Math.max(512 * 1024, Math.min(Number(safeOptions.maxBytes) || (50 * 1024 * 1024), 150 * 1024 * 1024));
     const visited = new Set();
+    function scoreCandidate(candidateUrl) {
+      let score = 0;
+      if (/\.pdf($|[?#])/i.test(candidateUrl)) score += 4;
+      if (/\/pdf(\/|$|[?#])/i.test(candidateUrl)) score += 3;
+      if (expectedDoi && urlLikelyMatchesExpectedDoi(candidateUrl, expectedDoi)) score += 8;
+      if (isLowSignalDiscoveryURL(candidateUrl)) score -= 10;
+      return score;
+    }
     async function tryUrl(targetUrl, depth) {
       if (!targetUrl || visited.has(targetUrl) || depth > 2) return { ok: false, error: 'No PDF candidate succeeded' };
+      if (!isSafeHttpURL(targetUrl)) return { ok: false, error: 'Blocked URL candidate' };
+      if (isLowSignalDiscoveryURL(targetUrl)) {
+        return { ok: false, error: 'Low-signal discovery URL skipped' };
+      }
       visited.add(targetUrl);
-      const meta = await followRedirects(targetUrl, 8, { timeout: timeoutMs, returnMeta: true });
+      const meta = await followRedirects(targetUrl, 8, {
+        timeout: timeoutMs,
+        returnMeta: true,
+        maxBytes,
+        blockPrivate: true
+      });
       const buf = meta && meta.buffer ? meta.buffer : meta;
       if (!buf || !Buffer.isBuffer(buf)) return { ok: false, error: 'Invalid response buffer' };
       if (buf.length < 100) return { ok: false, error: 'Too small: ' + buf.length + ' bytes' };
       const headerStr = buf.slice(0, 4096).toString('ascii');
       const pdfIdx = headerStr.indexOf('%PDF-');
+      const finalUrl = (meta && meta.finalUrl) || targetUrl;
       if (pdfIdx >= 0) {
-        return { ok: true, buffer: pdfIdx > 0 ? buf.slice(pdfIdx) : buf };
+        const pdfBuffer = pdfIdx > 0 ? buf.slice(pdfIdx) : buf;
+        if (expectedDoi || expectedTitle) {
+          const sampleSize = Math.min(pdfBuffer.length, 3 * 1024 * 1024);
+          const sample = pdfBuffer.slice(0, sampleSize).toString('latin1');
+          if (expectedDoi) {
+            const doiInUrl = urlLikelyMatchesExpectedDoi(finalUrl, expectedDoi) || urlLikelyMatchesExpectedDoi(targetUrl, expectedDoi);
+            const doiInBody = bufferLikelyMatchesExpectedDoi(pdfBuffer, expectedDoi);
+            const doiCandidates = extractDoiCandidates(sample);
+            const hasDifferentDoi = doiCandidates.length > 0 && !doiCandidates.includes(expectedDoi);
+            if (hasDifferentDoi) {
+              return { ok: false, error: 'PDF DOI mismatch (different DOI found)' };
+            }
+            if (!doiInBody && !doiInUrl) {
+              if (requireDoiEvidence) {
+                return { ok: false, error: 'PDF DOI kanıtı yok' };
+              }
+              if (!(expectedTitle && bufferLikelyMatchesExpectedTitle(pdfBuffer, expectedTitle))) {
+                return { ok: false, error: 'PDF DOI mismatch' };
+              }
+            }
+          } else if (expectedTitle && !bufferLikelyMatchesExpectedTitle(pdfBuffer, expectedTitle)) {
+            return { ok: false, error: 'PDF title mismatch' };
+          }
+        }
+        return { ok: true, buffer: pdfBuffer, finalUrl };
       }
       const isHTML = headerStr.toLowerCase().includes('<html') || headerStr.toLowerCase().includes('<!doctype');
       if (!isHTML) {
         return { ok: false, error: 'No PDF header found in first 4096 bytes' };
       }
-      const finalUrl = (meta && meta.finalUrl) || targetUrl;
       const html = buf.slice(0, Math.min(buf.length, 300000)).toString('utf8');
-      const candidates = extractPdfCandidatesFromHTML(html, finalUrl).slice(0, 10);
+      if (expectedDoi) {
+        if (!textHasExpectedDoi(html, expectedDoi) && !urlLikelyMatchesExpectedDoi(finalUrl, expectedDoi)) {
+          return { ok: false, error: 'Landing page DOI mismatch' };
+        }
+      }
+      const candidates = extractPdfCandidatesFromHTML(html, finalUrl)
+        .filter(candidate => isSafeHttpURL(candidate))
+        .filter(candidate => !isLowSignalDiscoveryURL(candidate))
+        .filter(candidate => !(expectedDoi && urlContainsDifferentDoi(candidate, expectedDoi)))
+        .filter(candidate => !(expectedDoi && !urlLikelyMatchesExpectedDoi(candidate, expectedDoi) && !/\/pdf(\/|$|[?#])|\.pdf($|[?#])/i.test(candidate)))
+        .sort((a, b) => scoreCandidate(b) - scoreCandidate(a))
+        .slice(0, 10);
       for (const cand of candidates) {
         const tried = await tryUrl(cand, depth + 1);
         if (tried && tried.ok) return tried;
@@ -276,7 +621,7 @@ ipcMain.handle('pdf:download', async (_ev, url, refId, options = {}) => {
     return tryUrl(startUrl, 0);
   }
   try {
-    const timeoutMs = Math.max(5000, Math.min(Number(options.timeoutMs) || 30000, 90000));
+    const timeoutMs = Math.max(5000, Math.min(Number(safeOptions.timeoutMs) || 30000, 90000));
     const fetched = await fetchPdfBufferWithFallback(url, timeoutMs);
     if (!fetched || !fetched.ok || !fetched.buffer) {
       return { ok: false, error: (fetched && fetched.error) ? fetched.error : 'PDF download failed' };
@@ -297,6 +642,10 @@ ipcMain.handle('dialog:openPDF', async () => {
   if (result.canceled || !result.filePaths.length) return { ok: false };
   const files = [];
   for (const fp of result.filePaths) {
+    if (!/\.pdf$/i.test(fp)) continue;
+    const stat = fs.statSync(fp);
+    if (!stat.isFile()) continue;
+    if (stat.size > 120 * 1024 * 1024) continue;
     const buf = fs.readFileSync(fp);
     files.push({
       name: path.basename(fp),
@@ -310,10 +659,55 @@ ipcMain.handle('word:toHtml', async (_ev, filePath) => {
   try {
     const resolved = path.resolve(String(filePath || ''));
     if (!/\.(docx?|rtf)$/i.test(resolved)) return { ok: false, error: 'Desteklenmeyen dosya türü (.doc/.docx/.rtf gerekli)' };
+    if (!fs.existsSync(resolved)) return { ok: false, error: 'Dosya bulunamadı' };
+    const stat = fs.statSync(resolved);
+    if (!stat.isFile()) return { ok: false, error: 'Dosya okunamadı' };
+    if (stat.size > 40 * 1024 * 1024) return { ok: false, error: 'Dosya çok büyük' };
     const html = await convertWordWithOfficeComToHtml(resolved);
     return { ok: true, html };
   } catch (e) {
     return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('net:fetch-json', async (_ev, url, options = {}) => {
+  if (!isSafeHttpURL(url)) return { ok: false, error: 'Geçersiz veya güvenli olmayan URL' };
+  try {
+    const safeOptions = sanitizeNetFetchOptions(options);
+    const timeout = Math.max(2500, Math.min(parseInt(safeOptions.timeoutMs, 10) || 8000, 30000));
+    const data = await fetchJSON(url, {
+      timeout,
+      blockPrivate: true,
+      allowedHosts: NET_ALLOWED_HOSTS
+    });
+    return { ok: true, data };
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : String(e) };
+  }
+});
+
+ipcMain.handle('net:fetch-text', async (_ev, url, options = {}) => {
+  if (!isSafeHttpURL(url)) return { ok: false, error: 'Geçersiz veya güvenli olmayan URL' };
+  try {
+    const safeOptions = sanitizeNetFetchOptions(options);
+    const timeout = Math.max(2500, Math.min(parseInt(safeOptions.timeoutMs, 10) || 8000, 30000));
+    const maxBytes = Math.max(32 * 1024, Math.min(parseInt(safeOptions.maxBytes, 10) || (4 * 1024 * 1024), 12 * 1024 * 1024));
+    const meta = await followRedirects(url, 6, {
+      timeout,
+      maxBytes,
+      returnMeta: true,
+      blockPrivate: true,
+      allowedHosts: NET_ALLOWED_HOSTS,
+      headers: {
+        'User-Agent': 'AcademiQ/1.0 (academic research tool)',
+        'Accept': 'text/html,application/xhtml+xml,application/xml,text/plain,*/*'
+      }
+    });
+    const buf = meta && meta.buffer ? meta.buffer : meta;
+    const text = Buffer.isBuffer(buf) ? buf.toString('utf8') : '';
+    return { ok: true, text, finalUrl: meta && meta.finalUrl ? String(meta.finalUrl) : String(url) };
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : String(e) };
   }
 });
 
@@ -352,7 +746,11 @@ ipcMain.handle('sync:setSyncDir', async () => {
     properties: ['openDirectory']
   });
   if (result.canceled || !result.filePaths.length) return { ok: false };
-  return storage.setSyncDir(result.filePaths[0]);
+  try {
+    return storage.setSyncDir(result.filePaths[0]);
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
 });
 
 ipcMain.handle('sync:clearSyncDir', async () => {
@@ -371,7 +769,10 @@ ipcMain.handle('app:getInfo', async () => {
 ipcMain.handle('update:check', async () => {
   const checkUrl = storage.getSettingsSnapshot().updateUrl || UPDATE_URL;
   try {
-    const data = await fetchJSON(checkUrl);
+    const data = await fetchJSON(checkUrl, {
+      blockPrivate: true,
+      allowedHosts: UPDATE_ALLOWED_HOSTS
+    });
     return buildUpdateCheckResult(data, APP_VERSION);
   } catch (e) {
     return { available: false, current: APP_VERSION, error: e.message };
@@ -386,7 +787,12 @@ ipcMain.handle('update:download', async (_ev, origUrl) => {
     }
     const url = normalizeDownloadUrl(origUrl);
     console.log('[UPDATE] Downloading from:', url, '(original:', origUrl, ')');
-    const buf = await followRedirects(url);
+    const buf = await followRedirects(url, 8, {
+      blockPrivate: true,
+      allowedHosts: UPDATE_ALLOWED_HOSTS,
+      maxBytes: 200 * 1024 * 1024,
+      timeout: 45000
+    });
     if (!buf || buf.length < 100) return { ok: false, error: 'Empty download (' + (buf ? buf.length : 0) + ' bytes)' };
     return applyDownloadedUpdate({
       appDir: APP_DIR,

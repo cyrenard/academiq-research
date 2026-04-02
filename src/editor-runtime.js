@@ -25,6 +25,17 @@
     return undefined;
   }
 
+  function isTokenActive(options){
+    if(!options || options.token == null || typeof options.isTokenActive !== 'function'){
+      return true;
+    }
+    try{
+      return !!options.isTokenActive(options.token);
+    }catch(e){
+      return true;
+    }
+  }
+
   function ensureEditorWritableState(editorRef){
     var ed = editorRef || getEditor();
     if(!ed) return false;
@@ -160,20 +171,25 @@ function syncReferenceSectionDeferred(delay){
   function runDocumentLoadEffects(options){
     options = options || {};
     setTimeout(function(){
+      if(!isTokenActive(options)) return;
       if(typeof options.beforeApply === 'function'){
         safeCall(options.beforeApply);
       }
+      if(!isTokenActive(options)) return;
       if(options.normalize !== false && typeof root.normalizeCitationSpans === 'function'){
         try{ root.normalizeCitationSpans(options.target || undefined); }catch(e){}
       }
+      if(!isTokenActive(options)) return;
       if(options.focusToEnd && typeof options.focusToEndFn === 'function'){
         safeCall(options.focusToEndFn);
       }else if(options.focusSurface && typeof options.focusSurfaceFn === 'function'){
         safeCall(options.focusSurfaceFn);
       }
+      if(!isTokenActive(options)) return;
       if(options.syncRefs !== false && typeof root.updateRefSection === 'function'){
         safeCall(function(){ root.updateRefSection(); });
       }
+      if(!isTokenActive(options)) return;
       if(options.syncChrome !== false){
         syncEditorChrome();
       }
@@ -181,6 +197,7 @@ function syncReferenceSectionDeferred(delay){
       if(options.layout !== false){
         syncPageLayout();
       }
+      if(!isTokenActive(options)) return;
       if(typeof options.afterLayout === 'function'){
         safeCall(options.afterLayout);
       }

@@ -143,6 +143,38 @@ test('runDocumentLoadEffects applies normalize, refs, chrome and layout', async 
   delete globalThis.updatePageHeight;
 });
 
+test('runDocumentLoadEffects skips stale token callbacks', async () => {
+  const calls = [];
+  globalThis.normalizeCitationSpans = () => { calls.push(['normalize']); };
+  globalThis.updateRefSection = () => { calls.push(['refs']); };
+  globalThis.uSt = () => { calls.push(['status']); };
+  globalThis.save = () => { calls.push(['save']); };
+  globalThis.updatePageHeight = () => { calls.push(['layout']); };
+
+  const runtime = require('../src/editor-runtime.js');
+  runtime.runDocumentLoadEffects({
+    token: 'stale-load',
+    isTokenActive() {
+      return false;
+    },
+    beforeApply() {
+      calls.push(['before']);
+    },
+    afterLayout() {
+      calls.push(['after']);
+    }
+  });
+
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.deepEqual(calls, []);
+
+  delete globalThis.normalizeCitationSpans;
+  delete globalThis.updateRefSection;
+  delete globalThis.uSt;
+  delete globalThis.save;
+  delete globalThis.updatePageHeight;
+});
+
 test('init completes without binding blank-surface focus hacks', () => {
   let layout = 0;
   globalThis.updatePageHeight = () => { layout++; };

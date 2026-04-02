@@ -17,3 +17,10 @@ test('normalizeImportHTML distinguishes html and plain text', () => {
   assert.match(io.normalizeImportHTML('duz metin', text => '<p>' + text + '</p>'), /<p>duz metin<\/p>/);
   assert.equal(io.normalizeImportHTML('<h1>X</h1>'), '<h1>X</h1>');
 });
+
+test('normalizeImportHTML strips dangerous tags from html input', () => {
+  const cleaned = io.normalizeImportHTML('<p>A</p><script>alert(1)</script><iframe src="x"></iframe>');
+  assert.equal(cleaned.includes('<script'), false);
+  assert.equal(cleaned.includes('<iframe'), false);
+  assert.match(cleaned, /<p>A<\/p>/);
+});

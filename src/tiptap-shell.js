@@ -43,15 +43,54 @@
     return doc ? doc.getElementById('apaed') : null;
   }
 
+  function queryHost(host, selector){
+    if(!host || typeof host.querySelector !== 'function') return null;
+    try{
+      return host.querySelector(selector);
+    }catch(e){
+      return null;
+    }
+  }
+
   function getShellEl(doc){
+    var host = getHostEl(doc);
+    if(host){
+      var scoped = queryHost(host, '#' + SHELL_ID);
+      if(scoped) return scoped;
+    }
     return doc ? doc.getElementById(SHELL_ID) : null;
   }
 
   function getBodyEl(doc){
+    var shell = getShellEl(doc);
+    if(shell && typeof shell.querySelector === 'function'){
+      var body = shell.querySelector('#' + BODY_ID);
+      if(body) return body;
+    }
+    var host = getHostEl(doc);
+    if(host){
+      var scoped = queryHost(host, '#' + BODY_ID);
+      if(scoped) return scoped;
+    }
     return doc ? doc.getElementById(BODY_ID) : null;
   }
 
   function getMountEl(doc){
+    var body = getBodyEl(doc);
+    if(body && typeof body.querySelector === 'function'){
+      var mount = body.querySelector('#' + CONTENT_ID);
+      if(mount) return mount;
+    }
+    var shell = getShellEl(doc);
+    if(shell && typeof shell.querySelector === 'function'){
+      var shellMount = shell.querySelector('#' + CONTENT_ID);
+      if(shellMount) return shellMount;
+    }
+    var host = getHostEl(doc);
+    if(host){
+      var scoped = queryHost(host, '#' + CONTENT_ID);
+      if(scoped) return scoped;
+    }
     return doc ? doc.getElementById(CONTENT_ID) : null;
   }
 
@@ -68,13 +107,23 @@
     return normalizeHTML(host.innerHTML);
   }
 
+  function hasCanonicalShell(host){
+    if(!host) return false;
+    if(!host.firstElementChild || host.firstElementChild.id !== SHELL_ID) return false;
+    if(host.children && host.children.length !== 1) return false;
+    var shell = host.firstElementChild;
+    var body = shell && shell.querySelector ? shell.querySelector('#' + BODY_ID) : null;
+    var mount = body && body.querySelector ? body.querySelector('#' + CONTENT_ID) : null;
+    return !!(body && mount && mount.parentElement === body);
+  }
+
   function init(){
     var doc = getDoc();
     var host = getHostEl(doc);
     if(!doc || !host) return null;
     injectStyles(doc);
     var existingHTML = getHTMLFromHost(host);
-    if(!getMountEl(doc)){
+    if(!hasCanonicalShell(host)){
       host.innerHTML = buildShellMarkup();
     }
     var mount = getMountEl(doc);

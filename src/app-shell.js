@@ -1,7 +1,18 @@
 (function(){
-  function safeInit(mod){
+  function reportInitError(scope, err){
+    if(window.AQStability && typeof window.AQStability.capture === 'function'){
+      window.AQStability.capture(scope, err);
+    }
+  }
+
+  function safeInit(name, mod){
     if(mod && typeof mod.init === 'function'){
-      try{ mod.init(); }catch(e){ console.warn('App shell init failed:', e); }
+      try{
+        mod.init();
+      }catch(e){
+        reportInitError('init.' + name, e);
+        console.warn('App shell init failed (' + name + '):', e);
+      }
     }
   }
 
@@ -18,19 +29,19 @@
   }
 
   function init(){
-    safeInit(window.AQTipTapShell);
-    safeInit(window.AQTipTapWordSurface);
-    safeInit(window.AQTipTapWordMedia);
-    safeInit(window.AQTipTapWordEvents);
-    safeInit(window.AQTipTapWordTables);
-    safeInit(window.AQEditorShell);
-    safeInit(window.AQEditorCore);
-    safeInit(window.AQEditorRuntime);
-    safeInit(window.AQReferenceManager);
-    safeInit(window.AQEditorIntegration);
-    safeInit(window.AQCitationRuntime);
-    safeInit(window.AQNotes);
-    safeInit(window.AQPdfViewer);
+    safeInit('AQTipTapShell', window.AQTipTapShell);
+    safeInit('AQTipTapWordSurface', window.AQTipTapWordSurface);
+    safeInit('AQTipTapWordMedia', window.AQTipTapWordMedia);
+    safeInit('AQTipTapWordEvents', window.AQTipTapWordEvents);
+    safeInit('AQTipTapWordTables', window.AQTipTapWordTables);
+    safeInit('AQEditorShell', window.AQEditorShell);
+    safeInit('AQEditorCore', window.AQEditorCore);
+    safeInit('AQEditorRuntime', window.AQEditorRuntime);
+    safeInit('AQReferenceManager', window.AQReferenceManager);
+    safeInit('AQEditorIntegration', window.AQEditorIntegration);
+    safeInit('AQCitationRuntime', window.AQCitationRuntime);
+    safeInit('AQNotes', window.AQNotes);
+    safeInit('AQPdfViewer', window.AQPdfViewer);
   }
 
   window.AQAppShell = {

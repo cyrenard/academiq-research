@@ -2,6 +2,9 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 
+const MAX_DATA_JSON_BYTES = 50 * 1024 * 1024;
+const MAX_PDF_BYTES = 120 * 1024 * 1024;
+
 function createStorageService(options) {
   const appDir = options.appDir;
   const settingsFile = path.join(appDir, 'settings.json');
@@ -16,7 +19,7 @@ function createStorageService(options) {
   }
 
   function buildPdfFileName(refId) {
-    const raw = String(refId || '');
+    const raw = normalizeRefId(refId);
     const base = (raw || 'ref')
       .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
       .replace(/\s+/g, ' ')
@@ -27,8 +30,9 @@ function createStorageService(options) {
   }
 
   function resolvePdfPaths(dir, refId) {
+    const normalizedRefId = normalizeRefId(refId);
     const safeName = buildPdfFileName(refId);
-    const legacySafe = String(refId || '').replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').replace(/\.\.+/g, '_') || 'ref';
+    const legacySafe = normalizedRefId.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').replace(/\.\.+/g, '_') || 'ref';
     const legacyName = legacySafe + '.pdf';
     const safeResolved = path.resolve(path.join(dir, safeName));
     const legacyResolved = path.resolve(path.join(dir, legacyName));
@@ -37,6 +41,32 @@ function createStorageService(options) {
       safe: safeResolved.startsWith(dirResolved) ? safeResolved : path.join(dir, 'ref__invalid.pdf'),
       legacy: legacyResolved.startsWith(dirResolved) ? legacyResolved : path.join(dir, 'ref__invalid_legacy.pdf')
     };
+  }
+
+  function normalizeRefId(refId) {
+    const value = String(refId || '').trim();
+    if (!value) throw new Error('Geçersiz referans kimliği');
+    if (value.length > 320) throw new Error('Referans kimliği çok uzun');
+    return value;
+  }
+
+  function ensurePDFBuffer(buffer) {
+    const buf = Buffer.from(buffer || []);
+    if (!buf.length) throw new Error('PDF verisi boş');
+    if (buf.length > MAX_PDF_BYTES) throw new Error('PDF boyutu sınırı aşıldı');
+    const header = buf.slice(0, 1024).toString('ascii');
+    if (header.indexOf('%PDF-') < 0) throw new Error('Geçersiz PDF içeriği');
+    return buf;
+  }
+
+  function normalizeSyncDir(dirPath) {
+    const raw = String(dirPath || '').trim();
+    if (!raw) throw new Error('Geçersiz sync klasörü');
+    const resolved = path.resolve(raw);
+    if (!fs.existsSync(resolved)) throw new Error('Sync klasörü bulunamadı');
+    const stat = fs.statSync(resolved);
+    if (!stat.isDirectory()) throw new Error('Sync klasörü bir dizin olmalı');
+    return resolved;
   }
 
   function loadSettings() {
@@ -91,6 +121,8 @@ function createStorageService(options) {
   }
 
   function saveData(json) {
+    if (typeof json !== 'string') throw new Error('Kaydedilecek veri metin olmalı');
+    if (Buffer.byteLength(json, 'utf8') > MAX_DATA_JSON_BYTES) throw new Error('Veri boyutu sınırı aşıldı');
     const fp = getSyncDataPath();
     const bak = fp + '.bak';
     const tmp = fp + '.tmp';
@@ -103,7 +135,8 @@ function createStorageService(options) {
   }
 
   function savePDF(refId, buffer) {
-    const buf = Buffer.from(buffer);
+    normalizeRefId(refId);
+    const buf = ensurePDFBuffer(buffer);
     const localPaths = resolvePdfPaths(localPdfDir, refId);
     fs.writeFileSync(localPaths.safe, buf);
     if (settings.syncDir) {
@@ -114,6 +147,7 @@ function createStorageService(options) {
   }
 
   function loadPDF(refId) {
+    normalizeRefId(refId);
     const localPaths = resolvePdfPaths(localPdfDir, refId);
     if (fs.existsSync(localPaths.safe)) {
       const buf = fs.readFileSync(localPaths.safe);
@@ -138,6 +172,7 @@ function createStorageService(options) {
   }
 
   function pdfExists(refId) {
+    normalizeRefId(refId);
     const localPaths = resolvePdfPaths(localPdfDir, refId);
     if (fs.existsSync(localPaths.safe) || fs.existsSync(localPaths.legacy)) return true;
     if (settings.syncDir) {
@@ -148,6 +183,7 @@ function createStorageService(options) {
   }
 
   function deletePDF(refId) {
+    normalizeRefId(refId);
     const localPaths = resolvePdfPaths(localPdfDir, refId);
     if (fs.existsSync(localPaths.safe)) fs.unlinkSync(localPaths.safe);
     if (fs.existsSync(localPaths.legacy)) fs.unlinkSync(localPaths.legacy);
@@ -187,8 +223,9 @@ function createStorageService(options) {
   }
 
   function setSyncDir(dirPath) {
+    const resolvedDir = normalizeSyncDir(dirPath);
     const oldPath = getSyncDataPath();
-    settings.syncDir = dirPath;
+    settings.syncDir = resolvedDir;
     saveSettings();
     const newPath = getSyncDataPath();
     if (oldPath !== newPath) {

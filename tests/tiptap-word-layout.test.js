@@ -74,17 +74,32 @@ test('applyPageGaps pushes overflowing blocks to next page content start', () =>
       }
     };
   }
+  let styleEl = null;
+  const ownerDoc = {
+    head: {
+      appendChild(node){ styleEl = node; }
+    },
+    getElementById(){ return styleEl; },
+    createElement(){
+      return {
+        id: '',
+        textContent: ''
+      };
+    }
+  };
 
   const first = makeBlock(500);
   const second = makeBlock(500);
   const total = layout.applyPageGaps({
-    children: [first, second]
+    children: [first, second],
+    ownerDocument: ownerDoc
   }, 931, 1123);
 
   assert.equal(total, 1623);
-  assert.deepEqual(first.classList.added, []);
-  assert.deepEqual(second.classList.added, ['aq-page-gap']);
-  assert.equal(second.style.values['--aq-page-gap'], '623px');
+  assert.ok(styleEl);
+  assert.equal(styleEl.id, 'aq-page-gap-style');
+  assert.match(styleEl.textContent, /nth-child\(2\)/);
+  assert.match(styleEl.textContent, /margin-top:623px/);
 });
 
 test('resolvePageMetrics combines physical page height with visual page gap', () => {
@@ -132,6 +147,21 @@ test('resolvePageMetrics combines physical page height with visual page gap', ()
 
   delete globalThis.window;
   delete globalThis.document;
+});
+
+test('resolvePageMetrics enforces APA 1-inch margins as minimum', () => {
+  const metrics = layout.resolvePageMetrics({
+    pageHeight: 1123,
+    pageMargin: 40,
+    pageGap: 8,
+    pageContentHeight: 1100,
+    pageTotalHeight: 1120
+  });
+
+  assert.equal(metrics.pageMargin, 96);
+  assert.equal(metrics.pageGap >= 24, true);
+  assert.equal(metrics.pageContentHeight <= (metrics.pageHeight - (metrics.pageMargin * 2)), true);
+  assert.equal(metrics.pageTotalHeight >= (metrics.pageHeight + metrics.pageGap), true);
 });
 
 test('syncPageMetrics uses A4 measurements and renders sheets through background host', () => {

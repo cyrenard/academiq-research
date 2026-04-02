@@ -1,15 +1,17 @@
 {
   "name": "academiq-research",
-  "version": "1.0.9",
+  "version": "1.1.0",
   "description": "AcademiQ Research - Akademik Yazim ve Kaynak Yonetim Uygulamasi",
   "main": "main.js",
   "author": "AcademiQ",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "test": "C:\\Progra~1\\nodejs\\node.exe --test --test-concurrency=1 --test-isolation=none tests/*.test.js",
-    "build": "node scripts/inline-src.js && electron-builder --win --x64 && node scripts/restore-src.js",
-    "build:dir": "node scripts/inline-src.js && electron-builder --win --x64 --dir && node scripts/restore-src.js"
+    "test": "node --test --test-concurrency=1 --test-isolation=none tests/*.test.js",
+    "gate:release": "node scripts/release-gate.js",
+    "release:baseline": "npm run gate:release && npm run build",
+    "build": "node scripts/build-win.js",
+    "build:dir": "node scripts/build-win.js --dir"
   },
   "dependencies": {},
   "devDependencies": {
@@ -28,6 +30,7 @@
       "preload.js",
       "academiq-research.html",
       "tiptap-bundle.js",
+      "vendor/**/*",
       "icon.ico",
       "icon.png",
       "package.json",

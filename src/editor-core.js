@@ -201,15 +201,21 @@
   function withPreservedSelection(fn, options){
     var scrollTop = saveScroll();
     var bookmark = captureSelection();
-    var result = fn ? fn() : undefined;
-    restoreSelection(bookmark, options || {});
-    restoreScroll(scrollTop);
-    return result;
+    try{
+      return fn ? fn() : undefined;
+    }finally{
+      restoreSelection(bookmark, options || {});
+      restoreScroll(scrollTop);
+    }
   }
 
   function setContent(html, focusAtEnd){
+    var restoreTop = saveScroll();
     if(typeof window.__aqSetEditorDoc === 'function'){
       window.__aqSetEditorDoc(html, !!focusAtEnd);
+      if(!focusAtEnd){
+        restoreScroll(restoreTop, [0, 16, 64, 140]);
+      }
       syncShell();
       return true;
     }

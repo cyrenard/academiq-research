@@ -43,12 +43,13 @@ test('storage service updates sync paths after sync dir selection', () => {
 test('storage service saves and loads pdf buffers', () => {
   const appDir = makeTempDir();
   const storage = createStorageService({ appDir });
-  const buf = Uint8Array.from([1, 2, 3, 4]).buffer;
+  const pdf = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF', 'ascii');
+  const buf = pdf.buffer.slice(pdf.byteOffset, pdf.byteOffset + pdf.byteLength);
 
   storage.savePDF('ref1', buf);
   const loaded = storage.loadPDF('ref1');
 
   assert.equal(loaded.ok, true);
-  assert.equal(Buffer.from(loaded.buffer).length, 4);
+  assert.ok(Buffer.from(loaded.buffer).length > 20);
   assert.equal(storage.pdfExists('ref1'), true);
 });

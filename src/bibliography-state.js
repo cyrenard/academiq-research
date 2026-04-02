@@ -121,7 +121,8 @@
     var manualHTML = doc && doc.bibliographyManual && !forceAuto ? String(doc.bibliographyHTML || '').trim() : '';
 
     if(!refs.length){
-      if(persistedHTML){
+      var showManualOnly = !!(doc && doc.bibliographyManual && persistedHTML);
+      if(showManualOnly){
         bodyEl.innerHTML = persistedHTML;
         if(pageEl.style) pageEl.style.display = 'block';
       }else{

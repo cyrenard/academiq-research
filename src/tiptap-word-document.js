@@ -5,11 +5,24 @@
   }
   root.AQTipTapWordDocument = factory();
 })(typeof window !== 'undefined' ? window : globalThis, function(){
+  var runtimeState = {
+    loadToken: 0
+  };
+
   function resolveBlankHTML(blankHTML){
     if(typeof blankHTML === 'function'){
       return String(blankHTML() || '<p></p>');
     }
     return String(blankHTML || '<p></p>');
+  }
+
+  function issueLoadToken(){
+    runtimeState.loadToken += 1;
+    return runtimeState.loadToken;
+  }
+
+  function isLoadTokenActive(token){
+    return token === runtimeState.loadToken;
   }
 
   function escapeAttr(text){
@@ -21,7 +34,7 @@
   }
 
   function buildImageHTML(src, alt){
-    return '<div style="text-align:left;margin:12px 0;text-indent:0"><img src="' + String(src || '') + '" style="max-width:100%;height:auto;border:1px solid var(--b);border-radius:4px;" alt="' + escapeAttr(alt || '') + '"/></div><p><br></p>';
+    return '<img src="' + String(src || '') + '" data-width="70%" data-align="left" style="display:block;float:left;width:70%;max-width:100%;height:auto;text-indent:0;margin-left:0;margin-right:14px;margin-top:2px;margin-bottom:10px;" alt="' + escapeAttr(alt || '') + '"/><p><br></p>';
   }
 
   function buildExportDocHTML(edHTML){
@@ -212,26 +225,46 @@
     options = options || {};
     var blankHTML = String(options.blankHTML || '<p></p>');
     var html = prepareLoadedHTML(options.html || blankHTML, blankHTML);
+    var hasTokenGuard = options.loadToken != null && typeof options.isLoadTokenActive === 'function';
+
+    function isActiveLoad(){
+      if(!hasTokenGuard) return true;
+      try{
+        return !!options.isLoadTokenActive(options.loadToken);
+      }catch(e){
+        return true;
+      }
+    }
 
     if(typeof options.beforeSet === 'function'){
       options.beforeSet(html);
     }
 
     function finalize(target, appliedHTML){
+      if(!isActiveLoad()) return false;
       if(typeof options.runLoadEffects === 'function'){
         options.runLoadEffects({
           target: target || null,
           html: appliedHTML || html,
-          beforeApply: options.beforeApply || null,
+          beforeApply: function(){
+            if(!isActiveLoad()) return;
+            if(typeof options.beforeApply === 'function') options.beforeApply();
+          },
           focusToEnd: !!options.focusAtEnd && !!options.editor,
           focusToEndFn: options.focusToEndFn || null,
           focusSurface: !!options.focusAtEnd && !options.editor,
           focusSurfaceFn: options.focusSurfaceFn || null,
-          afterLayout: options.afterLayout || null
+          afterLayout: function(){
+            if(!isActiveLoad()) return;
+            if(typeof options.afterLayout === 'function') options.afterLayout();
+          },
+          token: options.loadToken != null ? options.loadToken : null,
+          isTokenActive: typeof options.isLoadTokenActive === 'function' ? options.isLoadTokenActive : null
         });
         return true;
       }
 
+      if(!isActiveLoad()) return false;
       if(typeof options.beforeApply === 'function'){
         options.beforeApply();
       }
@@ -298,6 +331,8 @@
       normalize: options.normalize || null,
       syncRefs: options.syncRefs || null,
       syncChrome: options.syncChrome || null,
+      loadToken: options.loadToken != null ? options.loadToken : null,
+      isLoadTokenActive: typeof options.isLoadTokenActive === 'function' ? options.isLoadTokenActive : null,
       syncLayout: options.syncLayout || null,
       afterLayout: options.afterLayout || null
     });
@@ -332,6 +367,8 @@
       normalize: options.normalize || null,
       syncRefs: options.syncRefs || null,
       syncChrome: options.syncChrome || null,
+      loadToken: options.loadToken != null ? options.loadToken : null,
+      isLoadTokenActive: typeof options.isLoadTokenActive === 'function' ? options.isLoadTokenActive : null,
       syncLayout: options.syncLayout || null,
       afterLayout: options.afterLayout || null
     });
@@ -340,6 +377,7 @@
   function loadEditorDocumentFromContext(options){
     options = options || {};
     var blankHTML = resolveBlankHTML(options.blankHTML);
+    var loadToken = issueLoadToken();
     return loadEditorDocumentWithState({
       html: options.html || blankHTML,
       blankHTML: blankHTML,
@@ -348,6 +386,8 @@
       shell: options.shell || null,
       host: options.host || null,
       runtimeApi: options.runtimeApi || null,
+      loadToken: loadToken,
+      isLoadTokenActive: isLoadTokenActive,
       beforeSet: function(nextHTML){
         if(typeof options.setSwitching === 'function'){
           options.setSwitching(true, nextHTML);

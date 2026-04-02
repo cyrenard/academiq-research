@@ -464,3 +464,73 @@ test('loadEditorDocumentFromContext manages switching and suppress-save flags', 
     ['afterLayout']
   ]);
 });
+
+test('loadEditorDocumentFromContext ignores stale async load callbacks', () => {
+  const calls = [];
+  const pending = [];
+  const editor = {
+    view: { dom: 'pm-root' },
+    commands: {
+      setContent(html, emit) {
+        calls.push(['setContent', html, emit]);
+      }
+    }
+  };
+
+  function load(label, html) {
+    return docmod.loadEditorDocumentFromContext({
+      html,
+      blankHTML() {
+        return '<p></p>';
+      },
+      editor,
+      runtimeApi: {
+        runDocumentLoadEffects(opts) {
+          calls.push(['runLoadEffects', opts.html, opts.token]);
+          pending.push(opts);
+        }
+      },
+      setSwitching(value) {
+        calls.push(['switch', value]);
+      },
+      setSuppressSave(value) {
+        calls.push(['suppress', value]);
+      },
+      ensureEditableRoot() {
+        calls.push(['ensure', label]);
+      },
+      afterLayout() {
+        calls.push(['afterLayout', label]);
+      }
+    });
+  }
+
+  load('A', '<p>a</p>');
+  load('B', '<p>b</p>');
+
+  assert.equal(pending.length, 2);
+  assert.notEqual(pending[0].token, pending[1].token);
+  assert.equal(typeof pending[0].isTokenActive, 'function');
+
+  if(typeof pending[1].beforeApply === 'function') pending[1].beforeApply();
+  if(typeof pending[1].afterLayout === 'function') pending[1].afterLayout();
+  if(typeof pending[0].beforeApply === 'function') pending[0].beforeApply();
+  if(typeof pending[0].afterLayout === 'function') pending[0].afterLayout();
+
+  const firstToken = pending[0].token;
+  const secondToken = pending[1].token;
+  assert.deepEqual(calls, [
+    ['switch', true],
+    ['suppress', true],
+    ['setContent', '<p>a</p>', false],
+    ['runLoadEffects', '<p>a</p>', firstToken],
+    ['switch', true],
+    ['suppress', true],
+    ['setContent', '<p>b</p>', false],
+    ['runLoadEffects', '<p>b</p>', secondToken],
+    ['suppress', false],
+    ['switch', false],
+    ['ensure', 'B'],
+    ['afterLayout', 'B']
+  ]);
+});

@@ -8,3 +8,5 @@ Thumbs.db
 .claude/
 .npm-cache/
 current-screen.png
+.tmp_restore/
+backups/

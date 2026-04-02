@@ -575,7 +575,7 @@
       var documentApi = options.documentApi || getGlobalDocumentBuilderApi();
       var html = documentApi && typeof documentApi.buildImageHTML === 'function'
         ? documentApi.buildImageHTML(result, file.name)
-        : '<div style="text-align:left;margin:12px 0;text-indent:0"><img src="' + result + '" style="max-width:100%;height:auto;border:1px solid var(--b);border-radius:4px;" alt="' + String(file.name || '') + '"/></div><p><br></p>';
+        : '<img src="' + result + '" data-width="70%" data-align="left" style="display:block;float:left;width:70%;max-width:100%;height:auto;text-indent:0;margin-left:0;margin-right:14px;margin-top:2px;margin-bottom:10px;" alt="' + String(file.name || '') + '"/><p><br></p>';
 
       insertImageWithState({
         editor: options.editor || null,
@@ -649,7 +649,54 @@
     options = options || {};
     var editor = options.editor || null;
     if(editor && editor.chain && typeof editor.chain().focus === 'function'){
-      editor.chain().focus().setImage({ src:options.src, alt:options.alt }).run();
+      var imageAttrs = {
+        src:options.src,
+        alt:options.alt,
+        width:'70%',
+        align:'left'
+      };
+      var inserted = false;
+      try{
+        inserted = !!editor.chain().focus().insertContent([
+          { type:'image', attrs:imageAttrs },
+          { type:'paragraph' }
+        ]).run();
+      }catch(_setImageErr){
+        inserted = false;
+      }
+      if(!inserted){
+        try{
+          inserted = !!editor.chain().focus().insertContent({
+            type:'image',
+            attrs:imageAttrs
+          }).run();
+        }catch(_insertContentErr){
+          inserted = false;
+        }
+      }
+      if(!inserted){
+        return insertHTML({
+          editor: null,
+          html: options.html,
+          host: options.host,
+          savedRangeRef: options.savedRangeRef,
+          afterDomInsert: function(host){
+            if(runMutationEffects({
+              target: host || null,
+              normalize: true,
+              layout: true,
+              syncChrome: true,
+              syncTOC: false,
+              syncRefs: false,
+              refreshTrigger: false
+            })) return;
+            if(typeof options.normalizeCitationSpans === 'function') options.normalizeCitationSpans(host);
+            if(typeof options.uSt === 'function') options.uSt();
+            if(typeof options.save === 'function') options.save();
+            if(typeof options.updatePageHeight === 'function') options.updatePageHeight();
+          }
+        });
+      }
       if(runMutationEffects({
           target: editor && editor.view ? editor.view.dom : null,
           layout: true,

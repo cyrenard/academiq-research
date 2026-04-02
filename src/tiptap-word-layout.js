@@ -5,10 +5,22 @@
   }
   root.AQTipTapWordLayout = factory();
 })(typeof window !== 'undefined' ? window : globalThis, function(){
+  var APA_MARGIN_PX = 96; // 1 inch @ 96dpi
+  var MIN_PAGE_GAP_PX = 24;
+
   var state = {
     timer: null,
     zoom: 100
   };
+
+  function safeGetElementById(doc, id){
+    if(!doc || typeof doc.getElementById !== 'function') return null;
+    try{
+      return doc.getElementById(id);
+    }catch(e){
+      return null;
+    }
+  }
 
   function getPageBackgroundHost(page){
     if(!page || typeof page.querySelector !== 'function') return null;
@@ -18,12 +30,13 @@
   function renderPageSheets(page, pageCount, options){
     options = options || {};
     var host = getPageBackgroundHost(page);
-    if(!host || typeof document === 'undefined') return 0;
+    var doc = options.doc || (page && page.ownerDocument) || (typeof document !== 'undefined' ? document : null);
+    if(!host || !doc || typeof doc.createElement !== 'function') return 0;
     host.innerHTML = '';
     var count = Math.max(1, parseInt(pageCount, 10) || 1);
     var step = parseInt(options.pageStep, 10) || 1155;
     for(var index = 0; index < count; index++){
-      var sheet = document.createElement('div');
+      var sheet = doc.createElement('div');
       sheet.className = 'aq-page-sheet';
       sheet.style.top = (index * step) + 'px';
       host.appendChild(sheet);
@@ -105,10 +118,15 @@
       }
     }
     pageHeight = pageHeight || 1123;
-    pageMargin = pageMargin || 96;
+    pageMargin = pageMargin || APA_MARGIN_PX;
+    if(pageMargin < APA_MARGIN_PX) pageMargin = APA_MARGIN_PX;
     pageGap = pageGap || 32;
-    pageContentHeight = pageContentHeight || Math.max(1, pageHeight - (pageMargin * 2));
+    if(pageGap < MIN_PAGE_GAP_PX) pageGap = MIN_PAGE_GAP_PX;
+    var maxContentHeight = Math.max(1, pageHeight - (pageMargin * 2));
+    pageContentHeight = pageContentHeight || maxContentHeight;
+    if(pageContentHeight > maxContentHeight) pageContentHeight = maxContentHeight;
     pageTotalHeight = pageTotalHeight || (pageHeight + pageGap);
+    if(pageTotalHeight < (pageHeight + pageGap)) pageTotalHeight = pageHeight + pageGap;
     return {
       pageHeight: pageHeight,
       pageTotalHeight: pageTotalHeight,
@@ -136,13 +154,19 @@
     });
     var doc = editorDom.ownerDocument || (typeof document !== 'undefined' ? document : null);
     if(doc){
-      var styleEl = doc.getElementById('aq-page-gap-style');
-      if(!styleEl){
+      var styleEl = safeGetElementById(doc, 'aq-page-gap-style');
+      if(!styleEl && typeof doc.createElement === 'function'){
         styleEl = doc.createElement('style');
         styleEl.id = 'aq-page-gap-style';
-        doc.head.appendChild(styleEl);
+        if(doc.head && typeof doc.head.appendChild === 'function'){
+          doc.head.appendChild(styleEl);
+        }else if(typeof doc.appendChild === 'function'){
+          doc.appendChild(styleEl);
+        }
       }
-      styleEl.textContent = rules.join('');
+      if(styleEl){
+        styleEl.textContent = rules.join('');
+      }
     }
     return Math.max(pageContentHeight, visualOffset);
   }
@@ -162,32 +186,42 @@
     var pageGap = metrics.pageGap;
     var pageVerticalPadding = metrics.pageVerticalPadding;
     var editorView = options.editorView || null;
-    page.querySelectorAll('.page-break-overlay,.page-number').forEach(function(el){ el.remove(); });
-    editorDom.querySelectorAll('.pg-spacer').forEach(function(el){ el.remove(); });
+    var doc = options.doc || editorDom.ownerDocument || page.ownerDocument || (typeof document !== 'undefined' ? document : null);
+    if(typeof page.querySelectorAll === 'function'){
+      page.querySelectorAll('.page-break-overlay,.page-number').forEach(function(el){ el.remove(); });
+    }
+    if(typeof editorDom.querySelectorAll === 'function'){
+      editorDom.querySelectorAll('.pg-spacer').forEach(function(el){ el.remove(); });
+    }
     var visualContentHeight = applyPageGaps(editorDom, pageContentHeight, pageTotalHeight);
     var contentHeight = Math.max(editorDom.scrollHeight || 0, editorDom.offsetHeight || 0, visualContentHeight);
     var pageCount = Math.max(1, Math.ceil(contentHeight / pageTotalHeight));
     var viewportMinHeight = scrollEl ? Math.max(pageTotalHeight, (scrollEl.clientHeight || 0) + 44) : pageTotalHeight;
     page.style.minHeight = Math.max(viewportMinHeight, pageCount * pageTotalHeight, contentHeight + pageVerticalPadding) + 'px';
     renderPageSheets(page, pageCount, {
+      doc: doc,
       pageStep: pageTotalHeight
     });
-    page.querySelectorAll('.aq-page-gap-cover').forEach(function(el){ el.remove(); });
-    for(var p = 0; p < pageCount - 1; p++){
-      var overlay = document.createElement('div');
-      overlay.className = 'page-break-overlay';
-      overlay.style.top = (p * pageTotalHeight + pageHeight) + 'px';
-      overlay.style.height = pageGap + 'px';
-      page.appendChild(overlay);
+    if(typeof page.querySelectorAll === 'function'){
+      page.querySelectorAll('.aq-page-gap-cover').forEach(function(el){ el.remove(); });
     }
-    if(showPageNumbers){
-      buildPageNumberTops(pageCount, pageTotalHeight, 24).forEach(function(top, index){
-        var num = document.createElement('div');
-        num.className = 'page-number';
-        num.textContent = String(index + 1);
-        num.style.top = top + 'px';
-        page.appendChild(num);
-      });
+    if(doc && typeof doc.createElement === 'function'){
+      for(var p = 0; p < pageCount - 1; p++){
+        var overlay = doc.createElement('div');
+        overlay.className = 'page-break-overlay';
+        overlay.style.top = (p * pageTotalHeight + pageHeight) + 'px';
+        overlay.style.height = pageGap + 'px';
+        page.appendChild(overlay);
+      }
+      if(showPageNumbers){
+        buildPageNumberTops(pageCount, pageTotalHeight, 24).forEach(function(top, index){
+          var num = doc.createElement('div');
+          num.className = 'page-number';
+          num.textContent = String(index + 1);
+          num.style.top = top + 'px';
+          page.appendChild(num);
+        });
+      }
     }
     return pageCount;
   }
@@ -206,8 +240,8 @@
     options = options || {};
     var doc = options.doc || (typeof document !== 'undefined' ? document : null);
     return {
-      page: options.page || (doc ? doc.getElementById('apapage') : null),
-      label: options.label || (doc ? doc.getElementById('zoomLbl') : null)
+      page: options.page || safeGetElementById(doc, 'apapage'),
+      label: options.label || safeGetElementById(doc, 'zoomLbl')
     };
   }
 
@@ -274,10 +308,11 @@
   function runEditorZoom(options){
     options = options || {};
     var doc = options.doc || (typeof document !== 'undefined' ? document : null);
+    var label = safeGetElementById(doc, 'zoomLbl');
     return editorZoom({
       doc: doc,
       delta: options.delta,
-      currentZoom: doc ? parseInt((doc.getElementById('zoomLbl') || {}).textContent, 10) || 100 : 100,
+      currentZoom: parseInt((label || {}).textContent, 10) || 100,
       applyManual: function(next){
         var targets = resolveZoomTargets({ doc: doc });
         if(targets.page){

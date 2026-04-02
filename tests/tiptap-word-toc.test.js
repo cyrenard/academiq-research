@@ -13,8 +13,8 @@ test('buildTOCHTML builds toc rows with page numbers and target ids', function()
   });
   assert.match(html, /generated-0/);
   assert.match(html, /custom-id/);
-  assert.match(html, /<span class="toc-page">1<\/span>/);
-  assert.match(html, /<span class="toc-page">2<\/span>/);
+  assert.match(html, /<span class="toc-page"[^>]*>1<\/span>/);
+  assert.match(html, /<span class="toc-page"[^>]*>2<\/span>/);
 });
 
 test('scrollToHeading finds target and triggers highlight flow', function(){

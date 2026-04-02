@@ -144,3 +144,28 @@ test('deleteWorkspaceWithDocState removes linked document and falls back to rema
   assert.equal(state.doc, '<p>One</p>');
   assert.equal(current.doc.id, 'doc1');
 });
+
+test('switchWorkspaceState keeps toc and bibliography scoped to each workspace document', () => {
+  const state = {
+    wss: [
+      { id: 'ws1', name: 'Alan 1', lib: [], docId: 'doc1' },
+      { id: 'ws2', name: 'Alan 2', lib: [], docId: 'doc2' }
+    ],
+    docs: [
+      { id: 'doc1', name: 'Alan 1', content: '<p>A</p>', tocHTML: '<div>toc-a</div>', bibliographyHTML: '<p>b-a</p>', bibliographyManual: false },
+      { id: 'doc2', name: 'Alan 2', content: '<p>B</p>', tocHTML: '<div>toc-b</div>', bibliographyHTML: '<p>b-b</p>', bibliographyManual: true }
+    ],
+    cur: 'ws1',
+    curDoc: 'doc1',
+    doc: '<p>A</p>'
+  };
+
+  const switched = docTabsState.switchWorkspaceState(state, 'ws2', { sanitize });
+
+  assert.equal(switched.workspace.id, 'ws2');
+  assert.equal(switched.doc.id, 'doc2');
+  assert.equal(switched.doc.tocHTML, '<div>toc-b</div>');
+  assert.equal(switched.doc.bibliographyHTML, '<p>b-b</p>');
+  assert.equal(state.docs.find(d => d.id === 'doc1').tocHTML, '<div>toc-a</div>');
+  assert.equal(state.docs.find(d => d.id === 'doc1').bibliographyHTML, '<p>b-a</p>');
+});

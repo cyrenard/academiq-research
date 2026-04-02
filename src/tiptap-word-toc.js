@@ -58,6 +58,9 @@
       return replaceTOCString(fullHTML, tocHTML);
     }
     var div = document.createElement('div');
+    if(!div || typeof div.querySelector !== 'function' || typeof div.insertAdjacentHTML !== 'function'){
+      return replaceTOCString(fullHTML, tocHTML);
+    }
     div.innerHTML = fullHTML || '';
     var existing = div.querySelector('.toc-container');
     if(existing){
@@ -75,6 +78,9 @@
       return removeTOCString(fullHTML);
     }
     var div = document.createElement('div');
+    if(!div || typeof div.querySelector !== 'function'){
+      return removeTOCString(fullHTML);
+    }
     div.innerHTML = fullHTML || '';
     var toc = div.querySelector('.toc-container');
     if(!toc) return null;
@@ -83,7 +89,7 @@
   }
 
   function scrollToHeading(editorRoot, idx){
-    if(!editorRoot) return false;
+    if(!editorRoot || typeof editorRoot.querySelector !== 'function') return false;
     var entry = editorRoot.querySelector('.toc-entry[data-toc-idx="' + idx + '"]');
     var targetId = entry && entry.dataset ? entry.dataset.targetId : '';
     var target = targetId ? editorRoot.querySelector('#' + targetId) : null;
@@ -121,7 +127,7 @@
   function insertTOC(deps){
     deps = deps || {};
     var editorRoot = typeof deps.getEditorRoot === 'function' ? deps.getEditorRoot() : null;
-    if(!editorRoot) return false;
+    if(!editorRoot || typeof editorRoot.querySelectorAll !== 'function') return false;
     var headings = editorRoot.querySelectorAll('h1,h2,h3,h4,h5');
     if(!headings.length){
       if(typeof deps.onNoHeadings === 'function') deps.onNoHeadings();
@@ -149,7 +155,8 @@
     clearTimeout(state.timer);
     state.timer = setTimeout(function(){
       var editorRoot = typeof deps.getEditorRoot === 'function' ? deps.getEditorRoot() : null;
-      if(!editorRoot || !editorRoot.querySelector('.toc-container')) return;
+      if(!editorRoot || typeof editorRoot.querySelector !== 'function' || typeof editorRoot.querySelectorAll !== 'function') return;
+      if(!editorRoot.querySelector('.toc-container')) return;
       var headings = editorRoot.querySelectorAll('h1,h2,h3,h4,h5');
       if(!headings.length) return;
       if(typeof deps.isEditorFocused === 'function' && deps.isEditorFocused() && _retries < 20){
