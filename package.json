@@ -31,6 +31,7 @@
       "academiq-research.html",
       "tiptap-bundle.js",
       "vendor/**/*",
+      "browser-capture-extension/**/*",
       "icon.ico",
       "icon.png",
       "package.json",

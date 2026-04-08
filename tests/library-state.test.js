@@ -26,3 +26,16 @@ test('filterLibraryItems filters by label', () => {
   assert.equal(result.length, 1);
   assert.equal(result[0].title, 'B');
 });
+
+test('filterLibraryItems filters by collection membership', () => {
+  const items = [
+    { id: 'r1', title: 'A', collectionIds: ['col-a'] },
+    { id: 'r2', title: 'B', collectionIds: ['col-b'] },
+    { id: 'r3', title: 'C', collectionIds: [] }
+  ];
+
+  const result = libraryState.filterLibraryItems(items, '', '', { collectionFilter: 'col-b' });
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0].id, 'r2');
+});

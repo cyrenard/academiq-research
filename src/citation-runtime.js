@@ -162,6 +162,23 @@
     }).join('') + '</blockquote>';
   }
 
+  function decorateLinkedNoteHTML(html, note, ref){
+    var out = String(html || '');
+    var linking = window.AQNoteLinking || null;
+    if(!linking || typeof linking.decorateNoteInsertionHTML !== 'function') return out;
+    try{
+      return linking.decorateNoteInsertionHTML(out, {
+        noteId: note && note.id,
+        referenceId: (ref && ref.id) || (note && note.rid) || '',
+        page: (note && note.tag) || (note && note.sourcePage) || '',
+        noteType: (note && note.noteType) || (note && note.type) || '',
+        notebookId: (note && note.nbId) || (note && note.notebookId) || ''
+      });
+    }catch(_e){
+      return out;
+    }
+  }
+
   function isTypingTarget(target){
     if(!target) return false;
     if(target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return true;
@@ -227,6 +244,37 @@
     };
   }
 
+  var lastResultReasons = {};
+
+  function getEditorContextText(){
+    try{
+      var ed = getEditor();
+      if(ed && ed.state && ed.state.selection && ed.state.doc && typeof ed.state.doc.textBetween === 'function'){
+        var pos = ed.state.selection.from || 0;
+        return ed.state.doc.textBetween(Math.max(0, pos - 260), pos, ' ');
+      }
+    }catch(e){}
+    return '';
+  }
+
+  function getRecentCitationIds(){
+    try{
+      var host = getEditorHost();
+      if(!host || typeof host.querySelectorAll !== 'function') return [];
+      var ids = [];
+      host.querySelectorAll('.cit[data-ref]').forEach(function(node){
+        String((node && node.dataset ? node.dataset.ref : '') || '')
+          .split(',')
+          .map(function(id){ return String(id || '').trim(); })
+          .filter(Boolean)
+          .forEach(function(id){ ids.push(id); });
+      });
+      return ids;
+    }catch(e){
+      return [];
+    }
+  }
+
   function getResults(query){
     const q = query || '';
     try{
@@ -234,7 +282,7 @@
       const list = rm && typeof rm.filterReferences === 'function'
         ? rm.filterReferences(q)
         : (window.filterRefsForQuery ? window.filterRefsForQuery(window.cLib ? window.cLib() : [], q) : []);
-      return list
+      var deduped = list
         .filter(Boolean)
         .filter(function(ref, idx, arr){
           const key = rm && typeof rm.referenceKey === 'function'
@@ -247,7 +295,26 @@
             return rk === key;
           }) === idx;
         });
+      var recommendationApi = window.AQReferenceRecommendation || null;
+      if(recommendationApi && typeof recommendationApi.rankForCitationContext === 'function'){
+        var ranked = recommendationApi.rankForCitationContext(deduped, {
+          query: q,
+          contextText: getEditorContextText(),
+          notes: (window.S && Array.isArray(window.S.notes)) ? window.S.notes : [],
+          recentRefIds: getRecentCitationIds()
+        });
+        lastResultReasons = {};
+        ranked.forEach(function(item){
+          if(item && item.ref && item.ref.id){
+            lastResultReasons[item.ref.id] = Array.isArray(item.reasons) ? item.reasons.slice(0, 2).join(' · ') : '';
+          }
+        });
+        return ranked.map(function(item){ return item.ref; });
+      }
+      lastResultReasons = {};
+      return deduped;
     }catch(e){
+      lastResultReasons = {};
       return [];
     }
   }
@@ -586,12 +653,24 @@
         return;
       }
       list.innerHTML = '';
+      if(!runtime.state.query){
+        var hasAnyReason = runtime.state.results.some(function(ref){
+          return !!lastResultReasons[String(ref && ref.id || '')];
+        });
+        if(hasAnyReason){
+          var hd = document.createElement('div');
+          hd.className = 'tge';
+          hd.textContent = 'Önerilen Kaynaklar';
+          list.appendChild(hd);
+        }
+      }
       runtime.state.results.forEach(function(ref, index){
         const div = document.createElement('div');
         const selected = runtime.state.selectedIds.indexOf(ref.id) >= 0;
         const active = index === runtime.state.activeIndex;
         const authors = Array.isArray(ref.authors) ? ref.authors : (ref.authors ? [ref.authors] : []);
         const authorLine = authors.map(function(a){ return String(a || '').trim(); }).filter(Boolean).join('; ') || 'Bilinmeyen';
+        const reasonText = lastResultReasons[String(ref && ref.id || '')] || '';
         div.className = 'tgi' + (active ? ' on' : '') + (selected ? ' sel' : '');
         div.dataset.refId = ref.id;
         div.innerHTML =
@@ -599,7 +678,8 @@
             '<span style="width:14px;height:14px;border:1px solid '+(selected?'var(--acc)':'var(--b)')+';border-radius:3px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:var(--acc);flex-shrink:0">' + (selected ? '✓' : '') + '</span>' +
             '<div><div class="tgia">' + authorLine + ' (' + (ref.year || 't.y.') + ')</div><div class="tgit">' + ((ref.title || '').substring(0,72)) + '</div></div>' +
           '</div>' +
-          '<div class="tgic" style="padding-left:20px">→ ' + (window.getInlineCitationText ? window.getInlineCitationText(ref) : '') + '</div>';
+          '<div class="tgic" style="padding-left:20px">→ ' + (window.getInlineCitationText ? window.getInlineCitationText(ref) : '') + '</div>' +
+          (reasonText ? ('<div class="tgic" style="padding-left:20px;color:var(--txt3);font-size:10px">Öneri: ' + escHTML(reasonText) + '</div>') : '');
         div.addEventListener('mousedown', function(e){
           e.preventDefault();
           e.stopPropagation();
@@ -882,6 +962,7 @@
       }else{
         return false;
       }
+      html = decorateLinkedNoteHTML(html, note, ref);
       return runtime.insertHTMLWithCitationGuard(
         html,
         getScrollEl() ? getScrollEl().scrollTop : runtime.state.scrollTop,

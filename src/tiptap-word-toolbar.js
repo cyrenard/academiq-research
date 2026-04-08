@@ -72,7 +72,21 @@
       var btn = doc.getElementById(def.id);
       if(!btn) return;
       btn.classList[def.active ? 'add' : 'remove']('active');
+      btn.classList[def.active ? 'add' : 'remove']('is-active');
     });
+  }
+
+  function resolveTextAlign(editor){
+    if(!editor) return 'left';
+    if(typeof editor.isActive === 'function'){
+      if(editor.isActive({ textAlign:'center' })) return 'center';
+      if(editor.isActive({ textAlign:'right' })) return 'right';
+      if(editor.isActive({ textAlign:'justify' })) return 'justify';
+      if(editor.isActive({ textAlign:'left' })) return 'left';
+    }
+    var paragraphAttrs = typeof editor.getAttributes === 'function' ? (editor.getAttributes('paragraph') || {}) : {};
+    var headingAttrs = typeof editor.getAttributes === 'function' ? (editor.getAttributes('heading') || {}) : {};
+    return headingAttrs.textAlign || paragraphAttrs.textAlign || 'left';
   }
 
   function syncFormatState(options){
@@ -96,7 +110,14 @@
       { id:'btnBold', active:editor.isActive('bold') },
       { id:'btnItalic', active:editor.isActive('italic') },
       { id:'btnUnderline', active:editor.isActive('underline') },
-      { id:'btnStrike', active:editor.isActive('strike') }
+      { id:'btnStrike', active:editor.isActive('strike') },
+      { id:'btnParagraph', active:editor.isActive('paragraph') && !editor.isActive('blockquote') },
+      { id:'btnBlockQuote', active:editor.isActive('blockquote') },
+      { id:'btnUnorderedList', active:editor.isActive('bulletList') },
+      { id:'btnOrderedList', active:editor.isActive('orderedList') },
+      { id:'btnAlignLeft', active:resolveTextAlign(editor) === 'left' },
+      { id:'btnAlignCenter', active:resolveTextAlign(editor) === 'center' },
+      { id:'btnAlignRight', active:resolveTextAlign(editor) === 'right' }
     ]);
     var attrs = editor.getAttributes('textStyle') || {};
     var fontSel = doc.getElementById('fontsel');
@@ -113,8 +134,12 @@
       if(_btn){
         if(editor.isActive('heading',{level:_lvl})){
           _btn.classList.add('heading-active');
+          _btn.classList.add('active');
+          _btn.classList.add('is-active');
         }else{
           _btn.classList.remove('heading-active');
+          _btn.classList.remove('active');
+          _btn.classList.remove('is-active');
         }
       }
     }

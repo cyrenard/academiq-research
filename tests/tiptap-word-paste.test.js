@@ -10,6 +10,6 @@ test('tiptap word paste exports cleaning helpers', () => {
 
 test('formatPlainTextAPA wraps paragraphs and escapes html', () => {
   const html = paste.formatPlainTextAPA('Ilk paragraf\n\nIkinci <paragraf>');
-  assert.match(html, /<p>Ilk paragraf<\/p>/);
+  assert.match(html, /<p data-indent-mode="first-line">Ilk paragraf<\/p>/);
   assert.match(html, /&lt;paragraf&gt;/);
 });

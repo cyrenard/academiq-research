@@ -220,7 +220,7 @@ function fetchJSON(url, options = {}) {
       return;
     }
     const mod = parsed.protocol === 'https:' ? https : http;
-    mod.get(parsed.href, {
+    const req = mod.get(parsed.href, {
       headers: options.headers || {
         'User-Agent': 'AcademiQ-Updater/1.0',
         'Accept': 'application/json'
@@ -250,7 +250,12 @@ function fetchJSON(url, options = {}) {
           reject(e);
         }
       });
-    }).on('error', reject);
+    });
+    req.on('error', reject);
+    req.on('timeout', () => {
+      try { req.destroy(new Error('Timeout')); } catch (_e) {}
+      reject(new Error('Timeout'));
+    });
   });
 }
 

@@ -5,6 +5,12 @@ const docmod = require('../src/tiptap-word-document.js');
 
 test('tiptap word document exports content helpers', () => {
   assert.equal(typeof docmod.buildImageHTML, 'function');
+  assert.equal(typeof docmod.prepareExportSourceHTML, 'function');
+  assert.equal(typeof docmod.stripExportOnlyArtifacts, 'function');
+  assert.equal(typeof docmod.decorateExportLayout, 'function');
+  assert.equal(typeof docmod.buildCleanExportHTML, 'function');
+  assert.equal(typeof docmod.buildExportPDFHTML, 'function');
+  assert.equal(typeof docmod.buildExportPreviewHTML, 'function');
   assert.equal(typeof docmod.buildExportDocHTML, 'function');
   assert.equal(typeof docmod.stripLegacyEditorArtifacts, 'function');
   assert.equal(typeof docmod.prepareLoadedHTML, 'function');
@@ -27,11 +33,34 @@ test('tiptap word document exports content helpers', () => {
 test('buildImageHTML and buildExportDocHTML include expected markers', () => {
   const image = docmod.buildImageHTML('data:test', 'örnek');
   const exportHtml = docmod.buildExportDocHTML('<p>Deneme</p>');
+  const exportPdfHtml = docmod.buildExportPDFHTML('<p>Deneme</p>');
+  const exportPreviewHtml = docmod.buildExportPreviewHTML('<p>Deneme</p>');
 
   assert.match(image, /<img/);
   assert.match(image, /alt=/);
   assert.match(exportHtml, /WordSection1/);
   assert.match(exportHtml, /Deneme/);
+  assert.match(exportHtml, /p\[data-indent-mode="none"\]/);
+  assert.match(exportPdfHtml, /aq-export-root/);
+  assert.match(exportPdfHtml, /Content-Security-Policy/);
+  assert.match(exportPreviewHtml, /aq-preview-page/);
+});
+
+test('stripExportOnlyArtifacts removes editor-only helper nodes', () => {
+  const cleaned = docmod.stripExportOnlyArtifacts(
+    '<p>Metin</p><div class="img-toolbar">x</div><div class="aq-page-sheet">y</div><p>Son</p>'
+  );
+  assert.equal(cleaned, '<p>Metin</p><p>Son</p>');
+});
+
+test('decorateExportLayout groups heading with following block and tags bibliography entries', () => {
+  const html = docmod.decorateExportLayout(
+    '<h2>Baslik</h2><p>Ilk paragraf</p><h2>Kaynakça</h2><p class="refe">Yazar, A. (2024).</p>'
+  );
+  assert.match(html, /aq-keep-group/);
+  assert.match(html, /aq-keep-with-next/);
+  assert.match(html, /aq-biblio-heading/);
+  assert.match(html, /aq-ref-entry/);
 });
 
 test('stripLegacyEditorArtifacts removes old page wrappers and spacers', () => {

@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "AcademiQ Browser Capture",
+  "version": "1.0.0",
+  "description": "Yerel AcademiQ masaüstü uygulamasına makale yakalama uzantısı",
+  "permissions": ["activeTab", "scripting", "storage", "tabs"],
+  "host_permissions": ["http://127.0.0.1/*", "https://*/*", "http://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icon.png",
+    "32": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "AcademiQ Capture",
+    "default_icon": {
+      "16": "icon.png",
+      "32": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["browser-capture-utils.js", "detector.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

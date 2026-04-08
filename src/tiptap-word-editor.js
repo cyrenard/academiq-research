@@ -5,6 +5,76 @@
   }
   root.AQTipTapWordEditor = factory();
 })(typeof window !== 'undefined' ? window : globalThis, function(){
+  function getIndentApi(){
+    if(typeof window !== 'undefined' && window.AQTipTapWordIndent){
+      return window.AQTipTapWordIndent;
+    }
+    if(typeof globalThis !== 'undefined' && globalThis.AQTipTapWordIndent){
+      return globalThis.AQTipTapWordIndent;
+    }
+    if(typeof require === 'function'){
+      try{ return require('./tiptap-word-indent.js'); }catch(_e){}
+    }
+    return null;
+  }
+
+  var indentApi = getIndentApi();
+
+  function sanitizeIndentMode(value){
+    if(indentApi && typeof indentApi.sanitizeIndentMode === 'function'){
+      return indentApi.sanitizeIndentMode(value);
+    }
+    return value === 'none' ? 'none' : 'first-line';
+  }
+
+  function stripIndentClasses(className){
+    if(indentApi && typeof indentApi.stripIndentClasses === 'function'){
+      return indentApi.stripIndentClasses(className);
+    }
+    if(!className) return null;
+    var stripped = String(className).replace(/\b(indent-first-line|indent-none)\b/g, '').trim().replace(/\s+/g, ' ');
+    return stripped || null;
+  }
+
+  function parseIndentModeFromElement(el){
+    if(indentApi && typeof indentApi.parseIndentModeFromElement === 'function'){
+      return indentApi.parseIndentModeFromElement(el);
+    }
+    if(!el || typeof el.getAttribute !== 'function') return 'first-line';
+    var attr = el.getAttribute('data-indent-mode');
+    if(attr === 'none' || attr === 'first-line') return attr;
+    return 'first-line';
+  }
+
+  function resolveParagraphIndentMode(options){
+    if(indentApi && typeof indentApi.resolveParagraphIndentMode === 'function'){
+      return indentApi.resolveParagraphIndentMode(options);
+    }
+    return 'first-line';
+  }
+
+  function normalizeParagraphIndentation(options){
+    if(indentApi && typeof indentApi.normalizeParagraphIndentation === 'function'){
+      return indentApi.normalizeParagraphIndentation(options);
+    }
+    return { changed:false, updates:[] };
+  }
+
+  function resolveParagraphPosFromSelection($pos){
+    if(!($pos && typeof $pos.depth === 'number' && typeof $pos.node === 'function')) return null;
+    for(var depth = $pos.depth; depth >= 0; depth--){
+      var node = $pos.node(depth);
+      if(node && node.type && node.type.name === 'paragraph'){
+        if(depth === 0) return 0;
+        if(typeof $pos.before === 'function'){
+          try{ return $pos.before(depth); }catch(_e){ return null; }
+        }
+        return null;
+      }
+    }
+    return null;
+  }
+
   function createCitationMark(T){
     return T.Mark.create({
       name:'citation',
@@ -20,6 +90,31 @@
             default:null,
             parseHTML:function(el){ return el.getAttribute('data-id') || null; },
             renderHTML:function(attrs){ return attrs['data-id'] ? { 'data-id':attrs['data-id'] } : {}; }
+          },
+          'data-note-id':{
+            default:null,
+            parseHTML:function(el){ return el.getAttribute('data-note-id') || null; },
+            renderHTML:function(attrs){ return attrs['data-note-id'] ? { 'data-note-id':attrs['data-note-id'] } : {}; }
+          },
+          'data-note-ref':{
+            default:null,
+            parseHTML:function(el){ return el.getAttribute('data-note-ref') || null; },
+            renderHTML:function(attrs){ return attrs['data-note-ref'] ? { 'data-note-ref':attrs['data-note-ref'] } : {}; }
+          },
+          'data-note-page':{
+            default:null,
+            parseHTML:function(el){ return el.getAttribute('data-note-page') || null; },
+            renderHTML:function(attrs){ return attrs['data-note-page'] ? { 'data-note-page':attrs['data-note-page'] } : {}; }
+          },
+          'data-note-type':{
+            default:null,
+            parseHTML:function(el){ return el.getAttribute('data-note-type') || null; },
+            renderHTML:function(attrs){ return attrs['data-note-type'] ? { 'data-note-type':attrs['data-note-type'] } : {}; }
+          },
+          'data-note-nb':{
+            default:null,
+            parseHTML:function(el){ return el.getAttribute('data-note-nb') || null; },
+            renderHTML:function(attrs){ return attrs['data-note-nb'] ? { 'data-note-nb':attrs['data-note-nb'] } : {}; }
           }
         };
       },
@@ -113,21 +208,116 @@
     });
   }
 
+  // ── APA paragraph indent helpers ─────────────────────────────────────────
+  // Normalization plugin: corrects indentMode whenever doc changes (handles paste, programmatic inserts)
+  function createApaIndentPlugin(T){
+    return T.Extension.create({
+      name:'apaIndentNormalize',
+      addProseMirrorPlugins:function(){
+        return [new T.PmPlugin({
+          key:new T.PmPluginKey('apaIndentNormalize'),
+          appendTransaction:function(transactions, _old, newState){
+            if(!transactions.some(function(tr){ return tr.docChanged; })) return null;
+            var tr = newState.tr;
+            var result = normalizeParagraphIndentation({
+              doc:newState.doc,
+              applyUpdate:function(update){
+                tr.setNodeMarkup(update.pos, null, update.attrs);
+              }
+            });
+            return result.changed ? tr : null;
+          }
+        })];
+      }
+    });
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   function createApaParagraph(T){
     return T.Paragraph.extend({
       addAttributes:function(){
         return Object.assign({}, this.parent ? this.parent() : {}, {
           class:{
             default:null,
-            parseHTML:function(el){ return el.getAttribute('class') || null; },
+            parseHTML:function(el){
+              var cls = el.getAttribute('class') || null;
+              if(!cls) return null;
+              // Strip indent-derived classes — they are reconstructed from indentMode attr
+              return stripIndentClasses(cls);
+            },
             renderHTML:function(attrs){ return attrs.class ? { class:attrs.class } : {}; }
           },
           style:{
             default:null,
             parseHTML:function(el){ return el.getAttribute('style') || null; },
             renderHTML:function(attrs){ return attrs.style ? { style:attrs.style } : {}; }
+          },
+          indentMode:{
+            default:'first-line',
+            parseHTML:function(el){ return parseIndentModeFromElement(el); },
+            renderHTML:function(attrs){
+              return { 'data-indent-mode':sanitizeIndentMode(attrs.indentMode) };
+            }
+          },
+          'data-note-id':{
+            default:null,
+            parseHTML:function(el){ return el.getAttribute('data-note-id') || null; },
+            renderHTML:function(attrs){ return attrs['data-note-id'] ? { 'data-note-id':attrs['data-note-id'] } : {}; }
+          },
+          'data-note-ref':{
+            default:null,
+            parseHTML:function(el){ return el.getAttribute('data-note-ref') || null; },
+            renderHTML:function(attrs){ return attrs['data-note-ref'] ? { 'data-note-ref':attrs['data-note-ref'] } : {}; }
+          },
+          'data-note-page':{
+            default:null,
+            parseHTML:function(el){ return el.getAttribute('data-note-page') || null; },
+            renderHTML:function(attrs){ return attrs['data-note-page'] ? { 'data-note-page':attrs['data-note-page'] } : {}; }
+          },
+          'data-note-type':{
+            default:null,
+            parseHTML:function(el){ return el.getAttribute('data-note-type') || null; },
+            renderHTML:function(attrs){ return attrs['data-note-type'] ? { 'data-note-type':attrs['data-note-type'] } : {}; }
+          },
+          'data-note-nb':{
+            default:null,
+            parseHTML:function(el){ return el.getAttribute('data-note-nb') || null; },
+            renderHTML:function(attrs){ return attrs['data-note-nb'] ? { 'data-note-nb':attrs['data-note-nb'] } : {}; }
+          },
+          'data-mn-block-id':{
+            default:null,
+            parseHTML:function(el){ return el.getAttribute('data-mn-block-id') || null; },
+            renderHTML:function(attrs){ return attrs['data-mn-block-id'] ? { 'data-mn-block-id':attrs['data-mn-block-id'] } : {}; }
           }
         });
+      },
+      addKeyboardShortcuts:function(){
+        var self = this;
+        return {
+          Enter:function(){
+            var editor = self.editor;
+            var $head = editor.state.selection.$head;
+            // Delegate list items and code blocks to their own handlers
+            for(var d = $head.depth; d >= 0; d--){
+              var tn = $head.node(d).type.name;
+              if(tn === 'listItem' || tn === 'codeBlock') return false;
+            }
+            var didSplit = editor.commands.splitBlock();
+            if(!didSplit) return false;
+            var nextHead = editor.state.selection.$head;
+            if(nextHead && nextHead.parent && nextHead.parent.type && nextHead.parent.type.name === 'paragraph'){
+              var paragraphPos = resolveParagraphPosFromSelection(nextHead);
+              var mode = resolveParagraphIndentMode({
+                doc:editor.state.doc,
+                pos:paragraphPos,
+                $pos:nextHead,
+                node:nextHead.parent
+              });
+              editor.commands.updateAttributes('paragraph', { indentMode:mode });
+            }
+            return true;
+          }
+        };
       }
     });
   }
@@ -145,6 +335,11 @@
             default:null,
             parseHTML:function(el){ return el.getAttribute('style') || null; },
             renderHTML:function(attrs){ return attrs.style ? { style:attrs.style } : {}; }
+          },
+          'data-mn-block-id':{
+            default:null,
+            parseHTML:function(el){ return el.getAttribute('data-mn-block-id') || null; },
+            renderHTML:function(attrs){ return attrs['data-mn-block-id'] ? { 'data-mn-block-id':attrs['data-mn-block-id'] } : {}; }
           }
         });
       }
@@ -350,7 +545,12 @@
       createSubscriptMark(T),
       createCitationMark(T),
       createApaPasteExtension(T, hooks),
-      createSlashRTriggerExtension(T)
+      createSlashRTriggerExtension(T),
+      createApaIndentPlugin(T),
+      ...(typeof window !== 'undefined' && window.AQFootnotes ? [
+        window.AQFootnotes.createFootnoteRefNode(T),
+        window.AQFootnotes.createCrossRefMark(T)
+      ] : [])
     ];
   }
 

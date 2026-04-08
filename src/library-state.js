@@ -1,6 +1,7 @@
 (function(root){
   function filterLibraryItems(items, query, activeLabelFilter, options){
     options = options || {};
+    var collectionFilter = String(options.collectionFilter || 'all').trim();
     var getLabelName = options.getLabelName || function(label){
       return typeof label === 'string' ? label : ((label && label.name) || '');
     };
@@ -16,6 +17,10 @@
       if(activeLabelFilter && !(item.labels || []).some(function(label){
         return getLabelName(label) === activeLabelFilter;
       })) return false;
+      if(collectionFilter && collectionFilter !== 'all'){
+        var collections = Array.isArray(item.collectionIds) ? item.collectionIds : [];
+        if(collections.indexOf(collectionFilter) < 0) return false;
+      }
       return true;
     });
   }

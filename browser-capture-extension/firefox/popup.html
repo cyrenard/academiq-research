@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AcademiQ Capture</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="title" id="detectedTitle">Makale algilaniyor...</div>
+      <div class="row" style="margin-top:8px;flex-wrap:wrap;">
+        <span class="badge" id="doiBadge">DOI kontrol ediliyor</span>
+        <span class="badge" id="pdfBadge">PDF kontrol ediliyor</span>
+      </div>
+      <div class="summary-grid">
+        <div class="summary-item">
+          <span class="summary-label">Yazarlar</span>
+          <strong id="authorSummary">Algilanamadi</strong>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Dergi</span>
+          <strong id="journalSummary">Algilanamadi</strong>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Yil</span>
+          <strong id="yearSummary">Algilanamadi</strong>
+        </div>
+      </div>
+      <div class="evidence-list">
+        <div class="evidence-row"><span>DOI kaniti</span><strong id="doiEvidence">Kontrol ediliyor</strong></div>
+        <div class="evidence-row"><span>PDF kaniti</span><strong id="pdfEvidence">Kontrol ediliyor</strong></div>
+        <div class="evidence-row"><span>Baslik kaniti</span><strong id="titleEvidence">Kontrol ediliyor</strong></div>
+      </div>
+      <div class="muted" id="captureUrl" style="margin-top:8px;word-break:break-word;"></div>
+    </div>
+    <div class="card">
+      <div class="row stack">
+        <div class="field">
+          <label for="workspaceSel">Workspace</label>
+          <select id="workspaceSel"></select>
+        </div>
+        <div class="inline-create" id="workspaceCreateRow">
+          <input id="workspaceCreateInput" type="text" placeholder="Yeni workspace adı" maxlength="120"/>
+          <button class="secondary compact" id="workspaceCreateBtn">Yeni Workspace</button>
+        </div>
+        <div class="field">
+          <label for="comparisonSel">Karsilastirma</label>
+          <select id="comparisonSel"></select>
+        </div>
+      </div>
+      <div class="actions" style="margin-top:10px;">
+        <button class="primary" id="captureBtn">AcademiQ'a Ekle</button>
+        <button class="secondary" id="refreshBtn">Tekrar Tara</button>
+        <button class="secondary" id="openAppBtn">Uygulamayi Ac</button>
+      </div>
+      <div class="lookup" id="lookupStatus"></div>
+      <div class="status" id="captureStatus"></div>
+    </div>
+  </div>
+  <script src="config.js"></script>
+  <script src="browser-capture-utils.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

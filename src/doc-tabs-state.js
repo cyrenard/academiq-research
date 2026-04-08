@@ -5,6 +5,8 @@
 
   function normalizeDoc(doc, index, sanitize){
     doc = doc || {};
+    var citationStyle = String(doc.citationStyle || '').trim().toLowerCase();
+    if(!citationStyle) citationStyle = 'apa7';
     return {
       id: doc.id || ('doc' + (index + 1)),
       name: String(doc.name || ('Belge ' + (index + 1))).trim(),
@@ -12,7 +14,8 @@
       bibliographyHTML: typeof doc.bibliographyHTML === 'string' ? doc.bibliographyHTML : '',
       bibliographyManual: !!doc.bibliographyManual,
       coverHTML: typeof doc.coverHTML === 'string' ? doc.coverHTML : '',
-      tocHTML: typeof doc.tocHTML === 'string' ? doc.tocHTML : ''
+      tocHTML: typeof doc.tocHTML === 'string' ? doc.tocHTML : '',
+      citationStyle: citationStyle
     };
   }
 
@@ -52,7 +55,8 @@
           bibliographyHTML: '',
           bibliographyManual: false,
           coverHTML: '',
-          tocHTML: ''
+          tocHTML: '',
+          citationStyle: 'apa7'
         };
         next.docs.push(linked);
         docsById[linked.id] = linked;
@@ -99,7 +103,8 @@
       bibliographyHTML: '',
       bibliographyManual: false,
       coverHTML: '',
-      tocHTML: ''
+      tocHTML: '',
+      citationStyle: 'apa7'
     };
     var ws = {
       id: wsInput.id || uid(),
@@ -170,7 +175,8 @@
       bibliographyHTML: '',
       bibliographyManual: false,
       coverHTML: '',
-      tocHTML: ''
+      tocHTML: '',
+      citationStyle: 'apa7'
     };
     next.docs = Array.isArray(next.docs) ? next.docs.slice() : [];
     next.docs.push(doc);

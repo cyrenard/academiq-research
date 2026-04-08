@@ -39,6 +39,13 @@
     var existingHTML = tiptapShell && typeof tiptapShell.getHTML === 'function'
       ? tiptapShell.getHTML()
       : (edEl ? edEl.innerHTML : '<p></p>');
+    // Extract footnote and margin-note stores before TipTap parses the HTML
+    if(window.AQFootnotes && typeof window.AQFootnotes.hookSetHTML === 'function'){
+      existingHTML = window.AQFootnotes.hookSetHTML(existingHTML);
+    }
+    if(window.AQMarginNotes && typeof window.AQMarginNotes.hookSetHTML === 'function'){
+      existingHTML = window.AQMarginNotes.hookSetHTML(existingHTML);
+    }
     var mountEl = tiptapShell && typeof tiptapShell.getMountEl === 'function'
       ? tiptapShell.getMountEl()
       : null;
@@ -115,6 +122,14 @@
           }, 0);
         }
       });
+      // Init footnotes module
+      if(window.AQFootnotes && typeof window.AQFootnotes.init === 'function'){
+        window.AQFootnotes.init();
+      }
+      // Init margin notes module
+      if(window.AQMarginNotes && typeof window.AQMarginNotes.init === 'function'){
+        window.AQMarginNotes.init();
+      }
       if(window.editor && typeof window.editor.setEditable === 'function'){
         try{ window.editor.setEditable(true); }catch(e){}
       }

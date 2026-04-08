@@ -20,6 +20,38 @@
     if(input && typeof input.click === 'function') input.click();
   }
 
+  function closeLibraryActionGroups(exceptEl){
+    var groups = document.querySelectorAll('#libactions details.libgroup[open]');
+    if(!groups || !groups.length) return;
+    Array.prototype.forEach.call(groups, function(group){
+      if(exceptEl && group === exceptEl) return;
+      group.removeAttribute('open');
+    });
+  }
+
+  function bindLibraryActionGroups(){
+    var host = get('libactions');
+    if(!host || host.__aqBound) return;
+    host.__aqBound = true;
+
+    host.addEventListener('toggle', function(event){
+      var group = event && event.target && event.target.closest ? event.target.closest('details.libgroup') : null;
+      if(!group || !group.open) return;
+      closeLibraryActionGroups(group);
+    }, true);
+
+    host.addEventListener('click', function(event){
+      var btn = event && event.target && event.target.closest ? event.target.closest('button') : null;
+      if(!btn) return;
+      closeLibraryActionGroups(null);
+    });
+
+    document.addEventListener('click', function(event){
+      if(host.contains(event.target)) return;
+      closeLibraryActionGroups(null);
+    });
+  }
+
   function closeDropdown(){
     call('cdd');
   }
@@ -53,7 +85,8 @@
     on('ddWordImportBtn', 'click', function(){ clickInput('wordinp'); closeDropdown(); });
 
     on('tbExportMenuBtn', 'click', function(event){ call('opdd', 'ddexp', event && event.currentTarget ? event.currentTarget : this); });
-    on('ddExpPdfBtn', 'click', function(){ try{ root.print(); }catch(e){} closeDropdown(); });
+    on('ddExpPreviewBtn', 'click', function(){ execAndClose('openExportPreview'); });
+    on('ddExpPdfBtn', 'click', function(){ execAndClose('expPDF'); });
     on('ddExpDocBtn', 'click', function(){ execAndClose('expDOC'); });
     on('ddExpBibBtn', 'click', function(){ execAndClose('expBIB'); });
     on('ddExpRisBtn', 'click', function(){ execAndClose('expRIS'); });
@@ -100,6 +133,10 @@
     on('rtypeNotesBtn', 'click', function(event){ call('swR', 'notes', event && event.currentTarget ? event.currentTarget : this); });
     on('rtypeRefsBtn', 'click', function(event){ call('swR', 'refs', event && event.currentTarget ? event.currentTarget : this); });
     on('bsn', 'click', function(){ call('saveNote'); });
+    on('noteFilterType', 'change', function(event){ call('setNoteFilterType', event && event.target ? event.target.value : 'all'); });
+    on('noteFilterUsage', 'change', function(event){ call('setNoteFilterUsage', event && event.target ? event.target.value : 'all'); });
+    on('noteFilterTag', 'input', function(event){ call('setNoteFilterTag', event && event.target ? event.target.value : ''); });
+    on('noteFilterRef', 'change', function(event){ call('setNoteFilterRef', event && event.target ? event.target.value : 'all'); });
     on('refreshBibliographyBtn', 'click', function(){ call('refreshBibliographyManual'); });
     on('resetBibliographyBtn', 'click', function(){ call('resetBibliographyManual'); });
     on('goBibliographyBtn', 'click', function(){ call('insRefs'); });
@@ -204,10 +241,24 @@
     on('wizInsertBtn', 'click', function(){ call('doTable'); });
     on('coverCancelBtn', 'click', function(){ call('hideM', 'covermodal'); });
     on('coverInsertBtn', 'click', function(){ call('doCover'); });
+    on('dupCloseBtn', 'click', function(){ call('hideM', 'dupModal'); });
+    on('metaHealthCloseBtn', 'click', function(){ call('hideM', 'metaHealthModal'); });
+    on('collectionNameInp', 'keydown', function(event){
+      if(event && event.key === 'Enter'){
+        event.preventDefault();
+        call('createCollectionFromInput');
+      }
+    });
+    on('collectionCreateBtn', 'click', function(){ call('createCollectionFromInput'); });
+    on('collectionCloseBtn', 'click', function(){ call('hideM', 'collectionModal'); });
+    on('exportPreviewRefreshBtn', 'click', function(){ call('refreshExportPreview'); });
+    on('exportPreviewPdfBtn', 'click', function(){ call('expPDF'); });
+    on('exportPreviewCloseBtn', 'click', function(){ call('hideM', 'exportPreviewModal'); });
   }
 
   function bindUIEvents(){
     bindTopToolbarEvents();
+    bindLibraryActionGroups();
 
     on('themebtn', 'click', function(){ call('toggleTheme'); });
     on('zenbtn', 'click', function(){ call('toggleZenMode'); });
@@ -225,6 +276,10 @@
     on('doiFetchBtn', 'click', function(){ call('addDOI'); });
     on('libsrch', 'input', function(){ call('rLib'); });
     on('labelToggleBtn', 'click', function(){ call('toggleLabelFilterPanel'); });
+    on('collectionFilterSel', 'change', function(event){
+      call('setCollectionFilter', event && event.target ? event.target.value : 'all');
+    });
+    on('collectionManageBtn', 'click', function(){ call('openCollectionManager'); });
     on('batchOABtn', 'click', function(){ call('batchDownloadOA'); });
     on('batchCiteBtn', 'click', function(){ call('batchFetchCitations'); });
     on('btnPdfUpload', 'click', function(){
@@ -233,7 +288,17 @@
     on('btnBibImport', 'click', function(){
       clickInput('bibinp');
     });
+    on('btnZoteroImport', 'click', function(){
+      clickInput('zoteroinp');
+    });
+    on('btnFindDuplicates', 'click', function(){ call('openDuplicateReview'); });
+    on('btnMetadataHealth', 'click', function(){ call('openMetadataHealthCenter'); });
+    on('relatedToggleBtn', 'click', function(event){
+      if(event && typeof event.preventDefault === 'function') event.preventDefault();
+      call('toggleRelatedPanel');
+    });
     on('bibinp', 'change', function(event){ call('importBib', event); });
+    on('zoteroinp', 'change', function(event){ call('importZotero', event); });
     on('lfinp', 'change', function(event){ call('hPDFs', event); });
 
     bindEditorToolbarEvents();
@@ -246,6 +311,14 @@
     on('tocRemoveBtn', 'click', function(){ call('removeTOC'); });
     on('insImageBtn', 'click', function(){ call('insImage'); });
     on('trigRefBtn', 'click', function(){ call('doTrigRef'); });
+    on('btnFootnote', 'click', function(){ if(window.AQFootnotes) window.AQFootnotes.insertFootnote('footnote'); });
+    on('btnEndnote', 'click', function(){ if(window.AQFootnotes) window.AQFootnotes.insertFootnote('endnote'); });
+    on('btnCrossRef', 'click', function(){ if(window.AQFootnotes) window.AQFootnotes.showCrossRefDialog(); });
+    on('btnMnMode', 'click', function(){ if(window.AQMarginNotes) window.AQMarginNotes.toggleMnMode(); });
+    on('btnMnToggle', 'click', function(){ if(window.AQMarginNotes) window.AQMarginNotes.toggleMnVisible(); });
+    on('citationStyleSel', 'change', function(event){
+      call('setCitationStyle', event && event.target ? event.target.value : 'apa7');
+    });
     on('imginp', 'change', function(event){ call('handleImgUpload', event); });
     on('wordinp', 'change', function(event){ call('importWordFile', event); });
   }

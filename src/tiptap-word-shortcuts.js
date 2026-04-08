@@ -77,6 +77,10 @@
 
     if(mod && key === 'h' && !e.shiftKey) return run(deps.toggleFindBar);
     if(mod && key === 'f' && !deps.pdfOpen) return run(deps.toggleFindBar);
+    // Footnote shortcuts
+    if(e.altKey && key === 'f' && !mod){ return run(function(){ if(window.AQFootnotes) window.AQFootnotes.insertFootnote('footnote'); }); }
+    if(e.altKey && key === 'e' && !mod){ return run(function(){ if(window.AQFootnotes) window.AQFootnotes.insertFootnote('endnote'); }); }
+    if(e.altKey && key === 'r' && !mod){ return run(function(){ if(window.AQFootnotes) window.AQFootnotes.showCrossRefDialog(); }); }
     if(key === 'F10') return run(deps.toggleZenMode);
     if(key === 'Escape' && deps.zenActive) return run(deps.toggleZenMode);
     if(mod && key === 's' && !e.shiftKey && !deps.editorFocused) return run(deps.save);

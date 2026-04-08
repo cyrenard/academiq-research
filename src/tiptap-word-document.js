@@ -8,6 +8,7 @@
   var runtimeState = {
     loadToken: 0
   };
+  var hostRoot = typeof window !== 'undefined' ? window : globalThis;
 
   function resolveBlankHTML(blankHTML){
     if(typeof blankHTML === 'function'){
@@ -37,8 +38,232 @@
     return '<img src="' + String(src || '') + '" data-width="70%" data-align="left" style="display:block;float:left;width:70%;max-width:100%;height:auto;text-indent:0;margin-left:0;margin-right:14px;margin-top:2px;margin-bottom:10px;" alt="' + escapeAttr(alt || '') + '"/><p><br></p>';
   }
 
+  function stripNoteLinkAttrs(html){
+    var out = String(html || '');
+    if(hostRoot && hostRoot.AQNoteLinking && typeof hostRoot.AQNoteLinking.stripNoteLinkAttributes === 'function'){
+      try{ return String(hostRoot.AQNoteLinking.stripNoteLinkAttributes(out) || ''); }catch(_e){}
+    }
+    return out.replace(/\sdata-note-(?:id|ref|page|type|nb)="[^"]*"/gi, '');
+  }
+
+  function prepareExportSourceHTML(edHTML){
+    var rawHTML = String(edHTML || '');
+    // Inject footnotes/endnotes into export HTML before stripping editor-only stores.
+    if(hostRoot && hostRoot.AQFootnotes && typeof hostRoot.AQFootnotes.injectFootnotesIntoExportHTML === 'function'){
+      try{ rawHTML = hostRoot.AQFootnotes.injectFootnotesIntoExportHTML(rawHTML, true); }catch(_e){}
+    }
+    var cleanHTML = stripNoteLinkAttrs(rawHTML);
+    if(hostRoot && hostRoot.AQMarginNotes && typeof hostRoot.AQMarginNotes.stripForExport === 'function'){
+      cleanHTML = hostRoot.AQMarginNotes.stripForExport(cleanHTML);
+    }
+    cleanHTML = cleanHTML
+      .replace(/<div class="aq-fn-store"[\s\S]*?<\/div>/gi, '')
+      .replace(/<div class="aq-mn-store"[\s\S]*?<\/div>/gi, '')
+      .trim();
+    return cleanHTML;
+  }
+
+  function stripExportOnlyArtifacts(html){
+    var source = String(html || '');
+    if(typeof document !== 'undefined' && document.createElement){
+      var container = document.createElement('div');
+      container.innerHTML = source;
+      var removeSelectors = [
+        '.img-toolbar',
+        '.img-resize-handle',
+        '.aq-page-sheet',
+        '.page-break-overlay',
+        '.page-number',
+        '.toc-delete',
+        '.cit-gap',
+        '.aq-fn-store',
+        '.aq-mn-store',
+        '[data-editor-only]',
+        '[data-export-ignore="true"]',
+        '.ProseMirror-gapcursor',
+        '.ProseMirror-separator'
+      ];
+      container.querySelectorAll(removeSelectors.join(',')).forEach(function(node){ node.remove(); });
+      container.querySelectorAll('*').forEach(function(node){
+        if(node.hasAttribute('contenteditable')) node.removeAttribute('contenteditable');
+        if(node.hasAttribute('draggable')) node.removeAttribute('draggable');
+        Array.from(node.attributes || []).forEach(function(attr){
+          var name = String(attr && attr.name || '');
+          if(/^data-gramm/i.test(name)) node.removeAttribute(name);
+          if(/^on/i.test(name)) node.removeAttribute(name);
+        });
+      });
+      return container.innerHTML.trim();
+    }
+    return source
+      .replace(/<[^>]*class="[^"]*(?:img-toolbar|img-resize-handle|aq-page-sheet|page-break-overlay|page-number|toc-delete|cit-gap|aq-fn-store|aq-mn-store)[^"]*"[^>]*>[\s\S]*?<\/[^>]+>/gi, '')
+      .replace(/\scontenteditable="[^"]*"/gi, '')
+      .replace(/\sdraggable="[^"]*"/gi, '')
+      .replace(/\son[a-z]+="[^"]*"/gi, '')
+      .trim();
+  }
+
+  function appendClass(node, className){
+    if(!node || !className) return;
+    var current = String(node.getAttribute('class') || '').trim();
+    var parts = current ? current.split(/\s+/) : [];
+    if(parts.indexOf(className) >= 0) return;
+    parts.push(className);
+    node.setAttribute('class', parts.join(' ').trim());
+  }
+
+  function normalizeNodeText(node){
+    return String(node && node.textContent || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  }
+
+  function isBibliographyHeadingNode(node){
+    if(!node) return false;
+    var tag = String(node.tagName || '').toLowerCase();
+    if(!/^h[1-5]$/.test(tag)) return false;
+    var text = normalizeNodeText(node);
+    return text === 'kaynakça' || text === 'references' || text === 'bibliography';
+  }
+
+  function isCaptionLikeNode(node){
+    if(!node) return false;
+    var tag = String(node.tagName || '').toLowerCase();
+    if(tag !== 'p' && tag !== 'div') return false;
+    var text = normalizeNodeText(node);
+    return /^(tablo|table|şekil|sekil|figure)\s+\d+/i.test(text);
+  }
+
+  function isKeepWithNextNode(node){
+    if(!node) return false;
+    var tag = String(node.tagName || '').toLowerCase();
+    if(/^h[1-5]$/.test(tag)) return true;
+    return isCaptionLikeNode(node);
+  }
+
+  function isEmptyParagraph(node){
+    if(!node) return true;
+    var tag = String(node.tagName || '').toLowerCase();
+    if(tag !== 'p') return false;
+    var text = normalizeNodeText(node);
+    if(text) return false;
+    return !node.querySelector || !node.querySelector('img,table,figure,blockquote,ul,ol');
+  }
+
+  function decorateExportLayout(html){
+    var source = String(html || '');
+    if(typeof document === 'undefined' || !document.createElement){
+      return source
+        .replace(
+          /<p([^>]*)class="([^"]*\brefe\b[^"]*)"([^>]*)>/gi,
+          '<p$1class="$2 aq-ref-entry aq-avoid-break"$3>'
+        )
+        .replace(
+          /<(h[1-5])([^>]*)>(\s*(?:Kaynakça|References|Bibliography)\s*)<\/\1>\s*(<p[^>]*class="[^"]*\brefe\b[^"]*"[\s\S]*?<\/p>)/gi,
+          function(match, tag, attrs, text, nextBlock){
+            var nextWrapped = /aq-ref-entry/.test(nextBlock)
+              ? nextBlock
+              : nextBlock.replace(/class="([^"]*)"/i, 'class="$1 aq-ref-entry aq-avoid-break"');
+            var headingAttrs = /class=/i.test(attrs)
+              ? attrs.replace(/class="([^"]*)"/i, 'class="$1 aq-biblio-heading aq-keep-with-next"')
+              : attrs + ' class="aq-biblio-heading aq-keep-with-next"';
+            return '<div class="aq-keep-group"><' + tag + headingAttrs + '>' + text + '</' + tag + '>' + nextWrapped + '</div>';
+          }
+        )
+        .replace(
+          /<(h[1-5])([^>]*)>([\s\S]*?)<\/\1>\s*(<(?:p|div|table|figure|blockquote)[\s\S]*?<\/(?:p|div|table|figure|blockquote)>)/gi,
+          function(match, tag, attrs, text, nextBlock){
+            if(/aq-keep-group/.test(match)) return match;
+            var headingAttrs = /class=/i.test(attrs)
+              ? attrs.replace(/class="([^"]*)"/i, 'class="$1 aq-keep-with-next"')
+              : attrs + ' class="aq-keep-with-next"';
+            return '<div class="aq-keep-group"><' + tag + headingAttrs + '>' + text + '</' + tag + '>' + nextBlock + '</div>';
+          }
+        );
+    }
+    var container = document.createElement('div');
+    container.innerHTML = source;
+    var root = container;
+
+    root.querySelectorAll('p.refe,.refe').forEach(function(node){
+      appendClass(node, 'aq-ref-entry');
+      appendClass(node, 'aq-avoid-break');
+    });
+    root.querySelectorAll('table,figure,figcaption,blockquote').forEach(function(node){
+      appendClass(node, 'aq-avoid-break');
+    });
+
+    var children = Array.prototype.slice.call(root.children || []);
+    var inBibliography = false;
+    children.forEach(function(node){
+      if(isBibliographyHeadingNode(node)){
+        inBibliography = true;
+        appendClass(node, 'aq-biblio-heading');
+        appendClass(node, 'aq-keep-with-next');
+        return;
+      }
+      var tag = String(node.tagName || '').toLowerCase();
+      if(/^h[1-5]$/.test(tag)){
+        inBibliography = false;
+      }
+      if(inBibliography && (tag === 'p' || tag === 'div')){
+        if(String(node.getAttribute('class') || '').indexOf('refe') >= 0){
+          appendClass(node, 'aq-ref-entry');
+          appendClass(node, 'aq-avoid-break');
+        }
+      }
+    });
+
+    var current = root.firstElementChild;
+    while(current){
+      var next = current.nextElementSibling;
+      if(isKeepWithNextNode(current)){
+        appendClass(current, 'aq-keep-with-next');
+        while(next && isEmptyParagraph(next)){
+          next = next.nextElementSibling;
+        }
+        if(next && !/^h[1-5]$/i.test(String(next.tagName || ''))){
+          var wrapper = document.createElement('div');
+          wrapper.className = 'aq-keep-group';
+          current.parentNode.insertBefore(wrapper, current);
+          wrapper.appendChild(current);
+          wrapper.appendChild(next);
+          appendClass(next, 'aq-keep-target');
+          current = wrapper.nextElementSibling;
+          continue;
+        }
+      }
+      current = current.nextElementSibling;
+    }
+    return root.innerHTML.trim();
+  }
+
+  function buildCleanExportHTML(edHTML){
+    return decorateExportLayout(stripExportOnlyArtifacts(prepareExportSourceHTML(edHTML)));
+  }
+
+  function buildExportBaseCSS(){
+    return '@page{size:A4;margin:2.54cm;}html,body{margin:0;padding:0;background:#fff;color:#000;font-family:"Times New Roman",Times,serif;font-size:12pt;line-height:2;}body{counter-reset:page 0;}main.aq-export-root{width:100%;max-width:none;}.aq-export-root h1{font-size:12pt;font-weight:bold;text-align:center;margin:0;line-height:2;text-indent:0;break-after:avoid-page;page-break-after:avoid;}.aq-export-root h2{font-size:12pt;font-weight:bold;text-align:left;margin:0;line-height:2;text-indent:0;break-after:avoid-page;page-break-after:avoid;}.aq-export-root h3{font-size:12pt;font-weight:bold;font-style:italic;text-align:left;margin:0;line-height:2;text-indent:0;break-after:avoid-page;page-break-after:avoid;}.aq-export-root h4{font-size:12pt;font-weight:bold;text-align:left;margin:0;line-height:2;text-indent:.5in;break-after:avoid-page;page-break-after:avoid;}.aq-export-root h5{font-size:12pt;font-weight:bold;font-style:italic;text-align:left;margin:0;line-height:2;text-indent:.5in;break-after:avoid-page;page-break-after:avoid;}.aq-export-root p{margin:0;text-indent:.5in;orphans:3;widows:3;}.aq-export-root p[data-indent-mode="first-line"],.aq-export-root p.indent-first-line{text-indent:.5in;}.aq-export-root p[data-indent-mode="none"],.aq-export-root p.ni,.aq-export-root p.indent-none{text-indent:0;}.aq-export-root blockquote{margin:0;padding-left:.5in;text-indent:0;break-inside:avoid;page-break-inside:avoid;}.aq-export-root blockquote p{text-indent:0;}.aq-export-root ul,.aq-export-root ol{margin:0 0 0 .5in;padding:0;}.aq-export-root li{margin:0;text-indent:0;}.aq-export-root table{width:100%;border-collapse:collapse;font-size:12pt;margin:6pt 0;break-inside:avoid;page-break-inside:auto;}.aq-export-root thead{display:table-header-group;}.aq-export-root tr,.aq-export-root img{break-inside:avoid;page-break-inside:avoid;}.aq-export-root th{border-top:1.5px solid #000;border-bottom:1px solid #000;padding:4px 8px;font-weight:bold;}.aq-export-root td{padding:4px 8px;vertical-align:top;}.aq-export-root .refe,.aq-export-root .aq-ref-entry{margin:0;padding-left:.5in;text-indent:-.5in;break-inside:avoid;page-break-inside:avoid;}.aq-export-root .cit{color:#000;border:none;white-space:normal;}.aq-export-root .cit-gap{display:none!important;}.aq-export-root .toc-entry{break-inside:avoid;page-break-inside:avoid;color:#000;text-decoration:none;}.aq-export-root .toc-entry .toc-page{background:#fff;}.aq-export-root .table-wrap,.aq-export-root .figure-wrap,.aq-export-root figure,.aq-export-root figcaption,.aq-export-root .aq-avoid-break,.aq-export-root .aq-ref-entry,.aq-export-root .aq-keep-group{break-inside:avoid;page-break-inside:avoid;}.aq-export-root .aq-keep-with-next{break-after:avoid-page;page-break-after:avoid;}.aq-export-root .aq-biblio-heading{margin-bottom:0;}.aq-export-root .aq-ref-entry + .aq-ref-entry{margin-top:0;}.aq-export-root .aq-keep-target{break-before:auto;page-break-before:auto;}';
+  }
+
   function buildExportDocHTML(edHTML){
-    return '<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><meta name="ProgId" content="Word.Document"><meta name="Generator" content="AcademiQ Research"><style>@page WordSection1{size:595pt 842pt;margin:72pt 72pt 72pt 72pt;}div.WordSection1{page:WordSection1;}body{font-family:"Times New Roman",serif;font-size:12pt;line-height:2;margin:0;}h1{font-size:12pt;font-weight:bold;text-align:center;margin:0;text-indent:0;}h2{font-size:12pt;font-weight:bold;text-align:left;margin:0;text-indent:0;}h3{font-size:12pt;font-weight:bold;font-style:italic;margin:0;text-indent:0;}h4{font-size:12pt;font-weight:bold;margin:0;text-indent:.5in;}h5{font-size:12pt;font-weight:bold;font-style:italic;margin:0;text-indent:.5in;}p{margin:0;text-indent:.5in;mso-pagination:none;}.ni{text-indent:0;}.cit{color:#000;border:none;white-space:normal;}.cit-gap{display:none!important;}.refe{text-indent:-.5in;padding-left:.5in;margin:0;}blockquote{padding-left:.5in;text-indent:0;margin:0;}table{width:100%;border-collapse:collapse;font-size:12pt;page-break-inside:auto;}thead{display:table-header-group;}tr,img{page-break-inside:avoid;}th{border-top:1.5px solid #000;border-bottom:1px solid #000;padding:4px 8px;}td{padding:4px 8px;}.toc-delete,.img-toolbar,.img-resize-handle,.aq-page-sheet,.page-break-overlay,.page-number{display:none!important;}</style></head><body><div class="WordSection1">' + String(edHTML || '') + '</div></body></html>';
+    var cleanHTML = buildCleanExportHTML(edHTML);
+    return '<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><meta name="ProgId" content="Word.Document"><meta name="Generator" content="AcademiQ Research"><style>@page WordSection1{size:595pt 842pt;margin:72pt 72pt 72pt 72pt;}div.WordSection1{page:WordSection1;}' + buildExportBaseCSS() + '</style></head><body><div class="WordSection1"><main class="aq-export-root">' + String(cleanHTML || '') + '</main></div></body></html>';
+  }
+
+  function buildExportPDFHTML(edHTML){
+    var cleanHTML = buildCleanExportHTML(edHTML);
+    return '<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data: blob: file:; style-src \'unsafe-inline\'; font-src data:;"><title>AcademiQ Export</title><style>' + buildExportBaseCSS() + '</style></head><body><main class="aq-export-root">' + String(cleanHTML || '') + '</main></body></html>';
+  }
+
+  function buildExportPreviewHTML(edHTML){
+    var cleanHTML = buildCleanExportHTML(edHTML);
+    var previewCSS = buildExportBaseCSS()
+      + 'body{background:linear-gradient(180deg,#eff3f6 0%,#e6ebef 100%);padding:26px;}'
+      + '.aq-preview-page{width:21cm;min-height:29.7cm;margin:0 auto;background:#fff;padding:2.54cm;box-shadow:0 18px 44px rgba(43,58,70,.16);}'
+      + '.aq-export-root{width:100%;max-width:none;margin:0;}';
+    return '<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data: blob: file:; style-src \'unsafe-inline\'; font-src data:;"><title>AcademiQ Export Preview</title><style>' + previewCSS + '</style></head><body><div class="aq-preview-page"><main class="aq-export-root">' + String(cleanHTML || '') + '</main></div></body></html>';
   }
 
   function stripLegacyEditorArtifacts(html){
@@ -61,20 +286,40 @@
   function getEditorHTML(options){
     options = options || {};
     var editor = options.editor || null;
+    var raw;
     if(editor && typeof editor.getHTML === 'function'){
-      return editor.getHTML();
+      raw = editor.getHTML();
+    } else {
+      var shell = options.shell || null;
+      if(shell && typeof shell.getHTML === 'function'){
+        raw = shell.getHTML();
+      } else {
+        var host = options.host || (typeof document !== 'undefined' ? document.getElementById('apaed') : null);
+        raw = host ? (host.innerHTML || '<p></p>') : '<p></p>';
+      }
     }
-    var shell = options.shell || null;
-    if(shell && typeof shell.getHTML === 'function'){
-      return shell.getHTML();
+    // Append footnote store
+    if(hostRoot && hostRoot.AQFootnotes && typeof hostRoot.AQFootnotes.hookGetHTML === 'function'){
+      raw = hostRoot.AQFootnotes.hookGetHTML(raw);
     }
-    var host = options.host || (typeof document !== 'undefined' ? document.getElementById('apaed') : null);
-    return host ? (host.innerHTML || '<p></p>') : '<p></p>';
+    // Append margin notes store
+    if(hostRoot && hostRoot.AQMarginNotes && typeof hostRoot.AQMarginNotes.hookGetHTML === 'function'){
+      raw = hostRoot.AQMarginNotes.hookGetHTML(raw);
+    }
+    return raw;
   }
 
   function setEditorHTML(options){
     options = options || {};
     var html = String(options.html || '<p></p>');
+    // Extract footnote store before passing to TipTap
+    if(hostRoot && hostRoot.AQFootnotes && typeof hostRoot.AQFootnotes.hookSetHTML === 'function'){
+      html = hostRoot.AQFootnotes.hookSetHTML(html);
+    }
+    // Extract margin notes store
+    if(hostRoot && hostRoot.AQMarginNotes && typeof hostRoot.AQMarginNotes.hookSetHTML === 'function'){
+      html = hostRoot.AQMarginNotes.hookSetHTML(html);
+    }
     var editor = options.editor || null;
     if(editor && editor.commands && typeof editor.commands.setContent === 'function'){
       editor.commands.setContent(html);
@@ -197,6 +442,13 @@
       ? options.sanitizeHTML
       : function(value){ return String(value || ''); };
     var html = sanitizeHTML(options.html || blankHTML);
+    // Extract footnote and margin-note stores before passing to editor
+    if(hostRoot && hostRoot.AQFootnotes && typeof hostRoot.AQFootnotes.hookSetHTML === 'function'){
+      html = hostRoot.AQFootnotes.hookSetHTML(html);
+    }
+    if(hostRoot && hostRoot.AQMarginNotes && typeof hostRoot.AQMarginNotes.hookSetHTML === 'function'){
+      html = hostRoot.AQMarginNotes.hookSetHTML(html);
+    }
     var editor = options.editor || null;
     if(editor && editor.commands && typeof editor.commands.setContent === 'function'){
       try{
@@ -499,6 +751,12 @@
 
   return {
     buildImageHTML: buildImageHTML,
+    prepareExportSourceHTML: prepareExportSourceHTML,
+    stripExportOnlyArtifacts: stripExportOnlyArtifacts,
+    decorateExportLayout: decorateExportLayout,
+    buildCleanExportHTML: buildCleanExportHTML,
+    buildExportPDFHTML: buildExportPDFHTML,
+    buildExportPreviewHTML: buildExportPreviewHTML,
     buildExportDocHTML: buildExportDocHTML,
     stripLegacyEditorArtifacts: stripLegacyEditorArtifacts,
     prepareLoadedHTML: prepareLoadedHTML,

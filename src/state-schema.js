@@ -1,5 +1,5 @@
 (function(root){
-  var SCHEMA_VERSION = 2;
+  var SCHEMA_VERSION = 3;
 
   function clone(value){
     if(Array.isArray(value)) return value.map(clone);
@@ -70,6 +70,8 @@
     if(typeof ref.doi !== 'string') ref.doi = ref.doi ? String(ref.doi) : '';
     if(typeof ref.url !== 'string') ref.url = ref.url ? String(ref.url) : '';
     if(typeof ref.pdfUrl !== 'string') ref.pdfUrl = ref.pdfUrl ? String(ref.pdfUrl) : '';
+    if(!Array.isArray(ref.collectionIds)) ref.collectionIds = [];
+    ref.collectionIds = ref.collectionIds.map(function(id){ return normalizeText(id); }).filter(Boolean);
     ref.title = normalizeText(ref.title);
     ref.year = normalizeYear(ref.year);
     ref.journal = normalizeText(ref.journal);
@@ -88,6 +90,16 @@
     if(!ws.id) ws.id = 'ws' + (idx + 1);
     if(!ws.name) ws.name = '\u00c7al\u0131\u015fma Alan\u0131 ' + (idx + 1);
     if(typeof ws.docId !== 'string') ws.docId = ws.docId ? String(ws.docId) : '';
+    if(!Array.isArray(ws.collections)) ws.collections = [];
+    ws.collections = ws.collections
+      .filter(function(col){ return col && typeof col === 'object'; })
+      .map(function(col){
+        return {
+          id: normalizeText(col.id || ('col-' + Math.random().toString(36).slice(2, 8))),
+          name: normalizeText(col.name || 'Koleksiyon')
+        };
+      })
+      .filter(function(col){ return col.id && col.name; });
     if(!Array.isArray(ws.lib)) ws.lib = [];
     ws.lib = ws.lib.map(normalizeReference);
     return ws;
@@ -95,6 +107,8 @@
 
   function normalizeDoc(doc, idx, sanitize){
     doc = doc || {};
+    var citationStyle = String(doc.citationStyle || '').trim().toLowerCase();
+    if(!citationStyle) citationStyle = 'apa7';
     return {
       id: doc.id || ('doc' + (idx + 1)),
       name: doc.name || ('Belge ' + (idx + 1)),
@@ -102,8 +116,170 @@
       bibliographyHTML: typeof doc.bibliographyHTML === 'string' ? doc.bibliographyHTML : '',
       bibliographyManual: !!doc.bibliographyManual,
       coverHTML: typeof doc.coverHTML === 'string' ? doc.coverHTML : '',
-      tocHTML: typeof doc.tocHTML === 'string' ? doc.tocHTML : ''
+      tocHTML: typeof doc.tocHTML === 'string' ? doc.tocHTML : '',
+      citationStyle: citationStyle
     };
+  }
+
+  function normalizeNotes(notes, notebooks, currentNotebookId){
+    var list = Array.isArray(notes) ? notes : [];
+    var notebookIds = {};
+    (Array.isArray(notebooks) ? notebooks : []).forEach(function(nb){
+      if(nb && nb.id) notebookIds[nb.id] = true;
+    });
+    var fallbackNotebookId = currentNotebookId || ((Array.isArray(notebooks) && notebooks[0] && notebooks[0].id) ? notebooks[0].id : 'nb1');
+
+    return list
+      .filter(function(note){ return note && typeof note === 'object'; })
+      .map(function(note){
+        var out = clone(note);
+        var nbId = out.nbId || out.notebookId || out.nb || fallbackNotebookId;
+        if(!notebookIds[nbId]) nbId = fallbackNotebookId;
+        out.nbId = nbId;
+        if(typeof out.id !== 'string' || !out.id){
+          out.id = (root && typeof root.uid === 'function') ? root.uid() : ('note-' + Math.random().toString(36).slice(2, 10));
+        }
+        if(typeof out.type !== 'string' || !out.type){
+          out.type = out.q ? 'hl' : 'm';
+        }
+        out.txt = typeof out.txt === 'string' ? out.txt : (out.txt ? String(out.txt) : '');
+        out.q = typeof out.q === 'string' ? out.q : (out.q ? String(out.q) : '');
+        out.src = typeof out.src === 'string' ? out.src : (out.src ? String(out.src) : '');
+        out.rid = typeof out.rid === 'string' ? out.rid : (out.rid ? String(out.rid) : '');
+        out.tag = typeof out.tag === 'string' ? out.tag : (out.tag ? String(out.tag) : '');
+        out.dt = typeof out.dt === 'string' ? out.dt : (out.dt ? String(out.dt) : '');
+        out.hlColor = typeof out.hlColor === 'string' ? out.hlColor : (out.hlColor ? String(out.hlColor) : '');
+        out.noteType = typeof out.noteType === 'string' && out.noteType.trim()
+          ? out.noteType
+          : (out.type === 'hl' ? 'direct_quote' : 'summary');
+        out.sourceExcerpt = typeof out.sourceExcerpt === 'string'
+          ? out.sourceExcerpt
+          : (out.q ? String(out.q) : '');
+        out.comment = typeof out.comment === 'string'
+          ? out.comment
+          : (out.txt ? String(out.txt) : '');
+        out.sourcePage = typeof out.sourcePage === 'string'
+          ? out.sourcePage
+          : (out.tag ? String(out.tag) : '');
+        out.inserted = !!out.inserted;
+        return out;
+      });
+  }
+
+  function normalizeMatrixCell(cell){
+    function normalizeCellText(value){
+      return String(value == null ? '' : value).replace(/\r\n?/g, '\n').trim();
+    }
+    if(typeof cell === 'string'){
+      return {
+        text: normalizeCellText(cell),
+        noteIds: [],
+        source: { page: '', snippet: '', updatedAt: 0 }
+      };
+    }
+    cell = cell && typeof cell === 'object' ? cell : {};
+    var source = cell.source && typeof cell.source === 'object' ? cell.source : {};
+    return {
+      text: normalizeCellText(cell.text || ''),
+      noteIds: (Array.isArray(cell.noteIds) ? cell.noteIds : [])
+        .map(function(noteId){ return normalizeText(noteId); })
+        .filter(Boolean),
+      source: {
+        page: normalizeText(source.page || ''),
+        snippet: normalizeCellText(source.snippet || ''),
+        updatedAt: Number(source.updatedAt) > 0 ? Number(source.updatedAt) : 0
+      }
+    };
+  }
+
+  function normalizeLiteratureMatrix(rawMatrix){
+    var matrix = rawMatrix && typeof rawMatrix === 'object' ? clone(rawMatrix) : {};
+    var editableColumns = ['purpose', 'method', 'sample', 'findings', 'limitations', 'myNotes'];
+    var out = {};
+    Object.keys(matrix).forEach(function(workspaceId){
+      var wsKey = normalizeText(workspaceId);
+      if(!wsKey) return;
+      var source = matrix[workspaceId] && typeof matrix[workspaceId] === 'object' ? matrix[workspaceId] : {};
+      var rows = Array.isArray(source.rows) ? source.rows : [];
+      var seenRef = {};
+      var normalizedRows = rows.map(function(row){
+        row = row && typeof row === 'object' ? row : {};
+        var referenceId = normalizeText(row.referenceId || '');
+        if(!referenceId) return null;
+        var refKey = referenceId.toLowerCase();
+        if(seenRef[refKey]) return null;
+        seenRef[refKey] = true;
+        var cells = {};
+        editableColumns.forEach(function(column){
+          cells[column] = normalizeMatrixCell(row.cells && row.cells[column]);
+        });
+        return {
+          id: normalizeText(row.id || ('mxr-' + Math.random().toString(36).slice(2, 11))),
+          workspaceId: wsKey,
+          referenceId: referenceId,
+          cells: cells,
+          createdAt: Number(row.createdAt) > 0 ? Number(row.createdAt) : Date.now(),
+          updatedAt: Number(row.updatedAt) > 0 ? Number(row.updatedAt) : Date.now()
+        };
+      }).filter(Boolean);
+
+      var selected = source.selectedCell && typeof source.selectedCell === 'object'
+        ? {
+            rowId: normalizeText(source.selectedCell.rowId || ''),
+            columnKey: normalizeText(source.selectedCell.columnKey || '')
+          }
+        : null;
+      var dismissedReferenceIds = (Array.isArray(source.dismissedReferenceIds) ? source.dismissedReferenceIds : [])
+        .map(function(referenceId){ return normalizeText(referenceId); })
+        .filter(Boolean);
+      if(selected && !selected.rowId){
+        selected = null;
+      }
+      out[wsKey] = {
+        rows: normalizedRows,
+        selectedCell: selected,
+        dismissedReferenceIds: dismissedReferenceIds,
+        updatedAt: Number(source.updatedAt) > 0 ? Number(source.updatedAt) : Date.now()
+      };
+    });
+    return out;
+  }
+
+  function scopeLiteratureMatrixToWorkspaces(state){
+    var matrix = normalizeLiteratureMatrix(state.literatureMatrix || {});
+    var workspaceMap = {};
+    (Array.isArray(state.wss) ? state.wss : []).forEach(function(ws){
+      if(ws && ws.id){
+        workspaceMap[ws.id] = ws;
+      }
+    });
+    var scoped = {};
+    Object.keys(matrix).forEach(function(workspaceId){
+      if(!workspaceMap[workspaceId]) return;
+      var bucket = matrix[workspaceId];
+      var libMap = {};
+      (workspaceMap[workspaceId].lib || []).forEach(function(ref){
+        if(ref && ref.id) libMap[String(ref.id).toLowerCase()] = true;
+      });
+      var rows = (bucket.rows || []).filter(function(row){
+        var rid = normalizeText(row && row.referenceId);
+        return !!(rid && libMap[rid.toLowerCase()]);
+      });
+      var selected = bucket.selectedCell;
+      if(selected && !rows.some(function(row){ return row.id === selected.rowId; })){
+        selected = null;
+      }
+      scoped[workspaceId] = {
+        rows: rows,
+        selectedCell: selected,
+        dismissedReferenceIds: (bucket.dismissedReferenceIds || []).filter(function(referenceId){
+          var rid = normalizeText(referenceId);
+          return !!(rid && libMap[rid.toLowerCase()]);
+        }),
+        updatedAt: bucket.updatedAt
+      };
+    });
+    return scoped;
   }
 
   function linkWorkspaceDocs(state, sanitize){
@@ -181,6 +357,7 @@
           id: ws.id,
           name: ws.name,
           docId: ws.docId,
+          collections: clone(ws.collections || []),
           lib: (ws.lib || []).map(function(ref){
             var clean = clone(ref);
             delete clean.pdfData;
@@ -199,7 +376,8 @@
       }),
       curDoc: state.curDoc,
       showPageNumbers: !!state.showPageNumbers,
-      customLabels: clone(state.customLabels || [])
+      customLabels: clone(state.customLabels || []),
+      literatureMatrix: scopeLiteratureMatrixToWorkspaces(state)
     };
   }
 
@@ -213,11 +391,13 @@
     }
     if(!state.curNb) state.curNb = state.notebooks[0].id;
     if(!Array.isArray(state.notes)) state.notes = [];
+    state.notes = normalizeNotes(state.notes, state.notebooks, state.curNb);
 
     linkWorkspaceDocs(state, sanitize);
 
     if(typeof state.showPageNumbers === 'undefined') state.showPageNumbers = false;
     if(!Array.isArray(state.customLabels)) state.customLabels = [];
+    state.literatureMatrix = scopeLiteratureMatrixToWorkspaces(state);
     state.schemaVersion = state.schemaVersion || 0;
     return state;
   }

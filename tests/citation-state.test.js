@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const citationState = require('../src/citation-state.js');
+const citationStyles = require('../src/citation-styles.js');
 
 function sortRefs(refs){
   return refs.slice().sort(function(a, b){
@@ -64,4 +65,19 @@ test('visibleCitationText mirrors inline text rules', function(){
     ], deps),
     '(Doe, 2024; Smith, 2022)'
   );
+});
+
+test('style adapter integration supports IEEE style output', function(){
+  const html = citationState.buildCitationHTML([
+    { id:'a', authors:['Doe, Jane'], year:'2024' },
+    { id:'b', authors:['Smith, John'], year:'2022' }
+  ], {
+    sortReferences: sortRefs,
+    dedupeReferences: dedupeRefs,
+    citationStyles,
+    styleId: 'ieee'
+  });
+
+  assert.match(html, /data-ref="a,b"/);
+  assert.match(html, /\[1\], \[2\]/);
 });

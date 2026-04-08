@@ -24,6 +24,7 @@ function main() {
     : 'npm';
   runStep('syntax', node, ['--check', 'main.js']);
   runStep('syntax', node, ['--check', 'preload.js']);
+  runStep('export quality', node, ['scripts/export-quality-gate.js']);
   if(process.platform === 'win32'){
     runStep('tests', 'cmd.exe', ['/d', '/s', '/c', `${npm} test -- --runInBand`]);
   }else{

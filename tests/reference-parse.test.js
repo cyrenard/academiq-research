@@ -59,3 +59,38 @@ test('parseRIS parses core fields and normalizes doi/year', () => {
   assert.equal(list[0].doi, '10.1234/abc.2020.001');
 });
 
+test('parseCSLJSON parses zotero-like csl json and preserves metadata', () => {
+  const text = JSON.stringify([
+    {
+      id: 'item-1',
+      type: 'article-journal',
+      title: 'CSL Paper',
+      author: [
+        { family: 'Doe', given: 'Jane' },
+        { family: 'Smith', given: 'John' }
+      ],
+      issued: { 'date-parts': [[2024, 5, 12]] },
+      'container-title': 'Journal of CSL',
+      volume: '10',
+      issue: '2',
+      page: '20-29',
+      DOI: 'https://doi.org/10.5000/CSL.1',
+      URL: 'https://example.org/csl',
+      abstract: 'Abstract text',
+      note: 'Note text',
+      tags: [{ tag: 'method' }, { tag: 'review' }],
+      attachments: [{ title: 'PDF', path: '/tmp/paper.pdf' }]
+    }
+  ]);
+  const list = parser.parseCSLJSON(text, { createId: () => 'ref3', workspaceId: 'ws3' });
+  assert.equal(list.length, 1);
+  assert.equal(list[0].id, 'ref3');
+  assert.equal(list[0].wsId, 'ws3');
+  assert.deepEqual(list[0].authors, ['Doe, Jane', 'Smith, John']);
+  assert.equal(list[0].year, '2024');
+  assert.equal(list[0].journal, 'Journal of CSL');
+  assert.equal(list[0].doi, '10.5000/csl.1');
+  assert.deepEqual(list[0].labels, ['method', 'review']);
+  assert.equal(list[0].abstract, 'Abstract text');
+  assert.equal(list[0].pdfPath, '/tmp/paper.pdf');
+});

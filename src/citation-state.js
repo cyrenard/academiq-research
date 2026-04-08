@@ -45,6 +45,11 @@
   }
 
   function getInlineCitationText(ref, deps){
+    var styleApi = deps && deps.citationStyles;
+    var styleId = deps && deps.styleId;
+    if(styleApi && typeof styleApi.formatInlineCitation === 'function'){
+      return styleApi.formatInlineCitation(ref, { style: styleId || 'apa7' });
+    }
     var authorLabel = buildAuthorLabel(ref || {}, deps || {});
     var year = ref && ref.year ? ref.year : 't.y.';
     return '(' + authorLabel + ', ' + year + ')';
@@ -63,15 +68,33 @@
   function buildCitationHTML(refs, deps){
     var normalized = normalizeRefs(refs, deps);
     if(!normalized.length) return '';
+    var styleApi = deps && deps.citationStyles;
+    var styleId = deps && deps.styleId;
+    var indexById = {};
+    normalized.forEach(function(ref, index){
+      if(ref && ref.id) indexById[ref.id] = index + 1;
+    });
     if(normalized.length === 1){
       return '<span class="cit" data-ref="' + normalized[0].id + '" contenteditable="false">'
-        + getInlineCitationText(normalized[0], deps)
+        + getInlineCitationText(normalized[0], Object.assign({}, deps, { indexById: indexById }))
         + '</span> ';
     }
-    var parts = normalized.map(function(ref){
+    var parts = normalized.map(function(ref, index){
+      if(styleApi && typeof styleApi.formatInlineCitation === 'function'){
+        return String(styleApi.formatInlineCitation(ref, {
+          style: styleId || 'apa7',
+          indexById: indexById,
+          index: index + 1
+        }) || '').replace(/^\(|\)$/g, '');
+      }
       return buildAuthorLabel(ref, deps) + ', ' + (ref && ref.year ? ref.year : 't.y.');
     });
     var ids = normalized.map(function(ref){ return ref.id; }).join(',');
+    if(styleApi && typeof styleApi.normalizeStyleId === 'function' && styleApi.normalizeStyleId(styleId) === 'ieee'){
+      return '<span class="cit" data-ref="' + ids + '" contenteditable="false">'
+        + parts.map(function(part){ return '[' + String(part).replace(/^\[|\]$/g, '') + ']'; }).join(', ')
+        + '</span> ';
+    }
     return '<span class="cit" data-ref="' + ids + '" contenteditable="false">('
       + parts.join('; ')
       + ')</span> ';
@@ -80,6 +103,18 @@
   function visibleCitationText(refs, deps){
     var normalized = normalizeRefs(refs, deps);
     if(!normalized.length) return '';
+    var styleApi = deps && deps.citationStyles;
+    var styleId = deps && deps.styleId;
+    if(styleApi && typeof styleApi.visibleCitationText === 'function'){
+      var indexById = {};
+      normalized.forEach(function(ref, index){
+        if(ref && ref.id) indexById[ref.id] = index + 1;
+      });
+      return styleApi.visibleCitationText(normalized, {
+        style: styleId || 'apa7',
+        indexById: indexById
+      });
+    }
     if(normalized.length === 1) return getInlineCitationText(normalized[0], deps);
     return '(' + normalized.map(function(ref){
       return buildAuthorLabel(ref, deps) + ', ' + (ref && ref.year ? ref.year : 't.y.');

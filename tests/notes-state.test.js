@@ -23,7 +23,12 @@ test('createManualNote normalizes tag and trims text', function(){
     src: 'Doe (2024)',
     rid: 'r1',
     tag: 'genel',
-    dt: '27.03.2026'
+    dt: '27.03.2026',
+    noteType: 'summary',
+    sourceExcerpt: '',
+    comment: 'deneme notu',
+    sourcePage: '',
+    inserted: false
   });
 });
 
@@ -62,6 +67,24 @@ test('renderNotesHTML escapes note content and renders actions', function(){
   assert.match(html, /&lt;Kaynak&gt;/);
   assert.match(html, /&lt;b&gt;not&lt;\/b&gt;/);
   assert.match(html, /&lt;script&gt;x&lt;\/script&gt;/);
-  assert.match(html, /cpCite\('n&#39;1'\)/);
+  assert.match(html, /data-note-action="copy-cite"/);
+  assert.match(html, /data-note-action="insert-cite"/);
+  assert.match(html, /data-note-action="open-source"/);
+  assert.match(html, /data-note-action="delete-note"/);
+  assert.match(html, /data-note-id="n&#39;1"/);
   assert.match(html, /border-left-color:#abc/);
+  assert.match(html, /Kayna&#287;a Git/);
+  assert.match(html, /Kullanılmadı/);
+});
+
+test('renderNotesHTML does not render source button for non-highlight notes', function(){
+  const html = notesState.renderNotesHTML([{
+    id: 'n2',
+    type: 'm',
+    src: 'Kaynak',
+    txt: 'manuel not',
+    rid: 'r2'
+  }], {});
+
+  assert.doesNotMatch(html, /Kayna&#287;a Git/);
 });

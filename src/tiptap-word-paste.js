@@ -37,10 +37,13 @@
       });
     });
     div.querySelectorAll('p').forEach(function(p){
-      if(!p.classList.contains('ni') && !p.classList.contains('refe')){
-        p.style.textIndent = '.5in';
-        p.style.margin = '0';
-      }
+      p.style.margin = '0';
+      // Remove any inline text-indent — indentation is now driven by data-indent-mode + CSS class
+      p.style.removeProperty('text-indent');
+      var isNoIndent = p.classList.contains('ni') || p.classList.contains('refe') ||
+                       p.classList.contains('indent-none') ||
+                       p.getAttribute('data-indent-mode') === 'none';
+      p.setAttribute('data-indent-mode', isNoIndent ? 'none' : 'first-line');
     });
     return div.innerHTML;
   }
@@ -59,7 +62,7 @@
       .map(function(paragraph){
         var trimmed = paragraph.replace(/\n/g, ' ').trim();
         if(!trimmed) return '';
-        return '<p>' + escapeHTML(trimmed) + '</p>';
+        return '<p data-indent-mode="first-line">' + escapeHTML(trimmed) + '</p>';
       })
       .filter(Boolean)
       .join('');

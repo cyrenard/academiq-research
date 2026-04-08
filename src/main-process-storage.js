@@ -1,4 +1,4 @@
-const path = require('path');
+﻿const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 
@@ -9,7 +9,7 @@ function createStorageService(options) {
   const appDir = options.appDir;
   const settingsFile = path.join(appDir, 'settings.json');
   const localPdfDir = path.join(appDir, 'pdfs');
-  let settings = { syncDir: '', theme: '' };
+  let settings = { syncDir: '', theme: '', browserCapture: {} };
 
   ensureDir(appDir);
   ensureDir(localPdfDir);
@@ -54,8 +54,6 @@ function createStorageService(options) {
     const buf = Buffer.from(buffer || []);
     if (!buf.length) throw new Error('PDF verisi boş');
     if (buf.length > MAX_PDF_BYTES) throw new Error('PDF boyutu sınırı aşıldı');
-    const header = buf.slice(0, 1024).toString('ascii');
-    if (header.indexOf('%PDF-') < 0) throw new Error('Geçersiz PDF içeriği');
     return buf;
   }
 
@@ -77,6 +75,8 @@ function createStorageService(options) {
     } catch (e) {
       console.warn('Settings load error:', e);
     }
+    if (!settings || typeof settings !== 'object') settings = { syncDir: '', theme: '', browserCapture: {} };
+    if (!settings.browserCapture || typeof settings.browserCapture !== 'object') settings.browserCapture = {};
     return settings;
   }
 
@@ -85,7 +85,7 @@ function createStorageService(options) {
   }
 
   function getSettingsSnapshot() {
-    return Object.assign({}, settings);
+    return JSON.parse(JSON.stringify(settings || {}));
   }
 
   function getSyncDataPath() {
@@ -150,22 +150,36 @@ function createStorageService(options) {
     normalizeRefId(refId);
     const localPaths = resolvePdfPaths(localPdfDir, refId);
     if (fs.existsSync(localPaths.safe)) {
-      const buf = fs.readFileSync(localPaths.safe);
-      return { ok: true, buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
+      try {
+        const buf = ensurePDFBuffer(fs.readFileSync(localPaths.safe));
+        return { ok: true, buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
+      } catch (_e) {
+        try { fs.unlinkSync(localPaths.safe); } catch (_err) {}
+        return { ok: false, error: 'invalid pdf cache' };
+      }
     }
     // Legacy filename migration (old builds used refId + '.pdf' directly)
     if (fs.existsSync(localPaths.legacy)) {
-      const buf = fs.readFileSync(localPaths.legacy);
-      try { fs.writeFileSync(localPaths.safe, buf); } catch (e) {}
-      return { ok: true, buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
+      try {
+        const buf = ensurePDFBuffer(fs.readFileSync(localPaths.legacy));
+        try { fs.writeFileSync(localPaths.safe, buf); } catch (e) {}
+        return { ok: true, buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
+      } catch (_e) {
+        try { fs.unlinkSync(localPaths.legacy); } catch (_err) {}
+        return { ok: false, error: 'invalid pdf cache' };
+      }
     }
     if (settings.syncDir) {
       const syncPaths = resolvePdfPaths(getSyncPDFDir(), refId);
       const syncFp = fs.existsSync(syncPaths.safe) ? syncPaths.safe : (fs.existsSync(syncPaths.legacy) ? syncPaths.legacy : null);
       if (syncFp) {
-        const buf = fs.readFileSync(syncFp);
-        try { fs.writeFileSync(localPaths.safe, buf); } catch (e) {}
-        return { ok: true, buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
+        try {
+          const buf = ensurePDFBuffer(fs.readFileSync(syncFp));
+          try { fs.writeFileSync(localPaths.safe, buf); } catch (e) {}
+          return { ok: true, buffer: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
+        } catch (_e) {
+          return { ok: false, error: 'invalid pdf cache' };
+        }
       }
     }
     return { ok: false, error: 'not found' };
@@ -265,6 +279,17 @@ function createStorageService(options) {
     return { ok: true };
   }
 
+  function getBrowserCaptureSettings() {
+    return Object.assign({}, settings.browserCapture || {});
+  }
+
+  function setBrowserCaptureSettings(patch) {
+    const source = patch && typeof patch === 'object' ? patch : {};
+    settings.browserCapture = Object.assign({}, settings.browserCapture || {}, source);
+    saveSettings();
+    return { ok: true, browserCapture: getBrowserCaptureSettings() };
+  }
+
   function getAppInfo(version) {
     return {
       version,
@@ -294,6 +319,8 @@ function createStorageService(options) {
     setSyncDir,
     clearSyncDir,
     setUpdateUrl,
+    getBrowserCaptureSettings,
+    setBrowserCaptureSettings,
     getAppInfo
   };
 }

@@ -44,7 +44,7 @@
   }
 
   function formatReference(ref){
-    return call('apa7', [ref], '');
+    return call('formatRef', [ref], call('apa7', [ref], ''));
   }
 
   function getUsedReferences(){

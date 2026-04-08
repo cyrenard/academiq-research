@@ -53,3 +53,16 @@ test('storage service saves and loads pdf buffers', () => {
   assert.ok(Buffer.from(loaded.buffer).length > 20);
   assert.equal(storage.pdfExists('ref1'), true);
 });
+
+test('storage service rejects zero-byte cached pdf files on load', () => {
+  const appDir = makeTempDir();
+  const storage = createStorageService({ appDir });
+  const pdfDir = path.join(appDir, 'pdfs');
+  fs.mkdirSync(pdfDir, { recursive: true });
+  fs.writeFileSync(path.join(pdfDir, 'ref-empty.pdf'), Buffer.alloc(0));
+
+  const loaded = storage.loadPDF('ref-empty');
+
+  assert.equal(loaded.ok, false);
+  assert.equal(loaded.error, 'invalid pdf cache');
+});

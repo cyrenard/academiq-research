@@ -26,7 +26,9 @@ var defaultLabels=[
   {name:'Tezde Kullan',color:'#e91e63'}
 ];
 var activeLabelFilter=null;
+var activeCollectionFilter='all';
 var labelFilterPanelOpen=false;
+var noteViewFilters={type:'all',usage:'all',tag:'',refId:'all'};
 
 var pdfDoc=null,pdfPg=1,pdfTotal=0,pdfScale=0,curRef=null; // 0=auto
 var pdfTabs=[],activeTabId=null; // {id,title,refId,pdfData,scrollPos,hlData,annots}
@@ -42,9 +44,21 @@ var oaBatchBusy=false;
 var addDoiBusy=false;
 var workspaceMutationBusy=false;
 var switchWsBusy=false;
+var relatedPanelCollapsed=false;
+var webRelatedRuntime={
+  token:0,
+  activeSeedKey:'',
+  loadingSeedKey:'',
+  items:[],
+  error:'',
+  statusText:'',
+  resultMap:{},
+  cache:null
+};
 var pdfRenderTokenId=0;
 var currentPdfRenderToken=null;
 var pdfFetchToken=0;
+var duplicateReviewState={groups:[],dismissedByWs:{}};
 
 
 // ¦¦ SYNC ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
@@ -335,7 +349,53 @@ function normalizeRefRecord(ref){
   }else{
     ref.authors=[];
   }
+  if(!Array.isArray(ref.collectionIds))ref.collectionIds=[];
+  ref.collectionIds=ref.collectionIds.map(function(id){return String(id||'').trim();}).filter(Boolean);
+  if(ref.pdfVerification&&window.AQPDFVerification&&typeof window.AQPDFVerification.normalizeStoredVerification==='function'){
+    try{ref.pdfVerification=window.AQPDFVerification.normalizeStoredVerification(ref.pdfVerification);}catch(_e){}
+  }
+  sanitizeRefPdfData(ref);
   return ref;
+}
+function normalizePdfVerification(value){
+  if(window.AQPDFVerification&&typeof window.AQPDFVerification.normalizeStoredVerification==='function'){
+    try{return window.AQPDFVerification.normalizeStoredVerification(value||null);}catch(_e){}
+  }
+  return value&&typeof value==='object'?value:null;
+}
+function setRefPdfVerification(ref,verification,url){
+  if(!ref||!verification)return;
+  ref.pdfVerification=normalizePdfVerification(verification);
+  if(ref.pdfVerification&&url&&!ref.pdfVerification.finalUrl)ref.pdfVerification.finalUrl=String(url||'');
+}
+function propagatePdfVerification(ref,verification,url){
+  if(!ref||!verification)return;
+  setRefPdfVerification(ref,verification,url);
+  S.wss.forEach(function(ws){
+    (ws.lib||[]).forEach(function(cand){
+      if(!cand||cand.id===ref.id)return;
+      normalizeRefRecord(cand);
+      if(!refsLikelySame(cand,ref))return;
+      setRefPdfVerification(cand,verification,url);
+    });
+  });
+}
+function pdfVerificationBadgeMeta(ref){
+  var verification=normalizePdfVerification(ref&&ref.pdfVerification||null);
+  if(window.AQPDFVerification&&typeof window.AQPDFVerification.getBadgeMeta==='function'&&verification){
+    try{return window.AQPDFVerification.getBadgeMeta(verification);}catch(_e){}
+  }
+  return null;
+}
+function pdfVerificationBadgeHTML(ref){
+  var meta=pdfVerificationBadgeMeta(ref);
+  if(!meta)return '';
+  return '<span class="lbadge '+__escHtml(meta.className||'')+'" title="'+__escHtml(meta.title||'')+'">'+__escHtml(meta.label||'PDF')+'</span>';
+}
+function pdfVerificationSummaryText(ref){
+  var verification=normalizePdfVerification(ref&&ref.pdfVerification||null);
+  if(!verification)return '';
+  return String(verification.summary||'').trim();
 }
 function refKey(ref){
   if(!ref)return'';
@@ -401,13 +461,47 @@ function persistBorrowedPDF(ref){
   if(!ref||!ref.id||!ref.pdfData||typeof window.electronAPI==='undefined')return;
   try{window.electronAPI.savePDF(ref.id,ref.pdfData).catch(function(){});}catch(e){}
 }
+function getPdfBufferByteLength(buffer){
+  try{
+    if(!buffer)return 0;
+    if(typeof buffer.byteLength==='number')return Number(buffer.byteLength)||0;
+    if(typeof buffer.length==='number')return Number(buffer.length)||0;
+    if(buffer.buffer&&typeof buffer.buffer.byteLength==='number'&&typeof buffer.byteOffset==='number'&&typeof buffer.byteLength==='number'){
+      return Number(buffer.byteLength)||0;
+    }
+  }catch(_e){}
+  return 0;
+}
+function isUsablePdfData(buffer){
+  try{
+    var len=getPdfBufferByteLength(buffer);
+    if(len<=32)return false;
+    var view=null;
+    if(buffer instanceof ArrayBuffer)view=new Uint8Array(buffer,0,Math.min(len,8));
+    else if(typeof Uint8Array!=='undefined'&&buffer instanceof Uint8Array)view=buffer.subarray(0,Math.min(buffer.byteLength||buffer.length||0,8));
+    else if(buffer&&buffer.buffer instanceof ArrayBuffer&&typeof buffer.byteOffset==='number'&&typeof buffer.byteLength==='number'){
+      view=new Uint8Array(buffer.buffer,buffer.byteOffset,Math.min(buffer.byteLength,8));
+    }
+    if(!view||!view.length)return len>32;
+    var head='';
+    for(var i=0;i<view.length;i++)head+=String.fromCharCode(view[i]);
+    if(head.indexOf('%PDF-')===0)return true;
+    return len>1024;
+  }catch(_e){}
+  return false;
+}
+function sanitizeRefPdfData(ref){
+  if(!ref||typeof ref!=='object')return false;
+  if(!ref.pdfData)return false;
+  return isUsablePdfData(ref.pdfData);
+}
 async function hydrateRefPDF(ref){
   if(!ref)return false;
-  if(ref.pdfData)return true;
+  if(sanitizeRefPdfData(ref))return true;
   if(typeof window.electronAPI==='undefined')return false;
   try{
     var direct=await window.electronAPI.loadPDF(ref.id);
-    if(direct&&direct.ok&&direct.buffer){
+    if(direct&&direct.ok&&isUsablePdfData(direct.buffer)){
       ref.pdfData=direct.buffer;
       persistBorrowedPDF(ref);
       return true;
@@ -418,7 +512,7 @@ async function hydrateRefPDF(ref){
     for(var ri=0;ri<lib.length;ri++){
       var cand=lib[ri];
       if(!cand||cand.id===ref.id||!refsLikelySame(cand,ref))continue;
-      if(cand.pdfData){
+      if(sanitizeRefPdfData(cand)){
         ref.pdfData=cand.pdfData;
         if(cand.pdfUrl&&!ref.pdfUrl)ref.pdfUrl=cand.pdfUrl;
         if(cand.url&&!ref.url)ref.url=cand.url;
@@ -427,7 +521,7 @@ async function hydrateRefPDF(ref){
       }
       try{
         var res=await window.electronAPI.loadPDF(cand.id);
-        if(res&&res.ok&&res.buffer){
+        if(res&&res.ok&&isUsablePdfData(res.buffer)){
           cand.pdfData=res.buffer;
           ref.pdfData=res.buffer;
           if(cand.pdfUrl&&!ref.pdfUrl)ref.pdfUrl=cand.pdfUrl;
@@ -459,6 +553,7 @@ function normalizeLoadedState(){
       if(typeof ref.doi!=='string')ref.doi=ref.doi?String(ref.doi):'';
       if(typeof ref.url!=='string')ref.url=ref.url?String(ref.url):'';
       if(typeof ref.pdfUrl!=='string')ref.pdfUrl=ref.pdfUrl?String(ref.pdfUrl):'';
+      sanitizeRefPdfData(ref);
       return ref;
     }).filter(function(ref){
       var key=refKey(ref)||('id:'+ref.id);
@@ -478,7 +573,7 @@ function normalizeLoadedState(){
     (ws.lib||[]).forEach(function(ref){
       var eq=findEquivalentRef(ref);
       if(eq){
-        if(!ref.pdfData&&eq.pdfData)ref.pdfData=eq.pdfData;
+        if(!ref.pdfData&&sanitizeRefPdfData(eq))ref.pdfData=eq.pdfData;
         if(!ref.pdfUrl&&eq.pdfUrl)ref.pdfUrl=eq.pdfUrl;
         if(!ref.url&&eq.url)ref.url=eq.url;
         if(ref.pdfData)persistBorrowedPDF(ref);
@@ -523,7 +618,136 @@ function filterRefsForQuery(refs,q){
     return tokens.every(function(token){return hay.indexOf(token)>=0;});
   }));
 }
-function curNotes(){return S.notes.filter(function(n){return n.nbId===S.curNb;});}
+function defaultNoteType(note){
+  if(!note||typeof note!=='object')return 'summary';
+  if(note.noteType&&typeof note.noteType==='string'&&note.noteType.trim())return note.noteType;
+  return note.type==='hl'?'direct_quote':'summary';
+}
+function normalizeResearchNote(note){
+  if(!note||typeof note!=='object')return note;
+  note.noteType=String(defaultNoteType(note)||'summary').trim()||'summary';
+  if(typeof note.sourceExcerpt!=='string'){
+    note.sourceExcerpt=note.q?String(note.q):'';
+  }
+  if(typeof note.comment!=='string'){
+    note.comment=note.txt?String(note.txt):'';
+  }
+  if(typeof note.sourcePage!=='string'){
+    note.sourcePage=String(note.tag||'').trim();
+  }
+  note.inserted=!!note.inserted;
+  return note;
+}
+function noteMatchesFilters(note){
+  if(!note)return false;
+  var typeFilter=String(noteViewFilters.type||'all');
+  if(typeFilter!=='all'&&String(note.noteType||defaultNoteType(note))!==typeFilter)return false;
+  var usageFilter=String(noteViewFilters.usage||'all');
+  if(usageFilter==='used'&&!note.inserted)return false;
+  if(usageFilter==='unused'&&note.inserted)return false;
+  var tagFilter=String(noteViewFilters.tag||'').trim().toLowerCase();
+  if(tagFilter){
+    var hay=(String(note.tag||'')+' '+String(note.noteType||'')+' '+String(note.txt||'')+' '+String(note.q||'')).toLowerCase();
+    if(hay.indexOf(tagFilter)<0)return false;
+  }
+  var refFilter=String(noteViewFilters.refId||'all');
+  if(refFilter!=='all'&&String(note.rid||'')!==refFilter)return false;
+  return true;
+}
+function curNotes(options){
+  options=options||{};
+  var applyFilters=options.applyFilters!==false;
+  var notebookIds={};
+  (S.notebooks||[]).forEach(function(nb){
+    if(nb&&nb.id)notebookIds[nb.id]=true;
+  });
+  var fallbackNotebookId=S.curNb||((S.notebooks&&S.notebooks[0]&&S.notebooks[0].id)?S.notebooks[0].id:'');
+  var repaired=false;
+  var result=(S.notes||[]).filter(function(n){
+    if(!n||typeof n!=='object')return false;
+    var noteNbId=n.nbId||n.notebookId||n.nb||'';
+    if(!noteNbId||!notebookIds[noteNbId]){
+      if(fallbackNotebookId){
+        n.nbId=fallbackNotebookId;
+        repaired=true;
+      }else{
+        return false;
+      }
+    }
+    if(n.nbId!==S.curNb)return false;
+    normalizeResearchNote(n);
+    return applyFilters?noteMatchesFilters(n):true;
+  });
+  if(repaired&&typeof save==='function'){
+    try{save();}catch(_e){}
+  }
+  return result;
+}
+
+function rThemes(){
+  return;
+  if(!groups.length){
+    groupsEl.innerHTML='<div style="color:var(--txt3);font-size:11px;padding:4px;">Tema olusturmak icin notlara etiket ekleyin.</div>';
+    detailEl.innerHTML='<div style="color:var(--txt3);font-size:11px;padding:6px;line-height:1.5;">Notlarinizi etiketleyin (ornek: metodoloji, teori, bulgu). Tema gorunumu notlari otomatik gruplar.</div>';
+    return;
+  }
+  var selectedId=getSelectedThemeId();
+  if(!selectedId||!notesThemeSnapshot.groupsById[selectedId]){
+    selectedId=groups[0].id;
+    setSelectedThemeId(selectedId);
+  }
+  groupsEl.innerHTML=groups.map(function(group){
+    var on=(group.id===selectedId)?' on':'';
+    return '<button class="thchip'+on+'" data-theme-id="'+escTheme(group.id)+'">'
+      +'<span>'+escTheme(group.label)+'</span>'
+      +'<span class="thcount">'+group.count+'</span>'
+      +'</button>';
+  }).join('');
+
+  var selected=notesThemeSnapshot.groupsById[selectedId];
+  if(!selected){
+    detailEl.innerHTML='';
+    return;
+  }
+  var sourcePreview=selected.sources.slice(0,3).join(', ');
+  var meta=''+selected.count+' not';
+  if(selected.sources.length)meta+=' · '+selected.sources.length+' kaynak';
+  if(sourcePreview)meta+='<br>'+escTheme(sourcePreview)+(selected.sources.length>3?' ...':'');
+
+  var notesHTML=selected.notes.map(function(note,index){
+    var key='note-'+index+'-'+(note.id||'na');
+    notesThemeSnapshot.noteByKey[key]=note;
+    var body=String(note.noteText||'').trim();
+    var quote=String(note.quoteText||'').trim();
+    var location=String(note.location||'').trim();
+    var sourceLine=escTheme(note.source||'Kaynak belirtilmemis')+(location?' · '+escTheme(location):'');
+    var hasSource=!!note.sourceId;
+    var copyText=body||quote;
+    return '<div class="thnote">'
+      +'<div class="thsrc">'+sourceLine+'</div>'
+      +(body?'<div class="thtxt">'+escTheme(body)+'</div>':'')
+      +(quote?'<div class="thquote">'+escTheme(quote)+'</div>':'')
+      +'<div class="ncacts">'
+      +'<button class="ncb" data-note-action="copy-note" data-note-key="'+escTheme(key)+'"'+(copyText?'':' disabled')+'>Kopyala</button>'
+      +'<button class="ncb" data-note-action="insert-note" data-note-key="'+escTheme(key)+'">Belgeye Ekle</button>'
+      +'<button class="ncb" data-note-action="open-source" data-note-key="'+escTheme(key)+'"'+(hasSource?'':' disabled')+'>Kaynaga Git</button>'
+      +'</div>'
+      +'</div>';
+  }).join('');
+
+  detailEl.innerHTML=''
+    +'<div class="thhead">'
+      +'<div>'
+        +'<div class="thtitle">'+escTheme(selected.label)+'</div>'
+        +'<div class="thmeta">'+meta+'</div>'
+      +'</div>'
+      +'<div class="thacts">'
+        +'<button class="ncb" data-theme-action="copy">Temayi Kopyala</button>'
+        +'<button class="ncb" data-theme-action="insert-outline">Ozet Iskeleti Ekle</button>'
+      +'</div>'
+    +'</div>'
+    +notesHTML;
+}
 
 // ¦¦ DOCUMENT TABS ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
 function rDocTabs(){
@@ -647,16 +871,22 @@ function fT(t){if(!t)return'';return t.toLowerCase().replace(/(^|\.\s+|:\s*)([a-
 function apa7(d){var c='';var a=fal(d.authors||[]);if(a)c+=a+' ';c+='('+(d.year||'t.y.')+('). ');c+=fT(d.title||'')+'. ';if(d.journal){c+=d.journal;if(d.volume){c+=', '+d.volume;if(d.issue)c+='('+d.issue+')';}if(d.fp){c+=', '+d.fp;if(d.lp)c+='\u2013'+d.lp;}c+='. ';}if(d.doi)c+='https://doi.org/'+d.doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i,'');else if(d.url)c+=d.url;return c.trim();}
 function inText(d,mode){var au=(d.authors||[]).map(fa).filter(Boolean);var ls=au.map(function(a){return a.split(',')[0].trim();});var ap=ls.length===0?'Bilinmeyen':ls.length===1?ls[0]:ls.length===2?ls[0]+' & '+ls[1]:ls[0]+' vd.';var yr=d.year||'t.y.';return mode==='footnote_explicit'?ap+', '+yr+'.':'('+ap+', '+yr+')';}
 function getInlineCitationText(ref){
+  var style=getCurrentCitationStyle();
+  if(window.AQCitationStyles&&typeof window.AQCitationStyles.formatInlineCitation==='function'){
+    return window.AQCitationStyles.formatInlineCitation(ref,{style:style});
+  }
   if(window.AQCitationState&&typeof window.AQCitationState.getInlineCitationText==='function'){
     return window.AQCitationState.getInlineCitationText(ref,{
       formatAuthor:fa,
       sortReferences:sortLib,
-      dedupeReferences:dedupeRefs
+      dedupeReferences:dedupeRefs,
+      citationStyles:window.AQCitationStyles||null,
+      styleId:style
     });
   }
   return inText(ref,'inline');
 }
-function shortRef(d){var a=d.authors&&d.authors[0]?d.authors[0].split(',')[0]:'?';if(d.authors&&d.authors.length>1)a+=' et al.';return a+' ('+(d.year||'t.y.')+')';}
+function shortRef(d){var a=d.authors&&d.authors[0]?d.authors[0].split(',')[0]:'?';if(d.authors&&d.authors.length>1)a+=' vd.';return a+' ('+(d.year||'t.y.')+')';}
 function apaSortKey(ref){
   ref=ref||{};
   var authors=(ref.authors||[]).map(function(a){return fa(String(a||''));}).filter(Boolean);
@@ -669,9 +899,75 @@ function apaSortKey(ref){
   return [surname.toLowerCase(),given.toLowerCase(),year,title,fullCitation].join('||');
 }
 function sortLib(refs){
-  return (refs||[]).slice().sort(function(a,b){
+  var list=(refs||[]).slice();
+  var styleApi=window.AQCitationStyles||null;
+  if(styleApi&&typeof styleApi.sortReferences==='function'){
+    return styleApi.sortReferences(list,{
+      style:getCurrentCitationStyle(),
+      locale:'tr',
+      preserveOrder:false
+    });
+  }
+  return list.sort(function(a,b){
     return apaSortKey(a).localeCompare(apaSortKey(b),'tr',{numeric:true,sensitivity:'base'});
   });
+}
+function getCurrentCitationStyle(){
+  var doc=getCurrentDocRecord?getCurrentDocRecord():null;
+  var raw=doc&&doc.citationStyle?doc.citationStyle:(S.citationStyle||'apa7');
+  if(window.AQCitationStyles&&typeof window.AQCitationStyles.normalizeStyleId==='function'){
+    return window.AQCitationStyles.normalizeStyleId(raw);
+  }
+  return String(raw||'apa7').trim().toLowerCase()||'apa7';
+}
+function setCitationStyle(styleId){
+  var doc=getCurrentDocRecord?getCurrentDocRecord():null;
+  if(!doc)return;
+  if(window.AQCitationStyles&&typeof window.AQCitationStyles.normalizeStyleId==='function'){
+    doc.citationStyle=window.AQCitationStyles.normalizeStyleId(styleId);
+  }else{
+    doc.citationStyle=String(styleId||'apa7').trim().toLowerCase()||'apa7';
+  }
+  save();
+  updateCitationStyleSelector();
+  // Re-sync inline citations + bibliography in one place to keep style switch deterministic.
+  runEditorMutationEffects({
+    target:editor&&editor.view?editor.view.dom:null,
+    normalize:true,
+    layout:false,
+    syncChrome:true,
+    syncRefs:true,
+    refreshTrigger:false
+  });
+  rRefs();
+  updateRefSection(true);
+}
+function updateCitationStyleSelector(){
+  var sel=document.getElementById('citationStyleSel');
+  if(!sel)return;
+  var next=getCurrentCitationStyle();
+  if(sel.value!==next)sel.value=next;
+}
+function formatRef(ref,options){
+  options=options||{};
+  var style=getCurrentCitationStyle();
+  var indexById=options.indexById||null;
+  var index=options.index||null;
+  if(style==='ieee'&&index==null&&ref&&ref.id){
+    try{
+      var used=sortLib(dedupeRefs(getUsedRefs()||[]));
+      var found=used.findIndex(function(item){return item&&item.id===ref.id;});
+      if(found>=0)index=found+1;
+    }catch(_e){}
+  }
+  if(window.AQCitationStyles&&typeof window.AQCitationStyles.formatReference==='function'){
+    return window.AQCitationStyles.formatReference(ref,{
+      style:style,
+      indexById:indexById,
+      index:index
+    });
+  }
+  return apa7(ref);
 }
 
 // ¦¦ WORKSPACES ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
@@ -1003,6 +1299,122 @@ async function batchFetchCitations(){
   }
 }
 function setDst(m,c){var e=document.getElementById('dst');e.textContent=m;e.className=c;}
+function classifyPdfDownloadFailureLocal(input){
+  var text=typeof input==='string'?input:((input&&typeof input.error==='string')?input.error:'');
+  var m=String(text||'').match(/\bHTTP\s+(\d{3})\b/i);
+  var status=m?parseInt(m[1],10):0;
+  var low=String(text||'').toLowerCase();
+  if(status===401||status===403){
+    return {
+      type:'protected_access',
+      statusCode:status,
+      isProtectedAccess:true,
+      userMessage:'PDF bağlantısı korumalı görünüyor. Referans kaydedildi; PDF için tarayıcıda açıp manuel erişim gerekebilir.'
+    };
+  }
+  if(status===404){
+    return {
+      type:'not_found',
+      statusCode:status,
+      isProtectedAccess:false,
+      userMessage:'PDF bağlantısı artık geçerli görünmüyor. Farklı bir PDF/OA kaynağı gerekebilir.'
+    };
+  }
+  if(status===429){
+    return {
+      type:'rate_limited',
+      statusCode:status,
+      isProtectedAccess:false,
+      userMessage:'PDF sunucusu istek sınırına takıldı. Biraz sonra yeniden deneyin.'
+    };
+  }
+  if(low.indexOf('timeout')>=0){
+    return {
+      type:'timeout',
+      statusCode:0,
+      isProtectedAccess:false,
+      userMessage:'PDF isteği zaman aşımına uğradı. Bağlantıyı tekrar deneyebilirsiniz.'
+    };
+  }
+  if(low.indexOf('doi mismatch')>=0||low.indexOf('title mismatch')>=0||low.indexOf('güven skoru düşük')>=0||low.indexOf('guven skoru dusuk')>=0){
+    return {
+      type:'verification_failed',
+      statusCode:0,
+      isProtectedAccess:false,
+      userMessage:'Bulunan dosya bu makaleyle güvenli biçimde eşleşmedi. Yanlış PDF indirilmedi.'
+    };
+  }
+  return {
+    type:'generic',
+    statusCode:status,
+    isProtectedAccess:false,
+    userMessage:'PDF indirilemedi. Bağlantı saklandı; isterseniz tarayıcıda açıp manuel yükleyebilirsiniz.'
+  };
+}
+function showPdfDownloadFallback(ref,failure){
+  clearPDFView();
+  var sc=document.getElementById('pdfscroll');
+  var doi=(ref&&ref.doi)||'';
+  var pdfUrl=(ref&&ref.pdfUrl)||'';
+  var title=(ref&&ref.title)||'';
+  var info=failure&&typeof failure==='object'?failure:classifyPdfDownloadFailureLocal(failure||'');
+  var box=document.createElement('div');
+  box.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:12px;text-align:center;width:100%;';
+  var icon=document.createElement('div');
+  icon.style.cssText='font-size:30px';
+  icon.textContent='PDF';
+  box.appendChild(icon);
+  if(title){
+    var titleEl=document.createElement('div');
+    titleEl.style.cssText='font-size:11px;color:var(--txt2);max-width:380px;line-height:1.5';
+    titleEl.textContent=String(title).substring(0,90);
+    box.appendChild(titleEl);
+  }
+  var msg=document.createElement('div');
+  msg.style.cssText='max-width:380px;font-size:11px;line-height:1.6;color:var(--txt2)';
+  msg.textContent=String((info&&info.userMessage)||'PDF indirilemedi.');
+  box.appendChild(msg);
+  if(info&&info.statusCode){
+    var statusEl=document.createElement('div');
+    statusEl.style.cssText='font-family:var(--fm);font-size:10px;color:var(--txt3)';
+    statusEl.textContent='HTTP '+info.statusCode;
+    box.appendChild(statusEl);
+  }
+  var controls=document.createElement('div');
+  controls.style.cssText='width:100%;max-width:320px;display:flex;flex-direction:column;gap:8px;margin-top:4px;';
+  if(pdfUrl){
+    var openLink=document.createElement('a');
+    openLink.href=pdfUrl;
+    openLink.target='_blank';
+    openLink.rel='noreferrer noopener';
+    openLink.style.cssText='background:rgba(255,255,255,.76);color:var(--txt2);border:1px solid rgba(186,169,143,.95);border-radius:10px;padding:10px 12px;font-size:12px;font-weight:600;text-decoration:none;display:block;';
+    openLink.textContent='PDF bağlantısını tarayıcıda aç';
+    controls.appendChild(openLink);
+  }
+  var uploadBtn=document.createElement('button');
+  uploadBtn.style.cssText='background:var(--acc);color:#0d1117;border:none;border-radius:10px;padding:10px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:var(--f);';
+  uploadBtn.textContent='PDF dosyasını manuel yükle';
+  uploadBtn.addEventListener('click',function(){
+    var input=document.getElementById('lfinp');
+    if(input&&typeof input.click==='function')input.click();
+  });
+  controls.appendChild(uploadBtn);
+  if(doi){
+    var doiLink=document.createElement('a');
+    doiLink.href='https://doi.org/'+doi;
+    doiLink.target='_blank';
+    doiLink.rel='noreferrer noopener';
+    doiLink.style.cssText='color:var(--txt3);font-size:11px;text-decoration:none;';
+    doiLink.textContent='Yayıncı sayfasını aç';
+    controls.appendChild(doiLink);
+  }
+  box.appendChild(controls);
+  var hint=document.createElement('div');
+  hint.style.cssText='font-size:10px;color:var(--txt3);line-height:1.7;max-width:360px;';
+  hint.textContent='Bu tür linkler bazen kurumsal erişim, oturum veya çerez gerektirir. Referans ve PDF bağlantısı korunur.';
+  box.appendChild(hint);
+  sc.appendChild(box);
+}
 function setBusyControl(id,busy,busyLabel){
   var el=document.getElementById(id);
   if(!el)return;
@@ -1046,6 +1458,7 @@ function mergeRefFields(target,source){
     target.labels=Array.from(new Set([].concat(target.labels||[],source.labels||[]).filter(Boolean)));
   }
   if(source.pdfData&&!target.pdfData)target.pdfData=source.pdfData;
+  if(source.pdfVerification&&!target.pdfVerification)target.pdfVerification=normalizePdfVerification(source.pdfVerification);
   if(source.citationCount!=null&&target.citationCount==null)target.citationCount=source.citationCount;
   if(source.citationFetchDate&&!target.citationFetchDate)target.citationFetchDate=source.citationFetchDate;
   normalizeRefRecord(target);
@@ -1108,11 +1521,12 @@ function downloadPDF(id,overrideUrl){
   sc.innerHTML='<div style="color:var(--acc);font-size:12px;padding:20px;text-align:center;width:100%;">'+
     'PDF indiriliyor...<br/><span style="font-size:10px;color:var(--txt3);display:block;margin-top:6px;">'+
     fetchUrl.substring(0,60)+'...</span></div>';
-  function propagatePDF(buffer){
+  function propagatePDF(buffer,verification){
     if(!r)return;
     normalizeRefRecord(r);
     r.pdfData=buffer;
     if(fetchUrl&&!r.pdfUrl)r.pdfUrl=fetchUrl;
+    if(verification)propagatePdfVerification(r,verification,fetchUrl);
     S.wss.forEach(function(ws){
       (ws.lib||[]).forEach(function(cand){
         if(!cand||cand.id===r.id)return;
@@ -1121,6 +1535,7 @@ function downloadPDF(id,overrideUrl){
         if(buffer&&!cand.pdfData)cand.pdfData=buffer;
         if(fetchUrl&&!cand.pdfUrl)cand.pdfUrl=fetchUrl;
         if(r.url&&!cand.url)cand.url=r.url;
+        if(verification)setRefPdfVerification(cand,verification,fetchUrl);
         if(cand.pdfData)persistBorrowedPDF(cand);
       });
     });
@@ -1135,16 +1550,35 @@ function downloadPDF(id,overrideUrl){
       dlOptions.requireDoiEvidence=true;
     }
     if(r&&r.title)dlOptions.expectedTitle=String(r.title||'');
+    if(r&&Array.isArray(r.authors)&&r.authors.length)dlOptions.expectedAuthors=r.authors.slice(0,4);
+    if(r&&r.year)dlOptions.expectedYear=String(r.year||'');
     window.electronAPI.downloadPDFfromURL(fetchUrl, r.id, dlOptions).then(function(res){
       if(res.ok){
         window.electronAPI.loadPDF(r.id).then(function(pr){
-          if(pr.ok){propagatePDF(pr.buffer);curRef=r;rLib();renderPDF(pr.buffer,activeTabId||null);setDst('? PDF indirildi (Electron)','ok');setTimeout(function(){setDst('','');},3000);}
+          if(pr.ok){
+            propagatePDF(pr.buffer,res.verification||null);
+            curRef=r;
+            rLib();
+            renderPDF(pr.buffer,activeTabId||null);
+            var trust=pdfVerificationSummaryText(r);
+            setDst(trust?('PDF indirildi · '+trust):'? PDF indirildi (Electron)','ok');
+            setTimeout(function(){setDst('','');},3600);
+          }
         });
       } else {
-        setDst('Electron indirme hatasi: '+res.error,'er');
-        showNoPDF(r);
+        var failure=(res&&res.failure)||classifyPdfDownloadFailureLocal(res||{error:(res&&res.error)||''});
+        if(fetchUrl&&!r.pdfUrl)r.pdfUrl=fetchUrl;
+        save();rLib();rRefs();
+        setDst((failure&&failure.userMessage)||('PDF indirilemedi: '+((res&&res.error)||'Bilinmeyen hata')),'er');
+        showPdfDownloadFallback(r,failure);
       }
-    }).catch(function(e){setDst('Electron hatasi','er');showNoPDF(r);});
+    }).catch(function(e){
+      var failure=classifyPdfDownloadFailureLocal((e&&e.message)?e.message:String(e));
+      if(fetchUrl&&!r.pdfUrl)r.pdfUrl=fetchUrl;
+      save();rLib();rRefs();
+      setDst((failure&&failure.userMessage)||'PDF indirilemedi.','er');
+      showPdfDownloadFallback(r,failure);
+    });
     return;
   }
   // Tarayici: fetch (CORS acik kaynaklar icin)
@@ -1188,19 +1622,20 @@ async function openRef(id){
   var r=findRef(id);if(!r)return;
   var eq=findEquivalentRef(r);
   if(eq){
-    if(!r.pdfData&&eq.pdfData)r.pdfData=eq.pdfData;
+    if(!r.pdfData&&sanitizeRefPdfData(eq))r.pdfData=eq.pdfData;
     if(!r.pdfUrl&&eq.pdfUrl)r.pdfUrl=eq.pdfUrl;
     if(!r.url&&eq.url)r.url=eq.url;
+    sanitizeRefPdfData(r);
     if(r.pdfData)persistBorrowedPDF(r);
   }
-  curRef=r;rLib();
+  curRef=r;rLib();renderRelatedPapers();
   document.getElementById('pdfpanel').classList.add('open');
   document.getElementById('pdftitle').textContent=(r.title||r.doi||'PDF').substring(0,55);
-  if(r.pdfData){addPdfTab(r.title||r.doi||'PDF',r.pdfData,r.id);return;}
+  if(sanitizeRefPdfData(r)){addPdfTab(r.title||r.doi||'PDF',r.pdfData,r.id);return;}
   if(typeof window.electronAPI!=='undefined'){
     try{
       var hydrated=await hydrateRefPDF(r);
-      if(hydrated&&r.pdfData){
+      if(hydrated&&sanitizeRefPdfData(r)){
         save();
         rLib();
         addPdfTab(r.title||r.doi||'PDF',r.pdfData,r.id);
@@ -1218,9 +1653,9 @@ function dRefIn(id,wsId){
   if(ws)ws.lib=ws.lib.filter(function(r){return r.id!==id;});
   if(eq&&curRef&&curRef.id===id)curRef=eq;
   else if(curRef&&curRef.id===id)curRef=null;
-  save();rLib();rRefs();
+  save();rLib();rRefs();renderRelatedPapers();
 }
-function showLabelMenu(x,y,ref){
+function showLabelMenuLegacy(x,y,ref){
   var menu=document.getElementById('ctxmenu');
   menu.innerHTML='';
   var editBtn=document.createElement('button');editBtn.className='ctxi';editBtn.textContent='Künyeyi Düzenle';
@@ -1269,6 +1704,40 @@ function showLabelMenu(x,y,ref){
     });
   };
   menu.appendChild(newBtn);
+  // Collections section
+  var csep=document.createElement('div');csep.className='ctx-sep';menu.appendChild(csep);
+  var ctitle=document.createElement('div');ctitle.className='ctx-label-title';ctitle.textContent='Koleksiyonlar';
+  menu.appendChild(ctitle);
+  var ws=currentWorkspaceForCollections();
+  var collections=ensureWorkspaceCollections(ws);
+  if(!Array.isArray(ref.collectionIds))ref.collectionIds=[];
+  if(!collections.length){
+    var empty=document.createElement('div');
+    empty.className='ctxi';
+    empty.style.opacity='.72';
+    empty.textContent='Koleksiyon yok';
+    menu.appendChild(empty);
+  }else{
+    collections.forEach(function(col){
+      var has=(ref.collectionIds||[]).some(function(id){return String(id)===String(col.id);});
+      var btn=document.createElement('button');btn.className='ctxi';
+      var check=document.createElement('span');
+      check.className='ctx-label-check'+(has?'':' off');
+      check.textContent='✓';
+      btn.appendChild(check);
+      var txt=document.createElement('span');
+      txt.textContent=String(col.name||'');
+      btn.appendChild(txt);
+      btn.onclick=function(){
+        toggleReferenceCollection(ref,col.id);
+        hideCtx();
+      };
+      menu.appendChild(btn);
+    });
+  }
+  var manage=document.createElement('button');manage.className='ctxi ctxi-new-label';manage.textContent='Koleksiyonları Yönet';
+  manage.onclick=function(){hideCtx();openCollectionManager();};
+  menu.appendChild(manage);
   // Separator + workspace move options
   if(S.wss.length>1){
     var sep=document.createElement('div');sep.className='ctx-sep';menu.appendChild(sep);
@@ -1337,8 +1806,189 @@ function showMoveMenu(x,y,ref,fromWsId){
   menu.style.left=Math.min(x,window.innerWidth-180)+'px';
   menu.classList.add('show');
 }
-function hideCtx(){document.getElementById('ctxmenu').classList.remove('show');}
-document.addEventListener('click',function(e){if(!e.target.closest('#ctxmenu'))hideCtx();});
+function closeCtxLabelPanel(){
+  var panel=document.getElementById('ctxlabelpanel');
+  if(!panel)return;
+  panel.classList.remove('show');
+  panel.innerHTML='';
+}
+function openLabelPickerPanel(anchorBtn,ref){
+  if(!anchorBtn||!ref)return;
+  var panel=document.getElementById('ctxlabelpanel');
+  if(!panel){
+    panel=document.createElement('div');
+    panel.id='ctxlabelpanel';
+    document.body.appendChild(panel);
+  }
+  panel.innerHTML='';
+  var title=document.createElement('div');
+  title.className='ctx-label-title';
+  title.textContent='Etiket Seç';
+  panel.appendChild(title);
+  var allLabels=defaultLabels.concat(S.customLabels||[]);
+  if(!Array.isArray(ref.labels))ref.labels=[];
+  allLabels.forEach(function(l){
+    var hasLabel=ref.labels.some(function(rl){return rl&&rl.name===l.name;});
+    var btn=document.createElement('button');
+    btn.className='ctxi';
+    var check=document.createElement('span');
+    check.className='ctx-label-check'+(hasLabel?'':' off');
+    check.textContent='✓';
+    btn.appendChild(check);
+    var dot=document.createElement('span');
+    dot.className='ctx-label-dot';
+    dot.style.background=String(l.color||'#9aa');
+    btn.appendChild(dot);
+    var txt=document.createElement('span');
+    txt.textContent=String(l.name||'');
+    btn.appendChild(txt);
+    btn.onclick=function(){
+      if(hasLabel)ref.labels=ref.labels.filter(function(rl){return rl&&rl.name!==l.name;});
+      else ref.labels.push({name:l.name,color:l.color});
+      save();
+      rLib();
+      hideCtx();
+    };
+    panel.appendChild(btn);
+  });
+  var customLabels=(S.customLabels||[]).filter(function(label){return label&&label.name;});
+  if(customLabels.length){
+    var delSep=document.createElement('div');
+    delSep.className='ctx-sep';
+    panel.appendChild(delSep);
+    var delTitle=document.createElement('div');
+    delTitle.className='ctx-label-title';
+    delTitle.textContent='Etiket Sil';
+    panel.appendChild(delTitle);
+    customLabels.forEach(function(label){
+      var delBtn=document.createElement('button');
+      delBtn.className='ctxi ctxi-delete-label';
+      var delDot=document.createElement('span');
+      delDot.className='ctx-label-dot';
+      delDot.style.background=String(label.color||'#9aa');
+      delBtn.appendChild(delDot);
+      var delTxt=document.createElement('span');
+      delTxt.textContent=String(label.name||'');
+      delBtn.appendChild(delTxt);
+      var delX=document.createElement('span');
+      delX.className='ctx-label-delete-x';
+      delX.textContent='x';
+      delBtn.appendChild(delX);
+      delBtn.onclick=function(){
+        if(!confirm('Bu ozel etiketi silmek istiyor musun?'))return;
+        deleteCustomLabel(label.name);
+        if(Array.isArray(ref.labels)){
+          ref.labels=ref.labels.filter(function(rl){return rl&&rl.name!==label.name;});
+        }
+        save();
+        rLib();
+        openLabelPickerPanel(anchorBtn,ref);
+      };
+      panel.appendChild(delBtn);
+    });
+  }
+  var sep=document.createElement('div');
+  sep.className='ctx-sep';
+  panel.appendChild(sep);
+  var newBtn=document.createElement('button');
+  newBtn.className='ctxi ctxi-new-label';
+  newBtn.textContent='+ Yeni Etiket';
+  newBtn.onclick=function(){
+    customPrompt('Etiket adı:','').then(function(name){
+      if(!name||!name.trim())return;
+      var colors=['#4caf50','#f44336','#2196f3','#9c27b0','#ff9800','#e91e63','#00bcd4','#795548'];
+      var color=colors[Math.floor(Math.random()*colors.length)];
+      var newLabel={name:name.trim(),color:color};
+      if(!S.customLabels)S.customLabels=[];
+      if(!S.customLabels.some(function(label){return label&&label.name===newLabel.name;}))S.customLabels.push(newLabel);
+      if(!Array.isArray(ref.labels))ref.labels=[];
+      if(!ref.labels.some(function(label){return label&&label.name===newLabel.name;}))ref.labels.push(newLabel);
+      save();
+      rLib();
+      hideCtx();
+    });
+  };
+  panel.appendChild(newBtn);
+  var rect=anchorBtn.getBoundingClientRect();
+  panel.style.top=Math.min(rect.top,window.innerHeight-320)+'px';
+  panel.style.left=Math.min(rect.right+6,window.innerWidth-250)+'px';
+  panel.classList.add('show');
+}
+function showLabelMenu(x,y,ref){
+  var menu=document.getElementById('ctxmenu');
+  menu.innerHTML='';
+  closeCtxLabelPanel();
+  var editBtn=document.createElement('button');
+  editBtn.className='ctxi';
+  editBtn.textContent='Künyeyi Düzenle';
+  editBtn.onclick=function(){hideCtx();editRefMetadata(ref);};
+  menu.appendChild(editBtn);
+  var labelBtn=document.createElement('button');
+  labelBtn.className='ctxi has-arrow';
+  labelBtn.innerHTML='<span>Etiket Ekle</span><span class="ctx-arrow">▸</span>';
+  labelBtn.onclick=function(event){
+    if(event){event.preventDefault();event.stopPropagation();}
+    openLabelPickerPanel(labelBtn,ref);
+  };
+  menu.appendChild(labelBtn);
+  var csep=document.createElement('div');
+  csep.className='ctx-sep';
+  menu.appendChild(csep);
+  var ctitle=document.createElement('div');
+  ctitle.className='ctx-label-title';
+  ctitle.textContent='Koleksiyonlar';
+  menu.appendChild(ctitle);
+  var ws=currentWorkspaceForCollections();
+  var collections=ensureWorkspaceCollections(ws);
+  if(!Array.isArray(ref.collectionIds))ref.collectionIds=[];
+  if(!collections.length){
+    var empty=document.createElement('div');
+    empty.className='ctxi';
+    empty.style.opacity='.72';
+    empty.textContent='Koleksiyon yok';
+    menu.appendChild(empty);
+  }else{
+    collections.forEach(function(col){
+      var has=(ref.collectionIds||[]).some(function(id){return String(id)===String(col.id);});
+      var btn=document.createElement('button');
+      btn.className='ctxi';
+      var check=document.createElement('span');
+      check.className='ctx-label-check'+(has?'':' off');
+      check.textContent='✓';
+      btn.appendChild(check);
+      var txt=document.createElement('span');
+      txt.textContent=String(col.name||'');
+      btn.appendChild(txt);
+      btn.onclick=function(){
+        toggleReferenceCollection(ref,col.id);
+        hideCtx();
+      };
+      menu.appendChild(btn);
+    });
+  }
+  var manage=document.createElement('button');
+  manage.className='ctxi ctxi-new-label';
+  manage.textContent='Koleksiyonları Yönet';
+  manage.onclick=function(){hideCtx();openCollectionManager();};
+  menu.appendChild(manage);
+  if(S.wss.length>1){
+    var sep=document.createElement('div');
+    sep.className='ctx-sep';
+    menu.appendChild(sep);
+    showMoveMenuItems(menu,ref,S.cur);
+  }
+  menu.style.top=Math.min(y,window.innerHeight-300)+'px';
+  menu.style.left=Math.min(x,window.innerWidth-220)+'px';
+  menu.classList.add('show');
+}
+function hideCtx(){
+  var menu=document.getElementById('ctxmenu');
+  if(menu)menu.classList.remove('show');
+  closeCtxLabelPanel();
+}
+document.addEventListener('click',function(e){
+  if(!e.target.closest('#ctxmenu')&&!e.target.closest('#ctxlabelpanel'))hideCtx();
+});
 function moveRefToWs(ref,fromWsId,toWsId){
   var from=S.wss.find(function(w){return w.id===fromWsId;});
   var to=S.wss.find(function(w){return w.id===toWsId;});
@@ -1432,6 +2082,7 @@ function pPF(file){
             if(existing){
               normalizeRefRecord(existing);
               existing.pdfData=orig;
+              setRefPdfVerification(existing,{status:'manual',summary:'PDF manuel eklendi'},'');
               if(r.doi&&!existing.doi)existing.doi=r.doi;
               if(r.title&&!existing.title)existing.title=r.title;
               if((r.authors||[]).length&&!(existing.authors||[]).length)existing.authors=r.authors.slice();
@@ -1443,6 +2094,7 @@ function pPF(file){
               if(r.lp&&!existing.lp)existing.lp=r.lp;
               curRef=existing;
             }else{
+              setRefPdfVerification(r,{status:'manual',summary:'PDF manuel eklendi'},'');
               cLib().push(r);
               curRef=r;
             }
@@ -1464,8 +2116,8 @@ function pPF(file){
         var ref={id:uid(),title:file.name.replace(/\.pdf$/i,''),authors:[],year:'',journal:'',volume:'',issue:'',fp:'',lp:'',doi:'',url:'',pdfData:orig,pdfUrl:null,wsId:S.cur};
         normalizeRefRecord(ref);
         var existing=(targetRef&&(!targetRef.pdfData)?targetRef:null)||(cLib()||[]).find(function(x){return refsLikelySame(x,ref);});
-        if(existing){existing.pdfData=orig;curRef=existing;}
-        else{cLib().push(ref);curRef=ref;}
+        if(existing){existing.pdfData=orig;setRefPdfVerification(existing,{status:'manual',summary:'PDF manuel eklendi'},'');curRef=existing;}
+        else{setRefPdfVerification(ref,{status:'manual',summary:'PDF manuel eklendi'},'');cLib().push(ref);curRef=ref;}
         if(typeof window.electronAPI!=='undefined'){
           window.electronAPI.savePDF(curRef.id,orig).catch(function(e){console.warn('PDF kayit:',e);});
         }
@@ -1607,13 +2259,14 @@ function tryFetch(url,refId){
   document.getElementById('pdfscroll').innerHTML='<div style="color:var(--acc);font-size:12px;padding:20px;text-align:center;width:100%">OA PDF deneniyor...</div>';
   tryFetchChain(urls,0,refId,fetchToken);
 }
-function attachFetchedPDF(refId,buffer,url){
+function attachFetchedPDF(refId,buffer,url,verification){
   var ref=findRef(refId);
   if(!ref)return;
   normalizeRefRecord(ref);
   ref.pdfData=buffer;
   if(url&&!ref.pdfUrl)ref.pdfUrl=url;
   if(url&&!ref.url)ref.url=url;
+  if(verification)propagatePdfVerification(ref,verification,url);
   S.wss.forEach(function(ws){
     (ws.lib||[]).forEach(function(cand){
       if(!cand||cand.id===ref.id)return;
@@ -1622,6 +2275,7 @@ function attachFetchedPDF(refId,buffer,url){
       if(!cand.pdfData)cand.pdfData=buffer;
       if(url&&!cand.pdfUrl)cand.pdfUrl=url;
       if(url&&!cand.url)cand.url=url;
+      if(verification)setRefPdfVerification(cand,verification,url);
       persistBorrowedPDF(cand);
     });
   });
@@ -1651,6 +2305,8 @@ function electronFetchChain(urls,idx,refId,fetchToken){
     dlOptions.requireDoiEvidence=true;
   }
   if(ref&&ref.title)dlOptions.expectedTitle=ref.title;
+  if(ref&&Array.isArray(ref.authors)&&ref.authors.length)dlOptions.expectedAuthors=ref.authors.slice(0,4);
+  if(ref&&ref.year)dlOptions.expectedYear=String(ref.year||'');
   window.electronAPI.downloadPDFfromURL(u,refId,dlOptions)
     .then(function(res){
       if(!isPdfFetchTokenActive(fetchToken))return;
@@ -1658,22 +2314,39 @@ function electronFetchChain(urls,idx,refId,fetchToken){
         return window.electronAPI.loadPDF(refId).then(function(pr){
           if(!isPdfFetchTokenActive(fetchToken))return;
           if(pr.ok){
-            attachFetchedPDF(refId,pr.buffer,u);
+            attachFetchedPDF(refId,pr.buffer,u,res.verification||null);
             var refLoaded=findRef(refId);
             addPdfTab((refLoaded&&refLoaded.title)||'PDF',pr.buffer,refId);
-            setDst('PDF indirildi ('+Math.round(res.size/1024)+' KB)','ok');
+            var trust=pdfVerificationSummaryText(refLoaded);
+            setDst(trust?('PDF indirildi · '+trust):('PDF indirildi ('+Math.round(res.size/1024)+' KB)'),'ok');
             setTimeout(function(){setDst('','');},3000);
           } else {
             electronFetchChain(urls,idx+1,refId,fetchToken);
           }
         });
       } else {
+        var failure=(res&&res.failure)||classifyPdfDownloadFailureLocal((res&&res.error)?String(res.error):'Indirme basarisiz');
+        if(idx>=urls.length-1&&failure&&failure.isProtectedAccess){
+          if(ref&&u&&!ref.pdfUrl)ref.pdfUrl=u;
+          save();rLib();rRefs();
+          setDst(failure.userMessage,'er');
+          showPdfDownloadFallback(ref||{pdfUrl:u},failure);
+          return;
+        }
         // Bu URL basarisiz, sonrakini dene
         electronFetchChain(urls,idx+1,refId,fetchToken);
       }
     })
     .catch(function(e){
       if(!isPdfFetchTokenActive(fetchToken))return;
+      var failure=classifyPdfDownloadFailureLocal((e&&e.message)?e.message:String(e));
+      if(idx>=urls.length-1&&failure&&failure.isProtectedAccess){
+        if(ref&&u&&!ref.pdfUrl)ref.pdfUrl=u;
+        save();rLib();rRefs();
+        setDst(failure.userMessage,'er');
+        showPdfDownloadFallback(ref||{pdfUrl:u},failure);
+        return;
+      }
       electronFetchChain(urls,idx+1,refId,fetchToken);
     });
 }
@@ -1710,6 +2383,11 @@ function renderPDF(buf,sourceTabId){
   clearPDFView();
   var renderToken=createPdfRenderToken(sourceTabId);
   loadHLData();
+  if(getPdfBufferByteLength(buf)<=32){
+    setDst('PDF indirilemedi veya bozuk kaydedildi. Baglantiyi yeniden deneyin.','er');
+    showNoPDF(curRef||{});
+    return;
+  }
   var safeBuf;
   try{safeBuf=(buf instanceof ArrayBuffer)?buf.slice(0):(buf.slice?buf.slice(0):new Uint8Array(buf));}
   catch(e){console.error('PDF buffer error:',e);setDst('PDF verisi bozuk','er');return;}
@@ -2438,6 +3116,32 @@ async function pdfSearchExec(){
   if(pdfSearchResults.length>0) pdfSearchGoTo(0);
 }
 
+function getPdfFullTextForRef(refId){
+  if(!curRef||String(curRef.id||'')!==String(refId||'')) return '';
+  if(!Object.keys(pdfTextCache).length) return '';
+  var keys=Object.keys(pdfTextCache).map(Number).sort(function(a,b){return a-b;});
+  var parts=[];
+  keys.forEach(function(pgNum){
+    var items=pdfTextCache[pgNum]||[];
+    parts.push(items.map(function(it){return it.str;}).join(' '));
+  });
+  return parts.join('\n');
+}
+
+async function extractPdfFullTextForRef(refId){
+  if(!pdfDoc||!curRef||String(curRef.id||'')!==String(refId||'')) return '';
+  for(var p=1;p<=pdfTotal;p++){
+    if(!pdfTextCache[p]){
+      try{
+        var page=await pdfDoc.getPage(p);
+        var tc=await page.getTextContent({normalizeWhitespace:true});
+        if(tc&&tc.items)pdfTextCache[p]=tc.items;
+      }catch(e){}
+    }
+  }
+  return getPdfFullTextForRef(refId);
+}
+
 function pdfSearchNext(){
   if(!pdfSearchResults.length){pdfSearchExec();return;}
   pdfSearchGoTo((pdfSearchIdx+1)%pdfSearchResults.length);
@@ -2668,7 +3372,7 @@ document.addEventListener('keydown',function(e){
         else document.execCommand('selectAll');
       },
       exportDoc:function(){e.preventDefault();expDOC();},
-      printDoc:function(){e.preventDefault();window.print();},
+      printDoc:function(){e.preventDefault();expPDF();},
       undoRedoSync:function(){setTimeout(function(){runEditorMutationEffects({layout:true,syncChrome:true,refreshTrigger:false});},50);},
       execCommand:function(cmd,val){e.preventDefault();ec(cmd,val);},
       increaseFontSize:function(){
@@ -2860,8 +3564,11 @@ function showHLtip(top,left,mode){
   }
   if(mode==='selection'){
     addTipButton('Kopyala',function(){cpSelText();});
-    addTipButton('Nota Kaydet',function(){doHL(true);});
     addTipButton('Highlight',function(){doHL(false);});
+    addTipButton('Özet Not',function(){doHL(true,'summary');});
+    addTipButton('Alıntı Notu',function(){doHL(true,'direct_quote');});
+    addTipButton('Parafraz Notu',function(){doHL(true,'paraphrase');});
+    addTipButton('Metne + Atıf',function(){insertSelectionIntoDocumentWithCitation();});
     addTipButton('Tablo',function(){extractTableFromSelection();});
     addTipButton('x',function(){hideHLtip();});
   } else {
@@ -2887,42 +3594,63 @@ document.addEventListener('mousedown',function(e){
 
 function hideHLtip(){var t=document.getElementById('hltip');if(t)t.classList.remove('show');clickedHLIdx=-1;}
 
-function doHL(saveToNote){
+function saveSelectionAsStructuredNote(noteType, quoteText, pageNum, color){
+  var tag='s.'+pageNum;
+  var note=createStructuredPdfNote(noteType,quoteText,{
+    source:curRef?shortRef(curRef):'',
+    referenceId:curRef?curRef.id:'',
+    pageTag:tag,
+    dateText:new Date().toLocaleDateString('tr-TR'),
+    highlightColor:color||hlColor
+  });
+  if(noteType==='summary'){
+    note.txt=String(quoteText||'').trim();
+    note.q='';
+    note.comment=note.txt;
+  }else if(noteType==='paraphrase'){
+    note.txt='Parafraz taslağı: '+String(quoteText||'').trim();
+    note.q='';
+    note.comment=note.txt;
+  }
+  normalizeResearchNote(note);
+  S.notes.unshift(note);
+  save();
+  rNotes();
+  swR('notes',document.querySelectorAll('.rtab')[0]);
+  return note;
+}
+function doHL(saveToNote,noteType){
   if(!selText||!selRangeObj){hideHLtip();return;}
   drawHL();
   saveHLData();  // Persist highlights
   hideHLtip();
+  var note=null;
   if(saveToNote){
-    var note={id:uid(),nbId:S.curNb,type:'hl',txt:'',q:selText,
-      src:curRef?shortRef(curRef):'',rid:curRef?curRef.id:'',
-      tag:'s.'+selPageNum,dt:new Date().toLocaleDateString('tr-TR'),hlColor:hlColor};
-    S.notes.unshift(note);save();rNotes();
-    swR('notes',document.querySelectorAll('.rtab')[0]);
+    note=saveSelectionAsStructuredNote(noteType||'direct_quote',selText,selPageNum,hlColor);
   }
   window.getSelection().removeAllRanges();
   selRangeObj=null;selText='';
+  return note;
+}
+function insertSelectionIntoDocumentWithCitation(){
+  var note=doHL(true,'direct_quote');
+  if(!note)return false;
+  var inserted=false;
+  if(window.AQCitationRuntime&&typeof window.AQCitationRuntime.insertNoteCitation==='function'){
+    try{inserted=!!window.AQCitationRuntime.insertNoteCitation(note.id);}catch(_e){}
+  }
+  if(!inserted&&typeof insCiteNote==='function'){
+    try{inserted=!!insCiteNote(note.id);}catch(_e){}
+  }
+  if(inserted)markNoteInserted(note.id);
+  return inserted;
 }
 
 // Tiklanan highlight'i nota ekle
 function hlToNote(){
   if(clickedHLIdx<0||!hlData[clickedHLIdx]){hideHLtip();return;}
   var hd=hlData[clickedHLIdx];
-  var note=(window.AQNotesState&&typeof window.AQNotesState.createHighlightNote==='function')
-    ? window.AQNotesState.createHighlightNote({
-        id:uid(),
-        notebookId:S.curNb,
-        quoteText:hd.text,
-        source:curRef?shortRef(curRef):'',
-        referenceId:curRef?curRef.id:'',
-        pageTag:'s.'+hd.page,
-        dateText:new Date().toLocaleDateString('tr-TR'),
-        highlightColor:hd.color
-      })
-    : {id:uid(),nbId:S.curNb,type:'hl',txt:'',q:(hd.text||'(metin yok)'),
-      src:curRef?shortRef(curRef):'',rid:curRef?curRef.id:'',
-      tag:'s.'+hd.page,dt:new Date().toLocaleDateString('tr-TR'),hlColor:hd.color};
-  S.notes.unshift(note);save();rNotes();
-  swR('notes',document.querySelectorAll('.rtab')[0]);
+  saveSelectionAsStructuredNote('direct_quote',hd.text,hd.page,hd.color);
   hideHLtip();
 }
 
@@ -2986,10 +3714,85 @@ function paintHL(hlCanvas,pageNum){
 }
 
 // ¦¦ NOTES ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
+function noteTypeLabel(noteType){
+  var map={
+    summary:'Özet',
+    direct_quote:'Doğrudan Alıntı',
+    paraphrase:'Parafraz',
+    personal_insight:'Kişisel İçgörü',
+    methodology:'Metodoloji',
+    finding:'Bulgular',
+    limitation:'Sınırlılık'
+  };
+  var key=String(noteType||'summary').trim();
+  return map[key]||'Not';
+}
+function syncNoteFilterReferenceOptions(){
+  var sel=document.getElementById('noteFilterRef');
+  if(!sel)return;
+  var ws=S.wss.find(function(x){return x&&x.id===S.cur;});
+  var refs=(ws&&ws.lib)||[];
+  var prev=String(noteViewFilters.refId||'all');
+  var html='<option value="all">Tüm Kaynaklar</option>';
+  html+=refs.map(function(ref){
+    var title=String(ref&&ref.title||'Başlıksız').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return '<option value="'+String(ref.id||'')+'">'+title.substring(0,64)+'</option>';
+  }).join('');
+  sel.innerHTML=html;
+  if(Array.from(sel.options).some(function(opt){return opt.value===prev;})){
+    sel.value=prev;
+  }else{
+    sel.value='all';
+    noteViewFilters.refId='all';
+  }
+}
+function setNoteFilterType(value){
+  noteViewFilters.type=String(value||'all').trim()||'all';
+  rNotes();
+}
+function setNoteFilterUsage(value){
+  noteViewFilters.usage=String(value||'all').trim()||'all';
+  rNotes();
+}
+function setNoteFilterTag(value){
+  noteViewFilters.tag=String(value||'').trim();
+  rNotes();
+}
+function setNoteFilterRef(value){
+  noteViewFilters.refId=String(value||'all').trim()||'all';
+  rNotes();
+}
+function markNoteInserted(noteId){
+  var note=(S.notes||[]).find(function(item){return item&&String(item.id)===String(noteId);});
+  if(!note)return;
+  normalizeResearchNote(note);
+  note.inserted=true;
+  save();
+  rNotes();
+}
+function createStructuredPdfNote(noteType, quoteText, options){
+  options=options||{};
+  var note=(window.AQNotesState&&typeof window.AQNotesState.createHighlightNote==='function')
+    ? window.AQNotesState.createHighlightNote({
+        id:uid(),
+        notebookId:S.curNb,
+        quoteText:String(quoteText||'').trim(),
+        source:options.source||'',
+        referenceId:options.referenceId||'',
+        pageTag:options.pageTag||'',
+        dateText:options.dateText||'',
+        highlightColor:options.highlightColor||'',
+        noteType:noteType||'direct_quote'
+      })
+    : {id:uid(),nbId:S.curNb,type:'hl',txt:'',q:String(quoteText||'').trim()||'(metin yok)',src:options.source||'',rid:options.referenceId||'',tag:options.pageTag||'',dt:options.dateText||'',hlColor:options.highlightColor||'',noteType:noteType||'direct_quote',sourceExcerpt:String(quoteText||'').trim(),comment:'',sourcePage:options.pageTag||'',inserted:false};
+  normalizeResearchNote(note);
+  return note;
+}
 function rNotes(){
   var el=document.getElementById('notelist');
   var notes=curNotes();
   if(!el)return;
+  syncNoteFilterReferenceOptions();
   var cardStyle='background:rgba(255,248,236,.98);border:1px solid rgba(110,91,60,.34);color:#2d2419;box-shadow:none;';
   var srcStyle='color:#6a563d;';
   var txtStyle='color:#2d2419;';
@@ -3003,7 +3806,8 @@ function rNotes(){
       txtStyle:txtStyle,
       quoteStyle:quoteStyle,
       btnStyle:btnStyle,
-      delStyle:delStyle
+      delStyle:delStyle,
+      noteTypeLabel:noteTypeLabel
     });
     return;
   }
@@ -3013,15 +3817,23 @@ function rNotes(){
   }
 }
 function dNote(id){
+  var removed=(S.notes||[]).find(function(n){return n&&n.id==id;})||null;
   S.notes=(window.AQNotesState&&typeof window.AQNotesState.deleteNote==='function')
     ? window.AQNotesState.deleteNote(S.notes,id)
     : S.notes.filter(function(n){return n.id!=id;});
+  if(removed&&window.AQLiteratureMatrixState&&typeof window.AQLiteratureMatrixState.removeLinkedNoteFromRows==='function'){
+    try{
+      window.AQLiteratureMatrixState.removeLinkedNoteFromRows(S,S.cur,removed.id);
+    }catch(_e){}
+  }
   save();rNotes();
 }
 function saveNote(){
   var txt=document.getElementById('noteta').value.trim();
   if(!txt)return;
   var tag=document.getElementById('notetag').value.trim()||'genel';
+  var noteTypeEl=document.getElementById('notetype');
+  var noteType=noteTypeEl?String(noteTypeEl.value||'summary'):'summary';
   var note=(window.AQNotesState&&typeof window.AQNotesState.createManualNote==='function')
     ? window.AQNotesState.createManualNote({
         id:uid(),
@@ -3030,10 +3842,12 @@ function saveNote(){
         source:curRef?shortRef(curRef):'',
         referenceId:curRef?curRef.id:'',
         tag:tag,
-        dateText:new Date().toLocaleDateString('tr-TR')
+        dateText:new Date().toLocaleDateString('tr-TR'),
+        noteType:noteType
       })
-    : {id:uid(),nbId:S.curNb,type:'m',txt:txt,q:'',src:curRef?shortRef(curRef):'',rid:curRef?curRef.id:'',tag:tag,dt:new Date().toLocaleDateString('tr-TR')};
+    : {id:uid(),nbId:S.curNb,type:'m',txt:txt,q:'',src:curRef?shortRef(curRef):'',rid:curRef?curRef.id:'',tag:tag,dt:new Date().toLocaleDateString('tr-TR'),noteType:noteType,sourceExcerpt:'',comment:txt,sourcePage:tag,inserted:false};
   if(!note)return;
+  normalizeResearchNote(note);
   S.notes.unshift(note);save();rNotes();document.getElementById('noteta').value='';document.getElementById('notetag').value='';
 }
 
@@ -3157,6 +3971,7 @@ function updateFmtState(){
   }catch(e){}
 }
 function uSt(){
+  updateCitationStyleSelector();
   if(window.AQTipTapWordToolbar&&typeof window.AQTipTapWordToolbar.syncStatusUI==='function'){
     window.AQTipTapWordToolbar.syncStatusUI({
       doc:document,
@@ -3446,17 +4261,57 @@ function doTable(){
 // ¦¦ EXPORT ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
 function getExportDocHTML(){
   var edHTML=sanitizeDocHTML(getCurrentEditorHTML());
+  if(window.AQNoteLinking&&typeof window.AQNoteLinking.stripNoteLinkAttributes==='function'){
+    try{edHTML=window.AQNoteLinking.stripNoteLinkAttributes(edHTML);}catch(_e){}
+  }
   if(window.AQTipTapWordDocument&&typeof window.AQTipTapWordDocument.buildExportDocHTML==='function'){
     return window.AQTipTapWordDocument.buildExportDocHTML(edHTML);
   }
   return '<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><meta name="ProgId" content="Word.Document"><meta name="Generator" content="AcademiQ Research"><style>@page WordSection1{size:595pt 842pt;margin:72pt 72pt 72pt 72pt;}div.WordSection1{page:WordSection1;}body{font-family:"Times New Roman",serif;font-size:12pt;line-height:2;margin:0;}h1{font-size:12pt;font-weight:bold;text-align:center;margin:0;text-indent:0;}h2{font-size:12pt;font-weight:bold;text-align:left;margin:0;text-indent:0;}h3{font-size:12pt;font-weight:bold;font-style:italic;margin:0;text-indent:0;}h4{font-size:12pt;font-weight:bold;margin:0;text-indent:.5in;}h5{font-size:12pt;font-weight:bold;font-style:italic;margin:0;text-indent:.5in;}p{margin:0;text-indent:.5in;mso-pagination:none;}.ni{text-indent:0;}.cit{color:#000;border:none;white-space:normal;}.cit-gap{display:none!important;}.refe{text-indent:-.5in;padding-left:.5in;margin:0;}blockquote{padding-left:.5in;text-indent:0;margin:0;}table{width:100%;border-collapse:collapse;font-size:12pt;page-break-inside:auto;}thead{display:table-header-group;}tr,img{page-break-inside:avoid;}th{border-top:1.5px solid #000;border-bottom:1px solid #000;padding:4px 8px;}td{padding:4px 8px;}.toc-delete,.img-toolbar,.img-resize-handle,.aq-page-sheet,.page-break-overlay,.page-number{display:none!important;}</style></head><body><div class="WordSection1">'+edHTML+'</div></body></html>';
+}
+function getExportPDFHTML(){
+  var edHTML=sanitizeDocHTML(getCurrentEditorHTML());
+  if(window.AQNoteLinking&&typeof window.AQNoteLinking.stripNoteLinkAttributes==='function'){
+    try{edHTML=window.AQNoteLinking.stripNoteLinkAttributes(edHTML);}catch(_e){}
+  }
+  if(window.AQTipTapWordDocument&&typeof window.AQTipTapWordDocument.buildExportPDFHTML==='function'){
+    return window.AQTipTapWordDocument.buildExportPDFHTML(edHTML);
+  }
+  return getExportDocHTML();
+}
+function getExportPreviewHTML(){
+  var edHTML=sanitizeDocHTML(getCurrentEditorHTML());
+  if(window.AQNoteLinking&&typeof window.AQNoteLinking.stripNoteLinkAttributes==='function'){
+    try{edHTML=window.AQNoteLinking.stripNoteLinkAttributes(edHTML);}catch(_e){}
+  }
+  if(window.AQTipTapWordDocument&&typeof window.AQTipTapWordDocument.buildExportPreviewHTML==='function'){
+    return window.AQTipTapWordDocument.buildExportPreviewHTML(edHTML);
+  }
+  return getExportPDFHTML();
+}
+function refreshExportPreview(){
+  var frame=document.getElementById('exportPreviewFrame');
+  var meta=document.getElementById('exportPreviewMeta');
+  if(!frame)return;
+  var html=getExportPreviewHTML();
+  frame.srcdoc=html;
+  if(meta){
+    meta.textContent='Önizleme temiz export yüzeyinden üretildi. Araç çubukları ve yardımcı katmanlar bu görünümde yer almaz.';
+  }
+}
+function openExportPreview(){
+  showM('exportPreviewModal');
+  refreshExportPreview();
 }
 function expDOC(){
   saveAs(new Blob([getExportDocHTML()],{type:'application/msword'}),'makale.doc');
 }
 function expPDF(){
   if(window.electronAPI&&typeof window.electronAPI.exportPDF==='function'){
-    window.electronAPI.exportPDF({defaultPath:'makale.pdf'}).then(function(result){
+    window.electronAPI.exportPDF({
+      defaultPath:'makale.pdf',
+      exportHTML:getExportPDFHTML()
+    }).then(function(result){
       if(!result||result.ok||result.canceled)return;
       alert('PDF dışa aktarma hatası: '+(result.error||'Bilinmeyen hata'));
     }).catch(function(err){
@@ -3467,9 +4322,9 @@ function expPDF(){
   var page=document.getElementById('apapage');
   if(!page)return;
   if(window.html2pdf){
-    var clone=window.AQTipTapWordIO&&typeof window.AQTipTapWordIO.buildPrintablePageClone==='function'
-      ? window.AQTipTapWordIO.buildPrintablePageClone(page)
-      : page.cloneNode(true);
+    var wrapper=document.createElement('div');
+    wrapper.innerHTML=getExportPDFHTML();
+    var clone=(wrapper.querySelector&&wrapper.querySelector('.aq-export-root'))||wrapper;
     var opt=window.AQTipTapWordIO&&typeof window.AQTipTapWordIO.buildPDFExportOptions==='function'
       ? window.AQTipTapWordIO.buildPDFExportOptions()
       : {
@@ -3483,7 +4338,7 @@ function expPDF(){
     html2pdf().set(opt).from(clone).save();
     return;
   }
-  window.print();
+  alert('PDF dışa aktarma bu ortamda desteklenmiyor. Lütfen masaüstü uygulamasında tekrar deneyin.');
 }
 function importWordFile(e){
   var file=e.target.files[0];
@@ -3713,7 +4568,17 @@ function enhanceToolbar(){
   tb.appendChild(mk('aa','Tümünü küçük harf',function(){transformSelectedText('lower');},'lower'));
 }
 function tSB(side){var el=document.getElementById(side);var btn=document.getElementById('btn'+side);el.classList.toggle('closed');btn.classList.toggle('on');}
-function swR(name,btn){document.querySelectorAll('.rtab').forEach(function(t){t.classList.remove('on');});document.querySelectorAll('.rpnl').forEach(function(p){p.classList.remove('on');});if(btn)btn.classList.add('on');var el=document.getElementById('rp'+name);if(el)el.classList.add('on');}
+function swR(name,btn){
+  document.querySelectorAll('.rtab').forEach(function(t){t.classList.remove('on');});
+  document.querySelectorAll('.rpnl').forEach(function(p){p.classList.remove('on');});
+  if(btn)btn.classList.add('on');
+  var el=document.getElementById('rp'+name);
+  if(el)el.classList.add('on');
+  if(name==='notes'&&typeof rNotes==='function'){
+    // Re-render notes when panel becomes visible; avoids stale empty view after async load.
+    try{rNotes();}catch(_e){}
+  }
+}
 function showM(id){document.getElementById(id).classList.add('show');}
 function hideM(id){document.getElementById(id).classList.remove('show');var inp=document.querySelector('#'+id+' .minp');if(inp)inp.value='';}
 // ¦¦ CUSTOM PROMPT (Electron-compatible) ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
@@ -3816,6 +4681,9 @@ async function showSyncSettings(){
   } else {
     dirEl.innerHTML='<span style="color:var(--txt3)">Tarayici modu - localStorage kullaniliyor</span>';
     infoEl.innerHTML='';
+  }
+  if(window.AQBrowserCapture&&typeof window.AQBrowserCapture.refreshSettings==='function'){
+    try{ await window.AQBrowserCapture.refreshSettings(); }catch(_e){}
   }
 }
 async function doClearSyncDir(){
@@ -4383,9 +5251,12 @@ async function __oaTryDownloadRefFromUrls(ref,baseUrls,maxAttempts){
         dlOptions.requireDoiEvidence=true;
       }
       if(ref&&ref.title)dlOptions.expectedTitle=ref.title;
+      if(ref&&Array.isArray(ref.authors)&&ref.authors.length)dlOptions.expectedAuthors=ref.authors.slice(0,4);
+      if(ref&&ref.year)dlOptions.expectedYear=String(ref.year||'');
       var res=await window.electronAPI.downloadPDFfromURL(triedUrl,ref.id,dlOptions);
       if(res&&res.ok){
         if(!ref.pdfUrl)ref.pdfUrl=triedUrl;
+        if(res.verification)propagatePdfVerification(ref,res.verification,triedUrl);
         var hydrated=await hydrateRefPDF(ref);
         if(hydrated&&ref.pdfData)return {ok:true,url:triedUrl};
         try{
@@ -4394,11 +5265,12 @@ async function __oaTryDownloadRefFromUrls(ref,baseUrls,maxAttempts){
         }catch(e){}
         setFailure('PDF kaydedildi ama yuklenemedi',triedUrl);
       }else{
-        var errMsg=(res&&res.error)?String(res.error):'Indirme basarisiz';
-        setFailure(errMsg,triedUrl);
+        var classified=(res&&res.failure)||classifyPdfDownloadFailureLocal((res&&res.error)?String(res.error):'Indirme basarisiz');
+        setFailure((classified&&classified.userMessage)?classified.userMessage:((res&&res.error)?String(res.error):'Indirme basarisiz'),triedUrl);
       }
     }catch(e){
-      setFailure((e&&e.message)?e.message:String(e),triedUrl);
+      var classifiedErr=classifyPdfDownloadFailureLocal((e&&e.message)?e.message:String(e));
+      setFailure((classifiedErr&&classifiedErr.userMessage)?classifiedErr.userMessage:((e&&e.message)?e.message:String(e)),triedUrl);
     }
   }
   if(!failure)failure='Bilinmeyen indirme hatasi';
@@ -4513,7 +5385,7 @@ async function batchDownloadOA(){
   var hw=((typeof navigator!=='undefined'&&navigator.hardwareConcurrency)?navigator.hardwareConcurrency:4);
   var concurrency=Math.min(queue.length,Math.max(2,Math.min(6,Math.ceil(hw/2))));
   setDst('Toplu indirme basladi: 0/'+queue.length+(alreadyLocal?(' (mevcut atlandi: '+alreadyLocal+')'):''),'ld');
-  var done=0,fail=0,failReasons=[],completed=0,nextIdx=0;
+  var done=0,fail=0,failReasons=[],completed=0,nextIdx=0,verifiedHigh=0,verifiedReview=0;
   async function worker(){
     while(true){
       var qi=nextIdx++;
@@ -4522,6 +5394,9 @@ async function batchDownloadOA(){
       var result=await __oaDownloadOneRef(ref);
       if(result&&result.ok){
         done++;
+        var verification=normalizePdfVerification(ref&&ref.pdfVerification||null);
+        if(verification&&verification.status==='verified')verifiedHigh++;
+        else if(verification&&verification.status==='likely')verifiedReview++;
         save();
       }else{
         fail++;
@@ -4542,6 +5417,8 @@ async function batchDownloadOA(){
   var msg='Toplu indirme bitti: '+done+'/'+queue.length+' basarili';
   if(fail>0)msg+=', '+fail+' basarisiz';
   if(alreadyLocal>0)msg+=', '+alreadyLocal+' zaten mevcuttu';
+  if(done>0)msg+=', '+verifiedHigh+' guvenli';
+  if(verifiedReview>0)msg+=', '+verifiedReview+' kontrol gerekli';
   if(failReasons.length){
     msg+=' | '+failReasons[0].slice(0,170);
   }
@@ -4857,6 +5734,122 @@ function importBib(e){
   e.target.value='';
 }
 
+function parseCSLJSON(text){
+  if(window.AQReferenceParse&&typeof window.AQReferenceParse.parseCSLJSON==='function'){
+    try{
+      return window.AQReferenceParse.parseCSLJSON(text,{
+        createId:uid,
+        workspaceId:S.cur
+      });
+    }catch(_e){}
+  }
+  return [];
+}
+function __importParseByFileName(fileName,text,allowJson){
+  var name=String(fileName||'').toLowerCase().trim();
+  if(allowJson&&window.AQZoteroIntegration&&typeof window.AQZoteroIntegration.parseExport==='function'){
+    try{
+      return window.AQZoteroIntegration.parseExport(name,text,{
+        parseBibTeX:parseBibTeX,
+        parseRIS:parseRIS,
+        parseCSLJSON:parseCSLJSON
+      });
+    }catch(_e){}
+  }
+  if(name.endsWith('.bib'))return parseBibTeX(text);
+  if(name.endsWith('.ris')||name.endsWith('.enw'))return parseRIS(text);
+  if(allowJson&&(name.endsWith('.json')||name.endsWith('.csljson')))return parseCSLJSON(text);
+  throw new Error('Desteklenmeyen dosya turu');
+}
+function __importNeedsMetadataAttention(ref){
+  if(window.AQMetadataHealth&&typeof window.AQMetadataHealth.analyzeReference==='function'){
+    try{
+      var report=window.AQMetadataHealth.analyzeReference(ref);
+      return report&&report.status!=='complete';
+    }catch(_e){}
+  }
+  var title=String(ref&&ref.title||'').trim();
+  var year=String(ref&&ref.year||'').trim();
+  var authors=(ref&&Array.isArray(ref.authors)?ref.authors:[]).filter(Boolean);
+  return !title||!year||!authors.length;
+}
+function importReferenceEntries(entries){
+  var lib=cLib();
+  var summary={
+    total:Array.isArray(entries)?entries.length:0,
+    imported:0,
+    duplicates:0,
+    skipped:0,
+    missingMetadata:0,
+    errors:[]
+  };
+  (entries||[]).forEach(function(entry){
+    try{
+      if(!entry||typeof entry!=='object'){summary.skipped++;return;}
+      var ref=Object.assign({},entry);
+      normalizeRefRecord(ref);
+      if(!ref.id)ref.id=uid();
+      if(!Array.isArray(ref.labels))ref.labels=[];
+      if(!ref.wsId)ref.wsId=S.cur;
+      if(!ref.title&&!ref.doi&&!((ref.authors||[]).length)){summary.skipped++;return;}
+      var existing=lib.find(function(r){return refKey(r)===refKey(ref);});
+      var finalRef=existing||ref;
+      if(existing){
+        mergeRefFields(existing,ref);
+        if(existing.pdfData)persistBorrowedPDF(existing);
+        summary.duplicates++;
+      }else{
+        lib.push(ref);
+        if(ref.pdfData)persistBorrowedPDF(ref);
+        summary.imported++;
+      }
+      if(__importNeedsMetadataAttention(finalRef))summary.missingMetadata++;
+    }catch(e){
+      summary.skipped++;
+      summary.errors.push(String(e&&e.message?e.message:e));
+    }
+  });
+  save();rLib();rRefs();
+  return summary;
+}
+function __importSummaryText(prefix,summary){
+  var parts=[
+    prefix,
+    (summary.imported||0)+' eklendi',
+    (summary.duplicates||0)+' duplicate',
+    (summary.skipped||0)+' atlandi',
+    (summary.missingMetadata||0)+' metadata kontrol'
+  ];
+  if(summary.errors&&summary.errors.length)parts.push('hata: '+summary.errors[0]);
+  return parts.join(' | ');
+}
+function __importFromFileInput(event,options){
+  options=options||{};
+  var file=event&&event.target&&event.target.files?event.target.files[0]:null;
+  if(!file)return;
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      var text=String(ev&&ev.target&&ev.target.result||'');
+      var entries=__importParseByFileName(file.name,text,!!options.allowJson);
+      if(!entries.length){setDst('Kaynak bulunamadi.','er');return;}
+      var summary=importReferenceEntries(entries);
+      setDst(__importSummaryText(options.prefix||'Aktarim',summary),'ok');
+      setTimeout(function(){setDst('','');},6500);
+    }catch(e){
+      setDst((options.prefix||'Aktarim')+' hatasi: '+String(e&&e.message?e.message:e),'er');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value='';
+}
+importBib=function(e){
+  __importFromFileInput(e,{allowJson:false,prefix:'Kaynak aktarimi'});
+};
+function importZotero(e){
+  __importFromFileInput(e,{allowJson:true,prefix:'Zotero aktarimi'});
+}
+
 // ¦¦ DARK THEME ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
 function updateThemeButton(){
   var btn=document.getElementById('themebtn');
@@ -4936,11 +5929,14 @@ document.addEventListener('keydown',function(e){
   }
 },true);
 function buildCitationHTML(refs){
+  var style=getCurrentCitationStyle();
   if(window.AQCitationState&&typeof window.AQCitationState.buildCitationHTML==='function'){
     return window.AQCitationState.buildCitationHTML(refs,{
       formatAuthor:fa,
       sortReferences:sortLib,
-      dedupeReferences:dedupeRefs
+      dedupeReferences:dedupeRefs,
+      citationStyles:window.AQCitationStyles||null,
+      styleId:style
     });
   }
   refs=sortLib(dedupeRefs(refs||[]));
@@ -4950,6 +5946,9 @@ function buildCitationHTML(refs){
 }
 function escJS(str){
   return String(str||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+}
+function esc(str){
+  return escJS(str);
 }
 function rRefs(){
   var el=document.getElementById('reflist');
@@ -4966,7 +5965,7 @@ function rRefs(){
       citationApi:window.AQTipTapWordCitation||null,
       findReference:function(id){return findRef(id,S.cur);},
       getInlineCitationText:getInlineCitationText,
-      formatReference:apa7,
+      formatReference:formatRef,
       escapeJS:escJS,
       dedupeReferences:dedupeRefs,
       sortReferences:sortLib
@@ -4975,7 +5974,7 @@ function rRefs(){
   var refs=getUsedRefs();
   if(!refs.length){el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">Metinde atıf yok.</div>';return;}
   el.innerHTML='';
-  refs.forEach(function(r){
+  refs.forEach(function(r,idx){
     var item=document.createElement('div');
     item.className='ri';
     var cite=document.createElement('div');
@@ -4983,13 +5982,13 @@ function rRefs(){
     cite.textContent=getInlineCitationText(r);
     var full=document.createElement('div');
     full.className='rifull';
-    full.innerHTML=apa7(r);
+    full.innerHTML=formatRef(r,{index:idx+1});
     var actions=document.createElement('div');
     actions.className='riacts';
     var copyBtn=document.createElement('button');
     copyBtn.className='rib';
     copyBtn.textContent='Kopyala';
-    copyBtn.addEventListener('click',function(){cpStr(apa7(r));});
+    copyBtn.addEventListener('click',function(){cpStr(formatRef(r,{index:idx+1}));});
     var pdfBtn=document.createElement('button');
     pdfBtn.className='rib';
     pdfBtn.textContent='PDF';
@@ -5228,6 +6227,150 @@ document.addEventListener('click',function(e){
   if(wrap.contains(e.target))return;
   setLabelFilterPanelOpen(false);
 });
+document.addEventListener('click',function(e){
+  var btn=e&&e.target&&e.target.closest?e.target.closest('#relatedToggleBtn'):null;
+  if(!btn)return;
+  e.preventDefault();
+  if(typeof toggleRelatedPanel==='function')toggleRelatedPanel();
+});
+function currentWorkspaceForCollections(){
+  return (S.wss||[]).find(function(ws){return ws&&ws.id===S.cur;})||null;
+}
+function ensureWorkspaceCollections(ws){
+  ws=ws||currentWorkspaceForCollections();
+  if(!ws)return [];
+  if(!Array.isArray(ws.collections))ws.collections=[];
+  ws.collections=ws.collections.map(function(col){
+    if(!col||typeof col!=='object')return null;
+    return {
+      id:String(col.id||uid()),
+      name:String(col.name||'Koleksiyon').trim()||'Koleksiyon'
+    };
+  }).filter(Boolean);
+  return ws.collections;
+}
+function renderCollectionFilter(){
+  var sel=document.getElementById('collectionFilterSel');
+  if(!sel)return;
+  var ws=currentWorkspaceForCollections();
+  var collections=ensureWorkspaceCollections(ws);
+  var prev=activeCollectionFilter||'all';
+  sel.innerHTML='<option value="all">Tüm Koleksiyonlar</option>'+collections.map(function(col){
+    return '<option value="'+__escHtml(col.id)+'">'+__escHtml(col.name)+'</option>';
+  }).join('');
+  if(Array.from(sel.options).some(function(opt){return opt.value===prev;})){
+    sel.value=prev;
+  }else{
+    activeCollectionFilter='all';
+    sel.value='all';
+  }
+}
+function setCollectionFilter(value){
+  activeCollectionFilter=String(value||'all').trim()||'all';
+  renderCollectionFilter();
+  rLib();
+}
+function createCollectionFromInput(){
+  var inp=document.getElementById('collectionNameInp');
+  var name=String(inp&&inp.value||'').trim();
+  if(!name)return;
+  var ws=currentWorkspaceForCollections();
+  if(!ws)return;
+  var collections=ensureWorkspaceCollections(ws);
+  if(collections.some(function(col){return col.name.toLowerCase()===name.toLowerCase();})){
+    setDst('Bu koleksiyon zaten var.','er');
+    return;
+  }
+  collections.push({id:uid(),name:name});
+  if(inp)inp.value='';
+  save();
+  renderCollectionFilter();
+  renderCollectionManager();
+  rLib();
+}
+function renameCollectionById(id){
+  var ws=currentWorkspaceForCollections();
+  var collections=ensureWorkspaceCollections(ws);
+  var col=collections.find(function(item){return String(item.id)===String(id);});
+  if(!col)return;
+  customPrompt('Koleksiyon adı:',col.name).then(function(next){
+    next=String(next||'').trim();
+    if(!next)return;
+    col.name=next;
+    save();
+    renderCollectionFilter();
+    renderCollectionManager();
+    rLib();
+  });
+}
+function deleteCollectionById(id){
+  var ws=currentWorkspaceForCollections();
+  if(!ws)return;
+  var collections=ensureWorkspaceCollections(ws);
+  ws.collections=collections.filter(function(item){return String(item.id)!==String(id);});
+  (ws.lib||[]).forEach(function(ref){
+    if(!Array.isArray(ref.collectionIds))ref.collectionIds=[];
+    ref.collectionIds=ref.collectionIds.filter(function(colId){return String(colId)!==String(id);});
+  });
+  if(activeCollectionFilter===String(id))activeCollectionFilter='all';
+  save();
+  renderCollectionFilter();
+  renderCollectionManager();
+  rLib();
+}
+function toggleReferenceCollection(ref,colId){
+  if(!ref||!colId)return;
+  if(!Array.isArray(ref.collectionIds))ref.collectionIds=[];
+  var idx=ref.collectionIds.findIndex(function(id){return String(id)===String(colId);});
+  if(idx>=0)ref.collectionIds.splice(idx,1);
+  else ref.collectionIds.push(colId);
+  save();
+  rLib();
+}
+function renderCollectionManager(){
+  var list=document.getElementById('collectionList');
+  if(!list)return;
+  var ws=currentWorkspaceForCollections();
+  var collections=ensureWorkspaceCollections(ws);
+  if(!collections.length){
+    list.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:8px 4px;">Henüz koleksiyon yok.</div>';
+    return;
+  }
+  list.innerHTML=collections.map(function(col){
+    return '<div class="collection-row">'+
+      '<div class="collection-name" title="'+__escHtml(col.name)+'">'+__escHtml(col.name)+'</div>'+
+      '<div class="collection-actions">'+
+        '<button class="collection-btn" data-col-action="rename" data-col-id="'+__escHtml(col.id)+'">Yeniden Adlandir</button>'+
+        '<button class="collection-btn collection-btn-danger" data-col-action="delete" data-col-id="'+__escHtml(col.id)+'">Sil</button>'+
+        '</div>'+
+    '</div>';
+  }).join('');
+}
+// Override legacy collection renderer with modal-specific minimal row styling.
+renderCollectionManager=function(){
+  var list=document.getElementById('collectionList');
+  if(!list)return;
+  var ws=currentWorkspaceForCollections();
+  var collections=ensureWorkspaceCollections(ws);
+  if(!collections.length){
+    list.innerHTML='<div class="collection-empty">Henuz koleksiyon yok.</div>';
+    return;
+  }
+  list.innerHTML=collections.map(function(col){
+    return '<div class="collection-row">'+
+      '<div class="collection-name" title="'+__escHtml(col.name)+'">'+__escHtml(col.name)+'</div>'+
+      '<div class="collection-actions">'+
+        '<button class="collection-btn" data-col-action="rename" data-col-id="'+__escHtml(col.id)+'">Yeniden Adlandir</button>'+
+        '<button class="collection-btn collection-btn-danger" data-col-action="delete" data-col-id="'+__escHtml(col.id)+'">Sil</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+};
+function openCollectionManager(){
+  renderCollectionFilter();
+  renderCollectionManager();
+  showM('collectionModal');
+}
 function rLabelFilter(){
   var el=document.getElementById('labelfilt');if(!el)return;
   var customLabels=(S.customLabels||[]).map(function(l){
@@ -5584,6 +6727,10 @@ function cleanupSlashRArtifacts(root){
   if(root&&window.AQCitationDOMState&&typeof window.AQCitationDOMState.cleanupSlashRTextNodes==='function')window.AQCitationDOMState.cleanupSlashRTextNodes(root);
 }
 function visibleCitationText(refs){
+  var style=getCurrentCitationStyle();
+  if(window.AQCitationStyles&&typeof window.AQCitationStyles.visibleCitationText==='function'){
+    return window.AQCitationStyles.visibleCitationText(refs,{style:style});
+  }
   if(window.AQTipTapWordCitation&&typeof window.AQTipTapWordCitation.visibleCitationText==='function'){
     return window.AQTipTapWordCitation.visibleCitationText(refs,{
       citationState:window.AQCitationState||null,
@@ -5670,6 +6817,11 @@ function ensureDocAuxFields(doc){
   if(!doc||typeof doc!=='object')return null;
   if(typeof doc.coverHTML!=='string')doc.coverHTML='';
   if(typeof doc.tocHTML!=='string')doc.tocHTML='';
+  if(typeof doc.citationStyle!=='string'||!doc.citationStyle.trim()){
+    doc.citationStyle='apa7';
+  }else if(window.AQCitationStyles&&typeof window.AQCitationStyles.normalizeStyleId==='function'){
+    doc.citationStyle=window.AQCitationStyles.normalizeStyleId(doc.citationStyle);
+  }
   return doc;
 }
 function syncAuxiliaryPages(){
@@ -5858,9 +7010,27 @@ function initTipTapEditor(){
   console.warn('TipTap word init module missing');
 }
 
+function __refreshUIAfterBrowserCapture(detail){
+  var info=detail&&typeof detail==='object'?detail:{};
+  return syncLoad().then(function(){
+    rWS();rNB();rLib();renderRelatedPapers();rNotes();rRefs();uSt();rDocTabs();
+    if(info.focusWorkspace&&info.workspaceId){
+      try{switchWs(String(info.workspaceId));}catch(_e){}
+    }
+    setTimeout(function(){
+      try{rNotes();}catch(_e){}
+    },120);
+  }).catch(function(e){
+    logStability('browserCapture.stateChanged',e,info);
+  });
+}
+
 // ¦¦ INIT ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
 syncLoad().then(function(){
-  rWS();rNB();rLib();rNotes();rRefs();uSt();rDocTabs();
+  rWS();rNB();rLib();renderRelatedPapers();rNotes();rRefs();uSt();rDocTabs();
+  setTimeout(function(){
+    try{rNotes();}catch(_e){}
+  },120);
   enhanceMenus();
   enhanceToolbar();
   // Initialize TipTap editor after content is loaded
@@ -5886,6 +7056,11 @@ syncLoad().then(function(){
       setSL('Yerel','ok');
       setTimeout(function(){setSL('','');},3000);
     }).catch(function(){});
+    if(typeof window.electronAPI.onBrowserCaptureStateChanged==='function'){
+      window.electronAPI.onBrowserCaptureStateChanged(function(detail){
+        __refreshUIAfterBrowserCapture(detail||{});
+      });
+    }
   }
 });
 setInterval(function(){if(syncDirty){syncDirty=false;syncSave();}},30000);
@@ -5972,11 +7147,11 @@ function updateRefSection(forceAuto){
       citationApi:window.AQTipTapWordCitation||null,
       findReference:function(id){return findRef(id,S.cur);},
       getInlineCitationText:getInlineCitationText,
-      formatReference:apa7,
+      formatReference:formatRef,
       escapeJS:escJS,
       dedupeReferences:dedupeRefs,
       sortReferences:sortLib,
-      formatRef:apa7,
+      formatRef:formatRef,
       bindSurface:bindBibliographySurface,
       onAfterUpdate:function(){save();}
     })) return;
@@ -5985,7 +7160,7 @@ function updateRefSection(forceAuto){
   refs=sortLib(dedupeRefs(refs||getUsedRefs()||[]));
   var doc=getCurrentDocRecord();
   bindBibliographySurface();
-  var generatedHTML='<h1>Kaynakça</h1>'+refs.map(function(ref){return '<p class="refe">'+apa7(ref)+'</p>';}).join('');
+  var generatedHTML='<h1>Kaynakça</h1>'+refs.map(function(ref,idx){return '<p class="refe">'+formatRef(ref,{index:idx+1})+'</p>';}).join('');
   var persistedHTML=doc?String(doc.bibliographyHTML||'').trim():'';
   var manualHTML=doc&&doc.bibliographyManual&&!forceAuto?String(doc.bibliographyHTML||'').trim():'';
   if(!refs.length){
@@ -6011,6 +7186,139 @@ function updateRefSection(forceAuto){
   }
   save();
 }
+function renderRelatedPapers(){
+  var panel=document.getElementById('relatedPanel');
+  var list=document.getElementById('relatedList');
+  if(!panel||!list)return;
+  if(!curRef){
+    panel.style.display='none';
+    list.innerHTML='<div class="rmeta">Bir kaynak seçildiğinde benzer çalışmalar burada görünür.</div>';
+    return;
+  }
+  panel.style.display='block';
+  var ws=S.wss.find(function(x){return x&&x.id===S.cur;});
+  var refs=(ws&&ws.lib)||[];
+  var recApi=window.AQReferenceRecommendation||null;
+  if(!(recApi&&typeof recApi.relatedPapers==='function')){
+    list.innerHTML='<div class="rmeta">Related öneri motoru hazır değil.</div>';
+    return;
+  }
+  var related=recApi.relatedPapers(curRef,refs,{notes:S.notes||[]}).slice(0,5);
+  if(!related.length){
+    list.innerHTML='<div class="rmeta">Benzer kayıt bulunamadı.</div>';
+    return;
+  }
+  list.innerHTML=related.map(function(item){
+    var ref=item.ref||{};
+    var reason=(item.reasons||[]).slice(0,2).join(' · ');
+    var authors=(Array.isArray(ref.authors)?ref.authors:[]).map(function(a){return String(a||'').split(',')[0].trim();}).filter(Boolean).slice(0,2).join(', ');
+    return '<div class="related-item" data-related-ref="'+__escHtml(ref.id||'')+'">'+
+      '<div class="rttl">'+__escHtml((ref.title||'Başlıksız').substring(0,86))+'</div>'+
+      '<div class="rmeta">'+__escHtml(authors||'Bilinmeyen')+' · '+__escHtml(ref.year||'t.y.')+(reason?(' · '+__escHtml(reason)):'')+'</div>'+
+    '</div>';
+  }).join('');
+}
+renderRelatedPapers=function(){
+  var panel=document.getElementById('relatedPanel');
+  var list=document.getElementById('relatedList');
+  var toggleBtn=document.getElementById('relatedToggleBtn');
+  if(!panel||!list)return;
+  panel.classList.toggle('collapsed',!!relatedPanelCollapsed);
+  if(toggleBtn){
+    toggleBtn.textContent=relatedPanelCollapsed?'+':'−';
+    toggleBtn.title=relatedPanelCollapsed?'Goster':'Kucult';
+    toggleBtn.setAttribute('aria-expanded',relatedPanelCollapsed?'false':'true');
+  }
+  panel.style.display='block';
+  if(!curRef){
+    list.innerHTML='<div class="rmeta">Bir kaynak secildiginde benzer makaleler burada gorunur.</div>';
+    return;
+  }
+  var ws=S.wss.find(function(x){return x&&x.id===S.cur;});
+  var refs=(ws&&ws.lib)||[];
+  var recApi=window.AQReferenceRecommendation||null;
+  if(!(recApi&&typeof recApi.relatedPapers==='function')){
+    list.innerHTML='<div class="rmeta">Benzer makale motoru hazir degil.</div>';
+    return;
+  }
+  var related=recApi.relatedPapers(curRef,refs,{notes:S.notes||[]}).slice(0,6);
+  if(!related.length){
+    list.innerHTML='<div class="rmeta">Benzer kayit bulunamadi.</div>';
+    return;
+  }
+  list.innerHTML=related.map(function(item){
+    var ref=item.ref||{};
+    var reasons=(item.reasons||[]).slice(0,2).join(' · ');
+    var authors=(Array.isArray(ref.authors)?ref.authors:[]).map(function(a){
+      return String(a||'').split(',')[0].trim();
+    }).filter(Boolean).slice(0,2).join(', ');
+    return '<div class="related-item" data-related-ref="'+__escHtml(ref.id||'')+'">'+
+      '<div class="rttl">'+__escHtml((ref.title||'Basliksiz').substring(0,100))+'</div>'+
+      '<div class="rmeta">'+__escHtml(authors||'Bilinmeyen')+' · '+__escHtml(ref.year||'t.y.')+(reasons?(' · '+__escHtml(reasons)):'')+'</div>'+
+    '</div>';
+  }).join('');
+};
+function toggleRelatedPanel(){
+  relatedPanelCollapsed=!relatedPanelCollapsed;
+  renderRelatedPapers();
+}
+renderCollectionManager=function(){
+  var list=document.getElementById('collectionList');
+  if(!list)return;
+  var ws=currentWorkspaceForCollections();
+  var collections=ensureWorkspaceCollections(ws);
+  if(!collections.length){
+    list.innerHTML='<div class="collection-empty">Henuz koleksiyon yok.</div>';
+    return;
+  }
+  list.innerHTML=collections.map(function(col){
+    return '<div class="collection-row">'+
+      '<div class="collection-name" title="'+__escHtml(col.name)+'">'+__escHtml(col.name)+'</div>'+
+      '<div class="collection-actions">'+
+        '<button class="collection-btn" data-col-action="rename" data-col-id="'+__escHtml(col.id)+'">Yeniden Adlandir</button>'+
+        '<button class="collection-btn collection-btn-danger" data-col-action="delete" data-col-id="'+__escHtml(col.id)+'">Sil</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+};
+renderRelatedPapers=function(){
+  var panel=document.getElementById('relatedPanel');
+  var list=document.getElementById('relatedList');
+  var toggleBtn=document.getElementById('relatedToggleBtn');
+  if(!panel||!list)return;
+  panel.style.display='block';
+  panel.classList.toggle('collapsed',!!relatedPanelCollapsed);
+  if(toggleBtn){
+    toggleBtn.textContent=relatedPanelCollapsed?'+':'-';
+    toggleBtn.title=relatedPanelCollapsed?'Goster':'Kucult';
+    toggleBtn.setAttribute('aria-expanded',relatedPanelCollapsed?'false':'true');
+  }
+  if(!curRef){
+    list.innerHTML='<div class="rmeta">Bir kaynak secildiginde benzer makaleler burada gorunur.</div>';
+    return;
+  }
+  var ws=S.wss.find(function(x){return x&&x.id===S.cur;});
+  var refs=(ws&&ws.lib)||[];
+  var recApi=window.AQReferenceRecommendation||null;
+  if(!(recApi&&typeof recApi.relatedPapers==='function')){
+    list.innerHTML='<div class="rmeta">Benzer makale motoru hazir degil.</div>';
+    return;
+  }
+  var related=recApi.relatedPapers(curRef,refs,{notes:S.notes||[]}).slice(0,6);
+  if(!related.length){
+    list.innerHTML='<div class="rmeta">Benzer kayit bulunamadi.</div>';
+    return;
+  }
+  list.innerHTML=related.map(function(item){
+    var ref=item.ref||{};
+    var reasons=(item.reasons||[]).slice(0,2).join(' · ');
+    var authors=(Array.isArray(ref.authors)?ref.authors:[]).map(function(a){return String(a||'').split(',')[0].trim();}).filter(Boolean).slice(0,2).join(', ');
+    return '<div class="related-item" data-related-ref="'+__escHtml(ref.id||'')+'">'+
+      '<div class="rttl">'+__escHtml((ref.title||'Basliksiz').substring(0,100))+'</div>'+
+      '<div class="rmeta">'+__escHtml(authors||'Bilinmeyen')+' · '+__escHtml(ref.year||'t.y.')+(reasons?(' · '+__escHtml(reasons)):'')+'</div>'+
+    '</div>';
+  }).join('');
+};
 function rLib(){
   var q=(document.getElementById('libsrch').value||'').toLowerCase();
   var el=document.getElementById('liblist');if(!el)return;
@@ -6021,21 +7329,23 @@ function rLib(){
   function labelName(l){return typeof l==='string'?l:((l&&l.name)||'');}
   function labelColor(l){return typeof l==='string'?'#b6873f':((l&&l.color)||'#b6873f');}
   var fl=window.AQLibraryState&&typeof window.AQLibraryState.filterLibraryItems==='function'
-    ? window.AQLibraryState.filterLibraryItems(ws.lib||[],q,activeLabelFilter,{getLabelName:labelName})
+    ? window.AQLibraryState.filterLibraryItems(ws.lib||[],q,activeLabelFilter,{getLabelName:labelName,collectionFilter:activeCollectionFilter})
     : (ws.lib||[]).filter(function(r){
         if(q&&!((r.title||'')+(r.authors||[]).join(' ')+(r.year||'')+(r.journal||'')).toLowerCase().includes(q))return false;
         if(activeLabelFilter&&!(r.labels||[]).some(function(l){return labelName(l)===activeLabelFilter;}))return false;
+        if(activeCollectionFilter&&activeCollectionFilter!=='all'&&!(Array.isArray(r.collectionIds)&&r.collectionIds.indexOf(activeCollectionFilter)>=0))return false;
         return true;
       });
   if(!fl.length){el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">'+(q||activeLabelFilter?'Eşleşme yok.':'DOI gir veya PDF yükle.')+'</div>';return;}
   fl.forEach(function(r){
     var a=r.authors&&r.authors[0]?r.authors[0].split(',')[0]:'?';
-    if(r.authors&&r.authors.length>1)a+=' et al.';
+    if(r.authors&&r.authors.length>1)a+=' vd.';
     var div=document.createElement('div');
     div.className='lcard'+(curRef&&curRef.id===r.id?' on':'');
     var hasPDFlocal=!!r.pdfData;
     var hasOAurl=!!(r.pdfUrl);
-    var pdfStatus=hasPDFlocal?'<span class="lbadge pdf">PDF ?</span>':(hasOAurl?'<span class="lbadge oa">OA v</span>':'');
+    var pdfVerificationHtml=hasPDFlocal?pdfVerificationBadgeHTML(r):'';
+    var pdfStatus=hasPDFlocal?('<span class="lbadge pdf" title="'+__escHtml(pdfVerificationSummaryText(r)||'PDF bu cihazda mevcut')+'">PDF ✓</span>'+pdfVerificationHtml):(hasOAurl?'<span class="lbadge oa">OA v</span>':'');
     var labelHTML=(r.labels||[]).map(function(l){
       var nm=labelName(l);if(!nm)return '';
       var color=labelColor(l);
@@ -6062,6 +7372,1195 @@ function rLib(){
     el.appendChild(div);
   });
 }
+function __duplicateDismissedMap(wsId){
+  var key=String(wsId||S.cur||'');
+  if(!duplicateReviewState.dismissedByWs[key])duplicateReviewState.dismissedByWs[key]={};
+  return duplicateReviewState.dismissedByWs[key];
+}
+function __duplicateReasonLabel(code){
+  if(code==='doi_exact')return 'DOI eşleşmesi';
+  if(code==='title_exact')return 'Başlık birebir eşleşme';
+  if(code==='author_year_similar_title')return 'Yazar+yıl+benzer başlık';
+  if(code==='pdf_signature')return 'PDF imzası eşleşmesi';
+  return code;
+}
+function __escHtml(value){
+  return String(value==null?'':value)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+function __replaceCitationRefIdInDocs(oldId,newId){
+  if(!oldId||!newId||oldId===newId)return;
+  var oldToken='data-ref="'+String(oldId).replace(/"/g,'&quot;')+'"';
+  var newToken='data-ref="'+String(newId).replace(/"/g,'&quot;')+'"';
+  (S.docs||[]).forEach(function(doc){
+    if(!doc||typeof doc.content!=='string')return;
+    if(doc.content.indexOf(oldToken)>=0)doc.content=doc.content.split(oldToken).join(newToken);
+  });
+  if(typeof S.doc==='string'&&S.doc.indexOf(oldToken)>=0)S.doc=S.doc.split(oldToken).join(newToken);
+  try{
+    var root=(editor&&editor.view&&editor.view.dom)?editor.view.dom:document.getElementById('apaed');
+    if(root){
+      root.querySelectorAll('.cit[data-ref="'+String(oldId).replace(/"/g,'')+'"]').forEach(function(node){
+        node.setAttribute('data-ref',newId);
+      });
+    }
+  }catch(_e){}
+}
+function __findDuplicateGroupsForCurrentWs(){
+  var ws=S.wss.find(function(x){return x&&x.id===S.cur;});
+  var refs=ws&&(ws.lib||[])||[];
+  if(!(window.AQDuplicateDetection&&typeof window.AQDuplicateDetection.detectDuplicateGroups==='function'))return [];
+  return window.AQDuplicateDetection.detectDuplicateGroups(refs,{
+    dismissedSignatures:__duplicateDismissedMap(S.cur)
+  });
+}
+function __renderDuplicateReviewModal(){
+  var summaryEl=document.getElementById('dupSummary');
+  var listEl=document.getElementById('dupGroups');
+  if(!summaryEl||!listEl)return;
+  var groups=duplicateReviewState.groups||[];
+  summaryEl.textContent=groups.length
+    ? (groups.length+' duplicate grup bulundu')
+    : 'Duplicate grup bulunamadı';
+  if(!groups.length){
+    listEl.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:12px 6px;">Şüpheli duplicate bulunamadı.</div>';
+    return;
+  }
+  listEl.innerHTML=groups.map(function(group){
+    var refs=(group.records||[]);
+    var reasons=(group.reasons||[]).map(__duplicateReasonLabel).join(', ');
+    var cards=refs.map(function(ref){
+      var authors=(Array.isArray(ref.authors)?ref.authors:[]).slice(0,2).join('; ');
+      return '<div class="dup-ref-card">'+
+        '<div class="dup-ref-title">'+__escHtml(ref.title||'Başlıksız')+'</div>'+
+        '<div class="dup-ref-meta"><b>Yazar:</b> '+__escHtml(authors||'-')+'</div>'+
+        '<div class="dup-ref-meta"><b>Yıl:</b> '+__escHtml(ref.year||'-')+'</div>'+
+        '<div class="dup-ref-meta"><b>Dergi:</b> '+__escHtml(ref.journal||'-')+'</div>'+
+        '<div class="dup-ref-meta"><b>DOI:</b> '+__escHtml(ref.doi||'-')+'</div>'+
+      '</div>';
+    }).join('');
+    return '<div class="dup-group-card" data-dup-signature="'+__escHtml(group.signature)+'">'+
+      '<div class="dup-head">Güven: '+Math.round((group.confidence||0)*100)+'% · '+__escHtml(reasons||'benzer metadata')+'</div>'+
+      '<div class="dup-ref-grid">'+cards+'</div>'+
+      '<div class="mb">'+
+        '<button class="mbtn p" data-dup-action="merge" data-dup-signature="'+__escHtml(group.signature)+'">Birleştir</button>'+
+        '<button class="mbtn s" data-dup-action="keep" data-dup-signature="'+__escHtml(group.signature)+'">İkisini de Tut</button>'+
+        '<button class="mbtn s" data-dup-action="dismiss" data-dup-signature="'+__escHtml(group.signature)+'">Yoksay</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+function __removeDuplicateGroup(signature){
+  duplicateReviewState.groups=(duplicateReviewState.groups||[]).filter(function(group){
+    return group.signature!==signature;
+  });
+}
+function __mergeDuplicateGroup(signature,options){
+  options=options||{};
+  var group=(duplicateReviewState.groups||[]).find(function(item){return item.signature===signature;});
+  if(!group)return false;
+  var ws=S.wss.find(function(x){return x&&x.id===S.cur;});
+  if(!ws)return false;
+  var candidates=(group.ids||[]).map(function(id){
+    return (ws.lib||[]).find(function(ref){return ref&&ref.id===id;})||null;
+  }).filter(Boolean);
+  if(candidates.length<2){
+    __removeDuplicateGroup(signature);
+    if(!options.silentUI)__renderDuplicateReviewModal();
+    return false;
+  }
+  var primary=(window.AQDuplicateDetection&&typeof window.AQDuplicateDetection.pickPrimaryRecord==='function')
+    ? window.AQDuplicateDetection.pickPrimaryRecord(candidates)
+    : candidates[0];
+  if(!primary)primary=candidates[0];
+  var removeMap={};
+  candidates.forEach(function(ref){
+    if(!ref||ref.id===primary.id)return;
+    if(window.AQDuplicateDetection&&typeof window.AQDuplicateDetection.mergeRecords==='function'){
+      window.AQDuplicateDetection.mergeRecords(primary,ref);
+    }else{
+      mergeRefFields(primary,ref);
+    }
+    removeMap[ref.id]=true;
+  });
+  ws.lib=(ws.lib||[]).filter(function(ref){return !removeMap[ref.id];});
+  (S.notes||[]).forEach(function(note){
+    if(note&&removeMap[note.rid])note.rid=primary.id;
+  });
+  Object.keys(removeMap).forEach(function(oldId){
+    __replaceCitationRefIdInDocs(oldId,primary.id);
+  });
+  if(curRef&&removeMap[curRef.id])curRef=primary;
+  save();rLib();rRefs();updateRefSection();
+  __removeDuplicateGroup(signature);
+  if(options.silentUI)return true;
+  __renderDuplicateReviewModal();
+  setDst('Duplicate kayıtlar birleştirildi.','ok');
+  setTimeout(function(){setDst('','');},3000);
+}
+function openDuplicateReview(){
+  duplicateReviewState.groups=__findDuplicateGroupsForCurrentWs();
+  showM('dupModal');
+  __renderDuplicateReviewModal();
+}
+function __mergeAllDuplicateGroups(){
+  var groups=(duplicateReviewState.groups||[]).slice();
+  if(!groups.length){
+    setDst('Birlestirilecek duplicate grup yok.','ok');
+    setTimeout(function(){setDst('','');},2200);
+    return;
+  }
+  var merged=0;
+  groups.forEach(function(group){
+    if(!group||!group.signature)return;
+    if(__mergeDuplicateGroup(group.signature,{silentUI:true}))merged++;
+  });
+  __renderDuplicateReviewModal();
+  setDst(merged+' duplicate grup birlestirildi.','ok');
+  setTimeout(function(){setDst('','');},3200);
+}
+function __dismissAllDuplicateGroups(){
+  var groups=(duplicateReviewState.groups||[]).slice();
+  if(!groups.length){
+    setDst('Yoksayilacak duplicate grup yok.','ok');
+    setTimeout(function(){setDst('','');},2200);
+    return;
+  }
+  var dismissed=__duplicateDismissedMap(S.cur);
+  groups.forEach(function(group){
+    if(group&&group.signature)dismissed[group.signature]=true;
+  });
+  duplicateReviewState.groups=[];
+  __renderDuplicateReviewModal();
+  setDst(groups.length+' duplicate grup yoksayildi.','ok');
+  setTimeout(function(){setDst('','');},3200);
+}
+function __renderMetadataHealth(){
+  var listEl=document.getElementById('metaHealthList');
+  var sumEl=document.getElementById('metaHealthSummary');
+  if(!listEl||!sumEl)return;
+  var ws=S.wss.find(function(x){return x&&x.id===S.cur;});
+  var refs=(ws&&ws.lib)||[];
+  var rows=refs.map(function(ref){
+    var report=(window.AQMetadataHealth&&typeof window.AQMetadataHealth.analyzeReference==='function')
+      ? window.AQMetadataHealth.analyzeReference(ref)
+      : {status:'complete',issues:[]};
+    return {ref:ref,report:report};
+  });
+  var summary=(window.AQMetadataHealth&&typeof window.AQMetadataHealth.summarizeHealth==='function')
+    ? window.AQMetadataHealth.summarizeHealth(refs)
+    : {total:refs.length,complete:refs.length,incomplete:0,suspicious:0,issueCounts:{}};
+  function issueLabel(code){
+    if(code==='missing_title')return 'Eksik başlık';
+    if(code==='missing_authors')return 'Eksik yazar';
+    if(code==='missing_year')return 'Eksik yıl';
+    if(code==='missing_journal')return 'Eksik dergi';
+    if(code==='malformed_doi')return 'Şüpheli DOI';
+    if(code==='malformed_pages')return 'Şüpheli sayfa';
+    return code;
+  }
+  var issueText=Object.keys(summary.issueCounts||{}).map(function(code){
+    return issueLabel(code)+' '+summary.issueCounts[code];
+  }).join(' · ');
+  sumEl.textContent='Toplam '+summary.total+' · Tam '+summary.complete+' · Eksik '+summary.incomplete+' · Şüpheli '+summary.suspicious+(issueText?(' · '+issueText):'');
+  if(!rows.length){
+    listEl.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:12px 6px;">Kaynak bulunamadı.</div>';
+    return;
+  }
+  listEl.innerHTML=rows.map(function(row){
+    var ref=row.ref||{};
+    var report=row.report||{status:'complete',issues:[]};
+    var statusLabel=report.status==='complete'?'Tam':(report.status==='incomplete'?'Eksik':'Şüpheli');
+    var issueHtml=(report.issues||[]).map(function(issue){
+      return '<span class="mh-issue">'+__escHtml(issue.message||issue.code)+'</span>';
+    }).join(' ');
+    return '<div class="mh-card" data-ref-id="'+__escHtml(ref.id||'')+'">'+
+      '<div class="mh-card-head"><span class="mh-status mh-'+__escHtml(report.status)+'">'+statusLabel+'</span><span class="mh-title">'+__escHtml(ref.title||'Başlıksız')+'</span></div>'+
+      '<div class="mh-meta">'+__escHtml((ref.authors||[]).slice(0,2).join('; ')||'Yazar yok')+' · '+__escHtml(ref.year||'yıl yok')+' · '+__escHtml(ref.journal||'dergi yok')+'</div>'+
+      '<div class="mh-issues">'+(issueHtml||'<span class="mh-issue">Sorun yok</span>')+'</div>'+
+      '<div class="mb">'+
+        '<button class="mbtn s" data-mh-action="edit" data-ref-id="'+__escHtml(ref.id||'')+'">Manuel Düzenle</button>'+
+        '<button class="mbtn s" data-mh-action="refetch" data-ref-id="'+__escHtml(ref.id||'')+'">DOI Yeniden Çek</button>'+
+        '<button class="mbtn p" data-mh-action="normalize" data-ref-id="'+__escHtml(ref.id||'')+'">Normalize Et</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+function openMetadataHealthCenter(){
+  showM('metaHealthModal');
+  __renderMetadataHealth();
+}
+function __getWebRelatedApi(){
+  return window.AQWebRelatedPapers||null;
+}
+function __getWebRelatedDiscoveryApi(){
+  return window.AQWebRelatedDiscovery||null;
+}
+function __ensureWebRelatedCache(){
+  if(webRelatedRuntime.cache)return webRelatedRuntime.cache;
+  var api=__getWebRelatedApi();
+  if(api&&typeof api.createCache==='function'){
+    webRelatedRuntime.cache=api.createCache(10*60*1000);
+    return webRelatedRuntime.cache;
+  }
+  var store={};
+  webRelatedRuntime.cache={
+    get:function(key){
+      var row=store[String(key||'')];
+      if(!row)return null;
+      if((Date.now()-row.at)>(10*60*1000)){
+        delete store[String(key||'')];
+        return null;
+      }
+      return row.value;
+    },
+    set:function(key,value){
+      store[String(key||'')]={at:Date.now(),value:value};
+    },
+    clear:function(){store={};}
+  };
+  return webRelatedRuntime.cache;
+}
+function __getWebRelatedSeedKey(ref){
+  var api=__getWebRelatedApi();
+  if(api&&typeof api.buildSeedKey==='function'){
+    try{return String(api.buildSeedKey(ref)||'');}catch(_e){}
+  }
+  if(ref&&ref.doi){
+    var doi=normalizeRefDoi(ref.doi);
+    if(doi)return 'doi:'+doi;
+  }
+  return 'ref:'+(ref&&ref.id?String(ref.id):'');
+}
+function __formatRelatedAuthors(ref){
+  return (Array.isArray(ref&&ref.authors)?ref.authors:[]).map(function(a){
+    return String(a||'').split(',')[0].trim();
+  }).filter(Boolean).slice(0,2).join(', ');
+}
+function __webRelatedFetchJSON(url,options){
+  var opts=options||{};
+  if(!(window.electronAPI&&typeof window.electronAPI.netFetchJSON==='function')){
+    return Promise.reject(new Error('Electron ag kanali bulunamadi'));
+  }
+  var timeoutMs=Math.max(2500,Math.min(parseInt(opts.timeoutMs,10)||9000,30000));
+  var requestPromise=window.electronAPI.netFetchJSON(url,{timeoutMs:timeoutMs}).then(function(res){
+    if(!res||!res.ok)throw new Error(res&&res.error?String(res.error):'Ag istegi basarisiz');
+    return res.data;
+  });
+  // Guard against hung IPC/net calls so UI never remains in perpetual "loading" state.
+  var timeoutPromise=new Promise(function(_resolve,reject){
+    setTimeout(function(){reject(new Error('Web istek zaman asimi'));},timeoutMs+1500);
+  });
+  return Promise.race([requestPromise,timeoutPromise]);
+}
+function __fallbackTokenize(text){
+  return String(text||'')
+    .toLowerCase()
+    .replace(/[^a-z0-9\u00c0-\u024f\s]/g,' ')
+    .split(/\s+/)
+    .filter(function(tok){return tok&&tok.length>=3;});
+}
+function __fallbackBuildQuery(seedRef){
+  var titleToks=__fallbackTokenize(seedRef&&seedRef.title||'').slice(0,8);
+  var firstAuthor=(Array.isArray(seedRef&&seedRef.authors)?seedRef.authors:[])[0]||'';
+  var surname=String(firstAuthor).split(',')[0].trim()||String(firstAuthor).split(/\s+/).slice(-1)[0]||'';
+  if(surname)titleToks.push(surname);
+  if(seedRef&&seedRef.year)titleToks.push(String(seedRef.year));
+  return titleToks.join(' ').trim();
+}
+function __fallbackMapOpenAlex(work){
+  if(!work||typeof work!=='object')return null;
+  function abstractFromInvertedIndex(inverted){
+    if(!inverted||typeof inverted!=='object')return '';
+    var tokens=[];
+    Object.keys(inverted).forEach(function(tok){
+      var positions=Array.isArray(inverted[tok])?inverted[tok]:[];
+      positions.forEach(function(pos){
+        tokens.push({pos:Number(pos),tok:String(tok||'')});
+      });
+    });
+    tokens.sort(function(a,b){return a.pos-b.pos;});
+    return tokens.map(function(row){return row.tok;}).join(' ').trim();
+  }
+  var authors=(Array.isArray(work.authorships)?work.authorships:[]).map(function(row){
+    return String(row&&row.author&&row.author.display_name||'').trim();
+  }).filter(Boolean);
+  var doi=String(work.doi||'').replace(/^https?:\/\/(?:dx\.)?doi\.org\//i,'');
+  var abstractText=String(work.abstract||'').trim()||abstractFromInvertedIndex(work.abstract_inverted_index||null);
+  return {
+    id:String(work.id||'').trim(),
+    provider:'openalex',
+    providerLabel:'OpenAlex',
+    title:String(work.display_name||work.title||'').trim(),
+    authors:authors,
+    year:String(work.publication_year||'').trim(),
+    journal:String(work&&work.primary_location&&work.primary_location.source&&work.primary_location.source.display_name||'').trim(),
+    doi:normalizeRefDoi(doi||''),
+    url:String(work&&work.primary_location&&work.primary_location.landing_page_url||work.id||'').trim(),
+    abstract:abstractText,
+    reasons:['OpenAlex benzerlik']
+  };
+}
+function __fallbackMapCrossref(item){
+  if(!item||typeof item!=='object')return null;
+  var authors=(Array.isArray(item.author)?item.author:[]).map(function(a){
+    var family=String(a&&a.family||'').trim();
+    var given=String(a&&a.given||'').trim();
+    if(family&&given)return family+', '+given;
+    return family||given;
+  }).filter(Boolean);
+  var title=Array.isArray(item.title)?String(item.title[0]||'').trim():String(item.title||'').trim();
+  var year='';
+  var dp=item&&((item.issued&&item.issued['date-parts'])||(item.published_print&&item.published_print['date-parts'])||(item.published_online&&item.published_online['date-parts']))||null;
+  if(Array.isArray(dp)&&Array.isArray(dp[0])&&dp[0].length)year=String(dp[0][0]||'').trim();
+  var journal=Array.isArray(item['container-title'])?String(item['container-title'][0]||'').trim():String(item['container-title']||'').trim();
+  var abstractText=String(item.abstract||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+  return {
+    id:String(item.DOI||item.URL||title||'').trim(),
+    provider:'crossref',
+    providerLabel:'Crossref',
+    title:title,
+    authors:authors,
+    year:year,
+    journal:journal,
+    doi:normalizeRefDoi(String(item.DOI||'')),
+    url:String(item.URL||'').trim(),
+    abstract:abstractText,
+    reasons:['Crossref benzerlik']
+  };
+}
+async function __discoverWebRelatedFallback(seedRef,options){
+  options=options||{};
+  var limit=Math.max(3,Math.min(parseInt(options.limit,10)||8,12));
+  var out=[];
+  var seen={};
+  function push(item){
+    var row=__normalizeWebRelatedItem(item||{});
+    if(!row.title)return;
+    var key=row.doi?('doi:'+row.doi.toLowerCase()):('title:'+String(row.title||'').toLowerCase().trim());
+    if(seen[key])return;
+    seen[key]=true;
+    out.push(row);
+  }
+  var doi=normalizeRefDoi(seedRef&&seedRef.doi||'');
+  if(doi){
+    try{
+      var seed=await __webRelatedFetchJSON('https://api.openalex.org/works/doi:'+encodeURIComponent(doi)+'?mailto=academiq@example.com',{timeoutMs:9000});
+      var ids=(Array.isArray(seed&&seed.related_works)?seed.related_works:[]).slice(0,Math.min(limit,8));
+      var rows=await Promise.all(ids.map(function(rawId){
+        var id=String(rawId||'').trim();
+        var m=id.match(/openalex\.org\/(W\d+)/i);
+        if(m&&m[1])id=m[1];
+        if(!id)return Promise.resolve(null);
+        return __webRelatedFetchJSON('https://api.openalex.org/works/'+encodeURIComponent(id)+'?mailto=academiq@example.com',{timeoutMs:9000}).catch(function(){return null;});
+      }));
+      rows.forEach(function(row){push(__fallbackMapOpenAlex(row));});
+    }catch(_e){}
+  }
+  if(out.length<Math.min(4,limit)){
+    var query=__fallbackBuildQuery(seedRef||{});
+    if(query){
+      try{
+        var search=await __webRelatedFetchJSON('https://api.openalex.org/works?search='+encodeURIComponent(query)+'&per-page='+String(limit)+'&mailto=academiq@example.com',{timeoutMs:9000});
+        (Array.isArray(search&&search.results)?search.results:[]).forEach(function(work){
+          push(__fallbackMapOpenAlex(work));
+        });
+      }catch(_e){}
+    }
+  }
+  if(out.length<Math.min(4,limit)){
+    var q=__fallbackBuildQuery(seedRef||{});
+    if(q){
+      try{
+        var cr=await __webRelatedFetchJSON('https://api.crossref.org/works?rows='+String(limit)+'&mailto=academiq@example.com&query.bibliographic='+encodeURIComponent(q),{timeoutMs:9000});
+        (Array.isArray(cr&&cr.message&&cr.message.items)?cr.message.items:[]).forEach(function(item){
+          push(__fallbackMapCrossref(item));
+        });
+      }catch(_e){}
+    }
+  }
+  if(doi){
+    out=out.filter(function(row){
+      return !(row&&row.doi&&normalizeRefDoi(row.doi)===doi);
+    });
+  }
+  return {
+    items:out.slice(0,limit),
+    fetchedAt:Date.now()
+  };
+}
+function __normalizeWebRelatedItem(item){
+  var api=__getWebRelatedApi();
+  if(api&&typeof api.normalizeWebResult==='function'){
+    try{return api.normalizeWebResult(item||{},{
+      provider:(item&&item.provider)||'web',
+      providerLabel:(item&&item.providerLabel)||'Web'
+    });}catch(_e){}
+  }
+  return {
+    id:String(item&&item.id||''),
+    provider:String(item&&item.provider||'web'),
+    providerLabel:String(item&&item.providerLabel||'Web'),
+    title:String(item&&item.title||'').trim(),
+    authors:Array.isArray(item&&item.authors)?item.authors.slice():[],
+    year:String(item&&item.year||'').trim(),
+    journal:String(item&&item.journal||'').trim(),
+    volume:String(item&&item.volume||'').trim(),
+    issue:String(item&&item.issue||'').trim(),
+    fp:String(item&&item.fp||'').trim(),
+    lp:String(item&&item.lp||'').trim(),
+    doi:normalizeRefDoi(item&&item.doi||item&&item.url||''),
+    url:String(item&&item.url||'').trim(),
+    abstract:String(item&&item.abstract||item&&item.snippet||'').trim(),
+    labels:Array.isArray(item&&item.labels)?item.labels.slice():[],
+    reasons:Array.isArray(item&&item.reasons)?item.reasons.slice():[]
+  };
+}
+function __buildRefFromWebRelated(item){
+  var normalized=__normalizeWebRelatedItem(item);
+  var api=__getWebRelatedApi();
+  var ref=null;
+  if(api&&typeof api.buildWorkspaceReference==='function'){
+    try{
+      ref=api.buildWorkspaceReference(normalized,{
+        workspaceId:S.cur,
+        createId:uid
+      });
+    }catch(_e){}
+  }
+  if(!ref){
+    ref={
+      id:uid(),
+      title:normalized.title||'',
+      authors:Array.isArray(normalized.authors)?normalized.authors.slice():[],
+      year:normalized.year||'',
+      journal:normalized.journal||'',
+      volume:normalized.volume||'',
+      issue:normalized.issue||'',
+      fp:normalized.fp||'',
+      lp:normalized.lp||'',
+      doi:normalizeRefDoi(normalized.doi||normalized.url||''),
+      url:normalized.url||'',
+      abstract:normalized.abstract||'',
+      note:'',
+      labels:Array.isArray(normalized.labels)?normalized.labels.slice():[],
+      pdfData:null,
+      pdfUrl:'',
+      wsId:S.cur
+    };
+  }
+  normalizeRefRecord(ref);
+  if(!ref.id)ref.id=uid();
+  if(!ref.wsId)ref.wsId=S.cur;
+  if(!ref.url&&ref.doi)ref.url='https://doi.org/'+ref.doi;
+  if(!Array.isArray(ref.labels))ref.labels=[];
+  if(normalized.providerLabel){
+    ref.discoveryProvider=normalized.providerLabel;
+  }else if(normalized.provider){
+    ref.discoveryProvider=normalized.provider;
+  }
+  if(normalized.reasons&&normalized.reasons.length){
+    ref.discoveryReasons=normalized.reasons.slice(0,4);
+  }
+  return ref;
+}
+function __findEquivalentRefAcrossWorkspaces(ref){
+  if(!ref)return null;
+  for(var wi=0;wi<S.wss.length;wi++){
+    var ws=S.wss[wi];
+    var lib=(ws&&ws.lib)||[];
+    for(var ri=0;ri<lib.length;ri++){
+      var cand=lib[ri];
+      if(cand&&refsLikelySame(cand,ref)){
+        return {wsId:ws.id,ref:cand};
+      }
+    }
+  }
+  return null;
+}
+function __attachExistingRefToActiveWorkspace(existingRef,candidateRef){
+  if(!existingRef)return null;
+  // Keep workspaces isolated: attach as a cloned record so edits in one workspace do not mutate another.
+  var clone=JSON.parse(JSON.stringify(existingRef));
+  clone.id=uid();
+  clone.wsId=S.cur;
+  clone.collectionIds=[];
+  mergeRefFields(clone,candidateRef||{});
+  normalizeRefRecord(clone);
+  return addToLib(clone)||clone;
+}
+function __addWebResultToActiveWorkspace(item,options){
+  options=options||{};
+  var ws=curWs();
+  if(!ws){
+    if(!options.quiet)setDst('Aktif workspace bulunamadi.','er');
+    return {status:'error',reason:'no_workspace'};
+  }
+  var normalized=__normalizeWebRelatedItem(item);
+  var candidateRef=__buildRefFromWebRelated(normalized);
+  var api=__getWebRelatedApi();
+  var decision=null;
+  if(api&&typeof api.decideAddToActiveWorkspace==='function'){
+    try{decision=api.decideAddToActiveWorkspace(S.wss,S.cur,candidateRef);}catch(_e){}
+  }
+  if(decision&&decision.action==='already_in_workspace'&&decision.existingRef){
+    if(!options.quiet){
+      setDst('Zaten bu workspace\'te mevcut.','ok');
+      setTimeout(function(){setDst('','');},2200);
+    }
+    return {status:'already',ref:decision.existingRef};
+  }
+  if(decision&&decision.action==='attach_existing'&&decision.existingRef){
+    var attached=__attachExistingRefToActiveWorkspace(decision.existingRef,candidateRef);
+    renderRelatedPapers();
+    if(!options.quiet){
+      setDst('Kaynak aktif workspace\'e eklendi.','ok');
+      setTimeout(function(){setDst('','');},2400);
+    }
+    return {status:'attached_existing',ref:attached};
+  }
+  var existingAny=__findEquivalentRefAcrossWorkspaces(candidateRef);
+  if(existingAny&&String(existingAny.wsId)!==String(S.cur)){
+    var attachedAny=__attachExistingRefToActiveWorkspace(existingAny.ref,candidateRef);
+    renderRelatedPapers();
+    if(!options.quiet){
+      setDst('Kaynak aktif workspace\'e eklendi.','ok');
+      setTimeout(function(){setDst('','');},2400);
+    }
+    return {status:'attached_existing',ref:attachedAny};
+  }
+  var added=addToLib(candidateRef)||candidateRef;
+  renderRelatedPapers();
+  if(!options.quiet){
+    setDst('Kaynak aktif workspace\'e eklendi.','ok');
+    setTimeout(function(){setDst('','');},2400);
+  }
+  return {status:'added',ref:added};
+}
+function __addWebResultToLibraryOnly(item){
+  var normalized=__normalizeWebRelatedItem(item);
+  var candidateRef=__buildRefFromWebRelated(normalized);
+  var existingAny=__findEquivalentRefAcrossWorkspaces(candidateRef);
+  if(existingAny&&existingAny.ref){
+    setDst('Kaynak kutuphanede zaten mevcut.','ok');
+    setTimeout(function(){setDst('','');},2200);
+    return {status:'already',ref:existingAny.ref,wsId:existingAny.wsId};
+  }
+  var added=addToLib(candidateRef)||candidateRef;
+  renderRelatedPapers();
+  setDst('Kaynak kutuphaneye eklendi.','ok');
+  setTimeout(function(){setDst('','');},2400);
+  return {status:'added',ref:added,wsId:S.cur};
+}
+function __resolveWebRelatedItemFromButton(btn){
+  var card=btn&&btn.closest?btn.closest('[data-related-web-index][data-related-seed]'):null;
+  if(!card)return null;
+  var idx=parseInt(card.getAttribute('data-related-web-index'),10);
+  if(!Number.isFinite(idx)||idx<0)return null;
+  var seedKey=String(card.getAttribute('data-related-seed')||'');
+  if(!seedKey)return null;
+  var row=webRelatedRuntime.resultMap&&webRelatedRuntime.resultMap[seedKey];
+  var items=row&&Array.isArray(row.items)?row.items:[];
+  if(idx>=items.length)return null;
+  return {
+    item:items[idx],
+    seedKey:seedKey,
+    index:idx,
+    card:card
+  };
+}
+function __handleWebRelatedAction(action,payload){
+  var item=payload&&payload.item;
+  if(!item)return;
+  if(action==='open-abstract'){
+    __openWebAbstractPreview(item);
+    return;
+  }
+  if(action==='add-active'){
+    __addWebResultToActiveWorkspace(item);
+    return;
+  }
+  if(action==='add-library'){
+    __addWebResultToLibraryOnly(item);
+    return;
+  }
+  if(action==='preview'){
+    var url=item.url||(item.doi?('https://doi.org/'+item.doi):'');
+    if(!url){
+      setDst('Detay URL bulunamadi.','er');
+      return;
+    }
+    try{window.open(url,'_blank','noopener');}catch(_e){
+      setDst('Detay acilamadi.','er');
+    }
+    return;
+  }
+  if(action==='find-oa'){
+    (async function(){
+      var added=__addWebResultToActiveWorkspace(item,{quiet:true});
+      var ref=added&&added.ref;
+      if(!ref){
+        setDst('Kaynak eklenemedi.','er');
+        return;
+      }
+      if(!ref.doi&&!ref.pdfUrl){
+        setDst('PDF/OA arama icin DOI veya URL gerekli.','er');
+        return;
+      }
+      setDst('OA PDF araniyor...','ld');
+      try{
+        var out=await __oaDownloadOneRef(ref);
+        if(out&&out.ok){
+          save();rLib();rRefs();
+          setDst('OA PDF bulundu ve eklendi.','ok');
+          setTimeout(function(){setDst('','');},2800);
+        }else{
+          setDst('OA PDF bulunamadi.','er');
+        }
+      }catch(e){
+        setDst('OA PDF aramasi basarisiz.','er');
+      }
+    })();
+    return;
+  }
+}
+function __openWebAbstractPreview(item){
+  var row=__normalizeWebRelatedItem(item||{});
+  var panel=document.getElementById('pdfpanel');
+  var sc=document.getElementById('pdfscroll');
+  var titleEl=document.getElementById('pdftitle');
+  if(!panel||!sc||!titleEl)return;
+
+  clearPDFView();
+  pdfDoc=null;
+  pdfTotal=0;
+  pdfPg=1;
+  updPgLabel();
+  panel.classList.add('open');
+  titleEl.textContent=('Ozet onizleme: '+(row.title||'Web sonuc')).substring(0,80);
+
+  var card=document.createElement('div');
+  card.style.cssText='width:min(820px,100%);background:#fff;border:1px solid rgba(214,202,184,.9);border-radius:12px;padding:16px 18px;box-shadow:0 14px 28px rgba(42,29,12,.12);line-height:1.6;color:var(--txt2);';
+
+  var h=document.createElement('h3');
+  h.style.cssText='margin:0 0 8px;font-size:18px;line-height:1.35;color:var(--txt);';
+  h.textContent=row.title||'Basliksiz';
+  card.appendChild(h);
+
+  var meta=document.createElement('div');
+  meta.style.cssText='font-family:var(--fm);font-size:11px;color:var(--txt3);margin-bottom:10px;';
+  var metaAuthors=__formatRelatedAuthors(row)||'Bilinmeyen';
+  meta.textContent=metaAuthors+' · '+(row.year||'t.y.')+(row.journal?(' · '+row.journal):'')+(row.providerLabel?(' · '+row.providerLabel):'');
+  card.appendChild(meta);
+
+  var abstractBox=document.createElement('div');
+  abstractBox.style.cssText='font-size:13px;white-space:pre-wrap;';
+  card.appendChild(abstractBox);
+  function renderAbstract(text,status){
+    var absText=String(text||'').trim();
+    if(absText){
+      abstractBox.style.whiteSpace='pre-wrap';
+      abstractBox.style.fontSize='13px';
+      abstractBox.style.color='var(--txt2)';
+      abstractBox.textContent=absText;
+      return;
+    }
+    abstractBox.style.whiteSpace='normal';
+    abstractBox.style.fontSize='12px';
+    abstractBox.style.color='var(--txt3)';
+    abstractBox.textContent=status||'Bu kayitta abstract bulunamadi.';
+  }
+  renderAbstract(row.abstract,'Bu kayitta abstract aranıyor...');
+  if(!String(row.abstract||'').trim()){
+    __hydrateWebResultAbstract(row).then(function(updated){
+      if(updated&&updated.abstract){
+        renderAbstract(updated.abstract,'');
+        if(item&&typeof item==='object'){
+          item.abstract=updated.abstract;
+          if(!item.url&&updated.url)item.url=updated.url;
+        }
+      }else{
+        renderAbstract('', 'Bu kayitta abstract bulunamadi.');
+      }
+    }).catch(function(){
+      renderAbstract('', 'Bu kayitta abstract bulunamadi.');
+    });
+  }
+
+  var actions=document.createElement('div');
+  actions.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;';
+  function mkBtn(label,primary){
+    var btn=document.createElement('button');
+    btn.type='button';
+    btn.textContent=label;
+    btn.style.cssText='border:1px solid '+(primary?'rgba(88,128,156,.45)':'rgba(146,166,177,.44)')+';background:'+(primary?'rgba(88,128,156,.1)':'rgba(255,255,255,.95)')+';color:'+ (primary?'#36586d':'var(--txt2)') +';border-radius:8px;padding:6px 10px;font-family:var(--fm);font-size:11px;cursor:pointer;';
+    return btn;
+  }
+  var addWsBtn=mkBtn('Workspace\'e ekle',true);
+  addWsBtn.addEventListener('click',function(){__addWebResultToActiveWorkspace(row);});
+  actions.appendChild(addWsBtn);
+
+  var addLibBtn=mkBtn('Kutuphaneye ekle',false);
+  addLibBtn.addEventListener('click',function(){__addWebResultToLibraryOnly(row);});
+  actions.appendChild(addLibBtn);
+
+  if(row.url||row.doi){
+    var detailBtn=mkBtn('Detay',false);
+    detailBtn.addEventListener('click',function(){
+      var url=row.url||(row.doi?('https://doi.org/'+row.doi):'');
+      if(!url)return;
+      try{window.open(url,'_blank','noopener');}catch(_e){}
+    });
+    actions.appendChild(detailBtn);
+  }
+
+  card.appendChild(actions);
+  sc.appendChild(card);
+}
+function __hydrateWebResultAbstract(row){
+  row=__normalizeWebRelatedItem(row||{});
+  if(row.abstract)return Promise.resolve(row);
+  function normalizeAbstract(text){
+    return String(text||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+  }
+  function abstractFromOpenAlex(inverted){
+    if(!inverted||typeof inverted!=='object')return '';
+    var toks=[];
+    Object.keys(inverted).forEach(function(tok){
+      var positions=Array.isArray(inverted[tok])?inverted[tok]:[];
+      positions.forEach(function(pos){toks.push({pos:Number(pos),tok:String(tok||'')});});
+    });
+    toks.sort(function(a,b){return a.pos-b.pos;});
+    return toks.map(function(x){return x.tok;}).join(' ').trim();
+  }
+  var doi=normalizeRefDoi(row.doi||'');
+  var openAlexUrl='';
+  if(row.url&&/api\.openalex\.org\/works\//i.test(String(row.url||''))){
+    openAlexUrl=String(row.url||'');
+  }else if(row.id&&/openalex\.org\/W\d+/i.test(String(row.id||''))){
+    var m=String(row.id).match(/openalex\.org\/(W\d+)/i);
+    if(m&&m[1])openAlexUrl='https://api.openalex.org/works/'+encodeURIComponent(m[1]);
+  }
+  var tasks=[];
+  if(doi){
+    tasks.push(function(){
+      return __webRelatedFetchJSON('https://api.openalex.org/works/doi:'+encodeURIComponent(doi)+'?mailto=academiq@example.com',{timeoutMs:9000}).then(function(work){
+        var abs=normalizeAbstract(work&&work.abstract)||abstractFromOpenAlex(work&&work.abstract_inverted_index||null);
+        if(abs){
+          row.abstract=abs;
+          if(!row.url)row.url=String(work&&work.primary_location&&work.primary_location.landing_page_url||work&&work.id||'').trim();
+        }
+      }).catch(function(){});
+    });
+    tasks.push(function(){
+      return __webRelatedFetchJSON('https://api.crossref.org/works/'+encodeURIComponent(doi),{timeoutMs:9000}).then(function(out){
+        var item=out&&out.message||null;
+        var abs=normalizeAbstract(item&&item.abstract||'');
+        if(abs&&!row.abstract)row.abstract=abs;
+        if(!row.url&&item&&item.URL)row.url=String(item.URL||'').trim();
+      }).catch(function(){});
+    });
+  }
+  if(openAlexUrl){
+    tasks.push(function(){
+      var u=openAlexUrl+(openAlexUrl.indexOf('?')>=0?'&':'?')+'mailto=academiq@example.com';
+      return __webRelatedFetchJSON(u,{timeoutMs:9000}).then(function(work){
+        var abs=normalizeAbstract(work&&work.abstract)||abstractFromOpenAlex(work&&work.abstract_inverted_index||null);
+        if(abs&&!row.abstract)row.abstract=abs;
+      }).catch(function(){});
+    });
+  }
+  if(!tasks.length)return Promise.resolve(row);
+  return tasks.reduce(function(p,step){
+    return p.then(function(){
+      if(row.abstract)return row;
+      return step().then(function(){return row;});
+    });
+  },Promise.resolve(row)).then(function(){return row;});
+}
+function __startWebRelatedFetch(seedRef,seedKey,retryCount){
+  retryCount=parseInt(retryCount,10)||0;
+  var discoverApi=__getWebRelatedDiscoveryApi();
+  if(webRelatedRuntime.loadingSeedKey===seedKey)return;
+  if(!(window.electronAPI&&typeof window.electronAPI.netFetchJSON==='function')){
+    webRelatedRuntime.error='Web arama icin guvenli ag kanali bulunamadi.';
+    webRelatedRuntime.statusText='';
+    return;
+  }
+  webRelatedRuntime.loadingSeedKey=seedKey;
+  webRelatedRuntime.error='';
+  webRelatedRuntime.statusText='Webde araniyor...';
+  var token=(webRelatedRuntime.token||0)+1;
+  webRelatedRuntime.token=token;
+  var watchdogTimer=setTimeout(function(){
+    if(token!==webRelatedRuntime.token)return;
+    if(webRelatedRuntime.loadingSeedKey!==seedKey)return;
+    webRelatedRuntime.loadingSeedKey='';
+    webRelatedRuntime.error='Web arama zaman asimina ugradi.';
+    webRelatedRuntime.statusText='';
+    if(webRelatedRuntime.activeSeedKey===seedKey)renderRelatedPapers();
+  },22000);
+  setTimeout(function(){
+    if(webRelatedRuntime.activeSeedKey===seedKey)renderRelatedPapers();
+  },0);
+  // Web discovery runs only through secure IPC-backed fetch, never direct renderer fetch.
+  var discoveryPromise;
+  try{
+    if(discoverApi&&typeof discoverApi.discoverWebRelated==='function'){
+      discoveryPromise=Promise.resolve(discoverApi.discoverWebRelated(seedRef,{
+        fetchJSON:function(url,opts){return __webRelatedFetchJSON(url,opts||{});},
+        limit:8
+      }));
+    }else{
+      discoveryPromise=Promise.resolve(__discoverWebRelatedFallback(seedRef,{limit:8}));
+    }
+  }catch(err){
+    if(token===webRelatedRuntime.token){
+      webRelatedRuntime.loadingSeedKey='';
+      webRelatedRuntime.error=String(err&&err.message?err.message:err||'Web aramasi basarisiz');
+      webRelatedRuntime.statusText='';
+      if(webRelatedRuntime.activeSeedKey===seedKey)renderRelatedPapers();
+    }
+    return;
+  }
+  discoveryPromise.then(function(out){
+    if(token!==webRelatedRuntime.token)return;
+    var items=Array.isArray(out&&out.items)?out.items:[];
+    var normalized=items.map(__normalizeWebRelatedItem);
+    var bucket={items:normalized,fetchedAt:out&&out.fetchedAt?out.fetchedAt:Date.now()};
+    if(!webRelatedRuntime.resultMap)webRelatedRuntime.resultMap={};
+    webRelatedRuntime.resultMap[seedKey]=bucket;
+    webRelatedRuntime.items=normalized.slice();
+    var cache=__ensureWebRelatedCache();
+    if(cache&&typeof cache.set==='function')cache.set(seedKey,bucket);
+    webRelatedRuntime.error='';
+    webRelatedRuntime.statusText=normalized.length
+      ? ('Web: '+normalized.length+' sonuc')
+      : 'Webde sonuc bulunamadi';
+  }).catch(function(err){
+    if(token!==webRelatedRuntime.token)return;
+    webRelatedRuntime.error=String(err&&err.message?err.message:err||'Web aramasi basarisiz');
+    webRelatedRuntime.statusText='';
+  }).finally(function(){
+    clearTimeout(watchdogTimer);
+    if(token===webRelatedRuntime.token&&webRelatedRuntime.loadingSeedKey===seedKey){
+      webRelatedRuntime.loadingSeedKey='';
+    }
+    if(webRelatedRuntime.activeSeedKey===seedKey)renderRelatedPapers();
+  });
+}
+function __bindSprint1PanelEvents(){
+  var collectionManageBtn=document.getElementById('collectionManageBtn');
+  if(collectionManageBtn&&!collectionManageBtn.__aqBound){
+    collectionManageBtn.__aqBound=true;
+    collectionManageBtn.addEventListener('click',function(){openCollectionManager();});
+  }
+  var collectionCreateBtn=document.getElementById('collectionCreateBtn');
+  if(collectionCreateBtn&&!collectionCreateBtn.__aqBound){
+    collectionCreateBtn.__aqBound=true;
+    collectionCreateBtn.addEventListener('click',function(){createCollectionFromInput();});
+  }
+  var btnZoteroImport=document.getElementById('btnZoteroImport');
+  if(btnZoteroImport&&!btnZoteroImport.__aqBound){
+    btnZoteroImport.__aqBound=true;
+    btnZoteroImport.addEventListener('click',function(){
+      var inp=document.getElementById('zoteroinp');
+      if(inp&&typeof inp.click==='function')inp.click();
+    });
+  }
+  var btnFindDuplicates=document.getElementById('btnFindDuplicates');
+  if(btnFindDuplicates&&!btnFindDuplicates.__aqBound){
+    btnFindDuplicates.__aqBound=true;
+    btnFindDuplicates.addEventListener('click',function(){openDuplicateReview();});
+  }
+  var btnMetadataHealth=document.getElementById('btnMetadataHealth');
+  if(btnMetadataHealth&&!btnMetadataHealth.__aqBound){
+    btnMetadataHealth.__aqBound=true;
+    btnMetadataHealth.addEventListener('click',function(){openMetadataHealthCenter();});
+  }
+  var citationStyleSel=document.getElementById('citationStyleSel');
+  if(citationStyleSel&&!citationStyleSel.__aqBound){
+    citationStyleSel.__aqBound=true;
+    citationStyleSel.addEventListener('change',function(event){
+      setCitationStyle(event&&event.target?event.target.value:'apa7');
+    });
+  }
+  var dupMergeAllBtn=document.getElementById('dupMergeAllBtn');
+  if(dupMergeAllBtn&&!dupMergeAllBtn.__aqBound){
+    dupMergeAllBtn.__aqBound=true;
+    dupMergeAllBtn.addEventListener('click',function(){__mergeAllDuplicateGroups();});
+  }
+  var dupDismissAllBtn=document.getElementById('dupDismissAllBtn');
+  if(dupDismissAllBtn&&!dupDismissAllBtn.__aqBound){
+    dupDismissAllBtn.__aqBound=true;
+    dupDismissAllBtn.addEventListener('click',function(){__dismissAllDuplicateGroups();});
+  }
+  var dupEl=document.getElementById('dupGroups');
+  if(dupEl&&!dupEl.__aqDupBound){
+    dupEl.__aqDupBound=true;
+    dupEl.addEventListener('click',function(event){
+      var btn=event&&event.target&&event.target.closest?event.target.closest('[data-dup-action]'):null;
+      if(!btn)return;
+      var action=String(btn.getAttribute('data-dup-action')||'');
+      var signature=String(btn.getAttribute('data-dup-signature')||'');
+      if(!signature)return;
+      if(action==='merge'){__mergeDuplicateGroup(signature);return;}
+      if(action==='dismiss'){
+        var dismissed=__duplicateDismissedMap(S.cur);
+        dismissed[signature]=true;
+      }
+      __removeDuplicateGroup(signature);
+      __renderDuplicateReviewModal();
+    });
+  }
+  var metaList=document.getElementById('metaHealthList');
+  if(metaList&&!metaList.__aqMhBound){
+    metaList.__aqMhBound=true;
+    metaList.addEventListener('click',function(event){
+      var btn=event&&event.target&&event.target.closest?event.target.closest('[data-mh-action]'):null;
+      if(!btn)return;
+      var action=String(btn.getAttribute('data-mh-action')||'');
+      var refId=String(btn.getAttribute('data-ref-id')||'');
+      if(!refId)return;
+      var ref=findRef(refId,S.cur)||findRef(refId);
+      if(!ref)return;
+      if(action==='edit'){
+        editRefMetadata(ref);
+        setTimeout(__renderMetadataHealth,220);
+        return;
+      }
+      if(action==='refetch'){
+        if(!ref.doi){setDst('DOI olmayan kaynakta yeniden çekme yapılamaz.','er');return;}
+        setDst('Metadata DOI üzerinden güncelleniyor...','ld');
+        fetchCR(ref.doi,function(err,fetched){
+          if(err||!fetched){setDst('DOI metadata alınamadı.','er');return;}
+          mergeRefFields(ref,fetched);
+          save();rLib();rRefs();updateRefSection();
+          __renderMetadataHealth();
+          setDst('Metadata güncellendi.','ok');
+          setTimeout(function(){setDst('','');},3000);
+        });
+        return;
+      }
+      if(action==='normalize'){
+        if(window.AQMetadataHealth&&typeof window.AQMetadataHealth.applyConservativeRepairs==='function'){
+          var result=window.AQMetadataHealth.applyConservativeRepairs(ref);
+          if(result&&result.ref){
+            Object.keys(result.ref).forEach(function(key){ref[key]=result.ref[key];});
+            normalizeRefRecord(ref);
+            save();rLib();rRefs();
+            __renderMetadataHealth();
+            setDst((result.changes||[]).length?'Kayıt normalize edildi.':'Değişiklik gerekmedi.','ok');
+            setTimeout(function(){setDst('','');},2500);
+          }
+        }
+      }
+    });
+  }
+  var mhRefresh=document.getElementById('metaHealthRefreshBtn');
+  if(mhRefresh&&!mhRefresh.__aqBound){
+    mhRefresh.__aqBound=true;
+    mhRefresh.addEventListener('click',function(){__renderMetadataHealth();});
+  }
+  var relatedList=document.getElementById('relatedList');
+  if(relatedList&&!relatedList.__aqBound){
+    relatedList.__aqBound=true;
+    relatedList.addEventListener('click',function(event){
+      var actionBtn=event&&event.target&&event.target.closest?event.target.closest('[data-related-action]'):null;
+      if(actionBtn){
+        if(typeof event.preventDefault==='function')event.preventDefault();
+        if(typeof event.stopPropagation==='function')event.stopPropagation();
+        var action=String(actionBtn.getAttribute('data-related-action')||'');
+        var payload=__resolveWebRelatedItemFromButton(actionBtn);
+        if(action&&payload)__handleWebRelatedAction(action,payload);
+        return;
+      }
+      var card=event&&event.target&&event.target.closest?event.target.closest('[data-related-ref]'):null;
+      if(card){
+        var refId=String(card.getAttribute('data-related-ref')||'');
+        if(refId&&typeof openRef==='function')openRef(refId);
+        return;
+      }
+      var webCard=event&&event.target&&event.target.closest?event.target.closest('[data-related-web-index][data-related-seed]'):null;
+      if(webCard){
+        var payload=__resolveWebRelatedItemFromButton(webCard);
+        if(payload&&payload.item)__openWebAbstractPreview(payload.item);
+      }
+    });
+  }
+  var relatedToggleBtn=document.getElementById('relatedToggleBtn');
+  if(relatedToggleBtn&&!relatedToggleBtn.__aqBound){
+    relatedToggleBtn.__aqBound=true;
+    relatedToggleBtn.addEventListener('click',function(event){
+      if(event&&typeof event.preventDefault==='function')event.preventDefault();
+      toggleRelatedPanel();
+    });
+  }
+  var collectionList=document.getElementById('collectionList');
+  if(collectionList&&!collectionList.__aqBound){
+    collectionList.__aqBound=true;
+    collectionList.addEventListener('click',function(event){
+      var btn=event&&event.target&&event.target.closest?event.target.closest('[data-col-action][data-col-id]'):null;
+      if(!btn)return;
+      var action=String(btn.getAttribute('data-col-action')||'');
+      var colId=String(btn.getAttribute('data-col-id')||'');
+      if(!colId)return;
+      if(action==='rename'){renameCollectionById(colId);return;}
+      if(action==='delete'){deleteCollectionById(colId);}
+    });
+  }
+  renderCollectionFilter();
+}
+__bindSprint1PanelEvents();
+(function enforceFinalSidebarOverrides(){
+  renderCollectionManager=function(){
+    var list=document.getElementById('collectionList');
+    if(!list)return;
+    var ws=currentWorkspaceForCollections();
+    var collections=ensureWorkspaceCollections(ws);
+    if(!collections.length){
+      list.innerHTML='<div class="collection-empty">Henuz koleksiyon yok.</div>';
+      return;
+    }
+    list.innerHTML=collections.map(function(col){
+      return '<div class="collection-row">'+
+        '<div class="collection-name" title="'+__escHtml(col.name)+'">'+__escHtml(col.name)+'</div>'+
+        '<div class="collection-actions">'+
+          '<button class="collection-btn" data-col-action="rename" data-col-id="'+__escHtml(col.id)+'">Yeniden Adlandir</button>'+
+          '<button class="collection-btn collection-btn-danger" data-col-action="delete" data-col-id="'+__escHtml(col.id)+'">Sil</button>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+  };
+
+  renderRelatedPapers=function(){
+    var panel=document.getElementById('relatedPanel');
+    var list=document.getElementById('relatedList');
+    var toggleBtn=document.getElementById('relatedToggleBtn');
+    if(!panel||!list)return;
+    panel.style.display='block';
+    panel.classList.toggle('collapsed',!!relatedPanelCollapsed);
+    if(toggleBtn){
+      toggleBtn.textContent=relatedPanelCollapsed?'+':'-';
+      toggleBtn.title=relatedPanelCollapsed?'Goster':'Kucult';
+      toggleBtn.setAttribute('aria-expanded',relatedPanelCollapsed?'false':'true');
+    }
+    if(!curRef){
+      list.innerHTML='<div class="rmeta">Bir kaynak secildiginde benzer makaleler burada gorunur.</div>';
+      return;
+    }
+    var ws=S.wss.find(function(x){return x&&x.id===S.cur;});
+    var refs=(ws&&ws.lib)||[];
+    var recApi=window.AQReferenceRecommendation||null;
+    if(!(recApi&&typeof recApi.relatedPapers==='function')){
+      list.innerHTML='<div class="rmeta">Benzer makale motoru hazir degil.</div>';
+      return;
+    }
+
+    var related=recApi.relatedPapers(curRef,refs,{notes:S.notes||[]}).slice(0,6);
+    var localHtml='';
+    if(related.length){
+      localHtml=related.map(function(item){
+        var ref=item.ref||{};
+        var reasons=(item.reasons||[]).slice(0,2).join(' · ');
+        var authors=__formatRelatedAuthors(ref);
+        return '<div class="related-item" data-related-ref="'+__escHtml(ref.id||'')+'">'+
+          '<div class="rttl">'+__escHtml((ref.title||'Basliksiz').substring(0,100))+'</div>'+
+          '<div class="rmeta">'+__escHtml(authors||'Bilinmeyen')+' · '+__escHtml(ref.year||'t.y.')+(reasons?(' · '+__escHtml(reasons)):'')+'</div>'+
+        '</div>';
+      }).join('');
+    }else{
+      localHtml='<div class="rmeta">Kutuphanede benzer kayit bulunamadi.</div>';
+    }
+
+    var seedKey=__getWebRelatedSeedKey(curRef);
+    webRelatedRuntime.activeSeedKey=seedKey;
+    var cache=__ensureWebRelatedCache();
+    if(cache&&typeof cache.get==='function'&&(!webRelatedRuntime.resultMap||!webRelatedRuntime.resultMap[seedKey])){
+      var cached=cache.get(seedKey);
+      if(cached&&Array.isArray(cached.items)){
+        if(!webRelatedRuntime.resultMap)webRelatedRuntime.resultMap={};
+        webRelatedRuntime.resultMap[seedKey]={
+          items:cached.items.slice(),
+          fetchedAt:cached.fetchedAt||Date.now()
+        };
+      }
+    }
+    var webBucket=webRelatedRuntime.resultMap&&webRelatedRuntime.resultMap[seedKey]||null;
+    var webItems=webBucket&&Array.isArray(webBucket.items)?webBucket.items:[];
+    var isLoading=(webRelatedRuntime.loadingSeedKey===seedKey);
+    var webStateText=webRelatedRuntime.statusText||'';
+    var webError=isLoading?'':String(webRelatedRuntime.error||'');
+
+    if(!webBucket&&!isLoading){
+      __startWebRelatedFetch({
+        id:curRef.id||'',
+        title:curRef.title||'',
+        authors:Array.isArray(curRef.authors)?curRef.authors.slice():[],
+        year:curRef.year||'',
+        journal:curRef.journal||'',
+        doi:curRef.doi||'',
+        url:curRef.url||'',
+        abstract:curRef.abstract||''
+      },seedKey);
+      isLoading=(webRelatedRuntime.loadingSeedKey===seedKey);
+      webError=isLoading?'':String(webRelatedRuntime.error||'');
+      webStateText=isLoading?'Webde araniyor...':'';
+    }
+    if(!webStateText){
+      if(isLoading)webStateText='Webde araniyor...';
+      else if(webError)webStateText='Hata';
+      else if(webItems.length)webStateText='Web: '+webItems.length+' sonuc';
+      else webStateText='Sonuc yok';
+    }
+
+    var webHtml='';
+    if(webItems.length){
+      webHtml=webItems.map(function(item,idx){
+        var authors=__formatRelatedAuthors(item);
+        var reasons=(Array.isArray(item.reasons)?item.reasons:[]).slice(0,2).join(' · ');
+        var sourceLabel=item.providerLabel||item.provider||'Web';
+        return '<div class="related-item" data-related-web-index="'+idx+'" data-related-seed="'+__escHtml(seedKey)+'">'+
+          '<div class="rttl">'+__escHtml((item.title||'Basliksiz').substring(0,110))+'</div>'+
+          '<div class="rmeta">'+__escHtml(authors||'Bilinmeyen')+' · '+__escHtml(item.year||'t.y.')+(item.journal?(' · '+__escHtml(item.journal)):'')+' · '+__escHtml(sourceLabel)+'</div>'+
+          (reasons?('<div class="rreason">Oneri: '+__escHtml(reasons)+'</div>'):'')+
+          '<div class="related-actions">'+
+            '<button type="button" class="related-act" data-related-action="open-abstract">Ozet</button>'+
+            '<button type="button" class="related-act primary" data-related-action="add-active">Workspace\'e ekle</button>'+
+            '<button type="button" class="related-act" data-related-action="add-library">Kutuphaneye ekle</button>'+
+            '<button type="button" class="related-act" data-related-action="preview">Detay</button>'+
+            '<button type="button" class="related-act" data-related-action="find-oa">PDF/OA bul</button>'+
+          '</div>'+
+        '</div>';
+      }).join('');
+    }else if(webError){
+      webHtml='<div class="rmeta">Web sonuclari alinamadi: '+__escHtml(webError.substring(0,120))+'</div>';
+    }else if(isLoading){
+      webHtml='<div class="rmeta">Webde benzer makaleler araniyor...</div>';
+    }else{
+      webHtml='<div class="rmeta">Webde benzer kayit bulunamadi.</div>';
+    }
+
+    list.innerHTML=
+      '<div class="related-group">'+
+        '<div class="related-group-title"><span>Yerel kutuphane</span></div>'+
+        '<div class="related-sublist">'+localHtml+'</div>'+
+      '</div>'+
+      '<div class="related-group">'+
+        '<div class="related-group-title"><span>Web sonuclari</span><span class="related-web-state">'+__escHtml(webStateText)+'</span></div>'+
+        '<div class="related-sublist">'+webHtml+'</div>'+
+      '</div>';
+  };
+
+  window.toggleRelatedPanel=function(){
+    relatedPanelCollapsed=!relatedPanelCollapsed;
+    renderRelatedPapers();
+  };
+})();
 (function installHardOverrides(){
   var st=document.createElement('style');
   st.textContent='' +
@@ -6070,6 +8569,10 @@ function rLib(){
     '#apaed .ProseMirror p{margin:0!important;padding:0!important;text-indent:.5in!important;text-align:left!important;white-space:normal!important;overflow-wrap:anywhere!important;word-break:break-word!important;}' +
     '#apaed .ProseMirror p.ni{ text-indent:0!important; }' +
     '#apaed .ProseMirror h1,#apaed .ProseMirror h2,#apaed .ProseMirror h3,#apaed .ProseMirror h4,#apaed .ProseMirror h5,#apaed .ProseMirror blockquote,#apaed .ProseMirror ul,#apaed .ProseMirror ol{margin:0!important;padding:0!important;transform:none!important;left:auto!important;right:auto!important;}' +
+    '#relatedList .related-item .related-actions{display:flex!important;flex-wrap:wrap!important;gap:6px!important;margin-top:8px!important;}' +
+    '#relatedList .related-item .related-actions .related-act{appearance:none!important;border:1px solid rgba(153,171,182,.52)!important;background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(248,252,254,.92))!important;color:var(--txt2)!important;border-radius:999px!important;font-family:var(--fm)!important;font-size:10px!important;letter-spacing:.01em!important;padding:5px 11px!important;min-height:28px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;cursor:pointer!important;box-shadow:0 2px 8px rgba(35,59,73,.08)!important;}' +
+    '#relatedList .related-item .related-actions .related-act.primary{border-color:rgba(85,122,146,.58)!important;background:linear-gradient(180deg,rgba(102,139,163,.18),rgba(95,132,157,.14))!important;color:#2f5063!important;font-weight:600!important;}' +
+    '#relatedList .related-item .related-actions .related-act:hover{border-color:var(--acc)!important;color:var(--acc)!important;box-shadow:0 6px 14px rgba(35,59,73,.12)!important;transform:translateY(-1px)!important;}' +
     '#apapage{overflow:visible!important;}';
   document.head.appendChild(st);
 })();

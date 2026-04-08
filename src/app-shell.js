@@ -41,6 +41,7 @@
     safeInit('AQEditorIntegration', window.AQEditorIntegration);
     safeInit('AQCitationRuntime', window.AQCitationRuntime);
     safeInit('AQNotes', window.AQNotes);
+    safeInit('AQLiteratureMatrix', window.AQLiteratureMatrix);
     safeInit('AQPdfViewer', window.AQPdfViewer);
   }
 

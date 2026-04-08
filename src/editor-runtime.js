@@ -10,7 +10,8 @@
   var state = {
     initialized: false,
     tocTimer: null,
-    refTimer: null
+    refTimer: null,
+    linkedBound: false
   };
 
   function getEditor(){
@@ -124,6 +125,77 @@ function syncReferenceSectionDeferred(delay){
     return true;
   }
 
+  function cssEscape(value){
+    var text = String(value == null ? '' : value);
+    if(typeof CSS !== 'undefined' && CSS && typeof CSS.escape === 'function'){
+      try{ return CSS.escape(text); }catch(_e){}
+    }
+    return text.replace(/(["\\])/g, '\\$1');
+  }
+
+  function ensureNotesPanelOpen(){
+    var notesBtn = typeof document !== 'undefined' ? document.getElementById('rtypeNotesBtn') : null;
+    var refsBtn = typeof document !== 'undefined' ? document.getElementById('rtypeRefsBtn') : null;
+    var notesPanel = typeof document !== 'undefined' ? document.getElementById('rpnotes') : null;
+    var refsPanel = typeof document !== 'undefined' ? document.getElementById('rprefs') : null;
+    if(root.swR && typeof root.swR === 'function'){
+      safeCall(function(){ root.swR('notes', notesBtn || null); });
+      return true;
+    }
+    if(notesBtn) notesBtn.classList.add('on');
+    if(refsBtn) refsBtn.classList.remove('on');
+    if(notesPanel) notesPanel.classList.add('on');
+    if(refsPanel) refsPanel.classList.remove('on');
+    return !!notesPanel;
+  }
+
+  function resolveLinkedMetaFromSelection(editorRef){
+    if(!root.AQNoteLinking || typeof root.AQNoteLinking.resolveLinkFromEditorSelection !== 'function'){
+      return null;
+    }
+    return safeCall(function(){
+      return root.AQNoteLinking.resolveLinkFromEditorSelection({
+        editor: editorRef || getEditor(),
+        root: typeof document !== 'undefined' ? document.getElementById('apaed') : null
+      });
+    }) || null;
+  }
+
+  function focusLinkedNoteFallback(meta, options){
+    options = options || {};
+    var noteId = String(meta && meta.noteId || '').trim();
+    if(!noteId || typeof document === 'undefined') return false;
+    var notes = root.S && Array.isArray(root.S.notes) ? root.S.notes : [];
+    var note = notes.find(function(entry){ return entry && String(entry.id || '') === noteId; }) || null;
+    if(!note) return false;
+    if(root.S && note.nbId && String(root.S.curNb || '') !== String(note.nbId)){
+      root.S.curNb = note.nbId;
+      if(typeof root.rNB === 'function') safeCall(root.rNB);
+    }
+    ensureNotesPanelOpen();
+    if(typeof root.rNotes === 'function') safeCall(root.rNotes);
+    var list = document.getElementById('notelist');
+    if(!list) return false;
+    list.querySelectorAll('.nc.note-linked-active').forEach(function(card){
+      card.classList.remove('note-linked-active');
+    });
+    var card = list.querySelector('.nc[data-note-id="' + cssEscape(noteId) + '"]');
+    if(!card){
+      card = Array.from(list.querySelectorAll('[data-note-id]')).find(function(node){
+        return String(node.getAttribute('data-note-id') || '') === noteId;
+      });
+      card = card && card.closest ? card.closest('.nc') : null;
+    }
+    if(!card) return false;
+    card.classList.add('note-linked-active');
+    if(options.scrollIntoView !== false){
+      safeCall(function(){
+        card.scrollIntoView({ block:'nearest', inline:'nearest', behavior: options.behavior || 'auto' });
+      });
+    }
+    return true;
+  }
+
   function runContentApplyEffects(options){
     options = options || {};
     setTimeout(function(){
@@ -221,6 +293,21 @@ function syncReferenceSectionDeferred(delay){
       safeCall(root.updateFmtState);
     }
     setTimeout(refreshCitationTrigger, 0);
+    setTimeout(function(){
+      var handled = false;
+      if(root.AQNotes && typeof root.AQNotes.syncLinkedNoteFromEditorSelection === 'function'){
+        var link = safeCall(function(){
+          return root.AQNotes.syncLinkedNoteFromEditorSelection({ clearOnUnlinked:true, scrollIntoView:true });
+        });
+        handled = !!(link && link.noteId);
+      }
+      if(!handled){
+        var meta = resolveLinkedMetaFromSelection(getEditor());
+        if(meta && meta.noteId){
+          focusLinkedNoteFallback(meta, { scrollIntoView:true, behavior:'auto' });
+        }
+      }
+    }, 0);
   }
 
   function focus(toEnd){
@@ -231,6 +318,18 @@ function syncReferenceSectionDeferred(delay){
   }
 
   function attachSurfaceHandlers(){
+    if(state.linkedBound || typeof document === 'undefined') return true;
+    var host = document.getElementById('apaed');
+    if(!host || !host.addEventListener) return true;
+    state.linkedBound = true;
+    host.addEventListener('click', function(){
+      setTimeout(function(){
+        var meta = resolveLinkedMetaFromSelection(getEditor());
+        if(meta && meta.noteId){
+          focusLinkedNoteFallback(meta, { scrollIntoView:true, behavior:'auto' });
+        }
+      }, 0);
+    }, true);
     return true;
   }
 
