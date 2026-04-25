@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.5 — Defense-in-depth for v1.1.4 fixes
+
+### Fixed
+- **Browser Capture install button still showed the "not allowed" cursor for some users in v1.1.4.** The renderer-side disable rule was already removed in v1.1.4, but a generic `.mbtn:disabled` CSS rule could still apply if any stale code path or older runtime override flipped `disabled` back on. Added explicit per-button CSS overrides for `#browserCaptureInstallBtn`, `#browserCaptureRepairBtn`, and `#browserCaptureLaunchBtn` that force `cursor:pointer; opacity:1; pointer-events:auto`. Also fixed the same `installStrategy.supported` disable rule + silent-click pattern in the (currently unused but bundled) `src/browser-capture.js` so the source tree is consistent.
+- **`/t` narrative citations could still render as parenthetical** for documents authored before v1.1.4 (where `data-mode="textual"` was stripped by the older ProseMirror schema). Added a defensive fallback in `normalizeCitationSpans` (both the inlined HTML version and `src/citation-dom-state.js`): if a `.cit` element's visible text matches the narrative pattern (`Author (Year)` — no leading parenthesis, year inside parens), the post-processor now re-applies `data-mode="textual"` and skips the rewrite. This protects legacy `/t` citations across saves, autosaves, and editor reloads.
+
 ## 1.1.4 — Critical hotfixes: Browser Capture install + /t narrative citation
 
 ### Fixed (critical)

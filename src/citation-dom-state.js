@@ -53,6 +53,17 @@
     Array.from(root.querySelectorAll('.cit')).forEach(function(node){
       // Textual citations (Yazar (Yıl) format) must not be overwritten with inline format
       if(node.getAttribute('data-mode') === 'textual') return;
+      // Defensive: if the visible text matches the narrative format
+      // ("Author (Year)" / "Author et al. (Year)" — no leading paren) treat
+      // it as textual even if data-mode was stripped along the way. This
+      // protects /t citations against any DOM round-trip that drops the
+      // attribute (e.g. legacy documents saved before data-mode joined the
+      // ProseMirror schema in v1.1.4).
+      var currentText = String(node.textContent || '').trim();
+      if(currentText && currentText.charAt(0) !== '(' && /\((?:\d{4}[a-z]?|t\.y\.)/.test(currentText)){
+        node.setAttribute('data-mode', 'textual');
+        return;
+      }
       var rid = String(node.getAttribute('data-ref') || '').trim();
       if(!rid) return;
       var refs = dedupeReferences(rid.split(',').map(function(id){

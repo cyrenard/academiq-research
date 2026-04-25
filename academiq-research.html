@@ -292,6 +292,17 @@ button,input,select,textarea{font-family:var(--f),var(--fsym);}
   transform:none!important;
   filter:saturate(.75);
 }
+/* Browser Capture install/repair/launch must always look clickable so the
+   user can read the actual error from the click handler instead of seeing
+   a static disabled state. We override the generic .mbtn:disabled rules
+   for these specific buttons (the renderer additionally sets .disabled to
+   false; this is a defense-in-depth so even a stale build is recoverable). */
+#browserCaptureInstallBtn,#browserCaptureRepairBtn,#browserCaptureLaunchBtn{
+  opacity:1!important;
+  cursor:pointer!important;
+  filter:none!important;
+  pointer-events:auto!important;
+}
 #liblist{flex:1;overflow-y:auto;padding:3px 7px 8px;}
 .related-panel{border-top:1px solid var(--b);padding:7px 7px 8px;background:rgba(255,251,244,.85)}
 .related-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
@@ -35069,6 +35080,18 @@ function syncReferenceSectionDeferred(delay){
     var getVisibleText = deps && typeof deps.visibleCitationText === 'function' ? deps.visibleCitationText : function(){ return ''; };
     Array.from(root.querySelectorAll('.cit')).forEach(function(node){
       if(node.getAttribute('data-mode') === 'textual') return;
+      // Defensive: if the visible text matches the narrative format
+      // "Author (Year)" or "Author et al. (Year)" — i.e. there is NO
+      // leading parenthesis — treat the citation as textual even if the
+      // data-mode attribute was stripped somewhere along the line. This
+      // protects /t citations against any DOM round-trip that loses the
+      // attribute (e.g. legacy documents saved before data-mode was added
+      // to the ProseMirror schema in v1.1.4).
+      var currentText = String(node.textContent || '').trim();
+      if(currentText && currentText.charAt(0) !== '(' && /\((?:\d{4}[a-z]?|t\.y\.)/.test(currentText)){
+        node.setAttribute('data-mode', 'textual');
+        return;
+      }
       var rid = String(node.getAttribute('data-ref') || '').trim();
       if(!rid) return;
       var refs = dedupeReferences(rid.split(',').map(function(id){
