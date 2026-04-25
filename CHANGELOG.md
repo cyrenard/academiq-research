@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.6 — Diagnostics build for capture button + /t citation
+
+If users still report the disabled cursor on Browser Capture buttons or `/t` rendering as parenthetical, this build makes the source of the bug self-evident:
+
+### Added
+- **Visible app version badge** in Settings (Sync modal). Reads `v1.1.6` etc. from `app:getInfo`. This lets users (and friends helping debug) confirm at a glance which build is actually running — especially helpful after NSIS upgrades that occasionally cache old files.
+- **DevTools logging for `/t`**. The citation insert path now logs the HTML being inserted *and* the resulting DOM (`data-mode` attribute) right after `chain.insertContent`. Open DevTools (`Ctrl+Shift+I`) → Console → trigger `/t`; you'll see exactly whether the schema preserved `data-mode="textual"`.
+
+### Fixed (defense-in-depth)
+- **MutationObserver pin** on `#browserCaptureInstallBtn` / `RepairBtn` / `LaunchBtn` reverses any `disabled` attribute change in the same microtask. On top of the renderer-side rule (`installBtn.disabled = false` since v1.1.4) and the CSS override (since v1.1.5), this guarantees the buttons stay clickable even if a stale or future code path tries to flip them off.
+
 ## 1.1.5 — Defense-in-depth for v1.1.4 fixes
 
 ### Fixed

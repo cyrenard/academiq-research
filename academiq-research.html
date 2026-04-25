@@ -3027,6 +3027,11 @@ body.aq-track-changes-on #apaed .aq-track-delete{
       </div>
     </div>
   </div>
+  <!-- APP VERSION (visible so users can verify which build they actually run) -->
+  <div style="margin-bottom:8px;padding:6px 10px;background:var(--bg);border:1px solid var(--b);border-radius:4px;font-size:10px;color:var(--txt3);font-family:var(--fm);display:flex;justify-content:space-between;align-items:center;">
+    <span>AcademiQ Research</span>
+    <strong id="aqAppVersionBadge" style="color:var(--txt2);font-weight:600;letter-spacing:.05em;">…</strong>
+  </div>
   <!-- EDITOR PREFERENCES -->
   <div style="margin-bottom:12px;padding:8px;background:var(--bg);border:1px solid var(--b);border-radius:4px;">
     <div style="font-family:var(--fm);font-size:9.5px;color:var(--acc);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;">EDITOR TERCIHLERI</div>
@@ -15954,6 +15959,13 @@ syncLoad().then(function(){
       renderDataSafetySummary(info);
       setSL('Yerel','ok');
       setTimeout(function(){setSL('','');},3000);
+      // Stamp the visible version badge in Settings so users (and friends
+      // who report bugs) can confirm which build they actually run.
+      try {
+        var badge=document.getElementById('aqAppVersionBadge');
+        var ver=(info&&info.appVersion)?String(info.appVersion):'';
+        if(badge) badge.textContent='v'+(ver||'?');
+      } catch(_e) {}
     }).catch(function(){});
     if(typeof window.electronAPI.onBrowserCaptureStateChanged==='function'){
       window.electronAPI.onBrowserCaptureStateChanged(function(detail){
@@ -36625,8 +36637,10 @@ function syncReferenceSectionDeferred(delay){
               var txt = refs.map(function(r){ return getNarrativeCitationText(r); }).join('; ');
               html = '<span class="cit" data-ref="'+refs.map(function(r){return r.id;}).join(',')+'" data-mode="textual">'+txt+'</span> ';
             }
+            try { console.log('[aq-citation] /t inserting narrative html:', html); } catch(_l){}
           }else{
             html = window.buildCitationHTML(refs);
+            try { console.log('[aq-citation] /r inserting parenthetical html:', html); } catch(_l){}
           }
           const ed = getEditor();
           if(ed && ed.chain){
@@ -36649,6 +36663,20 @@ function syncReferenceSectionDeferred(delay){
             chain.deleteRange({ from: delRange.from, to: delRange.to });
           }
           chain.insertContent(html, { parseOptions:{ preserveWhitespace:false } }).run();
+          // Verify what TipTap actually emitted to the DOM (vs what we
+          // asked it to insert). If data-mode is missing here, the schema
+          // fix didn't take effect for this build.
+          try {
+            if(mode === 'textual' && ed.view && ed.view.dom){
+              setTimeout(function(){
+                var spans = ed.view.dom.querySelectorAll('.cit[data-ref="'+refs[0].id+'"]');
+                if(spans.length){
+                  var last = spans[spans.length-1];
+                  console.log('[aq-citation] /t rendered DOM:', last.outerHTML, 'data-mode=', last.getAttribute('data-mode'));
+                }
+              }, 0);
+            }
+          } catch(_l2){}
           try{
             if(ed.state && ed.state.selection && ed.chain){
               var insertedCaret = ed.state.selection.to || ed.state.selection.from;
@@ -40958,9 +40986,39 @@ function syncReferenceSectionDeferred(delay){
     status(result && result.ok ? 'Browser Capture kurulumu baslatildi.' : ((result && result.error) || 'Kurulum baslatilamadi.'), result && result.ok ? 'ok' : 'er');
   }
 
+  // Force-keep the Browser Capture install/repair/launch buttons enabled,
+  // no matter what other code path tries to disable them. We've already
+  // removed the renderer-side disable rule, but legacy users on Firefox
+  // (and other unsupported browsers) reported the disabled cursor still
+  // showing. This MutationObserver intercepts any future `disabled`
+  // attribute change and reverses it within the same microtask. This is
+  // defense-in-depth on top of the CSS override and the JS rule.
+  function pinCaptureBtnsEnabled(){
+    var ids = ['browserCaptureInstallBtn','browserCaptureRepairBtn','browserCaptureLaunchBtn'];
+    ids.forEach(function(id){
+      var btn = document.getElementById(id);
+      if(!btn || btn.__aqEnablePin) return;
+      btn.__aqEnablePin = true;
+      // Initial sync.
+      if(btn.disabled){ btn.disabled = false; }
+      btn.removeAttribute('disabled');
+      try{
+        var mo = new MutationObserver(function(){
+          if(btn.disabled || btn.hasAttribute('disabled')){
+            btn.disabled = false;
+            btn.removeAttribute('disabled');
+            try{ console.log('[browser-capture] forced-enable', id); }catch(_l){}
+          }
+        });
+        mo.observe(btn, { attributes: true, attributeFilter: ['disabled'] });
+      }catch(_e){}
+    });
+  }
   function init(){
     bindSettingsButtons();
+    pinCaptureBtnsEnabled();
     refreshSettings().then(function(info){
+      pinCaptureBtnsEnabled();
       maybePromptInstall(info || {});
     });
     var api = getElectron();
