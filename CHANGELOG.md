@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.1.6 — Diagnostics build for capture button + /t citation
+
+If users still report the disabled cursor on Browser Capture buttons or `/t` rendering as parenthetical, this build makes the source of the bug self-evident:
+
+### Added
+- **Visible app version badge** in Settings (Sync modal). Reads `v1.1.6` etc. from `app:getInfo`. This lets users (and friends helping debug) confirm at a glance which build is actually running — especially helpful after NSIS upgrades that occasionally cache old files.
+- **DevTools logging for `/t`**. The citation insert path now logs the HTML being inserted *and* the resulting DOM (`data-mode` attribute) right after `chain.insertContent`. Open DevTools (`Ctrl+Shift+I`) → Console → trigger `/t`; you'll see exactly whether the schema preserved `data-mode="textual"`.
+
+### Fixed (defense-in-depth)
+- **MutationObserver pin** on `#browserCaptureInstallBtn` / `RepairBtn` / `LaunchBtn` reverses any `disabled` attribute change in the same microtask. On top of the renderer-side rule (`installBtn.disabled = false` since v1.1.4) and the CSS override (since v1.1.5), this guarantees the buttons stay clickable even if a stale or future code path tries to flip them off.
+
+## 1.1.5 — Defense-in-depth for v1.1.4 fixes
+
+### Fixed
+- **Browser Capture install button still showed the "not allowed" cursor for some users in v1.1.4.** The renderer-side disable rule was already removed in v1.1.4, but a generic `.mbtn:disabled` CSS rule could still apply if any stale code path or older runtime override flipped `disabled` back on. Added explicit per-button CSS overrides for `#browserCaptureInstallBtn`, `#browserCaptureRepairBtn`, and `#browserCaptureLaunchBtn` that force `cursor:pointer; opacity:1; pointer-events:auto`. Also fixed the same `installStrategy.supported` disable rule + silent-click pattern in the (currently unused but bundled) `src/browser-capture.js` so the source tree is consistent.
+- **`/t` narrative citations could still render as parenthetical** for documents authored before v1.1.4 (where `data-mode="textual"` was stripped by the older ProseMirror schema). Added a defensive fallback in `normalizeCitationSpans` (both the inlined HTML version and `src/citation-dom-state.js`): if a `.cit` element's visible text matches the narrative pattern (`Author (Year)` — no leading parenthesis, year inside parens), the post-processor now re-applies `data-mode="textual"` and skips the rewrite. This protects legacy `/t` citations across saves, autosaves, and editor reloads.
+
+## 1.1.4 — Critical hotfixes: Browser Capture install + /t narrative citation
+
+### Fixed (critical)
+- **Browser Capture "Kur" button could not be clicked.** The button was being `disabled` by the renderer whenever the detected install strategy reported `supported: false` — which fired for Firefox users, users without a Windows default browser association, and users with non-standard browsers (Yandex / Whale / Opera GX / portable Chromium). The click handler never even ran, so users saw "click does nothing" with no error. The disable rule is removed; the install button is now always clickable. The same fix applies to the Repair and Launch buttons.
+- **Silent click handlers** for install/update/repair/launch/restart-agent/stop-agent/test now route through a single `bindCaptureActionBtn` helper that:
+  - Shows an "İşleniyor..." busy state on the button so the click is visibly registered.
+  - Console-logs every step (`[browser-capture] dispatching action ...`).
+  - Catches IPC errors and surfaces them in the status bar instead of swallowing them.
+  - On a successful install/repair/update, automatically opens the extension folder in Explorer so the user can immediately see and locate the bundled extension files.
+- **`/t` narrative citations rendered as parenthetical** (same as `/r`). Root cause: the ProseMirror `citation` mark schema did not declare `data-mode` as an allowed attribute, so on insert TipTap silently stripped `data-mode="textual"`. Then the DOM post-processor `normalizeCitationSpans` saw a `.cit` span without `data-mode` and rewrote its text into the parenthetical form. Adding `data-mode` to `addAttributes` (in both `src/tiptap-word-editor.js` and the inlined HTML mirror) preserves it through the editor pipeline so the "Yazar (Yıl)" format survives.
+
+### Notes
+- Extension files are bundled inside `app.asar` and copied on install to `%LOCALAPPDATA%\AcademiQ\browser-capture-extension\<family>\`. The auto-open after install makes that visible to the user without hunting through AppData.
+
 ## 1.1.3 — Hotfix: import & paste hardening
 
 ### Fixed

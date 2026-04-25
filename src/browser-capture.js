@@ -508,18 +508,26 @@
       agentAutoStartEl.disabled = !info.agentAutoStartSupported;
     }
     if(focusWsEl) focusWsEl.checked = !!info.focusImportedWorkspace;
+    // Never disable install/repair based on installStrategy.supported.
+    // Doing so was the root cause of "click does nothing" reports — Firefox
+    // users, users with no detected default browser, and users with
+    // non-standard browsers got a disabled button that gave zero feedback.
+    // The click handler now shows a clear error or falls back to manual
+    // install instructions.
     if(installBtn){
-      installBtn.disabled = !!(info && info.installStrategy && !info.installStrategy.supported);
+      installBtn.disabled = false;
       installBtn.textContent = (setupState === 'ready' || setupState === 'connected') ? 'Yeniden Kur' : 'Browser Capture Kur';
     }
     if(updateBtn){
       updateBtn.disabled = !(info && info.updateAvailable);
     }
     if(repairBtn){
-      repairBtn.disabled = !!(info && info.installStrategy && !info.installStrategy.supported);
+      repairBtn.disabled = false;
     }
     if(launchBtn){
-      launchBtn.disabled = !!(info && info.installStrategy && (!info.installStrategy.supported || !info.browserExecutablePath));
+      // Launch still needs a browser executable to start, but no longer
+      // cares about installStrategy.supported.
+      launchBtn.disabled = !(info && info.browserExecutablePath);
     }
   }
 
@@ -710,80 +718,88 @@
     var agentAutoStartEl = byId('browserCaptureAgentAutoStart');
     var focusWsEl = byId('browserCaptureFocusWorkspace');
     var api = getElectron();
-    if(installBtn && !installBtn.__aqBound){
-      installBtn.__aqBound = true;
-      installBtn.addEventListener('click', async function(){
-        if(!api || typeof api.runBrowserCaptureAction !== 'function') return;
-        var info = await api.runBrowserCaptureAction('install');
-        renderSettingsStatus(info || {});
-        status(info && info.ok ? 'Browser Capture kurulumu baslatildi.' : ((info && info.error) || 'Kurulum baslatilamadi.'), info && info.ok ? 'ok' : 'er');
+    // Bulletproof click handler factory: never silently returns, always
+    // shows visible busy state and surfaces IPC errors. Fixes the class of
+    // bugs where users reported "click does nothing" because the bridge
+    // was unavailable or the lifecycle handler threw and the error was
+    // swallowed.
+    function bindCaptureActionBtn(btn, action, successMsg, failPrefix){
+      if(!btn || btn.__aqBound) return;
+      btn.__aqBound = true;
+      btn.addEventListener('click', async function(){
+        var liveApi = getElectron();
+        var prevDisabled = btn.disabled;
+        var prevText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'İşleniyor...';
+        try {
+          if(!liveApi || typeof liveApi.runBrowserCaptureAction !== 'function'){
+            try { console.error('[browser-capture] electronAPI bridge missing for action', action); } catch(_l){}
+            status('Browser Capture köprüsü hazır değil. Uygulamayı yeniden başlatın.', 'er');
+            return;
+          }
+          try { console.log('[browser-capture] dispatching action', action); } catch(_l2){}
+          var info = null;
+          try {
+            info = await liveApi.runBrowserCaptureAction(action);
+          } catch(ipcError) {
+            try { console.error('[browser-capture] IPC failed for', action, ipcError); } catch(_l3){}
+            status((failPrefix || 'İşlem başarısız') + ': ' + (ipcError && ipcError.message ? ipcError.message : 'IPC hatası'), 'er');
+            return;
+          }
+          try { console.log('[browser-capture] action result', action, info); } catch(_l4){}
+          renderSettingsStatus(info || {});
+          if(info && info.ok){
+            status(successMsg, 'ok');
+            // On a successful install/repair/update, auto-open the install
+            // dir so the user can immediately see the bundled extension.
+            if((action === 'install' || action === 'repair' || action === 'update') &&
+               liveApi.openBrowserCaptureInstallDir){
+              try { await liveApi.openBrowserCaptureInstallDir(); } catch(_e2){}
+            }
+          } else {
+            status((info && info.error) || (failPrefix || 'İşlem tamamlanamadı.'), 'er');
+          }
+        } catch(unexpected) {
+          try { console.error('[browser-capture] unexpected handler error', action, unexpected); } catch(_l5){}
+          status('Beklenmeyen hata: ' + (unexpected && unexpected.message ? unexpected.message : String(unexpected)), 'er');
+        } finally {
+          btn.disabled = prevDisabled;
+          btn.textContent = prevText;
+        }
       });
     }
-    if(updateBtn && !updateBtn.__aqBound){
-      updateBtn.__aqBound = true;
-      updateBtn.addEventListener('click', async function(){
-        if(!api || typeof api.runBrowserCaptureAction !== 'function') return;
-        var info = await api.runBrowserCaptureAction('update');
-        renderSettingsStatus(info || {});
-        status(info && info.ok ? 'Browser Capture guncellemesi baslatildi.' : ((info && info.error) || 'Guncelleme baslatilamadi.'), info && info.ok ? 'ok' : 'er');
-      });
-    }
-    if(repairBtn && !repairBtn.__aqBound){
-      repairBtn.__aqBound = true;
-      repairBtn.addEventListener('click', async function(){
-        if(!api || typeof api.runBrowserCaptureAction !== 'function') return;
-        var info = await api.runBrowserCaptureAction('repair');
-        renderSettingsStatus(info || {});
-        status(info && info.ok ? 'Browser Capture onarimi baslatildi.' : ((info && info.error) || 'Onarim baslatilamadi.'), info && info.ok ? 'ok' : 'er');
-      });
-    }
-    if(launchBtn && !launchBtn.__aqBound){
-      launchBtn.__aqBound = true;
-      launchBtn.addEventListener('click', async function(){
-        if(!api || typeof api.runBrowserCaptureAction !== 'function') return;
-        var info = await api.runBrowserCaptureAction('install');
-        renderSettingsStatus(info || {});
-        status(info && info.ok ? 'Tarayici Browser Capture ile acildi.' : ((info && info.error) || 'Tarayici acilamadi.'), info && info.ok ? 'ok' : 'er');
-      });
-    }
+    bindCaptureActionBtn(installBtn, 'install',
+      'Browser Capture kurulumu başlatıldı. Tarayıcı uzantı klasörü açılıyor.',
+      'Kurulum başlatılamadı');
+    bindCaptureActionBtn(updateBtn, 'update',
+      'Browser Capture güncellemesi başlatıldı.',
+      'Güncelleme başlatılamadı');
+    bindCaptureActionBtn(repairBtn, 'repair',
+      'Browser Capture onarımı başlatıldı.',
+      'Onarım başlatılamadı');
+    bindCaptureActionBtn(launchBtn, 'install',
+      'Tarayıcı Browser Capture ile açıldı.',
+      'Tarayıcı açılamadı');
+    bindCaptureActionBtn(restartAgentBtn, 'restart_agent',
+      'Capture agent yeniden başlatıldı.',
+      'Capture agent yeniden başlatılamadı');
+    bindCaptureActionBtn(stopAgentBtn, 'stop_agent',
+      'Capture agent durduruldu.',
+      'Capture agent durdurulamadı');
+    bindCaptureActionBtn(testBtn, 'test',
+      'Bağlantı testi tamamlandı.',
+      'Bağlantı testi başarısız');
     if(openDirBtn && !openDirBtn.__aqBound){
       openDirBtn.__aqBound = true;
       openDirBtn.addEventListener('click', async function(){
         if(api && typeof api.openBrowserCaptureInstallDir === 'function') await api.openBrowserCaptureInstallDir();
       });
     }
-    if(restartAgentBtn && !restartAgentBtn.__aqBound){
-      restartAgentBtn.__aqBound = true;
-      restartAgentBtn.addEventListener('click', async function(){
-        if(!api || typeof api.runBrowserCaptureAction !== 'function') return;
-        var info = await api.runBrowserCaptureAction('restart_agent');
-        renderSettingsStatus(info || {});
-        status(info && info.ok ? 'Capture agent yeniden baslatildi.' : ((info && info.error) || 'Capture agent yeniden baslatilamadi.'), info && info.ok ? 'ok' : 'er');
-      });
-    }
-    if(stopAgentBtn && !stopAgentBtn.__aqBound){
-      stopAgentBtn.__aqBound = true;
-      stopAgentBtn.addEventListener('click', async function(){
-        if(!api || typeof api.runBrowserCaptureAction !== 'function') return;
-        var info = await api.runBrowserCaptureAction('stop_agent');
-        renderSettingsStatus(info || {});
-        status(info && info.ok ? 'Capture agent durduruldu.' : ((info && info.error) || 'Capture agent durdurulamadi.'), info && info.ok ? 'ok' : 'er');
-      });
-    }
     if(guideBtn && !guideBtn.__aqBound){
       guideBtn.__aqBound = true;
       guideBtn.addEventListener('click', async function(){
         if(api && typeof api.openBrowserCaptureGuide === 'function') await api.openBrowserCaptureGuide();
-      });
-    }
-    if(testBtn && !testBtn.__aqBound){
-      testBtn.__aqBound = true;
-      testBtn.addEventListener('click', async function(){
-        if(api && typeof api.testBrowserCaptureConnection === 'function'){
-          var info = await api.testBrowserCaptureConnection();
-          renderSettingsStatus(info || {});
-          status(info && info.ok ? 'Baglanti aktif.' : ((info && info.message) || 'Uzanti henuz bagli gorunmuyor.'), info && info.ok ? 'ok' : 'er');
-        }
       });
     }
     if(autoPdfEl && !autoPdfEl.__aqBound){
