@@ -12,6 +12,7 @@ test('tiptap word document exports content helpers', () => {
   assert.equal(typeof docmod.buildExportPDFHTML, 'function');
   assert.equal(typeof docmod.buildExportPreviewHTML, 'function');
   assert.equal(typeof docmod.buildExportDocHTML, 'function');
+  assert.equal(typeof docmod.normalizeExportSemantics, 'function');
   assert.equal(typeof docmod.stripLegacyEditorArtifacts, 'function');
   assert.equal(typeof docmod.prepareLoadedHTML, 'function');
   assert.equal(typeof docmod.getEditorHTML, 'function');
@@ -44,6 +45,62 @@ test('buildImageHTML and buildExportDocHTML include expected markers', () => {
   assert.match(exportPdfHtml, /aq-export-root/);
   assert.match(exportPdfHtml, /Content-Security-Policy/);
   assert.match(exportPreviewHtml, /aq-preview-page/);
+});
+
+test('buildExportDocHTML preserves composite export sections and page breaks', () => {
+  const html = docmod.buildExportDocHTML(
+    '<div class="aq-export-composite">' +
+      '<section class="aq-export-cover aq-export-page"><p>Kapak</p></section>' +
+      '<section class="aq-export-main aq-export-page aq-export-page-break-before"><p>Metin</p></section>' +
+      '<section class="aq-export-bib aq-export-page aq-export-page-break-before"><h1>References</h1><p class="refe">Yazar, A. (2026).</p></section>' +
+    '</div>'
+  );
+
+  assert.match(html, /aq-export-cover/);
+  assert.match(html, /aq-export-main/);
+  assert.match(html, /aq-export-bib/);
+  assert.match(html, /aq-export-page-break-before/);
+  assert.match(html, /aq-biblio-heading/);
+  assert.match(html, /aq-ref-entry/);
+});
+
+test('buildCleanExportHTML passes through academic object normalization when available', () => {
+  globalThis.AQAcademicObjects = {
+    normalizeHTMLForExport(html) {
+      return String(html || '')
+        .replace('Deneme', 'Normalize Deneme')
+        .replace('<a class="cross-ref"', '<a class="cross-ref"')
+        .replace('<p class="ni"><strong>Tablo 1</strong></p><p class="ni"><em>Baslik</em></p><table><tr><td>A</td></tr></table>', '<p class="ni"><strong>Tablo 1</strong></p><p class="ni"><em>Baslik</em></p><table><tr><td>A</td></tr></table>');
+    }
+  };
+
+  const cleaned = docmod.buildCleanExportHTML('<p>Deneme</p><a class="cross-ref" data-ref-id="x">bkz. Tablo 1</a><p class="ni"><strong>Tablo 1</strong></p><p class="ni"><em>Baslik</em></p><table><tr><td>A</td></tr></table>');
+
+  assert.match(cleaned, /Normalize Deneme/);
+  assert.match(cleaned, /aq-cross-ref-export/);
+  assert.match(cleaned, /aq-table-block/);
+
+  delete globalThis.AQAcademicObjects;
+});
+
+test('normalizeExportSemantics wraps academic blocks conservatively', () => {
+  const normalized = docmod.normalizeExportSemantics(
+    '<a class="cross-ref" data-ref-id="t1">bkz. Tablo 1</a>' +
+    '<p class="ni"><strong>Tablo 1</strong></p>' +
+    '<p class="ni"><em>Deneysel Sonuclar</em></p>' +
+    '<table><tr><td>A</td></tr></table>' +
+    '<p class="ni"><em>Not.</em> n = 24</p>' +
+    '<p style="text-align:center;text-indent:0">[Şekil 1]</p>' +
+    '<p style="text-align:center;text-indent:0;font-style:italic">Şekil 1 - Akis</p>'
+  );
+
+  assert.match(normalized, /aq-cross-ref-export/);
+  assert.match(normalized, /aq-table-block/);
+  assert.match(normalized, /aq-table-label/);
+  assert.match(normalized, /aq-table-title/);
+  assert.match(normalized, /aq-table-note/);
+  assert.match(normalized, /aq-figure-block/);
+  assert.match(normalized, /aq-figure-caption/);
 });
 
 test('stripExportOnlyArtifacts removes editor-only helper nodes', () => {

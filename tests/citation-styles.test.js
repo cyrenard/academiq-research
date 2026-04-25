@@ -48,3 +48,36 @@ test('formatReference returns style-specific bibliography output', () => {
   assert.match(styles.formatReference(sample, { style: 'ieee', index: 2 }), /^\[2\]/);
   assert.match(styles.formatReference(sample, { style: 'harvard' }), /\(2024\)/);
 });
+
+test('APA7 formats book references with publisher and edition', () => {
+  const book = {
+    referenceType: 'book',
+    authors: ['Steele, Elizabeth A.'],
+    year: '2022',
+    title: 'Responsive consultation in early childhood',
+    publisher: 'Academic Press',
+    edition: '2'
+  };
+  const out = styles.formatReference(book, { style: 'apa7' });
+  assert.match(out, /Steele, E\./);
+  assert.match(out, /<i>Responsive consultation in early childhood<\/i>\./);
+  assert.match(out, /\(2 ed\.\)\./);
+  assert.match(out, /Academic Press\./);
+});
+
+test('APA7 formats website references with site and retrieved date', () => {
+  const website = {
+    referenceType: 'website',
+    authors: [],
+    title: 'Guidelines for student papers',
+    websiteName: 'APA Style',
+    publishedDate: '2024-10-05',
+    accessedDate: '2026-04-11',
+    url: 'https://apastyle.apa.org/'
+  };
+  const out = styles.formatReference(website, { style: 'apa7' });
+  assert.match(out, /\(October 5, 2024\)\./);
+  assert.match(out, /Guidelines for student papers\./);
+  assert.match(out, /APA Style\./);
+  assert.match(out, /Retrieved April 11, 2026, from https:\/\/apastyle\.apa\.org\//);
+});

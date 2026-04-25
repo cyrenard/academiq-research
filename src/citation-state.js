@@ -75,7 +75,7 @@
       if(ref && ref.id) indexById[ref.id] = index + 1;
     });
     if(normalized.length === 1){
-      return '<span class="cit" data-ref="' + normalized[0].id + '" contenteditable="false">'
+      return '<span class="cit" data-ref="' + normalized[0].id + '">'
         + getInlineCitationText(normalized[0], Object.assign({}, deps, { indexById: indexById }))
         + '</span> ';
     }
@@ -91,11 +91,11 @@
     });
     var ids = normalized.map(function(ref){ return ref.id; }).join(',');
     if(styleApi && typeof styleApi.normalizeStyleId === 'function' && styleApi.normalizeStyleId(styleId) === 'ieee'){
-      return '<span class="cit" data-ref="' + ids + '" contenteditable="false">'
+      return '<span class="cit" data-ref="' + ids + '">'
         + parts.map(function(part){ return '[' + String(part).replace(/^\[|\]$/g, '') + ']'; }).join(', ')
         + '</span> ';
     }
-    return '<span class="cit" data-ref="' + ids + '" contenteditable="false">('
+    return '<span class="cit" data-ref="' + ids + '">('
       + parts.join('; ')
       + ')</span> ';
   }

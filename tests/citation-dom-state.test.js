@@ -16,6 +16,14 @@ test('cleanupTextNodeValue strips slash trigger tokens from plain text', functio
   );
 });
 
+test('cleanup helpers strip narrative slash trigger tokens too', function(){
+  const html = '<p>Hello /tdoe <span class="cit" data-mode="textual">Doe (2024)</span></p><p>/t</p>';
+  const cleaned = citationDomState.cleanupCitationHTML(html);
+
+  assert.equal(cleaned, '<p>Hello <span class="cit" data-mode="textual">Doe (2024)</span></p><p></p>');
+  assert.equal(citationDomState.cleanupTextNodeValue('before /tdoe after'), 'before after');
+});
+
 test('normalizeCitationSpans updates nodes and ensures trailing text space', function(){
   const inserted = [];
   const parent = {
@@ -62,8 +70,8 @@ test('normalizeCitationSpans updates nodes and ensures trailing text space', fun
 
   citationDomState.normalizeCitationSpans(root, deps);
 
-  assert.equal(citationNode._attrs.contenteditable, 'false');
-  assert.equal(citationNode.textContent, '(Doe, 2024); (Smith, 2022)');
+  assert.equal(citationNode._attrs.contenteditable, undefined);
+  assert.equal(citationNode.textContent, '(Doe,\u00A02024); (Smith,\u00A02022)');
   assert.equal(inserted.length, 1);
   assert.equal(inserted[0].nodeType, 3);
   assert.equal(inserted[0].nodeValue, ' ');

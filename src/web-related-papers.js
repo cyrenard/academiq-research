@@ -61,6 +61,12 @@
     }).filter(Boolean);
   }
 
+  function normalizeReferenceType(value){
+    var raw = asText(value, 32).toLowerCase();
+    if(raw === 'book' || raw === 'website' || raw === 'article') return raw;
+    return 'article';
+  }
+
   function normalizeTextForMatch(value){
     return asText(value, 4096)
       .toLowerCase()
@@ -110,10 +116,16 @@
       id: asText(raw && raw.id, 320),
       provider: provider || 'web',
       providerLabel: providerLabel || 'Web',
+      referenceType: normalizeReferenceType(raw && raw.referenceType),
       title: normalizeTitle(raw && raw.title),
       authors: normalizeAuthors(raw && raw.authors),
       year: normalizeYear(raw && raw.year),
       journal: asText(raw && raw.journal, 512),
+      publisher: asText(raw && raw.publisher, 512),
+      edition: asText(raw && raw.edition, 128),
+      websiteName: asText(raw && raw.websiteName, 512),
+      publishedDate: asText(raw && raw.publishedDate, 64),
+      accessedDate: asText(raw && raw.accessedDate, 64),
       volume: asText(raw && raw.volume, 64),
       issue: asText(raw && raw.issue, 64),
       fp: asText(raw && raw.fp, 64),
@@ -132,6 +144,7 @@
     var aa = normalizeWebResult(a || {}, { provider: 'internal' });
     var bb = normalizeWebResult(b || {}, { provider: 'internal' });
     if(aa.doi && bb.doi) return aa.doi === bb.doi;
+    if(aa.referenceType !== bb.referenceType) return false;
 
     var ta = normalizeTextForMatch(aa.title);
     var tb = normalizeTextForMatch(bb.title);
@@ -204,10 +217,16 @@
         };
     return {
       id: asText(result.id, 320) || createId(),
+      referenceType: result.referenceType,
       title: result.title,
       authors: result.authors.slice(),
       year: result.year,
       journal: result.journal,
+      publisher: result.publisher,
+      edition: result.edition,
+      websiteName: result.websiteName,
+      publishedDate: result.publishedDate,
+      accessedDate: result.accessedDate,
       volume: result.volume,
       issue: result.issue,
       fp: result.fp,

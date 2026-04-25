@@ -11,8 +11,19 @@
     initialized: false,
     tocTimer: null,
     refTimer: null,
+    academicTimer: null,
     linkedBound: false
   };
+
+  // Cancel any deferred work scheduled via syncReferenceSectionDeferred /
+  // syncAcademicObjectsDeferred / syncTOCDeferred. Exposed primarily for
+  // tests so a lingering timer from a previous test cannot land inside a
+  // later test's assertion window and trigger its freshly-defined globals.
+  function resetPendingTimers(){
+    if(state.refTimer){ clearTimeout(state.refTimer); state.refTimer = null; }
+    if(state.academicTimer){ clearTimeout(state.academicTimer); state.academicTimer = null; }
+    if(state.tocTimer){ clearTimeout(state.tocTimer); state.tocTimer = null; }
+  }
 
   function getEditor(){
     if(root.AQEditorCore && typeof root.AQEditorCore.getEditor === 'function'){
@@ -125,6 +136,19 @@ function syncReferenceSectionDeferred(delay){
     return true;
   }
 
+  function syncAcademicObjectsDeferred(delay, target){
+    clearTimeout(state.academicTimer);
+    state.academicTimer = setTimeout(function(){
+      if(root.AQAcademicObjects && typeof root.AQAcademicObjects.normalizeDocument === 'function'){
+        safeCall(function(){
+          root.AQAcademicObjects.normalizeDocument({
+            root: target || (typeof document !== 'undefined' ? document.getElementById('apaed') : null)
+          });
+        });
+      }
+    }, parseInt(delay, 10) || 140);
+  }
+
   function cssEscape(value){
     var text = String(value == null ? '' : value);
     if(typeof CSS !== 'undefined' && CSS && typeof CSS.escape === 'function'){
@@ -208,6 +232,9 @@ function syncReferenceSectionDeferred(delay){
           try{ root.normalizeCitationSpans(options.target || undefined); }catch(e){}
         }
       }
+      if(options.syncAcademicObjects !== false){
+        syncAcademicObjectsDeferred(options.academicDelay, options.target || null);
+      }
       if(options.layout !== false){
         syncPageLayout();
       }
@@ -222,6 +249,12 @@ function syncReferenceSectionDeferred(delay){
       }
       if(options.refreshTrigger){
         setTimeout(refreshCitationTrigger, 0);
+      }
+      if(typeof root.refreshDocumentOutlineIfOpen === 'function'){
+        safeCall(root.refreshDocumentOutlineIfOpen);
+      }
+      if(typeof root.refreshCaptionManagerIfOpen === 'function'){
+        safeCall(root.refreshCaptionManagerIfOpen);
       }
       if(typeof options.onApplied === 'function'){
         options.onApplied();
@@ -251,6 +284,9 @@ function syncReferenceSectionDeferred(delay){
       if(options.normalize !== false && typeof root.normalizeCitationSpans === 'function'){
         try{ root.normalizeCitationSpans(options.target || undefined); }catch(e){}
       }
+      if(options.syncAcademicObjects !== false){
+        syncAcademicObjectsDeferred(options.academicDelay, options.target || null);
+      }
       if(!isTokenActive(options)) return;
       if(options.focusToEnd && typeof options.focusToEndFn === 'function'){
         safeCall(options.focusToEndFn);
@@ -269,6 +305,12 @@ function syncReferenceSectionDeferred(delay){
       if(options.layout !== false){
         syncPageLayout();
       }
+      if(typeof root.refreshDocumentOutlineIfOpen === 'function'){
+        safeCall(root.refreshDocumentOutlineIfOpen);
+      }
+      if(typeof root.refreshCaptionManagerIfOpen === 'function'){
+        safeCall(root.refreshCaptionManagerIfOpen);
+      }
       if(!isTokenActive(options)) return;
       if(typeof options.afterLayout === 'function'){
         safeCall(options.afterLayout);
@@ -277,15 +319,39 @@ function syncReferenceSectionDeferred(delay){
     return true;
   }
 
+  // ── Throttled update pipeline ──
+  // Batch deferred work into a single rAF/timer so rapid keystrokes don't
+  // queue dozens of overlapping timeouts.
+  var _updateToken = 0;
+  var _rafPending = false;
+
   function onEditorUpdate(ctx){
     if(root.__aqDocSwitching) return;
-    ensureEditorWritableState(ctx && ctx.editor ? ctx.editor : null);
+    var editor = ctx && ctx.editor ? ctx.editor : null;
+    ensureEditorWritableState(editor);
+    // Synchronous – must stay immediate for save indicator & dirty state
     syncEditorChrome();
-    normalizeCitationSpansDeferred(ctx && ctx.editor && ctx.editor.view ? ctx.editor.view.dom : null, 0);
-    syncPageLayout();
-    syncTOCDeferred();
-    syncReferenceSectionDeferred();
-    setTimeout(refreshCitationTrigger, 0);
+    // Everything else is deferred into a single batch
+    _updateToken++;
+    if(_rafPending) return;
+    _rafPending = true;
+    var raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function(fn){ setTimeout(fn, 16); };
+    raf(function(){
+      _rafPending = false;
+      var dom = editor && editor.view ? editor.view.dom : null;
+      normalizeCitationSpansDeferred(dom, 0);
+      syncAcademicObjectsDeferred(220, dom);
+      syncPageLayout();
+      if(typeof root.refreshDocumentOutlineIfOpen === 'function'){
+        safeCall(root.refreshDocumentOutlineIfOpen);
+      }
+      if(typeof root.refreshCaptionManagerIfOpen === 'function'){
+        safeCall(root.refreshCaptionManagerIfOpen);
+      }
+      syncTOCDeferred(200);
+      syncReferenceSectionDeferred(600);
+      setTimeout(refreshCitationTrigger, 0);
+    });
   }
 
   function onSelectionUpdate(){
@@ -347,6 +413,7 @@ function syncReferenceSectionDeferred(delay){
     onSelectionUpdate: onSelectionUpdate,
     syncPageLayout: syncPageLayout,
     syncReferenceSectionDeferred: syncReferenceSectionDeferred,
+    syncAcademicObjectsDeferred: syncAcademicObjectsDeferred,
     syncTOCDeferred: syncTOCDeferred,
     refreshCitationTrigger: refreshCitationTrigger,
     syncEditorChrome: syncEditorChrome,
@@ -355,6 +422,7 @@ function syncReferenceSectionDeferred(delay){
     runContentApplyEffects: runContentApplyEffects,
     handleMutation: handleMutation,
     runDocumentLoadEffects: runDocumentLoadEffects,
-    focus: focus
+    focus: focus,
+    resetPendingTimers: resetPendingTimers
   };
 });

@@ -13,6 +13,9 @@
       content: sanitize(doc.content || blankDoc()),
       bibliographyHTML: typeof doc.bibliographyHTML === 'string' ? doc.bibliographyHTML : '',
       bibliographyManual: !!doc.bibliographyManual,
+      bibliographyExtraRefIds: Array.isArray(doc.bibliographyExtraRefIds)
+        ? doc.bibliographyExtraRefIds.map(function(id){ return String(id || '').trim(); }).filter(Boolean)
+        : [],
       coverHTML: typeof doc.coverHTML === 'string' ? doc.coverHTML : '',
       tocHTML: typeof doc.tocHTML === 'string' ? doc.tocHTML : '',
       citationStyle: citationStyle
@@ -54,6 +57,7 @@
           content: sanitize(index === 0 ? (next.doc || blankDoc()) : blankDoc()),
           bibliographyHTML: '',
           bibliographyManual: false,
+          bibliographyExtraRefIds: [],
           coverHTML: '',
           tocHTML: '',
           citationStyle: 'apa7'
@@ -102,6 +106,7 @@
       content: sanitize(blankDoc()),
       bibliographyHTML: '',
       bibliographyManual: false,
+      bibliographyExtraRefIds: [],
       coverHTML: '',
       tocHTML: '',
       citationStyle: 'apa7'
@@ -174,6 +179,7 @@
       content: sanitize(blankDoc()),
       bibliographyHTML: '',
       bibliographyManual: false,
+      bibliographyExtraRefIds: [],
       coverHTML: '',
       tocHTML: '',
       citationStyle: 'apa7'

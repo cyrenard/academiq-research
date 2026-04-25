@@ -26,6 +26,9 @@ test('tiptap word find exports helpers', () => {
   assert.equal(typeof find.navigateSearch, 'function');
   assert.equal(typeof find.replaceSearchWithState, 'function');
   assert.equal(typeof find.bindSearchUI, 'function');
+  assert.equal(typeof find.collectTextSegments, 'function');
+  assert.equal(typeof find.buildSearchText, 'function');
+  assert.equal(typeof find.findMatchesInText, 'function');
 });
 
 test('toggleBar opens and closeBar resets count', () => {
@@ -57,6 +60,234 @@ test('buildSearchRegExp supports plain and regex modes', () => {
   assert.match('Hello', find.buildSearchRegExp('hello', false, false));
   assert.match('abc123', find.buildSearchRegExp('\\d+', true, false));
   assert.equal(find.buildSearchRegExp('', false, false), null);
+});
+
+test('collectTextSegments and buildSearchText preserve combined text across nodes', () => {
+  const nodes = [
+    { textContent:'Alpha ', parentElement:{ classList:{ contains(){ return false; } } } },
+    { textContent:'Beta', parentElement:{ classList:{ contains(){ return false; } } } },
+    { textContent:'', parentElement:{ classList:{ contains(){ return false; } } } },
+    { textContent:' Gamma', parentElement:{ classList:{ contains(name){ return name === 'find-hl'; } } } },
+    { textContent:' Delta', parentElement:{ classList:{ contains(){ return false; } } } }
+  ];
+  const doc = {
+    createTreeWalker(){
+      let index = -1;
+      return {
+        currentNode: null,
+        nextNode(){
+          index += 1;
+          if(index >= nodes.length) return false;
+          this.currentNode = nodes[index];
+          return true;
+        }
+      };
+    }
+  };
+  const segments = find.collectTextSegments({ doc, host:{} });
+  assert.equal(segments.length, 3);
+  assert.equal(find.buildSearchText(segments), 'Alpha Beta Delta');
+  assert.deepEqual(segments.map(segment => [segment.start, segment.end]), [[0, 6], [6, 10], [10, 16]]);
+});
+
+test('findMatchesInText matches across formatting boundaries in combined text', () => {
+  const re = find.buildSearchRegExp('alpha beta', false, false);
+  const matches = find.findMatchesInText('Alpha Beta Delta', re);
+  assert.deepEqual(matches, [{ start:0, end:10 }]);
+});
+
+test('executeSearchWithState uses editor ranges instead of DOM marks when editor is provided', () => {
+  const countEl = { textContent:'' };
+  const state = { matches:[], index:-1 };
+  let focusCount = 0;
+  const dispatched = [];
+  const doc = {
+    getElementById(id){
+      if(id === 'findcount') return countEl;
+      return null;
+    }
+  };
+  const editor = {
+    state: {
+      selection: {
+        constructor: {
+          create(_doc, from, to){
+            return { from, to };
+          }
+        }
+      },
+      tr: {
+        setSelection(sel){
+          dispatched.push(sel);
+          return this;
+        },
+        scrollIntoView(){
+          return this;
+        }
+      },
+      doc: {
+        descendants(fn){
+          fn({ isText:true, text:'Alpha' }, 1);
+          fn({ isText:true, text:' Beta' }, 6);
+        }
+      }
+    },
+    view: {
+      dispatch(payload){
+        dispatched.push(payload);
+      }
+    },
+    chain(){
+      return {
+        focus(){ focusCount += 1; return this; },
+        setTextSelection(){ return this; },
+        run(){ return true; }
+      };
+    }
+  };
+
+  const matches = find.executeSearchWithState({
+    doc,
+    state,
+    editor,
+    query:'alpha beta',
+    useRegex:false,
+    caseSensitive:false
+  });
+
+  assert.equal(matches.length, 1);
+  assert.equal(typeof matches[0].__aqEditorRange, 'object');
+  assert.deepEqual(state.editorRanges, [{ from:1, to:11 }]);
+  assert.equal(state.index, 0);
+  assert.equal(countEl.textContent, '1/1');
+  assert.equal(focusCount, 0);
+  assert.ok(dispatched.length >= 1);
+});
+
+test('executeSearchWithState skips cross-block false joins and keeps later block ranges accurate', () => {
+  const countEl = { textContent:'' };
+  const state = { matches:[], index:-1 };
+  const doc = {
+    getElementById(id){
+      if(id === 'findcount') return countEl;
+      return null;
+    }
+  };
+  const editor = {
+    state: {
+      doc: {
+        descendants(fn){
+          fn({ isText:true, text:'Alpha' }, 1);
+          fn({ isText:true, text:'Beta' }, 10);
+        }
+      }
+    },
+    chain(){
+      return {
+        focus(){ return this; },
+        setTextSelection(){ return this; },
+        run(){ return true; }
+      };
+    }
+  };
+
+  const noCrossBlock = find.executeSearchWithState({
+    doc,
+    state,
+    editor,
+    query:'haBe',
+    useRegex:false,
+    caseSensitive:true
+  });
+  assert.equal(noCrossBlock.length, 0);
+
+  const nextState = { matches:[], index:-1 };
+  const blockMatch = find.executeSearchWithState({
+    doc,
+    state: nextState,
+    editor,
+    query:'Beta',
+    useRegex:false,
+    caseSensitive:true
+  });
+  assert.equal(blockMatch.length, 1);
+  assert.deepEqual(nextState.editorRanges, [{ from:10, to:14 }]);
+});
+
+test('replaceSearchWithState succeeds with editor-backed replacement path', () => {
+  const calls = [];
+  const firstText = { textContent:'Alpha', ownerDocument:null };
+  const lastText = { textContent:'Beta', ownerDocument:null };
+  const markParent = {
+    replaceChild(){},
+    normalize(){}
+  };
+  const mark = { ownerDocument:null, parentNode:markParent };
+  const doc = {
+    getElementById(){ return null; },
+    createTextNode(value){ return { value, parentNode:markParent }; },
+    createTreeWalker(root){
+      let done = false;
+      return {
+        currentNode: null,
+        nextNode(){
+          if(done) return false;
+          done = true;
+          this.currentNode = root === mark ? firstText : null;
+          return root === mark;
+        }
+      };
+    }
+  };
+  firstText.ownerDocument = doc;
+  lastText.ownerDocument = doc;
+  mark.ownerDocument = {
+    createTreeWalker(){
+      const nodes = [firstText, lastText];
+      let index = -1;
+      return {
+        currentNode: null,
+        nextNode(){
+          index += 1;
+          if(index >= nodes.length) return false;
+          this.currentNode = nodes[index];
+          return true;
+        }
+      };
+    }
+  };
+  const editor = {
+    view: {
+      posAtDOM(node, offset){
+        if(node === firstText) return offset === 0 ? 5 : 10;
+        if(node === lastText) return offset === String(lastText.textContent || '').length ? 13 : 9;
+        return 0;
+      }
+    },
+    chain(){
+      return {
+        focus(){ return this; },
+        insertContentAt(range, replacement){
+          calls.push({ range, replacement });
+          return this;
+        },
+        run(){ return true; }
+      };
+    }
+  };
+  const state = { matches:[mark], index:0 };
+  const ok = find.replaceSearchWithState({
+    doc,
+    state,
+    replacement:'Gamma',
+    editor
+  });
+  assert.equal(ok, true);
+  assert.ok(calls.length <= 1);
+  if(calls.length === 1){
+    assert.deepEqual(calls, [{ range:{ from:5, to:13 }, replacement:'Gamma' }]);
+  }
+  assert.deepEqual(state, { matches:[], index:-1, editorRanges:[] });
 });
 
 test('bindInputs wires input and escape handlers once', async () => {
@@ -122,7 +353,7 @@ test('resetSearchState, highlightActive and next/prev manage search state', () =
   assert.equal(state.index, 0);
 
   find.resetSearchState(state);
-  assert.deepEqual(state, { matches: [], index: -1 });
+  assert.deepEqual(state, { matches: [], index: -1, editorRanges: [] });
   assert.deepEqual(calls, ['scroll-0', 'scroll-1', 'scroll-0']);
 });
 
@@ -145,7 +376,7 @@ test('closeSearchUI clears highlights and resets search state', () => {
   assert.equal(cleared, true);
   assert.equal(els.findbar.style.display, 'none');
   assert.equal(els.findcount.textContent, '--');
-  assert.deepEqual(state, { matches: [], index: -1 });
+  assert.deepEqual(state, { matches: [], index: -1, editorRanges: [] });
 });
 
 test('toggleSearchWithState and closeSearchWithState use host-aware clearing', () => {
@@ -170,7 +401,7 @@ test('toggleSearchWithState and closeSearchWithState use host-aware clearing', (
   assert.equal(opened, true);
   assert.equal(closed, true);
   assert.equal(els.findbar.style.display, 'none');
-  assert.deepEqual(state, { matches: [], index: -1 });
+  assert.deepEqual(state, { matches: [], index: -1, editorRanges: [] });
   assert.deepEqual(calls, ['focus', 'select']);
 });
 

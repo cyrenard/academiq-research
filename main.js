@@ -1,8 +1,9 @@
-﻿const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+﻿const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const { session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { execFile } = require('child_process');
+const crypto = require('crypto');
 const { createStorageService } = require('./src/main-process-storage.js');
 const {
   DEFAULT_CAPTURE_PORT,
@@ -23,9 +24,12 @@ const {
   determineBrowserInstallStrategy,
   buildManagedChromiumLaunchArgs,
   buildManagedSessionGuide,
-  prepareExtensionBundle,
-  createBrowserCaptureBridge
+  prepareExtensionBundle
 } = require('./src/main-process-browser-capture.js');
+const {
+  createCaptureAgentRuntime,
+  processCaptureQueue
+} = require('./src/capture-agent.js');
 const AQWebRelatedPapers = require('./src/web-related-papers.js');
 const AQLiteratureMatrixState = require('./src/literature-matrix-state.js');
 const AQDocTabsState = require('./src/doc-tabs-state.js');
@@ -33,9 +37,17 @@ const AQStateSchema = require('./src/state-schema.js');
 const {
   buildUpdateCheckResult,
   normalizeDownloadUrl,
-  applyDownloadedUpdate
+  applyDownloadedUpdate,
+  computeRuntimeSignature,
+  computeRendererRuntimeSignature,
+  resolveRuntimeOverride,
+  archiveLegacyRuntimeOverrides,
+  archiveRuntimeOverride,
+  archiveStaleRuntimeOverrides,
+  archiveUnexpectedAppRuntimeFiles
 } = require('./src/main-process-updater.js');
-const { followRedirects, fetchJSON } = require('./src/main-process-net.js');
+const { followRedirects, fetchJSON, postFormJSON } = require('./src/main-process-net.js');
+const { createLocalOcr } = require('./src/local-ocr.js');
 const {
   buildExportHTML,
   buildPrintToPDFOptions
@@ -46,13 +58,21 @@ const {
 const {
   classifyPdfDownloadFailure
 } = require('./src/pdf-download-errors.js');
+const {
+  decodeWordImportBuffer
+} = require('./src/main-process-word-import.js');
 
 // â”€â”€ PATHS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const APP_DIR = path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'AcademiQ');
 const storage = createStorageService({ appDir: APP_DIR });
+const localOcr = createLocalOcr({ appDir: APP_DIR });
 const BROWSER_CAPTURE_SOURCE_DIR = path.join(__dirname, 'browser-capture-extension');
 const APP_VERSION = require('./package.json').version;
 const APP_USER_MODEL_ID = 'com.academiq.research';
+const CAPTURE_AGENT_ARG = '--capture-agent';
+const CAPTURE_AGENT_AUTOSTART_ARG = '--capture-agent-autostart';
+const IS_CAPTURE_AGENT_MODE = process.argv.includes(CAPTURE_AGENT_ARG);
+const IS_CAPTURE_AGENT_AUTOSTART = process.argv.includes(CAPTURE_AGENT_AUTOSTART_ARG);
 
 if (process.platform === 'win32') {
   // Ensures taskbar/start menu/protocol windows resolve to the app identity
@@ -73,8 +93,16 @@ let browserCaptureRuntime = {
   flushTimer: null,
   lastBridgeEventAt: 0,
   lastHelloAt: 0,
-  lastHelloPayload: null
+  lastHelloPayload: null,
+  stopAgentRequested: false,
+  quitEnsured: false
 };
+let captureAgentRuntime = null;
+let captureAgentStartPromise = null;
+let captureQueuePollTimer = null;
+let captureQueuePollRunning = false;
+const CAPTURE_AGENT_START_RETRIES = 2;
+const CAPTURE_AGENT_START_DELAY_MS = 1200;
 const UPDATE_ALLOWED_HOSTS = [
   /^api\.github\.com$/i,
   /^github\.com$/i,
@@ -106,6 +134,42 @@ const NET_ALLOWED_HOSTS = [
   /^www\.dergipark\.org\.tr$/i,
   /^europepmc\.org$/i
 ];
+
+const RENDERER_LOG_MAX_BYTES = 5 * 1024 * 1024; // 5 MB soft cap
+const RENDERER_LOG_KEEP_BYTES = 1 * 1024 * 1024; // retain last ~1 MB on rotation
+function rotateRendererProbeLogIfNeeded(target) {
+  try {
+    const stat = fs.statSync(target);
+    if (stat && stat.size > RENDERER_LOG_MAX_BYTES) {
+      // Keep only the tail (last KEEP bytes), drop partial first line
+      const fd = fs.openSync(target, 'r');
+      try {
+        const buf = Buffer.alloc(RENDERER_LOG_KEEP_BYTES);
+        const start = Math.max(0, stat.size - RENDERER_LOG_KEEP_BYTES);
+        const read = fs.readSync(fd, buf, 0, RENDERER_LOG_KEEP_BYTES, start);
+        let tail = buf.slice(0, read).toString('utf8');
+        const nl = tail.indexOf('\n');
+        if (nl !== -1) tail = tail.slice(nl + 1);
+        fs.writeFileSync(target, tail, 'utf8');
+      } finally {
+        try { fs.closeSync(fd); } catch (_e) {}
+      }
+    }
+  } catch (_e) {}
+}
+function appendRendererProbeError(payload) {
+  try {
+    const target = path.join(storage.appDir, 'renderer-errors.log');
+    rotateRendererProbeLogIfNeeded(target);
+    const line = JSON.stringify({
+      ts: Date.now(),
+      payload: payload && typeof payload === 'object'
+        ? payload
+        : { message: String(payload || '') }
+    });
+    fs.appendFileSync(target, line + '\n', 'utf8');
+  } catch (_e) {}
+}
 
 function psQuote(value) {
   return "'" + String(value || '').replace(/'/g, "''") + "'";
@@ -139,7 +203,9 @@ function isSafeHttpURL(rawUrl, options = {}) {
 }
 
 function createCaptureToken() {
-  return 'aq_' + Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  // Cryptographically random; 32 bytes -> 64 hex chars. Used to authenticate
+  // the local browser-capture bridge, so it must not be predictable.
+  return 'aq_' + crypto.randomBytes(32).toString('hex');
 }
 
 function getBrowserCaptureSettings() {
@@ -248,6 +314,55 @@ function browserCaptureStatus(extra) {
   return buildBrowserCaptureStatus(extra);
 }
 
+function buildCaptureQueueStats(items) {
+  const stats = {
+    queued: 0,
+    waitingRetry: 0,
+    failed: 0,
+    imported: 0,
+    duplicateAttached: 0
+  };
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    if (!item) return;
+    if (item.status === 'queued') {
+      if (Number(item.nextRetryAt || 0) > Date.now()) stats.waitingRetry += 1;
+      else stats.queued += 1;
+      return;
+    }
+    if (item.status === 'failed') {
+      stats.failed += 1;
+      return;
+    }
+    if (item.status === 'imported') {
+      stats.imported += 1;
+      return;
+    }
+    if (item.status === 'duplicate_attached') stats.duplicateAttached += 1;
+  });
+  return stats;
+}
+
+function buildCaptureQueueActivity(items) {
+  return (Array.isArray(items) ? items : [])
+    .filter((item) => item && item.status)
+    .slice()
+    .sort((a, b) => Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0))
+    .slice(0, 6)
+    .map((item) => ({
+      id: String(item.id || ''),
+      type: item.type === 'workspace_create' ? 'workspace_create' : 'capture',
+      status: String(item.status || 'queued'),
+      title: item.type === 'workspace_create'
+        ? String(item.name || 'Yeni Workspace')
+        : String((item.payload && (item.payload.detectedTitle || item.payload.pageTitle)) || 'Yakalanan makale'),
+      workspaceId: String(item.realWorkspaceId || item.clientWorkspaceId || (item.payload && item.payload.selectedWorkspaceId) || ''),
+      updatedAt: Number(item.updatedAt || item.createdAt || 0),
+      nextRetryAt: Number(item.nextRetryAt || 0),
+      attemptCount: Number(item.attemptCount || 0),
+      lastError: String(item.lastError || '')
+    }));
+}
+
 function sanitizeDocHTMLForMain(html) {
   return String(html || '<p></p>');
 }
@@ -275,6 +390,9 @@ function saveMainState(state) {
   const persisted = serializeMainState(state);
   latestStateJSON = JSON.stringify(persisted);
   storage.saveData(latestStateJSON);
+  try {
+    if (storage.saveCaptureTargets) storage.saveCaptureTargets(getCaptureTargets());
+  } catch (_e) {}
   return persisted;
 }
 
@@ -285,14 +403,60 @@ function notifyBrowserCaptureStateChanged(detail) {
   } catch (_e) {}
 }
 
+async function processCaptureQueueFromApp(reason) {
+  if (captureQueuePollRunning || IS_CAPTURE_AGENT_MODE) return { ok: false, skipped: true };
+  captureQueuePollRunning = true;
+  try {
+    return await processCaptureQueue({
+      storage,
+      createWorkspace: createWorkspaceFromMain,
+      importCapture: importBrowserCaptureIntoState,
+      reason: reason || 'app-poll'
+    });
+  } finally {
+    captureQueuePollRunning = false;
+  }
+}
+
+function stopCaptureQueuePolling() {
+  if (captureQueuePollTimer) {
+    clearInterval(captureQueuePollTimer);
+    captureQueuePollTimer = null;
+  }
+}
+
+function startCaptureQueuePolling() {
+  stopCaptureQueuePolling();
+  if (IS_CAPTURE_AGENT_MODE) return;
+  captureQueuePollTimer = setInterval(function () {
+    processCaptureQueueFromApp('interval').catch(() => {});
+  }, 2500);
+}
+
+function normalizeCaptureReferenceType(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'book' || raw === 'website' || raw === 'article') return raw;
+  return 'article';
+}
+
 function normalizeCaptureReference(ref) {
   const target = ref && typeof ref === 'object' ? ref : {};
+  target.referenceType = normalizeCaptureReferenceType(target.referenceType);
   target.title = String(target.title || '').replace(/\s+/g, ' ').trim();
   target.year = String(target.year || '').trim();
   const yearMatch = target.year.match(/\b(19|20)\d{2}\b/);
   target.year = yearMatch ? yearMatch[0] : target.year;
+  if (!target.year && target.publishedDate) {
+    const publishedYear = String(target.publishedDate).match(/\b(19|20)\d{2}\b/);
+    if (publishedYear && publishedYear[0]) target.year = publishedYear[0];
+  }
   target.doi = normalizeDoi(target.doi || target.url || '');
   target.journal = String(target.journal || '').replace(/\s+/g, ' ').trim();
+  target.publisher = String(target.publisher || '').replace(/\s+/g, ' ').trim();
+  target.edition = String(target.edition || '').replace(/\s+/g, ' ').trim();
+  target.websiteName = String(target.websiteName || '').replace(/\s+/g, ' ').trim();
+  target.publishedDate = String(target.publishedDate || '').replace(/\s+/g, ' ').trim();
+  target.accessedDate = String(target.accessedDate || '').replace(/\s+/g, ' ').trim();
   target.volume = String(target.volume || '').trim();
   target.issue = String(target.issue || '').trim();
   target.fp = String(target.fp || '').trim();
@@ -318,11 +482,15 @@ function mergeCaptureReferenceFields(target, source) {
   normalizeCaptureReference(target);
   normalizeCaptureReference(source);
   [
-    'title', 'year', 'journal', 'volume', 'issue', 'fp', 'lp', 'doi', 'url', 'pdfUrl',
+    'referenceType', 'title', 'year', 'journal', 'volume', 'issue', 'fp', 'lp', 'doi', 'url', 'pdfUrl',
+    'websiteName', 'publishedDate', 'accessedDate',
     'publisher', 'edition', 'booktitle', 'location', 'language', 'abstract', 'note'
   ].forEach(function (key) {
     if (source[key] && !target[key]) target[key] = source[key];
   });
+  if (source.referenceType && source.referenceType !== 'article' && target.referenceType === 'article') {
+    target.referenceType = source.referenceType;
+  }
   if ((source.authors || []).length && !(target.authors || []).length) target.authors = source.authors.slice();
   if ((source.labels || []).length) {
     target.labels = Array.from(new Set([].concat(target.labels || [], source.labels || []).filter(Boolean)));
@@ -338,10 +506,16 @@ function mergeCaptureReferenceFields(target, source) {
 function buildBrowserCaptureReference(payload, targetWorkspaceId) {
   const safePayload = sanitizeCapturePayload(payload);
   const reference = AQWebRelatedPapers.buildWorkspaceReference({
+    referenceType: safePayload.referenceType || 'article',
     title: safePayload.detectedTitle,
     authors: safePayload.detectedAuthors,
     year: safePayload.detectedYear,
     journal: safePayload.detectedJournal,
+    publisher: safePayload.detectedPublisher,
+    edition: safePayload.detectedEdition,
+    websiteName: safePayload.detectedWebsiteName,
+    publishedDate: safePayload.detectedPublishedDate,
+    accessedDate: safePayload.detectedAccessedDate,
     doi: safePayload.doi,
     url: safePayload.sourcePageUrl,
     abstract: safePayload.detectedAbstract,
@@ -958,12 +1132,20 @@ async function detectBrowserOpenCommand(progId) {
 
 function buildBrowserCaptureStatus(extra) {
   const settings = getBrowserCaptureSettings();
+  const agentState = storage.loadCaptureAgentState ? storage.loadCaptureAgentState() : {};
+  const queueState = storage.loadCaptureQueue ? storage.loadCaptureQueue() : { items: [] };
+  const queueItems = Array.isArray(queueState.items) ? queueState.items : [];
+  const queueStats = buildCaptureQueueStats(queueItems);
+  const queuedItems = queueItems.filter((item) => item && item.status === 'queued');
+  const recentQueueItems = buildCaptureQueueActivity(queueItems);
   const bundledInfo = readExtensionManifestInfo(BROWSER_CAPTURE_SOURCE_DIR, settings.browserFamily);
   const runtimeInfo = browserCaptureRuntime.lastHelloPayload && typeof browserCaptureRuntime.lastHelloPayload === 'object'
     ? browserCaptureRuntime.lastHelloPayload
     : {};
   const status = Object.assign({
     enabled: !!settings.enabled,
+    agentAutoStart: settings.agentAutoStart !== false,
+    agentAutoStartSupported: !!settings.agentAutoStartSupported,
     port: settings.port || DEFAULT_CAPTURE_PORT,
     tokenReady: !!settings.token,
     browserFamily: settings.browserFamily || 'unknown',
@@ -979,17 +1161,25 @@ function buildBrowserCaptureStatus(extra) {
     lastVerificationAt: settings.lastVerificationAt || 0,
     autoAttachPdfUrl: settings.autoAttachPdfUrl !== false,
     focusImportedWorkspace: !!settings.focusImportedWorkspace,
-    bridgeConnected: !!(browserCaptureRuntime.lastBridgeEventAt && (Date.now() - browserCaptureRuntime.lastBridgeEventAt) < (15 * 60 * 1000)),
-    bridgeReady: !!browserCaptureRuntime.bridge,
+    bridgeConnected: !!agentState.running,
+    bridgeReady: !!agentState.running,
     browserCaptureProtocolVersion: BROWSER_CAPTURE_PROTOCOL_VERSION,
     bundledExtensionVersion: bundledInfo.version,
-    installedExtensionVersion: settings.installedExtensionVersion || (runtimeInfo.extensionVersion || ''),
-    installedProtocolVersion: settings.installedProtocolVersion || Number(runtimeInfo.protocolVersion || 0),
-    lastHelloAt: browserCaptureRuntime.lastHelloAt || 0,
+    installedExtensionVersion: settings.installedExtensionVersion || agentState.extensionVersion || (runtimeInfo.extensionVersion || ''),
+    installedProtocolVersion: settings.installedProtocolVersion || Number(agentState.protocolVersion || runtimeInfo.protocolVersion || 0),
+    lastHelloAt: Number(agentState.lastHelloAt || browserCaptureRuntime.lastHelloAt || 0),
     lastError: settings.lastError || '',
     updatePending: !!settings.updatePending,
     lastLifecycleAction: settings.lastLifecycleAction || '',
-    extensionManagerUrl: getBrowserExtensionManagerUrl(settings)
+    extensionManagerUrl: getBrowserExtensionManagerUrl(settings),
+    agentRunning: !!agentState.running,
+    agentPid: Number(agentState.pid || 0),
+    agentPort: Number(agentState.port || settings.port || DEFAULT_CAPTURE_PORT),
+    agentVersion: String(agentState.agentVersion || APP_VERSION),
+    queueLength: queuedItems.length,
+    queueStats,
+    recentQueueItems,
+    lastCaptureReceivedAt: Number(agentState.lastCaptureReceivedAt || 0)
   }, extra || {});
   status.installStrategy = determineBrowserInstallStrategy(status);
   const lifecycle = evaluateBrowserCaptureLifecycle({
@@ -1012,6 +1202,7 @@ async function refreshBrowserCaptureSettings() {
   const browserOpenCommand = await detectBrowserOpenCommand(detected && detected.progId ? detected.progId : '');
   const browserExecutablePath = extractExecutableFromCommand(browserOpenCommand);
   const next = getBrowserCaptureSettings();
+  const loginItemState = getCaptureAgentLoginItemState();
   const bundledInfo = readExtensionManifestInfo(BROWSER_CAPTURE_SOURCE_DIR, detected && detected.browser ? detected.browser.family : 'chromium');
   const patch = {
     defaultBrowserLabel: detected && detected.browser ? detected.browser.label : 'Bilinmiyor',
@@ -1019,6 +1210,8 @@ async function refreshBrowserCaptureSettings() {
     browserFamily: detected && detected.browser ? detected.browser.family : 'unknown',
     browserOpenCommand,
     browserExecutablePath,
+    agentAutoStartSupported: !!loginItemState.supported,
+    agentAutoStart: loginItemState.supported ? !!loginItemState.enabled : (next.agentAutoStart !== false),
     bundledExtensionVersion: bundledInfo.version,
     bridgeProtocolVersion: BROWSER_CAPTURE_PROTOCOL_VERSION
   };
@@ -1034,6 +1227,224 @@ function buildBrowserCaptureStartUrl(settings) {
   const token = encodeURIComponent(String(settings && settings.token ? settings.token : ''));
   const port = Number(settings && settings.port ? settings.port : DEFAULT_CAPTURE_PORT) || DEFAULT_CAPTURE_PORT;
   return 'http://127.0.0.1:' + port + '/status?token=' + token;
+}
+
+function buildCaptureAgentSpawnArgs() {
+  const args = [];
+  if (process.defaultApp) {
+    args.push(path.resolve(app.getAppPath()));
+  }
+  args.push(CAPTURE_AGENT_ARG);
+  return args;
+}
+
+function buildCaptureAgentAutoStartArgs() {
+  return buildCaptureAgentSpawnArgs().concat([CAPTURE_AGENT_AUTOSTART_ARG]);
+}
+
+function getCaptureAgentLoginItemState() {
+  if (process.platform !== 'win32' || !app.isPackaged || typeof app.getLoginItemSettings !== 'function') {
+    return { supported: false, enabled: false };
+  }
+  try {
+    const info = app.getLoginItemSettings({
+      path: process.execPath,
+      args: buildCaptureAgentAutoStartArgs()
+    });
+    return {
+      supported: true,
+      enabled: !!(info && info.openAtLogin)
+    };
+  } catch (_e) {
+    return { supported: false, enabled: false };
+  }
+}
+
+function syncCaptureAgentLoginItem(enabled) {
+  const current = getCaptureAgentLoginItemState();
+  if (!current.supported || typeof app.setLoginItemSettings !== 'function') {
+    return current;
+  }
+  try {
+    app.setLoginItemSettings({
+      openAtLogin: !!enabled,
+      path: process.execPath,
+      args: buildCaptureAgentAutoStartArgs()
+    });
+  } catch (_e) {}
+  return getCaptureAgentLoginItemState();
+}
+
+async function startDetachedCaptureAgentProcess() {
+  const args = buildCaptureAgentSpawnArgs();
+  if (process.platform === 'win32') {
+    const psArgs = [
+      '-NoProfile',
+      '-NonInteractive',
+      '-WindowStyle',
+      'Hidden',
+      '-Command',
+      'Start-Process -FilePath ' + psQuote(process.execPath)
+        + ' -ArgumentList @(' + args.map(psQuote).join(',') + ')'
+        + ' -WindowStyle Hidden'
+    ];
+    await new Promise(function (resolve, reject) {
+      execFile('powershell.exe', psArgs, { windowsHide: true }, function (error) {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+    return;
+  }
+  await new Promise(function (resolve, reject) {
+    try {
+      const child = execFile(process.execPath, args, {
+        detached: true,
+        windowsHide: true
+      }, function (error) {
+        if (error) reject(error);
+      });
+      if (child && typeof child.unref === 'function') child.unref();
+      resolve();
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+async function pingCaptureAgentStatus() {
+  const settings = getBrowserCaptureSettings();
+  const port = Number(settings.port || DEFAULT_CAPTURE_PORT) || DEFAULT_CAPTURE_PORT;
+  const token = encodeURIComponent(String(settings.token || ''));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1200);
+  try {
+    const response = await fetch('http://127.0.0.1:' + port + '/status?token=' + token, {
+      method: 'GET',
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error('agent-status-' + response.status);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function waitForMs(ms) {
+  return new Promise(function (resolve) {
+    setTimeout(resolve, Math.max(0, Number(ms) || 0));
+  });
+}
+
+async function refreshCaptureAgentStatusSnapshot() {
+  try {
+    const live = await pingCaptureAgentStatus();
+    if (storage.saveCaptureAgentState) {
+      const current = storage.loadCaptureAgentState ? storage.loadCaptureAgentState() : {};
+      storage.saveCaptureAgentState(Object.assign({}, current, {
+        running: true,
+        pid: Number(live.agentPid || live.pid || current.pid || 0),
+        port: Number(live.agentPort || live.port || getBrowserCaptureSettings().port || DEFAULT_CAPTURE_PORT),
+        agentVersion: String(live.agentVersion || current.agentVersion || APP_VERSION),
+        extensionVersion: String(live.extensionVersion || current.extensionVersion || ''),
+        protocolVersion: Number(live.protocolVersion || current.protocolVersion || BROWSER_CAPTURE_PROTOCOL_VERSION),
+        lastHelloAt: Number(live.lastHelloAt || current.lastHelloAt || 0),
+        lastCaptureReceivedAt: Number(live.lastCaptureReceivedAt || current.lastCaptureReceivedAt || 0),
+        lastError: ''
+      }));
+    }
+    return live;
+  } catch (error) {
+    if (storage.saveCaptureAgentState) {
+      const current = storage.loadCaptureAgentState ? storage.loadCaptureAgentState() : {};
+      storage.saveCaptureAgentState(Object.assign({}, current, {
+        running: false,
+        pid: 0,
+        port: 0,
+        lastError: error && error.message ? String(error.message) : 'Capture agent ulasilamiyor'
+      }));
+    }
+    return null;
+  }
+}
+
+async function ensureCaptureAgentRunning() {
+  const live = await refreshCaptureAgentStatusSnapshot();
+  if (live && live.ok) {
+    const liveVersion = String(live.agentVersion || '');
+    const liveProtocolVersion = Number(live.protocolVersion || 0);
+    if (liveVersion === APP_VERSION && (!liveProtocolVersion || liveProtocolVersion === BROWSER_CAPTURE_PROTOCOL_VERSION)) {
+      return live;
+    }
+    try { await stopCaptureAgent(); } catch (_e) {}
+  }
+  if (captureAgentStartPromise) return captureAgentStartPromise;
+  captureAgentStartPromise = new Promise(function (resolve, reject) {
+    try {
+      const tryStart = function (attemptIndex) {
+        startDetachedCaptureAgentProcess().then(function () {
+          setTimeout(async function () {
+            try {
+              const status = await refreshCaptureAgentStatusSnapshot();
+              if (status && status.ok) {
+                resolve(status);
+                return;
+              }
+              if (attemptIndex + 1 < CAPTURE_AGENT_START_RETRIES) {
+                await waitForMs(350);
+                tryStart(attemptIndex + 1);
+                return;
+              }
+              reject(new Error('Capture agent baslatildi ancak ulasilamiyor'));
+            } catch (error) {
+              if (attemptIndex + 1 < CAPTURE_AGENT_START_RETRIES) {
+                await waitForMs(350);
+                tryStart(attemptIndex + 1);
+                return;
+              }
+              reject(error);
+            }
+          }, CAPTURE_AGENT_START_DELAY_MS);
+        }).catch(function (error) {
+          try {
+            if (attemptIndex + 1 < CAPTURE_AGENT_START_RETRIES) {
+              tryStart(attemptIndex + 1);
+              return;
+            }
+            reject(error);
+          } catch (nestedError) {
+            reject(nestedError);
+          }
+        });
+      };
+      tryStart(0);
+    } catch (error) {
+      reject(error);
+    }
+  }).finally(function () {
+    captureAgentStartPromise = null;
+  });
+  return captureAgentStartPromise;
+}
+
+async function stopCaptureAgent() {
+  const settings = getBrowserCaptureSettings();
+  const port = Number(settings.port || DEFAULT_CAPTURE_PORT) || DEFAULT_CAPTURE_PORT;
+  const token = encodeURIComponent(String(settings.token || ''));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1500);
+  try {
+    const response = await fetch('http://127.0.0.1:' + port + '/agent/stop?token=' + token, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error('agent-stop-' + response.status);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function prepareBrowserCaptureSetup() {
@@ -1056,6 +1467,8 @@ async function prepareBrowserCaptureSetup() {
     installDir: prepared.installDir,
     guidePath: installStrategy.supported ? managedGuidePath : prepared.guidePath,
     managedProfileDir: installStrategy.supported ? path.join(BROWSER_CAPTURE_MANAGED_PROFILE_DIR, settings.browserFamily === 'firefox' ? 'firefox' : 'chromium') : '',
+    agentAutoStart: settings.agentAutoStart !== false,
+    agentAutoStartSupported: !!settings.agentAutoStartSupported,
     lastPreparedAt: Date.now(),
     setupPromptSeen: true,
     lifecycleState: installStrategy.supported ? 'installing' : 'unsupported_browser',
@@ -1138,20 +1551,59 @@ async function launchManagedBrowserCaptureSession(reason) {
 async function runBrowserCaptureLifecycle(action) {
   const normalizedAction = String(action || 'install').trim().toLowerCase();
   if (normalizedAction === 'test') {
-    const info = buildBrowserCaptureStatus();
-    const ok = !!info.bridgeConnected;
+    const live = await refreshCaptureAgentStatusSnapshot();
+    const info = buildBrowserCaptureStatus(live && typeof live === 'object' ? live : {});
+    const ok = !!(live && live.ok);
     const patch = {
       lastVerificationAt: Date.now(),
       lifecycleState: ok ? 'ready' : (info.installDir ? 'repair_needed' : 'not_installed'),
       compatibilityState: ok ? 'compatible' : info.compatibilityState,
       lastLifecycleAction: 'test',
-      lastError: ok ? '' : 'Uzanti ile aktif baglanti dogrulanamadi.'
+      lastError: ok ? '' : 'Capture agent veya uzanti ile aktif baglanti dogrulanamadi.'
     };
     if (storage.setBrowserCaptureSettings) storage.setBrowserCaptureSettings(patch);
     return Object.assign({ ok, action: 'test', message: ok ? 'Browser Capture hazir.' : patch.lastError }, buildBrowserCaptureStatus(patch));
   }
+  if (normalizedAction === 'stop_agent') {
+    try {
+      browserCaptureRuntime.stopAgentRequested = true;
+      await stopCaptureAgent();
+      await refreshCaptureAgentStatusSnapshot();
+      return Object.assign({ ok: true, action: normalizedAction, message: 'Capture agent durduruldu.' }, buildBrowserCaptureStatus());
+    } catch (error) {
+      return Object.assign({ ok: false, action: normalizedAction, error: error && error.message ? error.message : 'Capture agent durdurulamadi.' }, buildBrowserCaptureStatus());
+    }
+  }
+  if (normalizedAction === 'restart_agent') {
+    browserCaptureRuntime.stopAgentRequested = false;
+    try { await stopCaptureAgent(); } catch (_e) {}
+    await ensureCaptureAgentRunning();
+    return Object.assign({ ok: true, action: normalizedAction, message: 'Capture agent yeniden baslatildi.' }, buildBrowserCaptureStatus());
+  }
   if (normalizedAction === 'update' || normalizedAction === 'repair' || normalizedAction === 'install') {
-    return launchManagedBrowserCaptureSession(normalizedAction);
+    const prepared = await prepareBrowserCaptureSetup();
+    const loginItemState = syncCaptureAgentLoginItem(prepared.agentAutoStart !== false);
+    if (storage.setBrowserCaptureSettings) {
+      storage.setBrowserCaptureSettings({
+        agentAutoStartSupported: !!loginItemState.supported,
+        agentAutoStart: loginItemState.supported ? !!loginItemState.enabled : (prepared.agentAutoStart !== false)
+      });
+    }
+    browserCaptureRuntime.stopAgentRequested = false;
+    await ensureCaptureAgentRunning();
+    const strategy = prepared.installStrategy || determineBrowserInstallStrategy(prepared);
+    if (strategy && strategy.supported && strategy.id === 'managed_chromium_session') {
+      return launchManagedBrowserCaptureSession(normalizedAction);
+    }
+    const patch = {
+      enabled: true,
+      lifecycleState: 'installed_not_verified',
+      compatibilityState: 'pending_verification',
+      lastLifecycleAction: normalizedAction,
+      lastError: ''
+    };
+    if (storage.setBrowserCaptureSettings) storage.setBrowserCaptureSettings(patch);
+    return Object.assign({ ok: true, action: normalizedAction, message: 'Capture agent hazir. Uzanti kurulumu tamamlandiginda baglanti dogrulanacak.' }, buildBrowserCaptureStatus(patch));
   }
   return Object.assign({ ok: false, error: 'Bilinmeyen Browser Capture aksiyonu.' }, buildBrowserCaptureStatus());
 }
@@ -1388,6 +1840,10 @@ function sanitizeDownloadOptions(input) {
   if (Array.isArray(src.expectedAuthors)) out.expectedAuthors = src.expectedAuthors.map(v => String(v || '').slice(0, 256)).filter(Boolean).slice(0, 8);
   if (src.expectedYear != null) out.expectedYear = String(src.expectedYear || '').slice(0, 32);
   if (src.requireDoiEvidence != null) out.requireDoiEvidence = !!src.requireDoiEvidence;
+  if (src.ws && typeof src.ws === 'object') {
+    const wsId = String(src.ws.id || '').trim();
+    if (wsId) out.ws = { id: wsId.slice(0, 128), name: String(src.ws.name || '').slice(0, 256) };
+  }
   return out;
 }
 
@@ -1420,6 +1876,9 @@ function sanitizeNetFetchOptions(input) {
   }
   if (src.maxBytes != null && Number.isFinite(Number(src.maxBytes))) {
     out.maxBytes = Number(src.maxBytes);
+  }
+  if (src.allowAnyHost != null) {
+    out.allowAnyHost = !!src.allowAnyHost;
   }
   return out;
 }
@@ -1473,13 +1932,48 @@ async function convertWordWithOfficeComToHtml(inputPath) {
   const finalPath = outPath && fs.existsSync(outPath) ? outPath : (fs.existsSync(tempHtml) ? tempHtml : '');
   if (!finalPath) throw new Error('Office COM HTML donusumu basarisiz');
   const raw = fs.readFileSync(finalPath);
-  let html = raw.toString('utf8');
-  const head = html.slice(0, 2000).toLowerCase();
-  if (head.includes('charset=windows-1254') || head.includes('charset=iso-8859-9')) {
-    try { html = new TextDecoder('windows-1254').decode(raw); } catch (_e) {}
-  }
+  const decoded = decodeWordImportBuffer(raw);
+  const html = decoded && decoded.html ? String(decoded.html) : raw.toString('utf8');
+  // Debug: keep a copy of the last Word import so we can inspect what the
+  // filtered-HTML conversion produced when the editor renders oddly.
+  try {
+    const debugPath = path.join(app.getPath('temp'), 'aq_last_word_import.html');
+    fs.writeFileSync(debugPath, html, 'utf8');
+  } catch (_e) {}
   try { fs.unlinkSync(finalPath); } catch (_e) {}
   return html;
+}
+
+async function convertExportHTMLWithOfficeComToDocx(html, outputPath) {
+  const outPath = path.resolve(String(outputPath || ''));
+  if (!outPath) throw new Error('DOCX hedef yolu geçersiz');
+  const tempHtml = path.join(app.getPath('temp'), `aq_docx_export_${Date.now()}_${Math.random().toString(16).slice(2)}.html`);
+  try {
+    fs.writeFileSync(tempHtml, String(html || '<p></p>'), 'utf8');
+    const script = [
+      "$ErrorActionPreference='Stop'",
+      `$inPath=${psQuote(tempHtml)}`,
+      `$outPath=${psQuote(outPath)}`,
+      "$word=$null",
+      "$doc=$null",
+      "try {",
+      "  $word = New-Object -ComObject Word.Application",
+      "  $word.Visible = $false",
+      "  $word.DisplayAlerts = 0",
+      "  $doc = $word.Documents.Open($inPath, $false, $true)",
+      "  $wdFormatXMLDocument = 12",
+      "  $doc.SaveAs([ref]$outPath, [ref]$wdFormatXMLDocument)",
+      "} finally {",
+      "  if($doc -ne $null){ try { $doc.Close([ref]0) } catch {} }",
+      "  if($word -ne $null){ try { $word.Quit() } catch {} }",
+      "}"
+    ].join(';');
+    await runPowerShell(script, 120000);
+  } finally {
+    try { fs.unlinkSync(tempHtml); } catch (_e) {}
+  }
+  if (!fs.existsSync(outPath)) throw new Error('DOCX dışa aktarımı tamamlanamadı');
+  return outPath;
 }
 
 function createWindow() {
@@ -1504,49 +1998,88 @@ function createWindow() {
   });
 
   mainWindow.setMenuBarVisibility(false);
-  // Prefer downloaded UI override so "Check update" applies immediately.
   // In development (npm start / unpackaged), always use bundled files directly.
-  // Fall back to bundled UI, then legacy src/index.html.
+  // Packaged builds archive stale overrides from userData but also load the
+  // bundled file to keep the runtime deterministic across updates.
   const bundledHtml = path.join(__dirname, 'academiq-research.html');
-  const updatedHtml = path.join(storage.appDir, 'academiq-research.html');
-  const fallbackHtml = path.join(__dirname, 'src', 'index.html');
-  let htmlPath = fallbackHtml;
-  if (app.isPackaged && fs.existsSync(updatedHtml)) {
-    // Always sync JS dependencies from ASAR to AppData so updates pick up new code.
-    // Use readFileSync+writeFileSync (not copyFileSync) so it works from inside ASAR archives.
-    try {
-      const bundleSrc = path.join(__dirname, 'tiptap-bundle.js');
-      const bundleDst = path.join(storage.appDir, 'tiptap-bundle.js');
-      if (fs.existsSync(bundleSrc)) fs.writeFileSync(bundleDst, fs.readFileSync(bundleSrc));
-      const srcDir = path.join(__dirname, 'src');
-      const dstSrcDir = path.join(storage.appDir, 'src');
-      if (fs.existsSync(srcDir)) {
-        try { fs.mkdirSync(dstSrcDir, { recursive: true }); } catch (_e) {}
-        fs.readdirSync(srcDir).forEach(function(file) {
-          try {
-            fs.writeFileSync(path.join(dstSrcDir, file), fs.readFileSync(path.join(srcDir, file)));
-          } catch (_e) {}
-        });
-      }
-      const vendorDir = path.join(__dirname, 'vendor');
-      const dstVendorDir = path.join(storage.appDir, 'vendor');
-      if (fs.existsSync(vendorDir)) {
-        try { fs.mkdirSync(dstVendorDir, { recursive: true }); } catch (_e) {}
-        fs.readdirSync(vendorDir).forEach(function(file) {
-          try {
-            fs.writeFileSync(path.join(dstVendorDir, file), fs.readFileSync(path.join(vendorDir, file)));
-          } catch (_e) {}
-        });
-      }
-    } catch (_e) {}
-    htmlPath = updatedHtml;
-  } else if (fs.existsSync(bundledHtml)) htmlPath = bundledHtml;
-  mainWindow.loadFile(htmlPath);
+  if (app.isPackaged) {
+    try { archiveLegacyRuntimeOverrides(storage.appDir); } catch (_e) {}
+    try { archiveUnexpectedAppRuntimeFiles(storage.appDir); } catch (_e) {}
+    const expectedRuntimeSignature = computeRendererRuntimeSignature(__dirname);
+    try { archiveStaleRuntimeOverrides(storage.appDir, APP_VERSION, expectedRuntimeSignature); } catch (_e) {}
+  }
+  if (!fs.existsSync(bundledHtml)) {
+    console.error('[startup] bundled renderer HTML missing:', bundledHtml);
+    app.quit();
+    return;
+  }
+  mainWindow.loadFile(bundledHtml);
   mainWindow.webContents.on('did-finish-load', () => {
     browserCaptureRuntime.ready = true;
-    processPersistedBrowserCaptureQueue().catch(() => {});
+    processCaptureQueueFromApp('did-finish-load').catch(() => {});
     flushPendingBrowserCaptures();
     scheduleBrowserCaptureFlush(160);
+    try {
+      mainWindow.webContents.executeJavaScript(`(() => {
+        const byId = (id) => document.getElementById(id);
+        const themeBtn = byId('themebtn');
+        const settingsBtn = byId('settingsBtn');
+        const toolbarRows = Array.from(document.querySelectorAll('#etb .etb-row')).map((row) => ({
+          text: (row.textContent || '').replace(/\s+/g, ' ').trim(),
+          children: Array.from(row.querySelectorAll('.tbgrp')).map((group) => ({
+            title: (group.querySelector('.tbgrp-title')?.textContent || '').trim(),
+            text: (group.textContent || '').replace(/\s+/g, ' ').trim()
+          }))
+        }));
+        const modals = Array.from(document.querySelectorAll('.modal-bg')).map((el) => ({
+          id: el.id || '',
+          cls: el.className || '',
+          display: getComputedStyle(el).display,
+          pointerEvents: getComputedStyle(el).pointerEvents
+        }));
+        return {
+          href: location.href,
+          scriptCount: document.scripts.length,
+          scriptSources: Array.from(document.scripts).slice(0, 120).map((script) => ({
+            src: script.getAttribute('src') || '',
+            inlineLength: script.getAttribute('src') ? 0 : String(script.textContent || '').length
+          })),
+          hasDoTrigRef: typeof window.doTrigRef,
+          hasCheckTrig: typeof window.checkTrig,
+          hasOpenTrig: typeof window.openTrig,
+          hasRenderTrig: typeof window.renderTrig,
+          hasCitationRuntime: typeof window.AQCitationRuntime,
+          citationRuntimeInit: !!window.__aqCitationRuntimeV1,
+          editorPresent: !!window.editor,
+          themeText: themeBtn ? themeBtn.textContent : '',
+          themeDisplay: themeBtn ? getComputedStyle(themeBtn).display : '',
+          settingsText: settingsBtn ? settingsBtn.textContent : '',
+          bodyPointerEvents: document.body && document.body.style ? document.body.style.pointerEvents : '',
+          legacyPhase: window.__aqLegacyRuntimePhase || '',
+          hasShowSyncSettings: typeof window.showSyncSettings,
+          hasSyncLoad: typeof window.syncLoad,
+          toolbarRows,
+          modalSnapshot: modals
+        };
+      })()`, true).then((probe) => {
+        try {
+          fs.writeFileSync(path.join(storage.appDir, 'ui-load-probe.json'), JSON.stringify({
+            ts: Date.now(),
+            htmlPath,
+            probe
+          }, null, 2), 'utf8');
+        } catch (_e) {}
+      }).catch(() => {});
+    } catch (_e) {}
+  });
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    appendRendererProbeError({
+      type: 'console-message',
+      level,
+      message: String(message || ''),
+      line: Number(line || 0),
+      sourceId: String(sourceId || '')
+    });
   });
 
   // Open external links in browser
@@ -1565,6 +2098,20 @@ function createWindow() {
 
   mainWindow.webContents.on('will-attach-webview', (event) => {
     event.preventDefault();
+  });
+
+  // PDF viewer sağ tık: seçili metin varsa native menüyü bastır (renderer hltip'i gösterir)
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    if (!params.isEditable && params.selectionText && params.selectionText.trim()) return;
+    const tpl = [];
+    if (params.isEditable) {
+      tpl.push({ label: 'Kes', role: 'cut' });
+      tpl.push({ label: 'Kopyala', role: 'copy', enabled: !!(params.selectionText) });
+      tpl.push({ label: 'Yapıştır', role: 'paste' });
+      tpl.push({ type: 'separator' });
+    }
+    tpl.push({ label: 'Tümünü Seç', role: 'selectAll' });
+    Menu.buildFromTemplate(tpl).popup({ window: mainWindow });
   });
 
   // Close confirmation â€” ask user if they want to save
@@ -1598,10 +2145,35 @@ function createWindow() {
   });
 }
 
-const gotLock = app.requestSingleInstanceLock();
-if (!gotLock) {
-  app.quit();
+if (IS_CAPTURE_AGENT_MODE) {
+  app.whenReady().then(async () => {
+    storage.loadSettings();
+    const settings = getBrowserCaptureSettings();
+    if (IS_CAPTURE_AGENT_AUTOSTART && (settings.enabled === false || settings.agentAutoStart === false)) {
+      app.exit(0);
+      return;
+    }
+    try {
+      const existing = await pingCaptureAgentStatus().catch(() => null);
+      if (existing && existing.ok) {
+        app.exit(0);
+        return;
+      }
+      captureAgentRuntime = createCaptureAgentRuntime({
+        storage,
+        appVersion: APP_VERSION
+      });
+      await captureAgentRuntime.start();
+    } catch (error) {
+      console.warn('Capture agent start error:', error && error.message ? error.message : error);
+      app.exit(1);
+    }
+  });
 } else {
+  const gotLock = app.requestSingleInstanceLock();
+  if (!gotLock) {
+    app.quit();
+  } else {
   app.on('web-contents-created', (_event, contents) => {
     contents.on('will-attach-webview', (event) => {
       event.preventDefault();
@@ -1618,12 +2190,38 @@ if (!gotLock) {
     if (protocolUrl) handleProtocolUrl(protocolUrl);
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     try {
       session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
         callback(permission === 'clipboard-sanitized-write');
       });
     } catch (_e) {}
+    // One-shot: purge any residual AI data (encrypted API keys + chat history)
+    // from prior versions. Run BEFORE storage init so nothing can re-touch
+    // these files between cleanup and load. Cleans both APP_DIR and the
+    // Electron userData path (different installs may have used either).
+    try {
+      const cleanupDirs = [];
+      cleanupDirs.push(APP_DIR);
+      try {
+        const userData = app.getPath('userData');
+        if (userData && userData !== APP_DIR) cleanupDirs.push(userData);
+      } catch (_e) {}
+      for (const dir of cleanupDirs) {
+        try {
+          const aiSecretsFile = path.join(dir, 'ai-secrets.enc');
+          if (fs.existsSync(aiSecretsFile)) {
+            try { fs.unlinkSync(aiSecretsFile); console.log('[ai-cleanup] removed', aiSecretsFile); } catch (_e) {}
+          }
+          const aiChatDir = path.join(dir, 'ai-chat');
+          if (fs.existsSync(aiChatDir)) {
+            try { fs.rmSync(aiChatDir, { recursive: true, force: true }); console.log('[ai-cleanup] removed', aiChatDir); } catch (_e) {}
+          }
+        } catch (_e) {}
+      }
+    } catch (e) {
+      console.warn('AI cleanup error:', e && e.message ? e.message : e);
+    }
     storage.loadSettings();
     try {
       const bootData = storage.loadData();
@@ -1631,7 +2229,29 @@ if (!gotLock) {
     } catch (_e) {
       latestStateJSON = '';
     }
+    try {
+      if (storage.markSessionOpen) storage.markSessionOpen({ appVersion: APP_VERSION });
+    } catch (_e) {}
+    // One-shot: migrate any legacy flat-dir PDFs into workspace-scoped folders.
+    try {
+      if (typeof storage.migrateLegacyPdfsToWorkspaces === 'function') {
+        const migResult = storage.migrateLegacyPdfsToWorkspaces();
+        if (migResult && (migResult.migrated || migResult.skipped || migResult.failed)) {
+          console.log('[pdf-migration]', migResult);
+        }
+      }
+    } catch (e) {
+      console.warn('PDF migration error:', e && e.message ? e.message : e);
+    }
+    try {
+      if (storage.saveCaptureTargets) storage.saveCaptureTargets(getCaptureTargets());
+    } catch (_e) {}
     getBrowserCaptureSettings();
+    try {
+      await processCaptureQueueFromApp('startup');
+    } catch (error) {
+      console.warn('Capture queue process error:', error && error.message ? error.message : error);
+    }
     try {
       if (process.defaultApp && process.argv.length >= 2) {
         app.setAsDefaultProtocolClient('academiq', process.execPath, [path.resolve(process.argv[1])]);
@@ -1643,17 +2263,43 @@ if (!gotLock) {
       console.warn('AcademiQ protocol registration error:', error && error.message ? error.message : error);
     });
     createWindow();
-    startBrowserCaptureBridge().catch((error) => {
-      console.warn('Browser capture bridge start error:', error && error.message ? error.message : error);
+    startCaptureQueuePolling();
+    ensureCaptureAgentRunning().catch((error) => {
+      console.warn('Capture agent start error:', error && error.message ? error.message : error);
     });
     const initialProtocolUrl = extractProtocolUrlFromArgs(process.argv);
     if (initialProtocolUrl) setTimeout(() => { handleProtocolUrl(initialProtocolUrl); }, 250);
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
   });
+  }
 }
 
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-app.on('before-quit', () => {
+app.on('window-all-closed', () => {
+  if (IS_CAPTURE_AGENT_MODE) return;
+  if (process.platform !== 'darwin') app.quit();
+});
+app.on('before-quit', (event) => {
+  if (!IS_CAPTURE_AGENT_MODE && !browserCaptureRuntime.quitEnsured) {
+    const settings = getBrowserCaptureSettings();
+    const shouldKeepAgentAlive = settings.enabled !== false && settings.agentAutoStart !== false && !browserCaptureRuntime.stopAgentRequested;
+    if (shouldKeepAgentAlive) {
+      event.preventDefault();
+      browserCaptureRuntime.quitEnsured = true;
+      ensureCaptureAgentRunning()
+        .catch(() => null)
+        .finally(() => {
+          app.quit();
+        });
+      return;
+    }
+  }
+  stopCaptureQueuePolling();
+  try {
+    if (storage.markSessionClosed) storage.markSessionClosed({ appVersion: APP_VERSION });
+  } catch (_e) {}
+  if (captureAgentRuntime && IS_CAPTURE_AGENT_MODE) {
+    try { captureAgentRuntime.stop(); } catch (_e) {}
+  }
   if (browserCaptureRuntime.bridge) {
     try { browserCaptureRuntime.bridge.close(); } catch (_e) {}
   }
@@ -1664,10 +2310,17 @@ app.on('open-url', (event, url) => {
 });
 
 // â”€â”€ IPC: DATA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+ipcMain.on('renderer:probeError', (_event, payload) => {
+  appendRendererProbeError(payload);
+});
+
 ipcMain.handle('data:load', async () => {
   try {
     const result = storage.loadData();
     latestStateJSON = result && result.data ? String(result.data) : '';
+    try {
+      if (storage.saveCaptureTargets) storage.saveCaptureTargets(getCaptureTargets());
+    } catch (_e) {}
     return result;
   } catch (e) { return { ok: false, error: e.message }; }
 });
@@ -1676,40 +2329,89 @@ ipcMain.handle('data:save', async (_ev, json) => {
   try {
     const safeJSON = sanitizeDataPayload(json);
     latestStateJSON = safeJSON;
-    return storage.saveData(safeJSON);
-  } catch (e) { return { ok: false, error: e.message }; }
+    const saved = storage.saveData(safeJSON);
+    try {
+      if (storage.saveCaptureTargets) storage.saveCaptureTargets(getCaptureTargets());
+    } catch (_e) {}
+    return saved;
+  } catch (e) {
+    try {
+      if (storage.saveSessionState) storage.saveSessionState({ lastSaveError: e && e.message ? String(e.message) : 'Bilinmeyen kaydetme hatasi' });
+    } catch (_err) {}
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('data:saveDraft', async (_ev, json) => {
+  try {
+    const safeJSON = sanitizeDataPayload(json);
+    return storage.saveEditorDraft(safeJSON, { source: 'editor-draft' });
+  } catch (e) {
+    try {
+      if (storage.saveSessionState) storage.saveSessionState({ lastDraftError: e && e.message ? String(e.message) : 'Bilinmeyen draft kaydetme hatasi' });
+    } catch (_err) {}
+    return { ok: false, error: e.message };
+  }
 });
 
 // â”€â”€ IPC: PDF FILES (dual-write: local cache + sync folder) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-ipcMain.handle('pdf:save', async (_ev, refId, buffer) => {
+function sanitizeWsContext(ws) {
+  if (!ws || typeof ws !== 'object') return null;
+  const id = String(ws.id || '').trim();
+  if (!id) return null;
+  if (id.length > 128) return null;
+  return { id, name: String(ws.name || '').slice(0, 256) };
+}
+
+ipcMain.handle('pdf:save', async (_ev, refId, buffer, ws) => {
   try {
     normalizeRefId(refId);
     const pdfBuffer = sanitizePDFBuffer(buffer);
     if (pdfBuffer.length > 150 * 1024 * 1024) throw new Error('PDF dosyasi cok buyuk');
-    return storage.savePDF(refId, pdfBuffer);
+    return storage.savePDF(refId, pdfBuffer, sanitizeWsContext(ws));
   } catch (e) { return { ok: false, error: e.message }; }
 });
 
-ipcMain.handle('pdf:load', async (_ev, refId) => {
+ipcMain.handle('pdf:load', async (_ev, refId, ws) => {
   try {
     normalizeRefId(refId);
-    return storage.loadPDF(refId);
+    return storage.loadPDF(refId, sanitizeWsContext(ws));
   } catch (e) { return { ok: false, error: e.message }; }
 });
 
-ipcMain.handle('pdf:exists', async (_ev, refId) => {
+ipcMain.handle('pdf:exists', async (_ev, refId, ws) => {
   try {
     normalizeRefId(refId);
-    return storage.pdfExists(refId);
+    return storage.pdfExists(refId, sanitizeWsContext(ws));
   } catch (_e) {
     return false;
   }
 });
 
-ipcMain.handle('pdf:delete', async (_ev, refId) => {
+ipcMain.handle('pdf:delete', async (_ev, refId, ws) => {
   try {
     normalizeRefId(refId);
-    return storage.deletePDF(refId);
+    return storage.deletePDF(refId, sanitizeWsContext(ws));
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// Open the stored PDF's folder in the OS file explorer, highlighting the file.
+ipcMain.handle('pdf:showInExplorer', async (_ev, refId, ws) => {
+  try {
+    normalizeRefId(refId);
+    const filePath = storage.locatePdfPath(refId, sanitizeWsContext(ws));
+    if (!filePath) return { ok: false, error: 'PDF bulunamadi' };
+    try { shell.showItemInFolder(filePath); } catch (e) { return { ok: false, error: e.message }; }
+    return { ok: true, path: filePath };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// Delete an entire workspace's PDF folder (called before removing a workspace).
+ipcMain.handle('pdf:deleteWorkspaceFolder', async (_ev, ws) => {
+  try {
+    const wsCtx = sanitizeWsContext(ws);
+    if (!wsCtx) return { ok: false, error: 'Gecersiz calisma alani' };
+    return storage.deleteWorkspacePdfFolder(wsCtx);
   } catch (e) { return { ok: false, error: e.message }; }
 });
 
@@ -1888,7 +2590,7 @@ async function downloadPDFfromURLMain(url, refId, options = {}) {
       };
     }
     const pdfBuf = fetched.buffer;
-    storage.savePDF(refId, pdfBuf);
+    storage.savePDF(refId, pdfBuf, options && options.ws ? sanitizeWsContext(options.ws) : null);
     return {
       ok: true,
       size: pdfBuf.length,
@@ -1970,12 +2672,13 @@ ipcMain.handle('net:fetch-text', async (_ev, url, options = {}) => {
     const safeOptions = sanitizeNetFetchOptions(options);
     const timeout = Math.max(2500, Math.min(parseInt(safeOptions.timeoutMs, 10) || 8000, 30000));
     const maxBytes = Math.max(32 * 1024, Math.min(parseInt(safeOptions.maxBytes, 10) || (4 * 1024 * 1024), 12 * 1024 * 1024));
+    const allowedHosts = safeOptions.allowAnyHost ? null : NET_ALLOWED_HOSTS;
     const meta = await followRedirects(url, 6, {
       timeout,
       maxBytes,
       returnMeta: true,
       blockPrivate: true,
-      allowedHosts: NET_ALLOWED_HOSTS,
+      allowedHosts,
       headers: {
         'User-Agent': 'AcademiQ/1.0 (academic research tool)',
         'Accept': 'text/html,application/xhtml+xml,application/xml,text/plain,*/*'
@@ -2041,6 +2744,54 @@ ipcMain.handle('export:pdf', async (event, options = {}) => {
   }
 });
 
+ipcMain.handle('pdf:exportAnnotated', async (event, options = {}) => {
+  try {
+    const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+    if (!win) return { ok: false, error: 'Pencere bulunamadi' };
+    const pdfBase64 = String((options && options.pdfBase64) || '');
+    if (!pdfBase64) return { ok: false, error: 'Kaynak PDF verisi yok.' };
+    const srcBytes = Buffer.from(pdfBase64, 'base64');
+    if (!srcBytes.length) return { ok: false, error: 'Kaynak PDF boş.' };
+    const saveResult = await dialog.showSaveDialog(win, {
+      title: 'Annotationlı PDF Olarak Kaydet',
+      defaultPath: String(options.defaultPath || 'makale - annotated.pdf'),
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    });
+    if (saveResult.canceled || !saveResult.filePath) return { ok: false, canceled: true };
+    const { flattenAnnotationsIntoPdf } = require('./src/main-process-pdf-annotate.js');
+    const outBytes = await flattenAnnotationsIntoPdf({
+      pdfBytes: srcBytes,
+      payload: options.payload || {}
+    });
+    fs.writeFileSync(saveResult.filePath, Buffer.from(outBytes));
+    return { ok: true, filePath: saveResult.filePath, size: outBytes.length };
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : String(e) };
+  }
+});
+
+ipcMain.handle('export:docx', async (event, options = {}) => {
+  try {
+    const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+    if (!win) return { ok: false, error: 'Pencere bulunamadi' };
+    const saveResult = await dialog.showSaveDialog(win, {
+      title: 'DOCX Olarak Kaydet',
+      defaultPath: String(options.defaultPath || 'makale.docx'),
+      filters: [{ name: 'Word Belgesi', extensions: ['docx'] }]
+    });
+    if (saveResult.canceled || !saveResult.filePath) return { ok: false, canceled: true };
+    const targetPath = /\.docx$/i.test(saveResult.filePath)
+      ? saveResult.filePath
+      : (saveResult.filePath + '.docx');
+    const exportHTML = buildExportHTML(options);
+    await convertExportHTMLWithOfficeComToDocx(exportHTML, targetPath);
+    const size = fs.existsSync(targetPath) ? fs.statSync(targetPath).size : 0;
+    return { ok: true, filePath: targetPath, size };
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : String(e) };
+  }
+});
+
 // â”€â”€ IPC: SYNC SETTINGS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 ipcMain.handle('sync:getSettings', async () => {
   return storage.getSyncSettings();
@@ -2066,6 +2817,7 @@ ipcMain.handle('sync:clearSyncDir', async () => {
 // â”€â”€ IPC: BROWSER CAPTURE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 ipcMain.handle('browserCapture:getStatus', async () => {
   await refreshBrowserCaptureSettings();
+  await refreshCaptureAgentStatusSnapshot();
   return browserCaptureStatus({
     activeWorkspaceId: getCaptureTargets().activeWorkspaceId || ''
   });
@@ -2118,6 +2870,14 @@ ipcMain.handle('browserCapture:updatePrefs', async (_ev, prefs = {}) => {
   if (prefs && typeof prefs === 'object' && typeof prefs.setupPromptSeen !== 'undefined') {
     safe.setupPromptSeen = !!prefs.setupPromptSeen;
   }
+  if (prefs && typeof prefs === 'object' && typeof prefs.agentAutoStart !== 'undefined') {
+    const loginItemState = syncCaptureAgentLoginItem(!!prefs.agentAutoStart);
+    safe.agentAutoStartSupported = !!loginItemState.supported;
+    safe.agentAutoStart = loginItemState.supported ? !!loginItemState.enabled : !!prefs.agentAutoStart;
+    if (safe.agentAutoStart) {
+      try { await ensureCaptureAgentRunning(); } catch (_e) {}
+    }
+  }
   storage.setBrowserCaptureSettings(safe);
   return Object.assign({ ok: true }, browserCaptureStatus());
 });
@@ -2128,7 +2888,7 @@ ipcMain.handle('browserCapture:createWorkspace', async (_ev, name = '') => {
 
 ipcMain.handle('browserCapture:rendererReady', async () => {
   browserCaptureRuntime.ready = true;
-  processPersistedBrowserCaptureQueue().catch(() => {});
+  processCaptureQueueFromApp('renderer-ready').catch(() => {});
   flushPendingBrowserCaptures();
   scheduleBrowserCaptureFlush(100);
   return { ok: true };
@@ -2143,6 +2903,16 @@ const UPDATE_URL = 'https://api.github.com/repos/cyrenard/academiq-research/rele
 
 ipcMain.handle('app:getInfo', async () => {
   return storage.getAppInfo(APP_VERSION);
+});
+
+ipcMain.handle('docHistory:get', async (_event, docId, limit = 20) => {
+  return storage.getDocumentHistory(docId, limit);
+});
+
+ipcMain.handle('docHistory:restore', async (_event, docId, snapshotId) => {
+  const result = storage.restoreDocumentHistorySnapshot(docId, snapshotId);
+  latestStateJSON = '';
+  return result;
 });
 
 // â”€â”€ IPC: AUTO-UPDATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -2179,6 +2949,7 @@ ipcMain.handle('update:download', async (_ev, origUrl) => {
       dirname: __dirname,
       url,
       buffer: buf,
+      appVersion: APP_VERSION,
       isPackaged: app.isPackaged,
       fetchBuffer: followRedirects
     });
@@ -2195,4 +2966,31 @@ ipcMain.handle('update:setUrl', async (_ev, url) => {
 ipcMain.handle('update:restart', async () => {
   app.relaunch();
   app.exit(0);
+});
+
+// ── Local OCR (Tesseract.js) ────────────────────────────────────────────
+// Runs entirely on-device. No external API calls, no API keys, no telemetry.
+
+function ocrSanitizeRecognizePayload(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  if (typeof raw.imageDataUrl === 'string') out.imageDataUrl = raw.imageDataUrl.length > 20 * 1024 * 1024 ? raw.imageDataUrl.slice(0, 20 * 1024 * 1024) : raw.imageDataUrl;
+  if (typeof raw.lang === 'string') out.lang = raw.lang.slice(0, 32);
+  if (Number.isFinite(Number(raw.page))) out.page = Math.max(1, Math.floor(Number(raw.page)));
+  return out;
+}
+
+ipcMain.handle('ocr:recognize', async (_ev, payload) => {
+  try {
+    const p = ocrSanitizeRecognizePayload(payload);
+    if (!p.imageDataUrl) return { ok: false, code: 'OCR_NO_IMAGE', message: 'Resim verisi yok' };
+    return await localOcr.recognize({ imageDataUrl: p.imageDataUrl, lang: p.lang });
+  } catch (e) {
+    return { ok: false, code: e && e.code ? e.code : 'OCR_ERROR', message: e && e.message ? e.message : 'OCR hatasi' };
+  }
+});
+
+// Dispose OCR worker on app quit to avoid dangling native threads.
+app.on('will-quit', () => {
+  try { if (localOcr && typeof localOcr.dispose === 'function') localOcr.dispose(); } catch (_e) {}
 });

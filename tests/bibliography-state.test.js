@@ -44,7 +44,7 @@ test('syncBibliographyHTML appends bibliography when missing', () => {
     }
   });
 
-  assert.equal(result, '<p>Body</p><h1>Kaynakça</h1><p class="refe">A</p>');
+  assert.equal(result, '<p>Body</p><h1>Kaynakça</h1><p class="refe" data-ref-id="" tabindex="0" role="button">A</p>');
 });
 
 test('syncBibliographyHTML keeps document unchanged when no refs and no bibliography heading', () => {
@@ -195,9 +195,34 @@ test('updateBibliographySection applies generated bibliography and updates docum
   assert.equal(updated, true);
   assert.equal(bound, true);
   assert.equal(pageEl.style.display, 'block');
-  assert.equal(bodyEl.innerHTML, '<h1>Kaynakça</h1><p class="refe">A</p><p class="refe">B</p>');
-  assert.equal(doc.bibliographyHTML, '<h1>Kaynakça</h1><p class="refe">A</p><p class="refe">B</p>');
+  assert.equal(bodyEl.innerHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="" tabindex="0" role="button">A</p><p class="refe" data-ref-id="" tabindex="0" role="button">B</p>');
+  assert.equal(doc.bibliographyHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="" tabindex="0" role="button">A</p><p class="refe" data-ref-id="" tabindex="0" role="button">B</p>');
   assert.equal(doc.bibliographyManual, false);
+});
+
+test('updateBibliographySection invokes syncPageLayout after render', () => {
+  const pageEl = { style: { display: 'none' } };
+  const bodyEl = { innerHTML: '' };
+  const doc = { id: 'doc-1', bibliographyHTML: '', bibliographyManual: false };
+  const calls = [];
+
+  bibliographyState.updateBibliographySection({
+    refs: [{ title: 'A' }],
+    pageEl,
+    bodyEl,
+    doc,
+    formatRef(ref) {
+      return ref.title;
+    },
+    syncPageLayout(payload) {
+      calls.push(payload);
+    }
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].pageEl, pageEl);
+  assert.equal(calls[0].bodyEl, bodyEl);
+  assert.deepEqual(calls[0].refs.map(ref => ref.title), ['A']);
 });
 
 test('renderReferencePanel delegates used-reference rendering to citation api', () => {
@@ -255,7 +280,7 @@ test('syncBibliographyUI renders references and updates bibliography in one pass
   assert.deepEqual(refs.map(ref => ref.id), ['a', 'b']);
   assert.equal(listEl.innerHTML, 'refs-rendered');
   assert.equal(pageEl.style.display, 'block');
-  assert.equal(bodyEl.innerHTML, '<h1>Kaynakça</h1><p class="refe">A</p><p class="refe">B</p>');
+  assert.equal(bodyEl.innerHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="a" tabindex="0" role="button">A</p><p class="refe" data-ref-id="b" tabindex="0" role="button">B</p>');
 });
 
 test('syncReferenceViews can render panel only without touching bibliography body', () => {
@@ -312,7 +337,164 @@ test('syncReferenceViews can render panel and bibliography together', () => {
   assert.deepEqual(refs.map(ref => ref.id), ['a', 'b']);
   assert.equal(listEl.innerHTML, 'views-rendered');
   assert.equal(pageEl.style.display, 'block');
-  assert.equal(bodyEl.innerHTML, '<h1>Kaynakça</h1><p class="refe">A</p><p class="refe">B</p>');
+  assert.equal(bodyEl.innerHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="a" tabindex="0" role="button">A</p><p class="refe" data-ref-id="b" tabindex="0" role="button">B</p>');
+});
+
+test('syncReferenceViews keeps external bibliography refs on generated page', () => {
+  const pageEl = { style: { display: 'none' } };
+  const bodyEl = { innerHTML: '' };
+  const listEl = { innerHTML: '' };
+  const doc = { bibliographyHTML: '', bibliographyManual: false, bibliographyExtraRefIds: ['c'] };
+
+  const refs = bibliographyState.syncReferenceViews({
+    editorRoot: { id: 'editor-root' },
+    listEl,
+    pageEl,
+    bodyEl,
+    doc,
+    citationApi: {
+      renderUsedReferenceList(editorRoot, el) {
+        el.innerHTML = 'views-rendered';
+        return [{ id: 'b', title: 'B' }];
+      }
+    },
+    getExtraReferences() {
+      return [{ id: 'c', title: 'C' }];
+    },
+    dedupeReferences(list) {
+      const seen = new Set();
+      return list.filter((ref) => {
+        if(seen.has(ref.id)) return false;
+        seen.add(ref.id);
+        return true;
+      });
+    },
+    sortReferences(list) {
+      return list.slice().sort((a, b) => a.id.localeCompare(b.id));
+    },
+    formatRef(ref) {
+      return ref.title;
+    }
+  });
+
+  assert.deepEqual(refs.map(ref => ref.id), ['b', 'c']);
+  assert.equal(listEl.innerHTML, 'views-rendered');
+  assert.equal(pageEl.style.display, 'block');
+  assert.equal(bodyEl.innerHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="b" tabindex="0" role="button">B</p><p class="refe" data-ref-id="c" tabindex="0" role="button">C</p>');
+  assert.equal(doc.bibliographyManual, false);
+});
+
+test('syncReferenceViews creates bibliography page from external refs without inline citations', () => {
+  const pageEl = { style: { display: 'none' } };
+  const bodyEl = { innerHTML: '' };
+  const listEl = { innerHTML: '' };
+  const doc = { bibliographyHTML: '', bibliographyManual: false, bibliographyExtraRefIds: ['c'] };
+
+  const refs = bibliographyState.syncReferenceViews({
+    editorRoot: { id: 'editor-root' },
+    listEl,
+    pageEl,
+    bodyEl,
+    doc,
+    citationApi: {
+      renderUsedReferenceList(editorRoot, el) {
+        el.innerHTML = 'no inline citations';
+        return [];
+      }
+    },
+    getExtraReferences() {
+      return [{ id: 'c', title: 'Ciudad-Fernandez' }];
+    },
+    dedupeReferences(list) {
+      return list;
+    },
+    sortReferences(list) {
+      return list.slice().sort((a, b) => a.title.localeCompare(b.title));
+    },
+    formatRef(ref) {
+      return ref.title;
+    }
+  });
+
+  assert.deepEqual(refs.map(ref => ref.id), ['c']);
+  assert.equal(listEl.innerHTML, 'no inline citations');
+  assert.equal(pageEl.style.display, 'block');
+  assert.equal(bodyEl.innerHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="c" tabindex="0" role="button">Ciudad-Fernandez</p>');
+  assert.equal(doc.bibliographyHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="c" tabindex="0" role="button">Ciudad-Fernandez</p>');
+});
+
+test('syncReferenceViews re-sorts external bibliography refs when new citations are added', () => {
+  const pageEl = { style: { display: 'none' } };
+  const bodyEl = { innerHTML: '' };
+  const listEl = { innerHTML: '' };
+  const doc = {
+    bibliographyHTML: '<h1>Kaynakça</h1><p class="refe">Ciudad</p>',
+    bibliographyManual: true,
+    bibliographyExtraRefIds: ['c']
+  };
+
+  const refs = bibliographyState.syncReferenceViews({
+    editorRoot: { id: 'editor-root' },
+    listEl,
+    pageEl,
+    bodyEl,
+    doc,
+    citationApi: {
+      renderUsedReferenceList(editorRoot, el) {
+        el.innerHTML = 'views-rendered';
+        return [{ id: 'a', title: 'Barros' }];
+      }
+    },
+    getExtraReferences() {
+      return [{ id: 'c', title: 'Ciudad' }];
+    },
+    dedupeReferences(list) {
+      const seen = new Set();
+      return list.filter((ref) => {
+        if(seen.has(ref.id)) return false;
+        seen.add(ref.id);
+        return true;
+      });
+    },
+    sortReferences(list) {
+      return list.slice().sort((a, b) => a.title.localeCompare(b.title));
+    },
+    formatRef(ref) {
+      return ref.title;
+    }
+  });
+
+  assert.deepEqual(refs.map(ref => ref.id), ['a', 'c']);
+  assert.equal(bodyEl.innerHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="a" tabindex="0" role="button">Barros</p><p class="refe" data-ref-id="c" tabindex="0" role="button">Ciudad</p>');
+  assert.equal(doc.bibliographyHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="a" tabindex="0" role="button">Barros</p><p class="refe" data-ref-id="c" tabindex="0" role="button">Ciudad</p>');
+  assert.equal(doc.bibliographyManual, false);
+});
+
+test('syncReferenceViews forwards syncPageLayout callback', () => {
+  const pageEl = { style: { display: 'none' } };
+  const bodyEl = { innerHTML: '' };
+  let syncLayoutCount = 0;
+
+  bibliographyState.syncReferenceViews({
+    editorRoot: { id: 'editor-root' },
+    listEl: { innerHTML: '' },
+    pageEl,
+    bodyEl,
+    doc: { bibliographyHTML: '', bibliographyManual: false },
+    citationApi: {
+      renderUsedReferenceList() {
+        return [{ id: 'a', title: 'A' }];
+      }
+    },
+    formatRef(ref) {
+      return ref.title;
+    },
+    syncPageLayout() {
+      syncLayoutCount += 1;
+    }
+  });
+
+  assert.equal(syncLayoutCount, 1);
 });
 
 test('resetManualBibliography clears manual bibliography state', () => {
@@ -408,7 +590,7 @@ test('syncReferenceViewsForState resolves current document before syncing', () =
   });
 
   assert.deepEqual(refs, [{ id: 'r1' }]);
-  assert.equal(state.docs[0].bibliographyHTML, '<h1>Kaynakça</h1><p class="refe">r1</p>');
+  assert.equal(state.docs[0].bibliographyHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="r1" tabindex="0" role="button">r1</p>');
 });
 
 test('refreshManualBibliographyForState resolves active document automatically', () => {

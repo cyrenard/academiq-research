@@ -1,5 +1,35 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+try {
+  if (typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
+    window.addEventListener('error', (event) => {
+      try {
+        ipcRenderer.send('renderer:probeError', {
+          type: 'error',
+          message: event && event.message ? String(event.message) : '',
+          filename: event && event.filename ? String(event.filename) : '',
+          lineno: event && Number.isFinite(Number(event.lineno)) ? Number(event.lineno) : 0,
+          colno: event && Number.isFinite(Number(event.colno)) ? Number(event.colno) : 0,
+          stack: event && event.error && event.error.stack ? String(event.error.stack) : ''
+        });
+      } catch (_e) {}
+    });
+    window.addEventListener('unhandledrejection', (event) => {
+      try {
+        const reason = event ? event.reason : null;
+        ipcRenderer.send('renderer:probeError', {
+          type: 'unhandledrejection',
+          message: reason && reason.message ? String(reason.message) : String(reason || ''),
+          filename: '',
+          lineno: 0,
+          colno: 0,
+          stack: reason && reason.stack ? String(reason.stack) : ''
+        });
+      } catch (_e) {}
+    });
+  }
+} catch (_e) {}
+
 function toUint8Array(value) {
   if (value == null) return null;
   if (typeof Uint8Array !== 'undefined' && value instanceof Uint8Array) return value;
@@ -65,6 +95,13 @@ function asURL(value) {
   return asString(value, 4096).trim();
 }
 
+function pickWsContext(ws) {
+  if (!ws || typeof ws !== 'object') return null;
+  const id = asString(ws.id, 128).trim();
+  if (!id) return null;
+  return { id, name: asString(ws.name, 256) };
+}
+
 function pickDownloadOptions(options) {
   const src = options && typeof options === 'object' ? options : {};
   const out = {};
@@ -79,6 +116,8 @@ function pickDownloadOptions(options) {
   if (Array.isArray(src.expectedAuthors)) out.expectedAuthors = src.expectedAuthors.map(item => asString(item, 256)).filter(Boolean).slice(0, 8);
   if (src.expectedYear != null) out.expectedYear = asString(src.expectedYear, 32);
   if (src.requireDoiEvidence != null) out.requireDoiEvidence = !!src.requireDoiEvidence;
+  const wsCtx = pickWsContext(src.ws);
+  if (wsCtx) out.ws = wsCtx;
   return out;
 }
 
@@ -90,6 +129,9 @@ function pickNetFetchOptions(options) {
   }
   if (src.maxBytes != null && Number.isFinite(Number(src.maxBytes))) {
     out.maxBytes = Number(src.maxBytes);
+  }
+  if (src.allowAnyHost != null) {
+    out.allowAnyHost = !!src.allowAnyHost;
   }
   return out;
 }
@@ -113,12 +155,15 @@ const electronAPI = {
   // Data sync
   loadData:       ()          => invoke('data:load'),
   saveData:       (json)      => invoke('data:save', typeof json === 'string' ? json : JSON.stringify(json || {})),
+  saveEditorDraft:(json)      => invoke('data:saveDraft', typeof json === 'string' ? json : JSON.stringify(json || {})),
 
-  // PDF file management
-  savePDF:        (refId, buf)=> invoke('pdf:save', asRefId(refId), buf),
-  loadPDF:        (refId)     => invoke('pdf:load', asRefId(refId)).then(normalizeResultBuffer),
-  pdfExists:      (refId)     => invoke('pdf:exists', asRefId(refId)),
-  deletePDF:      (refId)     => invoke('pdf:delete', asRefId(refId)),
+  // PDF file management (ws optional: {id, name} — routes into workspace-scoped folder)
+  savePDF:        (refId, buf, ws)=> invoke('pdf:save', asRefId(refId), buf, pickWsContext(ws)),
+  loadPDF:        (refId, ws)     => invoke('pdf:load', asRefId(refId), pickWsContext(ws)).then(normalizeResultBuffer),
+  pdfExists:      (refId, ws)     => invoke('pdf:exists', asRefId(refId), pickWsContext(ws)),
+  deletePDF:      (refId, ws)     => invoke('pdf:delete', asRefId(refId), pickWsContext(ws)),
+  showPdfInExplorer: (refId, ws)  => invoke('pdf:showInExplorer', asRefId(refId), pickWsContext(ws)),
+  deleteWorkspacePdfFolder: (ws)  => invoke('pdf:deleteWorkspaceFolder', pickWsContext(ws)),
 
   // PDF download (CORS-free, Node.js redirect following)
   downloadPDFfromURL: (url, refId, options) => invoke('pdf:download', asURL(url), asRefId(refId), pickDownloadOptions(options)),
@@ -132,6 +177,8 @@ const electronAPI = {
   openPDFDialog:  ()          => invoke('dialog:openPDF').then(normalizeDialogFiles),
   wordToHtml:     (filePath)  => invoke('word:toHtml', asString(filePath, 4096)),
   exportPDF:      (options)   => invoke('export:pdf', options && typeof options === 'object' ? options : {}),
+  exportAnnotatedPdfNative: (options) => invoke('pdf:exportAnnotated', options && typeof options === 'object' ? options : {}),
+  exportDOCX:     (options)   => invoke('export:docx', options && typeof options === 'object' ? options : {}),
 
   // Sync settings
   getSyncSettings: ()         => invoke('sync:getSettings'),
@@ -140,6 +187,8 @@ const electronAPI = {
 
   // App info
   getAppInfo:      ()         => invoke('app:getInfo'),
+  getDocumentHistory: (docId, limit) => invoke('docHistory:get', asString(docId, 320), Number.isFinite(Number(limit)) ? Number(limit) : 20),
+  restoreDocumentHistorySnapshot: (docId, snapshotId) => invoke('docHistory:restore', asString(docId, 320), asString(snapshotId, 128)),
 
   // Browser capture
   getBrowserCaptureStatus: () => invoke('browserCapture:getStatus'),
@@ -165,3 +214,11 @@ const electronAPI = {
 };
 
 contextBridge.exposeInMainWorld('electronAPI', Object.freeze(electronAPI));
+
+// ── Local OCR bridge (Tesseract.js, on-device) ────────────────────────────
+// Replaces the previous AI-powered OCR. No network, no API keys.
+const ocrAPI = {
+  recognize: (payload) => invoke('ocr:recognize', payload && typeof payload === 'object' ? payload : {})
+};
+
+contextBridge.exposeInMainWorld('ocrAPI', Object.freeze(ocrAPI));

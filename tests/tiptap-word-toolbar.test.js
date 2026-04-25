@@ -141,6 +141,8 @@ test('syncFormatState highlights structure, alignment and list buttons for activ
     btnItalic: { classList: makeClassList() },
     btnUnderline: { classList: makeClassList() },
     btnStrike: { classList: makeClassList() },
+    btnSuperscript: { classList: makeClassList() },
+    btnSubscript: { classList: makeClassList() },
     btnParagraph: { classList: makeClassList() },
     btnBlockQuote: { classList: makeClassList() },
     btnUnorderedList: { classList: makeClassList() },
@@ -165,6 +167,8 @@ test('syncFormatState highlights structure, alignment and list buttons for activ
       if (type === 'blockquote') return false;
       if (type === 'bulletList') return true;
       if (type === 'orderedList') return false;
+      if (type === 'superscript') return true;
+      if (type === 'subscript') return false;
       if (type === 'heading' && attrs && attrs.level === 2) return true;
       if (type && typeof type === 'object' && type.textAlign === 'center') return true;
       return false;
@@ -182,6 +186,8 @@ test('syncFormatState highlights structure, alignment and list buttons for activ
   assert.equal(ok, true);
   assert.deepEqual(buttons.btnParagraph.classList.addCalls, ['active', 'is-active']);
   assert.deepEqual(buttons.btnUnorderedList.classList.addCalls, ['active', 'is-active']);
+  assert.deepEqual(buttons.btnSuperscript.classList.addCalls, ['active', 'is-active']);
+  assert.deepEqual(buttons.btnSubscript.classList.removeCalls, ['active', 'is-active']);
   assert.deepEqual(buttons.btnAlignCenter.classList.addCalls, ['active', 'is-active']);
   assert.deepEqual(buttons.btnH2.classList.addCalls, ['heading-active', 'active', 'is-active']);
   assert.deepEqual(buttons.btnH1.classList.removeCalls, ['heading-active', 'active', 'is-active']);

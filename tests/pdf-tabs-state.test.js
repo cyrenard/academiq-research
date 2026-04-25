@@ -55,6 +55,45 @@ test('saveActiveTabState updates only active tab snapshot fields', function(){
   assert.equal(next.tabs[1].scrollPos, 5);
 });
 
+test('saveActiveTabState persists OCR cache and per-page OCR metadata', function(){
+  const next = pdfTabsState.saveActiveTabState({
+    tabs: [{ id:'tab_1', scrollPos:0, hlData:[], annots:[] }],
+    activeTabId: 'tab_1'
+  }, {
+    ocrPageItems: {
+      '1': [{ str: 'OCR text' }]
+    },
+    ocrPageMeta: {
+      '1': { status: 'success', attempts: 1, failures: 0, lastError: '', updatedAt: 10 },
+      '2': { status: 'failed', attempts: 2, failures: 2, lastError: 'ai_timeout', updatedAt: 20 }
+    },
+    ocrLastAt: 123456
+  });
+
+  assert.deepEqual(next.tabs[0].ocrPageItems, { '1': [{ str: 'OCR text' }] });
+  assert.deepEqual(next.tabs[0].ocrPageMeta, {
+    '1': { status: 'success', attempts: 1, failures: 0, lastError: '', updatedAt: 10 },
+    '2': { status: 'failed', attempts: 2, failures: 2, lastError: 'ai_timeout', updatedAt: 20 }
+  });
+  assert.equal(next.tabs[0].ocrLastAt, 123456);
+});
+
+test('switchPdfTab returns OCR fields from existing tab clone', function(){
+  const next = pdfTabsState.switchPdfTab({
+    tabs: [
+      { id:'tab_1', title:'Alpha', ocrPageItems:{ '3': [{ str:'x' }] }, ocrPageMeta:{ '3': { status:'success', attempts:1, failures:0, lastError:'', updatedAt:1 } }, ocrLastAt: 77 }
+    ],
+    activeTabId: null
+  }, 'tab_1');
+
+  assert.equal(next.activeTabId, 'tab_1');
+  assert.deepEqual(next.activeTab.ocrPageItems, { '3': [{ str:'x' }] });
+  assert.deepEqual(next.activeTab.ocrPageMeta, {
+    '3': { status:'success', attempts:1, failures:0, lastError:'', updatedAt:1 }
+  });
+  assert.equal(next.activeTab.ocrLastAt, 77);
+});
+
 test('closePdfTab selects first workspace tab when active closes', function(){
   const next = pdfTabsState.closePdfTab({
     tabs: [

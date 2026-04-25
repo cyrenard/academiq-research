@@ -9,6 +9,11 @@
     loadToken: 0
   };
   var hostRoot = typeof window !== 'undefined' ? window : globalThis;
+  var apaStyleEngine = null;
+  try{
+    if(typeof require === 'function') apaStyleEngine = require('./apa-style-engine.js');
+  }catch(_e){}
+  if(!apaStyleEngine && hostRoot && hostRoot.AQApaStyleEngine) apaStyleEngine = hostRoot.AQApaStyleEngine;
 
   function resolveBlankHTML(blankHTML){
     if(typeof blankHTML === 'function'){
@@ -101,6 +106,37 @@
       .replace(/\sdraggable="[^"]*"/gi, '')
       .replace(/\son[a-z]+="[^"]*"/gi, '')
       .trim();
+  }
+
+  function normalizeExportSemantics(html){
+    var source = String(html || '');
+    source = source.replace(/<a([^>]*)class="([^"]*\bcross-ref\b[^"]*)"([^>]*)>/gi, function(match, before, cls, after){
+      if(/\baq-cross-ref-export\b/.test(cls)) return match;
+      return '<a' + before + 'class="' + cls + ' aq-cross-ref-export"' + after + '>';
+    });
+    source = source.replace(
+      /((?:<p[^>]*class="[^"]*\bni\b[^"]*"[^>]*>\s*<strong>\s*Tablo\s+\d+\s*<\/strong>\s*<\/p>\s*)(?:<p[^>]*class="[^"]*\bni\b[^"]*"[^>]*>\s*<em>[\s\S]*?<\/em>\s*<\/p>\s*)?<table[\s\S]*?<\/table>(?:\s*<p[^>]*class="[^"]*\bni\b[^"]*"[^>]*>\s*<em>\s*Not\.<\/em>[\s\S]*?<\/p>)?)/gi,
+      function(block){
+        if(/aq-table-block/.test(block)) return block;
+        var wrapped = block
+          .replace(/<p([^>]*)>\s*<strong>(\s*Tablo\s+\d+\s*)<\/strong>\s*<\/p>/i, '<p$1 class="ni aq-table-label"><strong>$2</strong></p>')
+          .replace(/<p([^>]*)>\s*<em>([\s\S]*?)<\/em>\s*<\/p>/i, '<p$1 class="ni aq-table-title"><em>$2</em></p>')
+          .replace(/<table/i, '<table class="aq-export-table"')
+          .replace(/<p([^>]*)>\s*<em>\s*Not\.<\/em>([\s\S]*?)<\/p>/i, '<p$1 class="ni aq-table-note"><em>Not.</em>$2</p>');
+        return '<div class="aq-table-block aq-avoid-break">' + wrapped + '</div>';
+      }
+    );
+    source = source.replace(
+      /((?:<p[^>]*>\s*\[\s*(?:Şekil|Sekil|Figure)\s+\d+\s*\]\s*<\/p>\s*)(?:<p[^>]*>\s*(?:Şekil|Sekil|Figure)\s+\d+[\s\S]*?<\/p>))/gi,
+      function(block){
+        if(/aq-figure-block/.test(block)) return block;
+        var wrapped = block
+          .replace(/<p([^>]*)>\s*(\[\s*(?:Şekil|Sekil|Figure)\s+\d+\s*\])\s*<\/p>/i, '<p$1 class="ni aq-figure-placeholder">$2</p>')
+          .replace(/<p([^>]*)>\s*((?:Şekil|Sekil|Figure)\s+\d+[\s\S]*?)<\/p>/i, '<p$1 class="ni aq-figure-caption"><em>$2</em></p>');
+        return '<div class="aq-figure-block aq-avoid-break">' + wrapped + '</div>';
+      }
+    );
+    return source;
   }
 
   function appendClass(node, className){
@@ -240,11 +276,60 @@
   }
 
   function buildCleanExportHTML(edHTML){
-    return decorateExportLayout(stripExportOnlyArtifacts(prepareExportSourceHTML(edHTML)));
+    var cleanHTML = stripExportOnlyArtifacts(prepareExportSourceHTML(edHTML));
+    if(hostRoot && hostRoot.AQAcademicObjects && typeof hostRoot.AQAcademicObjects.normalizeHTMLForExport === 'function'){
+      try{
+        cleanHTML = hostRoot.AQAcademicObjects.normalizeHTMLForExport(cleanHTML);
+      }catch(_e){}
+    }
+    cleanHTML = normalizeExportSemantics(cleanHTML);
+    return decorateExportLayout(cleanHTML);
   }
 
   function buildExportBaseCSS(){
-    return '@page{size:A4;margin:2.54cm;}html,body{margin:0;padding:0;background:#fff;color:#000;font-family:"Times New Roman",Times,serif;font-size:12pt;line-height:2;}body{counter-reset:page 0;}main.aq-export-root{width:100%;max-width:none;}.aq-export-root h1{font-size:12pt;font-weight:bold;text-align:center;margin:0;line-height:2;text-indent:0;break-after:avoid-page;page-break-after:avoid;}.aq-export-root h2{font-size:12pt;font-weight:bold;text-align:left;margin:0;line-height:2;text-indent:0;break-after:avoid-page;page-break-after:avoid;}.aq-export-root h3{font-size:12pt;font-weight:bold;font-style:italic;text-align:left;margin:0;line-height:2;text-indent:0;break-after:avoid-page;page-break-after:avoid;}.aq-export-root h4{font-size:12pt;font-weight:bold;text-align:left;margin:0;line-height:2;text-indent:.5in;break-after:avoid-page;page-break-after:avoid;}.aq-export-root h5{font-size:12pt;font-weight:bold;font-style:italic;text-align:left;margin:0;line-height:2;text-indent:.5in;break-after:avoid-page;page-break-after:avoid;}.aq-export-root p{margin:0;text-indent:.5in;orphans:3;widows:3;}.aq-export-root p[data-indent-mode="first-line"],.aq-export-root p.indent-first-line{text-indent:.5in;}.aq-export-root p[data-indent-mode="none"],.aq-export-root p.ni,.aq-export-root p.indent-none{text-indent:0;}.aq-export-root blockquote{margin:0;padding-left:.5in;text-indent:0;break-inside:avoid;page-break-inside:avoid;}.aq-export-root blockquote p{text-indent:0;}.aq-export-root ul,.aq-export-root ol{margin:0 0 0 .5in;padding:0;}.aq-export-root li{margin:0;text-indent:0;}.aq-export-root table{width:100%;border-collapse:collapse;font-size:12pt;margin:6pt 0;break-inside:avoid;page-break-inside:auto;}.aq-export-root thead{display:table-header-group;}.aq-export-root tr,.aq-export-root img{break-inside:avoid;page-break-inside:avoid;}.aq-export-root th{border-top:1.5px solid #000;border-bottom:1px solid #000;padding:4px 8px;font-weight:bold;}.aq-export-root td{padding:4px 8px;vertical-align:top;}.aq-export-root .refe,.aq-export-root .aq-ref-entry{margin:0;padding-left:.5in;text-indent:-.5in;break-inside:avoid;page-break-inside:avoid;}.aq-export-root .cit{color:#000;border:none;white-space:normal;}.aq-export-root .cit-gap{display:none!important;}.aq-export-root .toc-entry{break-inside:avoid;page-break-inside:avoid;color:#000;text-decoration:none;}.aq-export-root .toc-entry .toc-page{background:#fff;}.aq-export-root .table-wrap,.aq-export-root .figure-wrap,.aq-export-root figure,.aq-export-root figcaption,.aq-export-root .aq-avoid-break,.aq-export-root .aq-ref-entry,.aq-export-root .aq-keep-group{break-inside:avoid;page-break-inside:avoid;}.aq-export-root .aq-keep-with-next{break-after:avoid-page;page-break-after:avoid;}.aq-export-root .aq-biblio-heading{margin-bottom:0;}.aq-export-root .aq-ref-entry + .aq-ref-entry{margin-top:0;}.aq-export-root .aq-keep-target{break-before:auto;page-break-before:auto;}';
+    var headingCSS = apaStyleEngine && typeof apaStyleEngine.buildExportHeadingCSS === 'function'
+      ? apaStyleEngine.buildExportHeadingCSS('.aq-export-root')
+      : '.aq-export-root h1{font-size:12pt;font-weight:bold;text-align:center;margin:0;line-height:var(--aq-line-spacing,24pt);mso-line-height-rule:exactly;text-indent:0;break-after:avoid-page;page-break-after:avoid;}'
+        + '.aq-export-root h2{font-size:12pt;font-weight:bold;text-align:left;margin:0;line-height:var(--aq-line-spacing,24pt);mso-line-height-rule:exactly;text-indent:0;break-after:avoid-page;page-break-after:avoid;}'
+        + '.aq-export-root h3{font-size:12pt;font-weight:bold;font-style:italic;text-align:left;margin:0;line-height:var(--aq-line-spacing,24pt);mso-line-height-rule:exactly;text-indent:0;break-after:avoid-page;page-break-after:avoid;}'
+        + '.aq-export-root h4{font-size:12pt;font-weight:bold;text-align:left;margin:0;line-height:var(--aq-line-spacing,24pt);mso-line-height-rule:exactly;text-indent:.5in;break-after:avoid-page;page-break-after:avoid;}'
+        + '.aq-export-root h5{font-size:12pt;font-weight:bold;font-style:italic;text-align:left;margin:0;line-height:var(--aq-line-spacing,24pt);mso-line-height-rule:exactly;text-indent:.5in;break-after:avoid-page;page-break-after:avoid;}';
+    var blockCSS = apaStyleEngine && typeof apaStyleEngine.buildExportBlockCSS === 'function'
+      ? apaStyleEngine.buildExportBlockCSS('.aq-export-root')
+      : '.aq-export-root p{margin:0;line-height:var(--aq-line-spacing,24pt);mso-line-height-rule:exactly;text-indent:.5in;orphans:3;widows:3;}'
+        + '.aq-export-root p[data-indent-mode="first-line"],.aq-export-root p.indent-first-line{text-indent:.5in;}'
+        + '.aq-export-root p[data-indent-mode="none"],.aq-export-root p.ni,.aq-export-root p.indent-none{text-indent:0;}'
+        + '.aq-export-root blockquote{margin:0;padding-left:.5in;line-height:var(--aq-line-spacing,24pt);text-indent:0;break-inside:avoid;page-break-inside:avoid;}'
+        + '.aq-export-root blockquote p{text-indent:0;}'
+        + '.aq-export-root .refe,.aq-export-root .aq-ref-entry{margin:0;padding-left:.5in;line-height:var(--aq-line-spacing,24pt);text-indent:-.5in;break-inside:avoid;page-break-inside:avoid;}'
+        + '.aq-export-root .aq-table-label,.aq-export-root .aq-figure-placeholder{margin:0;text-indent:0;text-align:center;font-weight:700;}'
+        + '.aq-export-root .aq-table-title,.aq-export-root .aq-figure-caption{margin:0 0 6pt 0;text-indent:0;text-align:center;font-style:italic;}';
+    return '@page{size:A4;margin:2.54cm;}'
+      + 'html,body{margin:0;padding:0;background:#fff;color:#000;font-family:"Times New Roman",Times,serif;font-size:12pt;line-height:var(--aq-line-spacing,24pt);mso-line-height-rule:exactly;}'
+      + 'body{counter-reset:page 0;}'
+      + 'main.aq-export-root{width:100%;max-width:none;}'
+      + '.aq-export-root .aq-export-page-break-before{break-before:page;page-break-before:always;}'
+      + headingCSS
+      + blockCSS
+      + '.aq-export-root ul,.aq-export-root ol{margin:0 0 0 .5in;padding:0;line-height:var(--aq-line-spacing,24pt);}'
+      + '.aq-export-root li{margin:0;line-height:var(--aq-line-spacing,24pt);mso-line-height-rule:exactly;text-indent:0;}'
+      + '.aq-export-root table{width:100%;border-collapse:collapse;font-size:12pt;margin:6pt 0;break-inside:avoid;page-break-inside:auto;}'
+      + '.aq-export-root thead{display:table-header-group;}'
+      + '.aq-export-root tr,.aq-export-root img{break-inside:avoid;page-break-inside:avoid;}'
+      + '.aq-export-root th{border-top:1.5px solid #000;border-bottom:1px solid #000;padding:4px 8px;font-weight:bold;line-height:var(--aq-line-spacing,24pt);}'
+      + '.aq-export-root td{padding:4px 8px;line-height:var(--aq-line-spacing,24pt);vertical-align:top;}'
+      + '.aq-export-root .cit{color:#000;border:none;white-space:normal;}'
+      + '.aq-export-root .cit-gap{display:none!important;}'
+      + '.aq-export-root .toc-entry{break-inside:avoid;page-break-inside:avoid;color:#000;text-decoration:none;}'
+      + '.aq-export-root .toc-entry .toc-page{background:#fff;}'
+      + '.aq-export-root .table-wrap,.aq-export-root .figure-wrap,.aq-export-root figure,.aq-export-root figcaption,.aq-export-root .aq-avoid-break,.aq-export-root .aq-ref-entry,.aq-export-root .aq-keep-group,.aq-export-root .aq-table-block,.aq-export-root .aq-figure-block{break-inside:avoid;page-break-inside:avoid;}'
+      + '.aq-export-root .aq-keep-with-next{break-after:avoid-page;page-break-after:avoid;}'
+      + '.aq-export-root .aq-biblio-heading{margin-bottom:0;}'
+      + '.aq-export-root .aq-ref-entry + .aq-ref-entry{margin-top:0;}'
+      + '.aq-export-root .aq-keep-target{break-before:auto;page-break-before:auto;}'
+      + '.aq-export-root .aq-table-block,.aq-export-root .aq-figure-block{margin:6pt 0 10pt 0;}'
+      + '.aq-export-root .aq-table-note{margin-top:4pt;text-indent:0;font-size:10.5pt;line-height:1.6;}'
+      + '.aq-export-root .aq-cross-ref-export{color:#000;text-decoration:none;font-style:italic;}';
   }
 
   function buildExportDocHTML(edHTML){
@@ -758,6 +843,7 @@
     buildExportPDFHTML: buildExportPDFHTML,
     buildExportPreviewHTML: buildExportPreviewHTML,
     buildExportDocHTML: buildExportDocHTML,
+    normalizeExportSemantics: normalizeExportSemantics,
     stripLegacyEditorArtifacts: stripLegacyEditorArtifacts,
     prepareLoadedHTML: prepareLoadedHTML,
     getEditorHTML: getEditorHTML,

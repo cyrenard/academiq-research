@@ -162,6 +162,35 @@
     return summary;
   }
 
+  function sortRows(rows, priority){
+    var list = Array.isArray(rows) ? rows.slice() : [];
+    var preferred = String(priority || 'all').toLowerCase();
+    var orders = {
+      all: ['incomplete', 'suspicious', 'complete'],
+      incomplete: ['incomplete', 'suspicious', 'complete'],
+      suspicious: ['suspicious', 'incomplete', 'complete'],
+      complete: ['complete', 'incomplete', 'suspicious']
+    };
+    var order = orders[preferred] || orders.all;
+    var rank = {};
+    order.forEach(function(status, index){ rank[status] = index; });
+    function safeTitle(row){
+      return String(row && row.ref && row.ref.title || '').trim().toLocaleLowerCase('tr');
+    }
+    function issueCount(row){
+      return Array.isArray(row && row.report && row.report.issues) ? row.report.issues.length : 0;
+    }
+    return list.sort(function(a, b){
+      var aStatus = String(a && a.report && a.report.status || 'complete');
+      var bStatus = String(b && b.report && b.report.status || 'complete');
+      var rankDiff = (rank[aStatus] ?? 99) - (rank[bStatus] ?? 99);
+      if(rankDiff) return rankDiff;
+      var issueDiff = issueCount(b) - issueCount(a);
+      if(issueDiff) return issueDiff;
+      return safeTitle(a).localeCompare(safeTitle(b), 'tr');
+    });
+  }
+
   function applyConservativeRepairs(ref){
     var src = ref || {};
     var out = Object.assign({}, src);
@@ -212,6 +241,7 @@
     normalizeDoi: normalizeDoi,
     analyzeReference: analyzeReference,
     summarizeHealth: summarizeHealth,
+    sortRows: sortRows,
     normalizeAuthorName: normalizeAuthorName,
     normalizeAuthorsList: normalizeAuthorsList,
     conservativeTitleCase: conservativeTitleCase,

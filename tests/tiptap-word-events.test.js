@@ -8,6 +8,7 @@ test('tiptap word events exports init and watchSurface', () => {
   assert.equal(typeof events.watchSurface, 'function');
   assert.equal(typeof events.applySurfaceAttributes, 'function');
   assert.equal(typeof events.buildContextMenuModel, 'function');
+  assert.equal(typeof events.fetchGrammarSuggestions, 'function');
 });
 
 test('buildContextMenuModel includes formatting actions only when there is a selection', () => {
@@ -24,7 +25,29 @@ test('buildContextMenuModel includes formatting actions only when there is a sel
   assert.ok(withoutSelection.some(item => item.action === 'selectAll'));
 });
 
-test('applySurfaceAttributes adds grammarly-related attributes', () => {
+test('buildContextMenuModel injects grammar suggestions before edit actions', () => {
+  const model = events.buildContextMenuModel(true, {
+    grammarSuggestions: [
+      { kind: 'action', action: 'replaceSelection', replacement: 'dogru', label: 'Duzelt: dogru' }
+    ],
+    grammarChecked: true
+  });
+  assert.equal(model[0].action, 'replaceSelection');
+  assert.equal(model[0].replacement, 'dogru');
+  const cutIndex = model.findIndex(item => item.action === 'cut');
+  assert.ok(cutIndex > 0);
+});
+
+test('buildContextMenuModel shows no-suggestion hint when grammar check is empty', () => {
+  const model = events.buildContextMenuModel(true, {
+    grammarSuggestions: [],
+    grammarChecked: true
+  });
+  assert.equal(model[0].kind, 'hint');
+  assert.equal(model[0].disabled, true);
+});
+
+test('applySurfaceAttributes sets spellcheck (no Grammarly attributes)', () => {
   const attrs = {};
   const node = {
     nodeType: 1,
@@ -39,10 +62,11 @@ test('applySurfaceAttributes adds grammarly-related attributes', () => {
     const ok = events.applySurfaceAttributes(node);
     assert.equal(ok, true);
     assert.equal(attrs.spellcheck, 'true');
-    assert.equal(attrs['data-gramm'], 'true');
-    assert.equal(attrs['data-gramm_editor'], 'true');
-    assert.equal(attrs['data-enable-grammarly'], 'true');
-    assert.equal(attrs['data-grammarly-part'], 'true');
+    assert.equal(attrs['data-gramm'], undefined);
+    assert.equal(attrs['data-gramm_editor'], undefined);
+    assert.equal(attrs['data-enable-grammarly'], undefined);
+    assert.equal(attrs['data-grammarly-part'], undefined);
+    assert.equal(attrs['data-grammarly-integration'], undefined);
   } finally {
     delete global.document;
   }

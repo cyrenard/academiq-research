@@ -39,3 +39,31 @@ test('filterLibraryItems filters by collection membership', () => {
   assert.equal(result.length, 1);
   assert.equal(result[0].id, 'r2');
 });
+
+test('buildLibraryRenderWindow caps large lists and exposes next window', () => {
+  const items = Array.from({ length: 600 }, (_, index) => ({ id: 'r' + index }));
+
+  const first = libraryState.buildLibraryRenderWindow(items, { limit: 120, defaultLimit: 120 });
+  assert.equal(first.total, 600);
+  assert.equal(first.rendered, 120);
+  assert.equal(first.hasMore, true);
+  assert.equal(first.nextLimit, 240);
+  assert.equal(first.items.length, 120);
+
+  const all = libraryState.buildLibraryRenderWindow(items, { limit: 1000, defaultLimit: 120 });
+  assert.equal(all.rendered, 600);
+  assert.equal(all.hasMore, false);
+});
+
+test('buildLibraryRenderWindow can render full filtered result set in one pass', () => {
+  const items = Array.from({ length: 430 }, (_, index) => ({ id: 'r' + index }));
+  const result = libraryState.buildLibraryRenderWindow(items, {
+    limit: 80,
+    defaultLimit: 80,
+    forceFullRender: true
+  });
+
+  assert.equal(result.rendered, 430);
+  assert.equal(result.hasMore, false);
+  assert.equal(result.nextLimit, 430);
+});

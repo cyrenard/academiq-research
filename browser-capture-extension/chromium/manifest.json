@@ -3,7 +3,7 @@
   "name": "AcademiQ Browser Capture",
   "version": "1.0.0",
   "description": "Yerel AcademiQ masaüstü uygulamasına makale yakalama uzantısı",
-  "permissions": ["activeTab", "scripting", "storage", "tabs"],
+  "permissions": ["activeTab", "scripting", "storage", "tabs", "alarms"],
   "host_permissions": ["http://127.0.0.1/*", "https://*/*", "http://*/*"],
   "background": {
     "service_worker": "background.js"

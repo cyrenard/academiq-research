@@ -180,6 +180,13 @@
   function syncFootnoteNumbers(){
     // Numbers in editor are handled by CSS counters — just sync the panel
     renderFootnotePanel();
+    if(root.AQAcademicObjects && typeof root.AQAcademicObjects.syncCrossRefLabels === 'function'){
+      try{
+        root.AQAcademicObjects.syncCrossRefLabels({
+          root: document.getElementById('apaed')
+        });
+      }catch(_e){}
+    }
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -217,12 +224,29 @@
     dlg.id = 'aq-crd';
     dlg.className = 'aq-crd';
     var rows = targets.map(function(t, i){
-      return '<div class="aq-crd-row" data-i="'+i+'">'+
+      var meta = '';
+      if(t.title) meta = '<div class="aq-crd-meta">'+escH(String(t.title || ''))+'</div>';
+      return '<div class="aq-crd-row" data-i="'+i+'" data-type="'+escA(t.type)+'">'+
         '<span class="aq-crd-badge aq-crd-'+escH(t.type)+'">'+typeLabel(t.type)+'</span>'+
-        '<span class="aq-crd-lbl">'+escH(t.label)+'</span></div>';
+        '<span class="aq-crd-copy"><span class="aq-crd-lbl">'+escH(t.label)+'</span>'+meta+'</span></div>';
     }).join('');
     dlg.innerHTML = '<div class="aq-crd-head"><b>Çapraz Referans</b><button class="aq-crd-x">✕</button></div>'+
-      '<div class="aq-crd-search"><input type="text" placeholder="Ara..." id="aq-crd-q" autocomplete="off"/></div>'+
+      '<div class="aq-crd-controls">'+
+        '<div class="aq-crd-search"><input type="text" placeholder="Ara..." id="aq-crd-q" autocomplete="off"/></div>'+
+        '<div class="aq-crd-filter" id="aq-crd-filter">'+
+          '<button type="button" class="aq-crd-chip active" data-filter="all">Tümü</button>'+
+          '<button type="button" class="aq-crd-chip" data-filter="heading">Başlık</button>'+
+          '<button type="button" class="aq-crd-chip" data-filter="table">Tablo</button>'+
+          '<button type="button" class="aq-crd-chip" data-filter="figure">Şekil</button>'+
+          '<button type="button" class="aq-crd-chip" data-filter="footnote">Dipnot</button>'+
+          '<button type="button" class="aq-crd-chip" data-filter="endnote">Sonnot</button>'+
+        '</div>'+
+        '<div class="aq-crd-mode" id="aq-crd-mode">'+
+          '<button type="button" class="aq-crd-chip active" data-mode="context">bkz. Tablo 1</button>'+
+          '<button type="button" class="aq-crd-chip" data-mode="label">Tablo 1</button>'+
+          '<button type="button" class="aq-crd-chip" data-mode="number">1</button>'+
+        '</div>'+
+      '</div>'+
       '<div class="aq-crd-body" id="aq-crd-body">'+rows+'</div>';
     document.body.appendChild(dlg);
     // Position near selection
@@ -234,20 +258,46 @@
       dlg.style.cssText = 'top:'+top+'px;left:'+left+'px';
     }
     dlg.querySelector('.aq-crd-x').onclick = function(){ dlg.remove(); };
-    document.getElementById('aq-crd-q').addEventListener('input', function(){
-      var q = this.value.toLowerCase();
+    var queryInput=document.getElementById('aq-crd-q');
+    var activeFilter='all';
+    var activeMode='context';
+    function renderRows(){
+      var q=(queryInput&&queryInput.value?queryInput.value:'').toLowerCase();
       dlg.querySelectorAll('.aq-crd-row').forEach(function(row){
-        var i = parseInt(row.getAttribute('data-i'),10);
-        row.style.display = targets[i].label.toLowerCase().indexOf(q)>=0 ? '' : 'none';
+        var i=parseInt(row.getAttribute('data-i'),10);
+        var target=targets[i]||null;
+        var hay=((target&&target.label)||'')+' '+((target&&target.title)||'');
+        var matchesQuery=hay.toLowerCase().indexOf(q)>=0;
+        var matchesType=activeFilter==='all'||(target&&target.type===activeFilter);
+        row.style.display=(matchesQuery&&matchesType)?'':'none';
+      });
+    }
+    queryInput.addEventListener('input', renderRows);
+    dlg.querySelectorAll('#aq-crd-filter .aq-crd-chip').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        activeFilter=String(btn.getAttribute('data-filter')||'all');
+        dlg.querySelectorAll('#aq-crd-filter .aq-crd-chip').forEach(function(chip){
+          chip.classList.toggle('active', chip===btn);
+        });
+        renderRows();
+      });
+    });
+    dlg.querySelectorAll('#aq-crd-mode .aq-crd-chip').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        activeMode=String(btn.getAttribute('data-mode')||'context');
+        dlg.querySelectorAll('#aq-crd-mode .aq-crd-chip').forEach(function(chip){
+          chip.classList.toggle('active', chip===btn);
+        });
       });
     });
     dlg.querySelectorAll('.aq-crd-row').forEach(function(row){
       row.addEventListener('click', function(){
         var t = targets[parseInt(row.getAttribute('data-i'),10)];
-        insertCrossRef(editor, t);
+        insertCrossRef(editor, t, activeMode);
         dlg.remove();
       });
     });
+    renderRows();
     document.getElementById('aq-crd-q').focus();
     // Close on outside click
     setTimeout(function(){
@@ -261,6 +311,14 @@
   }
 
   function collectCrossRefTargets(){
+    if(root.AQAcademicObjects && typeof root.AQAcademicObjects.collectTargets === 'function'){
+      try{
+        var academicTargets = root.AQAcademicObjects.collectTargets({
+          root: document.getElementById('apaed')
+        });
+        if(Array.isArray(academicTargets) && academicTargets.length) return academicTargets;
+      }catch(_e){}
+    }
     var host = document.getElementById('apaed');
     if(!host) return [];
     var targets = [];
@@ -300,19 +358,28 @@
     return el.id;
   }
 
-  function insertCrossRef(editor, target){
-    var prefix = 'bkz. ';
-    var text = prefix + target.label.trim();
+  function insertCrossRef(editor, target, mode){
+    var label = target && target.label ? String(target.label).trim() : '';
+    var text = root.AQAcademicObjects && typeof root.AQAcademicObjects.buildCrossRefText === 'function'
+      ? root.AQAcademicObjects.buildCrossRefText(target || label, { mode: mode || 'context' })
+      : ((mode === 'label' ? label : ('bkz. ' + label)) || 'bkz.');
     // Use mark if available
     if(editor.chain && editor.schema && editor.schema.marks && editor.schema.marks.crossRef){
       editor.chain().focus()
         .insertContent(
-          '<a class="cross-ref" data-ref-type="'+escA(target.type)+'" data-ref-id="'+escA(target.id)+'" data-ref-label="'+escA(target.label.trim())+'">'+escH(text)+'</a>'
+          '<a class="cross-ref" data-ref-type="'+escA(target.type)+'" data-ref-id="'+escA(target.id)+'" data-ref-label="'+escA(label)+'" data-ref-display="'+escA(mode||'context')+'">'+escH(text)+'</a>'
         ).run();
     } else {
       editor.chain().focus().insertContent(
-        '<a class="cross-ref" data-ref-type="'+escA(target.type)+'" data-ref-id="'+escA(target.id)+'" data-ref-label="'+escA(target.label.trim())+'">'+escH(text)+'</a>'
+        '<a class="cross-ref" data-ref-type="'+escA(target.type)+'" data-ref-id="'+escA(target.id)+'" data-ref-label="'+escA(label)+'" data-ref-display="'+escA(mode||'context')+'">'+escH(text)+'</a>'
       ).run();
+    }
+    if(root.AQAcademicObjects && typeof root.AQAcademicObjects.syncCrossRefLabels === 'function'){
+      try{
+        root.AQAcademicObjects.syncCrossRefLabels({
+          root: document.getElementById('apaed')
+        });
+      }catch(_e){}
     }
   }
 

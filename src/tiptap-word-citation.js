@@ -26,7 +26,9 @@
     var formatReference = typeof deps.formatReference === 'function' ? deps.formatReference : function(){ return ''; };
     var esc = typeof deps.escapeJS === 'function' ? deps.escapeJS : escapeJS;
     return normalizeRefs(refs, deps).map(function(ref){
-      return '<div class="ri"><div class="ricite">' + getInlineCitationText(ref) + '</div><div class="rifull">' + formatReference(ref) + '</div><div class="riacts"><button class="rib" onclick="cpStr(\'' + esc(formatReference(ref)) + '\')">Kopyala</button><button class="rib" onclick="openRef(\'' + ref.id + '\')">PDF</button></div></div>';
+      var refId = String(ref && ref.id || '');
+      var menuScript = "event.preventDefault();event.stopPropagation();(function(){var __ref=(typeof findRef==='function'?(findRef('" + esc(refId) + "',window.S&&window.S.cur)||findRef('" + esc(refId) + "')):null);if(__ref&&typeof showLabelMenu==='function')showLabelMenu(event.clientX,event.clientY,__ref);})();return false;";
+      return '<div class="ri" data-ref-id="' + esc(refId) + '" oncontextmenu="' + menuScript + '"><div class="ricite">' + getInlineCitationText(ref) + '</div><div class="rifull">' + formatReference(ref) + '</div><div class="riacts"><button class="rib" onclick="cpStr(\'' + esc(formatReference(ref)) + '\')">Kopyala</button><button class="rib" onclick="openRef(\'' + ref.id + '\')">PDF</button></div></div>';
     }).join('');
   }
 
@@ -88,10 +90,10 @@
       var cleaned = domState && typeof domState.cleanupCitationHTML === 'function'
         ? domState.cleanupCitationHTML(html)
         : String(html || '')
-            .replace(/(?:\s|&nbsp;|&#160;)*\/r[^<\s]*(?=(?:\s|&nbsp;|&#160;)*<span class="cit")/g,'')
-            .replace(/(?:\s|&nbsp;|&#160;)*\/r(?=<\/p>)/g,'')
-            .replace(/<p>\s*\/r[^<]*<\/p>/gi,'<p></p>')
-            .replace(/>\/r([^<]*)</g,'><');
+            .replace(/(?:\s|&nbsp;|&#160;)*\/[rt][^<\s]*(?=(?:\s|&nbsp;|&#160;)*<span class="cit")/g,'')
+            .replace(/(?:\s|&nbsp;|&#160;)*\/[rt](?=<\/p>)/g,'')
+            .replace(/<p>\s*\/[rt][^<]*<\/p>/gi,'<p></p>')
+            .replace(/>\/[rt]([^<]*)</g,'><');
       if(cleaned !== html){
         editor.commands.setContent(cleaned, false);
         if(typeof options.onChanged === 'function') options.onChanged();
@@ -215,7 +217,7 @@
     var state = editor.state;
     var pos = state.selection.from;
     var textBefore = state.doc.textBetween(Math.max(0, pos - 48), pos, '');
-    var match = textBefore.match(/\/r[^\s]*$/);
+    var match = textBefore.match(/\/[rt][^\s]*$/);
     var chain = editor.chain().focus();
     var triggerRange = deps.triggerRange || null;
     if(triggerRange && triggerRange.from >= 0 && triggerRange.to >= triggerRange.from){
@@ -223,7 +225,13 @@
     }else if(match){
       chain.deleteRange({ from: pos - match[0].length, to: pos });
     }
-    chain.insertContent(buildCitationHTML(list), { parseOptions:{ preserveWhitespace:false } }).run();
+    var inserted = chain.insertContent(buildCitationHTML(list), { parseOptions:{ preserveWhitespace:false } }).run();
+    if(inserted && editor.state && editor.state.selection && editor.chain){
+      try{
+        var caret = editor.state.selection.to;
+        editor.chain().focus().setTextSelection({ from: caret, to: caret }).run();
+      }catch(_e){}
+    }
     if(typeof deps.setTriggerRange === 'function'){
       deps.setTriggerRange(null);
     }

@@ -27,6 +27,45 @@ test('handleEditorShortcut routes heading and save actions', () => {
   assert.deepEqual(calls, [['formatBlock', 'h1'], ['save']]);
 });
 
+test('handleEditorShortcut Ctrl+Enter inserts page break', () => {
+  const calls = [];
+  const handled = shortcuts.handleEditorShortcut({ ctrlKey:true, key:'Enter' }, {
+    execCommand(cmd){ calls.push(cmd); }
+  });
+  assert.equal(handled, true);
+  assert.deepEqual(calls, ['insertPageBreak']);
+});
+
+test('handleEditorShortcut routes undo and redo actions explicitly', () => {
+  const calls = [];
+  const handledUndo = shortcuts.handleEditorShortcut({ ctrlKey:true, key:'z', shiftKey:false }, {
+    undo(){ calls.push('undo'); }
+  });
+  const handledRedoY = shortcuts.handleEditorShortcut({ ctrlKey:true, key:'y', shiftKey:false }, {
+    redo(){ calls.push('redo-y'); }
+  });
+  const handledRedoShiftZ = shortcuts.handleEditorShortcut({ ctrlKey:true, key:'z', shiftKey:true }, {
+    redo(){ calls.push('redo-shift-z'); }
+  });
+  assert.equal(handledUndo, true);
+  assert.equal(handledRedoY, true);
+  assert.equal(handledRedoShiftZ, true);
+  assert.deepEqual(calls, ['undo', 'redo-y', 'redo-shift-z']);
+});
+
+test('handleEditorShortcut does not hijack normal writing keys', () => {
+  const dangerousKeys = ['Enter', 'Backspace', 'Delete', 'ArrowLeft', 'ArrowRight'];
+
+  for (const key of dangerousKeys) {
+    const handled = shortcuts.handleEditorShortcut({ key }, {
+      execCommand(){ throw new Error(`${key} should not run editor command without modifier`); },
+      undo(){ throw new Error(`${key} should not undo without modifier`); },
+      redo(){ throw new Error(`${key} should not redo without modifier`); }
+    });
+    assert.equal(handled, false, `${key} should stay native during normal writing`);
+  }
+});
+
 test('isEditorFocused checks host containment', () => {
   const host = {
     contains(node){ return node === child; }
@@ -41,15 +80,44 @@ test('handleEditorTabShortcut routes indent and outdent', () => {
   const calls = [];
   const indentHandled = shortcuts.handleEditorTabShortcut({ key:'Tab', shiftKey:false }, {
     editorFocused:true,
+    inList:true,
     indent(){ calls.push('indent'); }
   });
   const outdentHandled = shortcuts.handleEditorTabShortcut({ key:'Tab', shiftKey:true }, {
     editorFocused:true,
+    inList:true,
     outdent(){ calls.push('outdent'); }
   });
   assert.equal(indentHandled, true);
   assert.equal(outdentHandled, true);
   assert.deepEqual(calls, ['indent', 'outdent']);
+});
+
+test('handleEditorTabShortcut ignores tab outside list context', () => {
+  const handled = shortcuts.handleEditorTabShortcut({ key:'Tab', shiftKey:false }, {
+    editorFocused:true,
+    inList:false,
+    indent(){ throw new Error('should not indent'); }
+  });
+  assert.equal(handled, false);
+});
+
+test('handleEditorTabShortcut ignores modified tabs so browser/editor can own them', () => {
+  const combos = [
+    { key:'Tab', ctrlKey:true, shiftKey:false },
+    { key:'Tab', metaKey:true, shiftKey:false },
+    { key:'Tab', altKey:true, shiftKey:false }
+  ];
+
+  for (const event of combos) {
+    const handled = shortcuts.handleEditorTabShortcut(event, {
+      editorFocused:true,
+      inList:true,
+      indent(){ throw new Error('modified Tab should not indent list'); },
+      outdent(){ throw new Error('modified Tab should not outdent list'); }
+    });
+    assert.equal(handled, false);
+  }
 });
 
 test('handleGlobalShortcut routes find and zoom reset', () => {
@@ -64,6 +132,15 @@ test('handleGlobalShortcut routes find and zoom reset', () => {
   assert.equal(handledFind, true);
   assert.equal(handledZoomReset, true);
   assert.deepEqual(calls, ['find', 'reset']);
+});
+
+test('handleGlobalShortcut toggles track changes with Ctrl+Shift+E', () => {
+  const calls = [];
+  const handled = shortcuts.handleGlobalShortcut({ ctrlKey:true, key:'E', shiftKey:true }, {
+    toggleTrackChanges(){ calls.push('track-toggle'); }
+  });
+  assert.equal(handled, true);
+  assert.deepEqual(calls, ['track-toggle']);
 });
 
 test('handleGlobalShortcut routes zen toggle and escape exit', () => {
@@ -114,6 +191,22 @@ test('handleDocumentShortcut orchestrates editor and pdf flows', () => {
   assert.deepEqual(calls, ['save', 'prev']);
 });
 
+test('handleDocumentShortcut leaves native editing keys alone while editor is focused', () => {
+  const handledEnter = shortcuts.handleDocumentShortcut({ key:'Enter' }, {
+    editorFocused:true,
+    inInput:false,
+    execCommand(){ throw new Error('plain Enter should stay native'); }
+  });
+  const handledBackspace = shortcuts.handleDocumentShortcut({ key:'Backspace' }, {
+    editorFocused:true,
+    inInput:false,
+    execCommand(){ throw new Error('plain Backspace should stay native'); }
+  });
+
+  assert.equal(handledEnter, false);
+  assert.equal(handledBackspace, false);
+});
+
 test('resolveDocumentShortcutState derives input, pdf and zen flags from DOM state', () => {
   const host = { contains(node){ return node === active; } };
   const active = {};
@@ -131,6 +224,7 @@ test('resolveDocumentShortcutState derives input, pdf and zen flags from DOM sta
     pdfOpen: true,
     inInput: true,
     editorFocused: true,
+    inList: false,
     zenActive: true
   });
 });

@@ -259,10 +259,75 @@ function fetchJSON(url, options = {}) {
   });
 }
 
+function postFormJSON(url, formData = {}, options = {}) {
+  return new Promise((resolve, reject) => {
+    let parsed;
+    try {
+      parsed = ensureAllowedURL(url, options);
+    } catch (e) {
+      reject(e);
+      return;
+    }
+    const mod = parsed.protocol === 'https:' ? https : http;
+    const params = new URLSearchParams();
+    if (formData && typeof formData === 'object') {
+      Object.keys(formData).forEach((key) => {
+        if (!key) return;
+        const value = formData[key];
+        if (value == null) return;
+        params.append(String(key), String(value));
+      });
+    }
+    const payload = params.toString();
+    const req = mod.request(parsed.href, {
+      method: 'POST',
+      headers: Object.assign({
+        'User-Agent': 'AcademiQ/1.0 (academic research tool)',
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(payload)
+      }, options.headers || {}),
+      timeout: options.timeout || 15000,
+      lookup: buildLookup(options)
+    }, (res) => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
+        const loc = res.headers.location;
+        res.resume();
+        if (loc) {
+          const next = loc.startsWith('http') ? loc : new URL(loc, parsed.href).href;
+          return postFormJSON(next, formData, options).then(resolve).catch(reject);
+        }
+        return reject(new Error('Redirect without location'));
+      }
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        if (res.statusCode !== 200) {
+          const bodySample = String(data || '').slice(0, 200).replace(/\s+/g, ' ').trim();
+          return reject(new Error('HTTP ' + res.statusCode + (bodySample ? (': ' + bodySample) : '')));
+        }
+        try {
+          resolve(JSON.parse(data || '{}'));
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => {
+      try { req.destroy(new Error('Timeout')); } catch (_e) {}
+      reject(new Error('Timeout'));
+    });
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
 module.exports = {
   ensureAllowedURL,
   isPrivateAddress,
   isBlockedHostname,
   followRedirects,
-  fetchJSON
+  fetchJSON,
+  postFormJSON
 };

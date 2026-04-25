@@ -12,10 +12,15 @@ const SAFE_DETECTION_SOURCES = {
   scholarly_meta: true,
   doi_url: true,
   page_url: true,
+  canonical_url: true,
   body_text: true,
   document_title: true,
   page_link: true,
+  button_link: true,
   pdf_page: true,
+  embed_src: true,
+  dom: true,
+  jsonld: true,
   og_meta: true,
   dc_meta: true
 };
@@ -24,6 +29,11 @@ const SAFE_DETECTION_CONFIDENCE = {
   weak: true,
   medium: true,
   strong: true
+};
+const SAFE_REFERENCE_TYPES = {
+  article: true,
+  book: true,
+  website: true
 };
 
 function asText(value, maxLen) {
@@ -113,9 +123,11 @@ function isAllowedBridgeOrigin(origin) {
     || /^https?:\/\/localhost(?::\d+)?$/i.test(raw);
 }
 
-function hasJsonContentType(req) {
+function hasBridgeBodyContentType(req) {
   const type = asText(req && req.headers ? req.headers['content-type'] : '', 256).toLowerCase();
-  return type.indexOf('application/json') >= 0;
+  return !type
+    || type.indexOf('application/json') >= 0
+    || type.indexOf('text/plain') >= 0;
 }
 
 function deriveSetupState(info) {
@@ -325,6 +337,8 @@ function normalizeBrowserCaptureSettings(raw) {
   const port = Number.isFinite(Number(source.port)) ? Number(source.port) : DEFAULT_CAPTURE_PORT;
   return {
     enabled: source.enabled !== false,
+    agentAutoStart: source.agentAutoStart !== false,
+    agentAutoStartSupported: typeof source.agentAutoStartSupported === 'undefined' ? false : !!source.agentAutoStartSupported,
     port: Math.min(65535, Math.max(1024, port || DEFAULT_CAPTURE_PORT)),
     token: asText(source.token, 256),
     browserFamily: asText(source.browserFamily, 32),
@@ -358,10 +372,13 @@ function normalizeBrowserCaptureSettings(raw) {
 
 function sanitizeCapturePayload(payload) {
   const source = payload && typeof payload === 'object' ? payload : {};
+  const referenceTypeRaw = asText(source.referenceType, 32).toLowerCase();
+  const referenceType = SAFE_REFERENCE_TYPES[referenceTypeRaw] ? referenceTypeRaw : 'article';
   const authors = Array.isArray(source.detectedAuthors)
     ? source.detectedAuthors.map(function (item) { return asText(item, 256); }).filter(Boolean).slice(0, 12)
     : [];
   const normalized = {
+    referenceType,
     sourcePageUrl: isSafeRemoteUrl(source.sourcePageUrl) ? asText(source.sourcePageUrl, 4096) : '',
     pageTitle: asText(source.pageTitle, 2048),
     doi: normalizeDoi(source.doi),
@@ -369,6 +386,11 @@ function sanitizeCapturePayload(payload) {
     detectedTitle: asText(source.detectedTitle || source.title, 2048),
     detectedAuthors: authors,
     detectedJournal: asText(source.detectedJournal || source.journal, 1024),
+    detectedPublisher: asText(source.detectedPublisher || source.publisher, 1024),
+    detectedWebsiteName: asText(source.detectedWebsiteName || source.websiteName, 1024),
+    detectedEdition: asText(source.detectedEdition || source.edition, 128),
+    detectedPublishedDate: asText(source.detectedPublishedDate || source.publishedDate, 64),
+    detectedAccessedDate: asText(source.detectedAccessedDate || source.accessedDate, 64),
     detectedYear: asText(source.detectedYear || source.year, 32),
     detectedAbstract: asText(source.detectedAbstract || source.abstract, 12000),
     selectedWorkspaceId: safeId(source.selectedWorkspaceId),
@@ -380,6 +402,10 @@ function sanitizeCapturePayload(payload) {
   };
   if (!normalized.sourcePageUrl && isSafeRemoteUrl(source.url)) normalized.sourcePageUrl = asText(source.url, 4096);
   if (!normalized.detectedTitle) normalized.detectedTitle = normalized.pageTitle;
+  if (!normalized.detectedYear && normalized.detectedPublishedDate) {
+    const yearMatch = String(normalized.detectedPublishedDate).match(/\b(19|20)\d{2}\b/);
+    if (yearMatch && yearMatch[0]) normalized.detectedYear = yearMatch[0];
+  }
   if (normalized.selectedComparisonId && normalized.selectedComparisonId !== 'literature-matrix') {
     normalized.selectedComparisonId = '';
   }
@@ -561,6 +587,7 @@ function createBrowserCaptureBridge(options) {
   const onGetStatus = typeof config.onGetStatus === 'function' ? config.onGetStatus : function () { return {}; };
   const onLookup = typeof config.onLookup === 'function' ? config.onLookup : function () { return { ok: false, error: 'Lookup unavailable' }; };
   const onCreateWorkspace = typeof config.onCreateWorkspace === 'function' ? config.onCreateWorkspace : function () { return { ok: false, error: 'Workspace creation unavailable' }; };
+  const onStop = typeof config.onStop === 'function' ? config.onStop : function () { return { ok: false, error: 'Stop unavailable' }; };
   const onRequestSeen = typeof config.onRequestSeen === 'function' ? config.onRequestSeen : function () {};
   let server = null;
   let activePort = 0;
@@ -605,8 +632,8 @@ function createBrowserCaptureBridge(options) {
       return;
     }
     if (req.method === 'POST' && parsed.pathname === '/hello') {
-      if (!hasJsonContentType(req)) {
-        writeJson(res, 415, { ok: false, error: 'JSON payload gerekli' });
+      if (!hasBridgeBodyContentType(req)) {
+        writeJson(res, 415, { ok: false, error: 'JSON veya text payload gerekli' });
         return;
       }
       let chunks = [];
@@ -640,8 +667,8 @@ function createBrowserCaptureBridge(options) {
       return;
     }
     if (req.method === 'POST' && parsed.pathname === '/capture') {
-      if (!hasJsonContentType(req)) {
-        writeJson(res, 415, { ok: false, error: 'JSON payload gerekli' });
+      if (!hasBridgeBodyContentType(req)) {
+        writeJson(res, 415, { ok: false, error: 'JSON veya text payload gerekli' });
         return;
       }
       let chunks = [];
@@ -669,8 +696,8 @@ function createBrowserCaptureBridge(options) {
       return;
     }
     if (req.method === 'POST' && parsed.pathname === '/lookup') {
-      if (!hasJsonContentType(req)) {
-        writeJson(res, 415, { ok: false, error: 'JSON payload gerekli' });
+      if (!hasBridgeBodyContentType(req)) {
+        writeJson(res, 415, { ok: false, error: 'JSON veya text payload gerekli' });
         return;
       }
       let chunks = [];
@@ -697,8 +724,8 @@ function createBrowserCaptureBridge(options) {
       return;
     }
     if (req.method === 'POST' && parsed.pathname === '/workspace') {
-      if (!hasJsonContentType(req)) {
-        writeJson(res, 415, { ok: false, error: 'JSON payload gerekli' });
+      if (!hasBridgeBodyContentType(req)) {
+        writeJson(res, 415, { ok: false, error: 'JSON veya text payload gerekli' });
         return;
       }
       let chunks = [];
@@ -722,6 +749,21 @@ function createBrowserCaptureBridge(options) {
         } catch (error) {
           writeJson(res, 400, { ok: false, error: error && error.message ? error.message : 'Gecersiz payload' });
         }
+      });
+      return;
+    }
+    if (req.method === 'POST' && parsed.pathname === '/agent/stop') {
+      if (!hasBridgeBodyContentType(req)) {
+        writeJson(res, 415, { ok: false, error: 'JSON veya text payload gerekli' });
+        return;
+      }
+      Promise.resolve(onStop() || { ok: true }).then(function (result) {
+        writeJson(res, 200, Object.assign({ ok: true }, result || {}));
+        setTimeout(function () {
+          try { close(); } catch (_e) {}
+        }, 40);
+      }).catch(function (error) {
+        writeJson(res, 500, { ok: false, error: error && error.message ? error.message : 'Stop failed' });
       });
       return;
     }

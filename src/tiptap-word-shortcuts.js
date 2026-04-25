@@ -21,6 +21,9 @@
     if(!mod) return false;
     var key = String(e.key || '');
 
+    if(key === 'Enter'){
+      return run(function(){ deps.execCommand('insertPageBreak'); });
+    }
     if(key === 'a' || key === 'A'){
       return run(deps.selectAll);
     }
@@ -33,11 +36,14 @@
     if(key === 'p'){
       return run(deps.printDoc);
     }
-    if(key === 'z'){
-      return run(deps.undoRedoSync);
+    if(key === 'z' || key === 'Z'){
+      if(e.shiftKey){
+        return run(deps.redo || deps.undoRedoSync);
+      }
+      return run(deps.undo || deps.undoRedoSync);
     }
-    if(key === 'y'){
-      return run(deps.undoRedoSync);
+    if(key === 'y' || key === 'Y'){
+      return run(deps.redo || deps.undoRedoSync);
     }
     if(key === '1') return run(function(){ deps.execCommand('formatBlock','h1'); });
     if(key === '2') return run(function(){ deps.execCommand('formatBlock','h2'); });
@@ -65,6 +71,7 @@
     var e = event || {};
     if(String(e.key || '') !== 'Tab') return false;
     if(!deps.editorFocused) return false;
+    if(!deps.inList) return false;
     if(e.ctrlKey || e.metaKey || e.altKey) return false;
     return run(e.shiftKey ? deps.outdent : deps.indent);
   }
@@ -77,6 +84,7 @@
 
     if(mod && key === 'h' && !e.shiftKey) return run(deps.toggleFindBar);
     if(mod && key === 'f' && !deps.pdfOpen) return run(deps.toggleFindBar);
+    if(mod && (key === 'e' || key === 'E') && e.shiftKey) return run(deps.toggleTrackChanges);
     // Footnote shortcuts
     if(e.altKey && key === 'f' && !mod){ return run(function(){ if(window.AQFootnotes) window.AQFootnotes.insertFootnote('footnote'); }); }
     if(e.altKey && key === 'e' && !mod){ return run(function(){ if(window.AQFootnotes) window.AQFootnotes.insertFootnote('endnote'); }); }
@@ -138,6 +146,7 @@
       pdfOpen: !!(pdfPanel && pdfPanel.classList && pdfPanel.classList.contains('open')),
       inInput: !!(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)),
       editorFocused: isEditorFocused(host, activeElement),
+      inList: typeof options.isInList === 'function' ? !!options.isInList() : false,
       zenActive: typeof options.getZenActive === 'function'
         ? !!options.getZenActive()
         : !!(chromeApi && typeof chromeApi.isZenActive === 'function' && chromeApi.isZenActive())

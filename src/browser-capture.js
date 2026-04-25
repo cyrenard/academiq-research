@@ -45,7 +45,18 @@
   }
   function normalizePayload(payload){
     var source = payload && typeof payload === 'object' ? payload : {};
+    var referenceTypeRaw = text(source.referenceType, 32).toLowerCase();
+    var referenceType = (referenceTypeRaw === 'book' || referenceTypeRaw === 'website' || referenceTypeRaw === 'article')
+      ? referenceTypeRaw
+      : 'article';
+    var detectedYear = text(source.detectedYear || source.year, 32);
+    var detectedPublishedDate = text(source.detectedPublishedDate || source.publishedDate, 64);
+    if(!detectedYear && detectedPublishedDate){
+      var yearMatch = String(detectedPublishedDate).match(/\b(19|20)\d{2}\b/);
+      if(yearMatch && yearMatch[0]) detectedYear = yearMatch[0];
+    }
     return {
+      referenceType: referenceType,
       sourcePageUrl: text(source.sourcePageUrl || source.url, 4096),
       pageTitle: text(source.pageTitle, 2048),
       doi: text(source.doi, 256),
@@ -53,7 +64,12 @@
       detectedTitle: text(source.detectedTitle || source.title, 2048),
       detectedAuthors: Array.isArray(source.detectedAuthors) ? source.detectedAuthors.map(function(item){ return text(item, 256); }).filter(Boolean).slice(0, 12) : [],
       detectedJournal: text(source.detectedJournal || source.journal, 1024),
-      detectedYear: text(source.detectedYear || source.year, 32),
+      detectedPublisher: text(source.detectedPublisher || source.publisher, 1024),
+      detectedWebsiteName: text(source.detectedWebsiteName || source.websiteName, 1024),
+      detectedEdition: text(source.detectedEdition || source.edition, 128),
+      detectedPublishedDate: detectedPublishedDate,
+      detectedAccessedDate: text(source.detectedAccessedDate || source.accessedDate, 64),
+      detectedYear: detectedYear,
       detectedAbstract: text(source.detectedAbstract || source.abstract, 12000),
       selectedWorkspaceId: text(source.selectedWorkspaceId, 128),
       selectedComparisonId: text(source.selectedComparisonId, 128),
@@ -79,10 +95,16 @@
     if(api && typeof api.buildWorkspaceReference === 'function'){
       try{
         ref = api.buildWorkspaceReference({
+          referenceType: safe.referenceType || 'article',
           title: safe.detectedTitle,
           authors: safe.detectedAuthors.slice(),
           year: safe.detectedYear,
           journal: safe.detectedJournal,
+          publisher: safe.detectedPublisher,
+          edition: safe.detectedEdition,
+          websiteName: safe.detectedWebsiteName,
+          publishedDate: safe.detectedPublishedDate,
+          accessedDate: safe.detectedAccessedDate,
           doi: safe.doi,
           url: safe.sourcePageUrl,
           abstract: safe.detectedAbstract,
@@ -99,10 +121,16 @@
     if(!ref){
       ref = {
         id: typeof root.uid === 'function' ? root.uid() : ('ref_' + Date.now()),
+        referenceType: safe.referenceType || 'article',
         title: safe.detectedTitle,
         authors: safe.detectedAuthors.slice(),
         year: safe.detectedYear,
         journal: safe.detectedJournal,
+        publisher: safe.detectedPublisher,
+        edition: safe.detectedEdition,
+        websiteName: safe.detectedWebsiteName,
+        publishedDate: safe.detectedPublishedDate,
+        accessedDate: safe.detectedAccessedDate,
         volume: '',
         issue: '',
         fp: '',
@@ -340,6 +368,75 @@
     return 'Hazir degil';
   }
 
+  function queueItemStatusLabel(item){
+    var raw = String(item && item.status || '').trim();
+    if(raw === 'imported') return 'Iceri aktarıldı';
+    if(raw === 'duplicate_attached') return 'Mevcut kayda baglandı';
+    if(raw === 'failed') return 'Hata';
+    if(Number(item && item.nextRetryAt || 0) > Date.now()) return 'Tekrar denenecek';
+    return 'Sirada';
+  }
+
+  function renderQueueInsights(info){
+    var statsEl = byId('browserCaptureQueueStats');
+    var listEl = byId('browserCaptureActivityList');
+    var queueStats = info && info.queueStats && typeof info.queueStats === 'object' ? info.queueStats : {};
+    var recentItems = Array.isArray(info && info.recentQueueItems) ? info.recentQueueItems : [];
+
+    if(statsEl){
+      var queued = Number(queueStats.queued || 0);
+      var waitingRetry = Number(queueStats.waitingRetry || 0);
+      var failed = Number(queueStats.failed || 0);
+      var imported = Number(queueStats.imported || 0);
+      var duplicateAttached = Number(queueStats.duplicateAttached || 0);
+      var pendingWorkspaceCount = Number(queueStats.pendingWorkspaceCount || 0);
+      var parts = [
+        'Sirada: ' + queued,
+        'Tekrar denenecek: ' + waitingRetry,
+        'Hata: ' + failed
+      ];
+      if(imported > 0) parts.push('Aktarildi: ' + imported);
+      if(duplicateAttached > 0) parts.push('Baglanan mevcut kayit: ' + duplicateAttached);
+      if(pendingWorkspaceCount > 0) parts.push('Bekleyen workspace: ' + pendingWorkspaceCount);
+      statsEl.textContent = parts.join(' • ');
+    }
+
+    if(listEl){
+      if(!recentItems.length){
+        listEl.innerHTML = '<div style="font-size:11px;color:var(--txt3);padding:6px 0;">Henüz capture hareketi yok.</div>';
+        return;
+      }
+      listEl.innerHTML = recentItems.map(function(item){
+        var title = text(item && item.title || 'Yakalanan makale', 140) || 'Yakalanan makale';
+        var metaBits = [
+          queueItemStatusLabel(item),
+          formatDateTime(item && item.updatedAt)
+        ];
+        if(item && item.type === 'workspace_create') metaBits.unshift('Workspace');
+        if(item && item.attemptCount > 0 && String(item.status || '') !== 'imported' && String(item.status || '') !== 'duplicate_attached'){
+          metaBits.push('Deneme: ' + String(item.attemptCount));
+        }
+        var errorLine = item && item.lastError
+          ? '<div style="font-size:10px;color:var(--red);line-height:1.45;margin-top:4px;">' + escapeHtml(text(item.lastError, 180)) + '</div>'
+          : '';
+        return '<div style="padding:8px 9px;border:1px solid var(--b);border-radius:8px;background:rgba(255,255,255,.78);">'
+          + '<div style="font-size:11px;color:var(--txt);font-weight:600;line-height:1.4;">' + escapeHtml(title) + '</div>'
+          + '<div style="font-family:var(--fm);font-size:9.5px;color:var(--txt3);line-height:1.5;margin-top:3px;">' + escapeHtml(metaBits.join(' • ')) + '</div>'
+          + errorLine
+          + '</div>';
+      }).join('');
+    }
+  }
+
+  function escapeHtml(value){
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   function renderSettingsStatus(info){
     var statusEl = byId('browserCaptureStatusText');
     var detailEl = byId('browserCaptureDetailText');
@@ -349,7 +446,12 @@
     var versionEl = byId('browserCaptureVersionInfo');
     var installEl = byId('browserCaptureInstallDir');
     var seenEl = byId('browserCaptureLastSeen');
+    var agentEl = byId('browserCaptureAgentStatus');
+    var autoStartStateEl = byId('browserCaptureAutoStartState');
+    var queueEl = byId('browserCaptureQueueCount');
+    var lastCaptureEl = byId('browserCaptureLastCapture');
     var autoPdfEl = byId('browserCaptureAutoPdf');
+    var agentAutoStartEl = byId('browserCaptureAgentAutoStart');
     var focusWsEl = byId('browserCaptureFocusWorkspace');
     var installBtn = byId('browserCaptureInstallBtn');
     var updateBtn = byId('browserCaptureUpdateBtn');
@@ -391,7 +493,20 @@
     }
     if(installEl) installEl.textContent = info.managedProfileDir || info.installDir || 'Hazir degil';
     if(seenEl) seenEl.textContent = formatDateTime(info.lastConnectedAt);
+    if(agentEl) agentEl.textContent = info.agentRunning ? 'Çalışıyor' : 'Kapalı';
+    if(autoStartStateEl){
+      autoStartStateEl.textContent = info.agentAutoStartSupported
+        ? (info.agentAutoStart ? 'Açık' : 'Kapalı')
+        : 'Desteklenmiyor';
+    }
+    if(queueEl) queueEl.textContent = String(Number(info.queueLength || 0));
+    if(lastCaptureEl) lastCaptureEl.textContent = formatDateTime(info.lastCaptureReceivedAt);
     if(autoPdfEl) autoPdfEl.checked = info.autoAttachPdfUrl !== false;
+    renderQueueInsights(info || {});
+    if(agentAutoStartEl){
+      agentAutoStartEl.checked = !!info.agentAutoStart;
+      agentAutoStartEl.disabled = !info.agentAutoStartSupported;
+    }
     if(focusWsEl) focusWsEl.checked = !!info.focusImportedWorkspace;
     if(installBtn){
       installBtn.disabled = !!(info && info.installStrategy && !info.installStrategy.supported);
@@ -586,10 +701,13 @@
     var updateBtn = byId('browserCaptureUpdateBtn');
     var repairBtn = byId('browserCaptureRepairBtn');
     var launchBtn = byId('browserCaptureLaunchBtn');
+    var restartAgentBtn = byId('browserCaptureRestartAgentBtn');
+    var stopAgentBtn = byId('browserCaptureStopAgentBtn');
     var openDirBtn = byId('browserCaptureOpenDirBtn');
     var guideBtn = byId('browserCaptureGuideBtn');
     var testBtn = byId('browserCaptureTestBtn');
     var autoPdfEl = byId('browserCaptureAutoPdf');
+    var agentAutoStartEl = byId('browserCaptureAgentAutoStart');
     var focusWsEl = byId('browserCaptureFocusWorkspace');
     var api = getElectron();
     if(installBtn && !installBtn.__aqBound){
@@ -634,6 +752,24 @@
         if(api && typeof api.openBrowserCaptureInstallDir === 'function') await api.openBrowserCaptureInstallDir();
       });
     }
+    if(restartAgentBtn && !restartAgentBtn.__aqBound){
+      restartAgentBtn.__aqBound = true;
+      restartAgentBtn.addEventListener('click', async function(){
+        if(!api || typeof api.runBrowserCaptureAction !== 'function') return;
+        var info = await api.runBrowserCaptureAction('restart_agent');
+        renderSettingsStatus(info || {});
+        status(info && info.ok ? 'Capture agent yeniden baslatildi.' : ((info && info.error) || 'Capture agent yeniden baslatilamadi.'), info && info.ok ? 'ok' : 'er');
+      });
+    }
+    if(stopAgentBtn && !stopAgentBtn.__aqBound){
+      stopAgentBtn.__aqBound = true;
+      stopAgentBtn.addEventListener('click', async function(){
+        if(!api || typeof api.runBrowserCaptureAction !== 'function') return;
+        var info = await api.runBrowserCaptureAction('stop_agent');
+        renderSettingsStatus(info || {});
+        status(info && info.ok ? 'Capture agent durduruldu.' : ((info && info.error) || 'Capture agent durdurulamadi.'), info && info.ok ? 'ok' : 'er');
+      });
+    }
     if(guideBtn && !guideBtn.__aqBound){
       guideBtn.__aqBound = true;
       guideBtn.addEventListener('click', async function(){
@@ -655,6 +791,16 @@
       autoPdfEl.addEventListener('change', function(){
         if(api && typeof api.updateBrowserCapturePrefs === 'function'){
           api.updateBrowserCapturePrefs({ autoAttachPdfUrl: !!autoPdfEl.checked });
+        }
+      });
+    }
+    if(agentAutoStartEl && !agentAutoStartEl.__aqBound){
+      agentAutoStartEl.__aqBound = true;
+      agentAutoStartEl.addEventListener('change', function(){
+        if(api && typeof api.updateBrowserCapturePrefs === 'function'){
+          api.updateBrowserCapturePrefs({ agentAutoStart: !!agentAutoStartEl.checked }).then(function(info){
+            renderSettingsStatus(info || {});
+          }).catch(function(){});
         }
       });
     }

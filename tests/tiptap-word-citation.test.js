@@ -119,6 +119,36 @@ test('insertCitationIntoEditor deletes trigger range and inserts normalized cita
   assert.equal(cleaned, true);
 });
 
+test('insertCitationIntoEditor handles narrative trigger and restores caret after citation', async function(){
+  const calls = [];
+  const chain = {
+    focus: function(){ calls.push('focus'); return this; },
+    deleteRange: function(arg){ calls.push({ deleteRange: arg }); return this; },
+    insertContent: function(html, opts){ calls.push({ insertContent: html, opts: opts }); return this; },
+    setTextSelection: function(range){ calls.push({ setTextSelection: range }); return this; },
+    run: function(){ calls.push('run'); return true; }
+  };
+
+  const ok = citation.insertCitationIntoEditor([{ id:'a' }], {
+    editor: {
+      state: {
+        selection: { from: 20, to: 34 },
+        doc: { textBetween: function(){ return '/tdoe'; } }
+      },
+      chain: function(){ return chain; }
+    },
+    buildCitationHTML: function(refs){ return refs.map(function(ref){ return ref.id; }).join(','); },
+    dedupeReferences: function(refs){ return refs; },
+    sortReferences: function(refs){ return refs; }
+  });
+
+  assert.equal(ok, true);
+  assert.deepEqual(calls[1], { deleteRange: { from: 15, to: 20 } });
+  assert.ok(calls.some(function(call){
+    return call && call.setTextSelection && call.setTextSelection.from === 34 && call.setTextSelection.to === 34;
+  }));
+});
+
 test('cleanupSlashRArtifacts falls back to regex cleanup when domState is missing', function(){
   let applied = null;
   const ok = citation.cleanupSlashRArtifacts({

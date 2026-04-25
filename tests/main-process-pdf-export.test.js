@@ -39,3 +39,9 @@ test('buildPrintToPDFOptions can disable page header numbering', () => {
   const opts = pdfExport.buildPrintToPDFOptions({ showPageNumbers:false });
   assert.equal(opts.displayHeaderFooter, false);
 });
+
+test('buildPrintToPDFOptions can produce full-bleed annotation exports', () => {
+  const opts = pdfExport.buildPrintToPDFOptions({ showPageNumbers:false, marginMode:'none' });
+  assert.equal(opts.displayHeaderFooter, false);
+  assert.deepEqual(opts.margins, { top:0, right:0, bottom:0, left:0 });
+});

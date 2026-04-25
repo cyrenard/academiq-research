@@ -45,6 +45,17 @@
       : qs('apaed');
   }
 
+  function targetInsideEditor(target){
+    if(!target) return false;
+    var host = getEditorHost();
+    if(!host || !host.contains) return false;
+    try{
+      return host === target || host.contains(target);
+    }catch(e){
+      return false;
+    }
+  }
+
   function getReferenceManager(){
     return window.AQReferenceManager || null;
   }
@@ -152,7 +163,7 @@
     var citeText = String(citationCore || '').replace(/^\(|\)$/g, '').trim() || 'Bilinmeyen, t.y.';
     if(locator) citeText += ', ' + locator;
     var safeRefId = escHTML(refId);
-    var citationHTML = '<span class="cit" data-ref="' + safeRefId + '" contenteditable="false">(' + escHTML(citeText) + ')</span>';
+    var citationHTML = '<span class="cit" data-ref="' + safeRefId + '">(' + escHTML(citeText) + ')</span>';
     var lastIndex = paragraphs.length - 1;
     paragraphs[lastIndex] = ensureFinalSentencePunctuation(paragraphs[lastIndex]);
     return '<blockquote>' + paragraphs.map(function(paragraph, index){
@@ -220,13 +231,15 @@
       if(!state) return null;
       const pos = state.selection.from;
       const txt = state.doc.textBetween(Math.max(0,pos-128),pos,' ',' ');
-      const m = txt.match(/\/r(?:\s*([^\n\r]*))?$/i);
+      const m = txt.match(/\/([rt])(?:\s*([^\n\r]*))?$/i);
       if(!m) return null;
+      try{ console.info('[aq-citation] currentQuery match', { query:(m[2]||'').trim(), pos:pos, mode:m[1] }); }catch(_e){}
       return {
-        query: (m[1] || '').trim(),
+        query: (m[2] || '').trim(),
         full: m[0],
         from: Math.max(0,pos-m[0].length),
-        to: pos
+        to: pos,
+        mode: (m[1] || 'r').toLowerCase()
       };
     }
     const sel = window.getSelection();
@@ -235,12 +248,14 @@
     const node = range.startContainer;
     if(!node || node.nodeType !== 3) return null;
     const txt2 = node.textContent.substring(0, range.startOffset);
-    const m2 = txt2.match(/\/r(?:\s*([^\n\r]*))?$/i);
+    const m2 = txt2.match(/\/([rt])(?:\s*([^\n\r]*))?$/i);
     if(!m2) return null;
+    try{ console.info('[aq-citation] currentQuery dom match', { query:(m2[2]||'').trim(), mode:m2[1] }); }catch(_e){}
     return {
-      query: (m2[1] || '').trim(),
+      query: (m2[2] || '').trim(),
       full: m2[0],
-      domRange: range.cloneRange()
+      domRange: range.cloneRange(),
+      mode: (m2[1] || 'r').toLowerCase()
     };
   }
 
@@ -275,6 +290,43 @@
     }
   }
 
+  function normalizeSortKey(value){
+    return String(value == null ? '' : value)
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLocaleLowerCase('tr');
+  }
+
+  function compareReferencesByTitle(a, b){
+    var titleCompare = normalizeSortKey(a && a.title).localeCompare(
+      normalizeSortKey(b && b.title),
+      'tr',
+      { sensitivity:'base', numeric:true }
+    );
+    if(titleCompare) return titleCompare;
+    var authorCompare = normalizeSortKey((a && a.authors && a.authors[0]) || '').localeCompare(
+      normalizeSortKey((b && b.authors && b.authors[0]) || ''),
+      'tr',
+      { sensitivity:'base', numeric:true }
+    );
+    if(authorCompare) return authorCompare;
+    var yearCompare = normalizeSortKey(a && a.year).localeCompare(
+      normalizeSortKey(b && b.year),
+      'tr',
+      { sensitivity:'base', numeric:true }
+    );
+    if(yearCompare) return yearCompare;
+    return normalizeSortKey(a && a.id).localeCompare(
+      normalizeSortKey(b && b.id),
+      'tr',
+      { sensitivity:'base', numeric:true }
+    );
+  }
+
+  function sortReferencesByTitle(refs){
+    return (Array.isArray(refs) ? refs : []).slice().sort(compareReferencesByTitle);
+  }
+
   function getResults(query){
     const q = query || '';
     try{
@@ -295,6 +347,7 @@
             return rk === key;
           }) === idx;
         });
+      deduped = sortReferencesByTitle(deduped);
       var recommendationApi = window.AQReferenceRecommendation || null;
       if(recommendationApi && typeof recommendationApi.rankForCitationContext === 'function'){
         var ranked = recommendationApi.rankForCitationContext(deduped, {
@@ -309,10 +362,10 @@
             lastResultReasons[item.ref.id] = Array.isArray(item.reasons) ? item.reasons.slice(0, 2).join(' · ') : '';
           }
         });
-        return ranked.map(function(item){ return item.ref; });
+        return sortReferencesByTitle(ranked.map(function(item){ return item.ref; }));
       }
       lastResultReasons = {};
-      return deduped;
+      return sortReferencesByTitle(deduped);
     }catch(e){
       lastResultReasons = {};
       return [];
@@ -473,14 +526,22 @@
 
   const runtime = {
     state: {
+      initialized: false,
       open: false,
       query: '',
+      triggerMode: 'inline',
       selectedIds: [],
+      retainedSelectedIds: [],
       activeIndex: 0,
       keyboardMode: 'query',
       scrollTop: 0,
       preserveScrollOnNextRefSync: false,
       lastRange: null,
+      lastRefreshAt: 0,
+      lastRefreshQuery: '',
+      lastRefreshFrom: null,
+      lastRefreshTo: null,
+      lastRefreshMode: 'r',
       results: [],
       originalUpdateRefSection: null,
       originalScheduleRefSectionSync: null,
@@ -491,7 +552,7 @@
 
     publicApi: {
       init: function(){ runtime.init(); },
-      openFromSlash: function(query){ runtime.openFromSlash(query); },
+      openFromSlash: function(query, mode){ runtime.openFromSlash(query, mode); },
       close: function(skipFocus){ runtime.close(skipFocus); },
       refreshFromEditor: function(){ runtime.refreshFromEditor(); },
       handleKeydown: function(event){ return runtime.handleKeydown(event); },
@@ -696,16 +757,22 @@
       syncLegacyState();
     },
 
-    openFromSlash: function(query){
+    openFromSlash: function(query, mode){
+      try{ console.info('[aq-citation] openFromSlash', { query:query || '', mode:mode || 'inline' }); }catch(_e){}
       runtime.saveScroll();
       runtime.state.open = true;
       runtime.state.query = query || '';
-      runtime.state.selectedIds = [];
+      runtime.state.triggerMode = mode || 'inline';
+      window.__aqCitationTriggerMode = runtime.state.triggerMode;
+      runtime.state.selectedIds = runtime.state.retainedSelectedIds.slice();
       runtime.state.activeIndex = 0;
       runtime.state.keyboardMode = 'query';
       const box = getTriggerBox();
       let rect = getAnchorRect();
       if(box){
+        box.style.display = 'block';
+        box.style.visibility = 'visible';
+        box.style.pointerEvents = 'auto';
         const shell = getEditorShell();
         if(shell && typeof shell.positionPopup === 'function'){
           shell.positionPopup(box, rect);
@@ -731,14 +798,25 @@
       }
     },
 
-    close: function(skipFocus){
+    close: function(skipFocus, options){
+      options = options || {};
+      if(options.preserveSelection === false){
+        runtime.state.retainedSelectedIds = [];
+      }else{
+        runtime.state.retainedSelectedIds = runtime.state.selectedIds.slice();
+      }
       runtime.state.open = false;
       runtime.state.query = '';
       runtime.state.selectedIds = [];
       runtime.state.activeIndex = 0;
       runtime.state.keyboardMode = 'query';
       const box = getTriggerBox();
-      if(box) box.classList.remove('show');
+      if(box){
+        box.classList.remove('show');
+        box.style.display = 'none';
+        box.style.visibility = 'hidden';
+        box.style.pointerEvents = 'none';
+      }
       const inp = getTriggerInput();
       if(inp){
         inp.disabled = false;
@@ -752,11 +830,30 @@
     refreshFromEditor: function(){
       const found = currentQuery();
       if(!found){
-        if(runtime.state.open) runtime.close(true);
+        try{ console.info('[aq-citation] refreshFromEditor miss'); }catch(_e){}
+        if(runtime.state.open) runtime.close(true, { preserveSelection:true });
         return;
       }
-      window.editorTrigRange = found.from != null ? { from: found.from, to: found.to } : null;
-      if(!runtime.state.open) runtime.openFromSlash(found.query);
+      var now = Date.now();
+      if(
+        (now - (runtime.state.lastRefreshAt || 0)) < 120 &&
+        runtime.state.lastRefreshQuery === (found.query || '') &&
+        runtime.state.lastRefreshFrom === found.from &&
+        runtime.state.lastRefreshTo === found.to &&
+        runtime.state.lastRefreshMode === (found.mode || 'r')
+      ){
+        return;
+      }
+      runtime.state.lastRefreshAt = now;
+      runtime.state.lastRefreshQuery = found.query || '';
+      runtime.state.lastRefreshFrom = found.from;
+      runtime.state.lastRefreshTo = found.to;
+      runtime.state.lastRefreshMode = found.mode || 'r';
+      runtime.state.triggerMode = (found.mode === 't') ? 'textual' : 'inline';
+      window.__aqCitationTriggerMode = runtime.state.triggerMode;
+      try{ console.info('[aq-citation] refreshFromEditor hit', { query:found.query || '' }); }catch(_e){}
+      window.editorTrigRange = found.from != null ? { from: found.from, to: found.to, mode: found.mode } : null;
+      if(!runtime.state.open) runtime.openFromSlash(found.query, runtime.state.triggerMode);
       else{
         runtime.state.query = found.query;
         runtime.state.keyboardMode = 'query';
@@ -770,6 +867,7 @@
       const idx = runtime.state.selectedIds.indexOf(id);
       if(idx >= 0) runtime.state.selectedIds.splice(idx, 1);
       else runtime.state.selectedIds.push(id);
+      runtime.state.retainedSelectedIds = runtime.state.selectedIds.slice();
       runtime.state.keyboardMode = 'navigate';
       runtime.renderList();
       syncLegacyState();
@@ -867,16 +965,39 @@
       }).filter(Boolean));
       if(!refs.length) return;
       if(window.buildCitationHTML){
-        const html = window.buildCitationHTML(refs);
+        let html = '';
+        // Prefer mode stored in editorTrigRange (most reliable — set at trigger-open time)
+        const _tr = window.editorTrigRange;
+        let mode = (_tr && _tr.mode === 't') ? 'textual'
+          : runtime.state.triggerMode || window.__aqCitationTriggerMode || 'inline';
+        try{
+          if(mode !== 'textual'){
+            const ed = getEditor();
+            if(ed && _tr && _tr.from != null && _tr.to != null && ed.state && ed.state.doc){
+              const trigText = ed.state.doc.textBetween(_tr.from, _tr.to, ' ', ' ');
+              if(/\/t/i.test(trigText)) mode = 'textual';
+            }
+          }
+        }catch(_e){}
+        if(mode === 'textual'){
+          if(refs.length === 1){
+            html = '<span class="cit" data-ref="'+refs[0].id+'" data-mode="textual">'+window.getNarrativeCitationText(refs[0])+'</span> ';
+          }else{
+            var txt = refs.map(function(r){ return window.getNarrativeCitationText(r); }).join('; ');
+            html = '<span class="cit" data-ref="'+refs.map(function(r){return r.id;}).join(',')+'" data-mode="textual">'+txt+'</span> ';
+          }
+        }else{
+          html = window.buildCitationHTML(refs);
+        }
         const ed = getEditor();
         if(ed && ed.chain){
-          const chain = ed.chain();
+          const chain = ed.chain().focus();
           const trigRange = window.editorTrigRange;
           let fallbackRange = null;
           if((!trigRange || trigRange.from == null || trigRange.to == null) && ed.state && ed.state.selection){
             const pos = ed.state.selection.from;
             const txt = ed.state.doc.textBetween(Math.max(0, pos - 128), pos, ' ', ' ');
-            const m = txt.match(/\/r(?:\s*([^\n\r]*))?$/i);
+            const m = txt.match(/\/([rt])(?:\s*([^\n\r]*))?$/i);
             if(m){
               fallbackRange = {
                 from: Math.max(0, pos - m[0].length),
@@ -889,6 +1010,14 @@
             chain.deleteRange({ from: delRange.from, to: delRange.to });
           }
           chain.insertContent(html, { parseOptions:{ preserveWhitespace:false } }).run();
+          try{
+            if(ed.state && ed.state.selection && ed.chain){
+              var insertedCaret = ed.state.selection.to || ed.state.selection.from;
+              if(insertedCaret != null){
+                ed.chain().focus().setTextSelection({ from: insertedCaret, to: insertedCaret }).run();
+              }
+            }
+          }catch(_e){}
           window.editorTrigRange = null;
         }else{
           const ei = getEditorIntegration();
@@ -900,7 +1029,8 @@
       const caretPos = captureEditorCaretPos();
       const bookmark = captureEditorSelectionBookmark();
       const syncToken = runtime.beginSyncCycle();
-      runtime.close(true);
+      runtime.state.retainedSelectedIds = [];
+      runtime.close(false, { preserveSelection:false });
       window.__aqCitationSyncInProgress = true;
       setTimeout(function(){ window.__aqCitationSyncInProgress = false; }, 900);
       if(window.AQEditorRuntime && typeof window.AQEditorRuntime.runContentApplyEffects === 'function'){
@@ -1074,10 +1204,15 @@
     },
 
     init: function(){
+      if(runtime.state.initialized){
+        window.__aqCitationRuntimeV1 = true;
+        return;
+      }
+      runtime.state.initialized = true;
       runtime.installReferenceSyncGuard();
       runtime.installDeferredReferenceSyncGuard();
       window.__aqCitationRuntimeV1 = true;
-      window.openTrig = function(q){ runtime.openFromSlash(q); };
+      window.openTrig = function(q, mode){ runtime.openFromSlash(q, mode || 'inline'); };
       window.renderTrig = function(q){
         runtime.state.query = q || '';
         runtime.renderList();
@@ -1087,7 +1222,9 @@
         runtime.renderList();
       };
       window.checkTrig = function(){ runtime.refreshFromEditor(); };
-      window.closeTrig = function(){ runtime.close(); };
+      window.closeTrig = function(){
+        runtime.close();
+      };
       window.doTrigRef = function(){
         runtime.saveScroll();
         if(getEditor()){
@@ -1115,6 +1252,9 @@
 
       const box = getTriggerBox();
       if(box){
+        box.style.display = 'none';
+        box.style.visibility = 'hidden';
+        box.style.pointerEvents = 'none';
         box.addEventListener('mousedown', function(e){ e.stopPropagation(); }, true);
         box.addEventListener('click', function(e){ e.stopPropagation(); }, true);
       }
@@ -1168,6 +1308,31 @@
           event.stopPropagation();
           if(typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
         }
+      }, true);
+      document.addEventListener('keyup', function(event){
+        if(!event || (event.ctrlKey || event.metaKey || event.altKey)) return;
+        var key = String(event.key || '');
+        if(key !== '/' && key.toLowerCase() !== 'r' && key.toLowerCase() !== 't' && key !== 'Backspace') return;
+        var target = event.target && event.target.nodeType === 3 ? event.target.parentNode : event.target;
+        if(!targetInsideEditor(target)) return;
+        setTimeout(function(){
+          if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
+            try{ window.AQCitationRuntime.refreshFromEditor(); }catch(_e){}
+          }else if(typeof window.checkTrig === 'function'){
+            try{ window.checkTrig(); }catch(_e){}
+          }
+        }, 0);
+      }, true);
+      document.addEventListener('input', function(event){
+        var target = event && event.target && event.target.nodeType === 3 ? event.target.parentNode : (event ? event.target : null);
+        if(!targetInsideEditor(target)) return;
+        setTimeout(function(){
+          if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
+            try{ window.AQCitationRuntime.refreshFromEditor(); }catch(_e){}
+          }else if(typeof window.checkTrig === 'function'){
+            try{ window.checkTrig(); }catch(_e){}
+          }
+        }, 0);
       }, true);
     }
   };

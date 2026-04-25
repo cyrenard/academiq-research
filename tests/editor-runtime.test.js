@@ -1,6 +1,29 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+// Editor runtime keeps module-scoped timers (state.refTimer /
+// state.academicTimer / state.tocTimer). When one test schedules a deferred
+// sync that fires later than expected, it can land inside the next test's
+// assertion window and trigger that test's freshly-defined globals (e.g.
+// updateRefSection), producing spurious extra entries in the calls log.
+// Clear pending timers and any globals that our deferred helpers probe
+// before every test so each run starts from a clean slate.
+test.beforeEach(() => {
+  try {
+    const runtime = require('../src/editor-runtime.js');
+    if(typeof runtime.resetPendingTimers === 'function'){
+      runtime.resetPendingTimers();
+    }
+  } catch(_e) {}
+  [
+    'uSt', 'save', 'updatePageHeight', 'updateFmtState',
+    'normalizeCitationSpans', 'AQAcademicObjects',
+    'rRefs', 'scheduleRefSectionSync', 'updateRefSection',
+    'autoUpdateTOC', 'refreshDocumentOutlineIfOpen', 'refreshCaptionManagerIfOpen',
+    'checkTrig', 'AQCitationRuntime', '__aqDocSwitching'
+  ].forEach((key) => { delete globalThis[key]; });
+});
+
 test('editor runtime exports orchestration helpers', () => {
   delete globalThis.AQEditorRuntime;
   const runtime = require('../src/editor-runtime.js');
@@ -36,22 +59,37 @@ test('runContentApplyEffects schedules normalize, layout and callbacks', async (
   const calls = [];
   globalThis.normalizeCitationSpans = (target) => { calls.push(['normalize', target]); };
   globalThis.updatePageHeight = () => { calls.push(['layout']); };
+  globalThis.AQAcademicObjects = {
+    normalizeDocument(options) {
+      calls.push(['academic', options && options.root ? 'root' : 'none']);
+    }
+  };
   const runtime = require('../src/editor-runtime.js');
   runtime.runContentApplyEffects({
     target: 'pm-root',
     onApplied: () => { calls.push(['applied']); },
     afterLayout: () => { calls.push(['after']); },
-    refreshTrigger: false
+    refreshTrigger: false,
+    // Pin the academic-objects timer so the test isn't at the mercy of the
+    // default 140ms delay plus OS timer slop on slower CI machines.
+    academicDelay: 20
   });
-  await new Promise(resolve => setTimeout(resolve, 10));
-  assert.deepEqual(calls, [
+  // Poll up to ~600ms for the academic callback to land. setTimeout precision
+  // in Node on Windows can be quite coarse, so a fixed short wait was flaky.
+  const deadline = Date.now() + 600;
+  while(Date.now() < deadline && !calls.some(c => c[0] === 'academic')){
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  assert.deepEqual(calls.slice(0, 4), [
     ['normalize', 'pm-root'],
     ['layout'],
     ['applied'],
     ['after']
   ]);
+  assert.deepEqual(calls[calls.length - 1], ['academic', 'root']);
   delete globalThis.normalizeCitationSpans;
   delete globalThis.updatePageHeight;
+  delete globalThis.AQAcademicObjects;
 });
 
 test('runContentApplyEffects can sync editor chrome', async () => {

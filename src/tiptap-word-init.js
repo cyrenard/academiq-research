@@ -5,6 +5,19 @@
   }
   root.AQTipTapWordInit = factory();
 })(typeof window !== 'undefined' ? window : globalThis, function(){
+  function ensureCitationRuntimeReady(attempt){
+    var tries = parseInt(attempt, 10) || 0;
+    if(typeof window === 'undefined') return;
+    if(window.AQCitationRuntime && typeof window.AQCitationRuntime.init === 'function'){
+      try{ window.AQCitationRuntime.init(); }catch(e){}
+      return;
+    }
+    if(tries >= 5) return;
+    setTimeout(function(){
+      ensureCitationRuntimeReady(tries + 1);
+    }, 80);
+  }
+
   function enableFallbackEditable(edEl, html){
     if(!edEl) return null;
     var shell = window.AQTipTapShell || null;
@@ -15,10 +28,6 @@
     }
     target.setAttribute('contenteditable', 'true');
     target.setAttribute('spellcheck', 'true');
-    target.setAttribute('data-gramm', 'true');
-    target.setAttribute('data-gramm_editor', 'true');
-    target.setAttribute('data-enable-grammarly', 'true');
-    target.setAttribute('data-grammarly-part', 'true');
     target.classList.add('ProseMirror');
     window.editor = null;
     return null;
@@ -130,9 +139,19 @@
       if(window.AQMarginNotes && typeof window.AQMarginNotes.init === 'function'){
         window.AQMarginNotes.init();
       }
+      // Citation trigger runtime powers `/r` insertion and slash detection.
+      // Keep it explicitly initialized with the editor surface bootstrap.
+      ensureCitationRuntimeReady(0);
       if(window.editor && typeof window.editor.setEditable === 'function'){
         try{ window.editor.setEditable(true); }catch(e){}
       }
+      try{
+        if(typeof window.setLineSpacing === 'function'){
+          window.setLineSpacing('2');
+        }else if(window.AQTipTapWordCommands && typeof window.AQTipTapWordCommands.applyLineSpacing === 'function'){
+          window.AQTipTapWordCommands.applyLineSpacing('2');
+        }
+      }catch(e){}
       if(window.AQTipTapWordEvents && typeof window.AQTipTapWordEvents.applySurfaceAttributes === 'function'){
         window.AQTipTapWordEvents.applySurfaceAttributes(edEl);
         if(mountEl && mountEl !== edEl) window.AQTipTapWordEvents.applySurfaceAttributes(mountEl);

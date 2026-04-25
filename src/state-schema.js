@@ -49,6 +49,12 @@
     return String(value || '').replace(/\s+/g, ' ').trim();
   }
 
+  function normalizeReferenceType(value){
+    var raw = String(value || '').trim().toLowerCase();
+    if(raw === 'book' || raw === 'website' || raw === 'article') return raw;
+    return 'article';
+  }
+
   function normalizeReference(ref){
     ref = ref || {};
     if(!ref.id && root && typeof root.uid === 'function') ref.id = root.uid();
@@ -63,6 +69,11 @@
     if(typeof ref.title !== 'string') ref.title = ref.title ? String(ref.title) : '';
     if(typeof ref.year !== 'string') ref.year = ref.year ? String(ref.year) : '';
     if(typeof ref.journal !== 'string') ref.journal = ref.journal ? String(ref.journal) : '';
+    if(typeof ref.publisher !== 'string') ref.publisher = ref.publisher ? String(ref.publisher) : '';
+    if(typeof ref.edition !== 'string') ref.edition = ref.edition ? String(ref.edition) : '';
+    if(typeof ref.websiteName !== 'string') ref.websiteName = ref.websiteName ? String(ref.websiteName) : '';
+    if(typeof ref.publishedDate !== 'string') ref.publishedDate = ref.publishedDate ? String(ref.publishedDate) : '';
+    if(typeof ref.accessedDate !== 'string') ref.accessedDate = ref.accessedDate ? String(ref.accessedDate) : '';
     if(typeof ref.volume !== 'string') ref.volume = ref.volume ? String(ref.volume) : '';
     if(typeof ref.issue !== 'string') ref.issue = ref.issue ? String(ref.issue) : '';
     if(typeof ref.fp !== 'string') ref.fp = ref.fp ? String(ref.fp) : '';
@@ -74,7 +85,16 @@
     ref.collectionIds = ref.collectionIds.map(function(id){ return normalizeText(id); }).filter(Boolean);
     ref.title = normalizeText(ref.title);
     ref.year = normalizeYear(ref.year);
+    if(!ref.year && ref.publishedDate){
+      ref.year = normalizeYear(ref.publishedDate);
+    }
+    ref.referenceType = normalizeReferenceType(ref.referenceType);
     ref.journal = normalizeText(ref.journal);
+    ref.publisher = normalizeText(ref.publisher);
+    ref.edition = normalizeText(ref.edition);
+    ref.websiteName = normalizeText(ref.websiteName);
+    ref.publishedDate = normalizeText(ref.publishedDate);
+    ref.accessedDate = normalizeText(ref.accessedDate);
     ref.volume = normalizeText(ref.volume);
     ref.issue = normalizeText(ref.issue);
     ref.fp = normalizeText(ref.fp);
@@ -109,15 +129,20 @@
     doc = doc || {};
     var citationStyle = String(doc.citationStyle || '').trim().toLowerCase();
     if(!citationStyle) citationStyle = 'apa7';
+    var trackChangesEnabled = !!doc.trackChangesEnabled;
     return {
       id: doc.id || ('doc' + (idx + 1)),
       name: doc.name || ('Belge ' + (idx + 1)),
       content: sanitize(doc.content || blankDoc()),
       bibliographyHTML: typeof doc.bibliographyHTML === 'string' ? doc.bibliographyHTML : '',
       bibliographyManual: !!doc.bibliographyManual,
+      bibliographyExtraRefIds: Array.isArray(doc.bibliographyExtraRefIds)
+        ? doc.bibliographyExtraRefIds.map(function(id){ return normalizeText(id); }).filter(Boolean)
+        : [],
       coverHTML: typeof doc.coverHTML === 'string' ? doc.coverHTML : '',
       tocHTML: typeof doc.tocHTML === 'string' ? doc.tocHTML : '',
-      citationStyle: citationStyle
+      citationStyle: citationStyle,
+      trackChangesEnabled: trackChangesEnabled
     };
   }
 

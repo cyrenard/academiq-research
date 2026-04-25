@@ -5,10 +5,49 @@
   }
   root.AQPdfTabsState = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function(){
+  function cloneOcrPageItems(input){
+    var source = input && typeof input === 'object' ? input : {};
+    var out = {};
+    Object.keys(source).forEach(function(pageKey){
+      var items = source[pageKey];
+      out[pageKey] = Array.isArray(items) ? items.slice() : [];
+    });
+    return out;
+  }
+
+  function cloneOcrPageMeta(input){
+    var source = input && typeof input === 'object' ? input : {};
+    var out = {};
+    Object.keys(source).forEach(function(pageKey){
+      var entry = source[pageKey];
+      if(!entry || typeof entry !== 'object'){
+        out[pageKey] = {
+          status: '',
+          attempts: 0,
+          failures: 0,
+          lastError: '',
+          updatedAt: 0
+        };
+        return;
+      }
+      out[pageKey] = {
+        status: String(entry.status || '').trim(),
+        attempts: Math.max(0, parseInt(entry.attempts, 10) || 0),
+        failures: Math.max(0, parseInt(entry.failures, 10) || 0),
+        lastError: String(entry.lastError || '').trim(),
+        updatedAt: Math.max(0, Number(entry.updatedAt) || 0)
+      };
+    });
+    return out;
+  }
+
   function cloneTab(tab){
     return Object.assign({}, tab, {
       hlData: Array.isArray(tab && tab.hlData) ? tab.hlData.slice() : [],
-      annots: Array.isArray(tab && tab.annots) ? tab.annots.slice() : []
+      annots: Array.isArray(tab && tab.annots) ? tab.annots.slice() : [],
+      ocrPageItems: cloneOcrPageItems(tab && tab.ocrPageItems),
+      ocrPageMeta: cloneOcrPageMeta(tab && tab.ocrPageMeta),
+      ocrLastAt: Math.max(0, Number(tab && tab.ocrLastAt) || 0)
     });
   }
 
@@ -48,7 +87,10 @@
       pdfData: input.pdfData,
       scrollPos: 0,
       hlData: [],
-      annots: Array.isArray(refAnnots) ? refAnnots.slice() : []
+      annots: Array.isArray(refAnnots) ? refAnnots.slice() : [],
+      ocrPageItems: {},
+      ocrPageMeta: {},
+      ocrLastAt: 0
     };
     tabs.push(tab);
     return {
@@ -73,7 +115,16 @@
       return Object.assign({}, tab, {
         scrollPos: typeof snapshot.scrollPos === 'number' ? snapshot.scrollPos : (tab.scrollPos || 0),
         hlData: Array.isArray(snapshot.hlData) ? snapshot.hlData.slice() : (Array.isArray(tab.hlData) ? tab.hlData.slice() : []),
-        annots: Array.isArray(snapshot.annots) ? snapshot.annots.slice() : (Array.isArray(tab.annots) ? tab.annots.slice() : [])
+        annots: Array.isArray(snapshot.annots) ? snapshot.annots.slice() : (Array.isArray(tab.annots) ? tab.annots.slice() : []),
+        ocrPageItems: snapshot.ocrPageItems
+          ? cloneOcrPageItems(snapshot.ocrPageItems)
+          : cloneOcrPageItems(tab.ocrPageItems),
+        ocrPageMeta: snapshot.ocrPageMeta
+          ? cloneOcrPageMeta(snapshot.ocrPageMeta)
+          : cloneOcrPageMeta(tab.ocrPageMeta),
+        ocrLastAt: Number.isFinite(Number(snapshot.ocrLastAt))
+          ? Math.max(0, Number(snapshot.ocrLastAt))
+          : Math.max(0, Number(tab.ocrLastAt) || 0)
       });
     });
     return {

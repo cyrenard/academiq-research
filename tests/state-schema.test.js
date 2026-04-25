@@ -60,6 +60,8 @@ test('hydrate fills defaults for missing structures', () => {
   assert.equal(hydrated.docs[0].id, 'doc1');
   assert.equal(hydrated.docs[0].content, '<p></p>');
   assert.equal(hydrated.docs[0].citationStyle, 'apa7');
+  assert.equal(hydrated.docs[0].trackChangesEnabled, false);
+  assert.deepEqual(hydrated.docs[0].bibliographyExtraRefIds, []);
   assert.equal(hydrated.showPageNumbers, false);
   assert.deepEqual(hydrated.customLabels, []);
 });
@@ -76,6 +78,31 @@ test('hydrate preserves doc citation style when present', () => {
   assert.equal(hydrated.docs[0].citationStyle, 'mla');
 });
 
+test('hydrate preserves doc track changes mode when present', () => {
+  const hydrated = stateSchema.hydrate(
+    {
+      wss: [{ id: 'ws1', name: 'WS', docId: 'doc1', lib: [] }],
+      docs: [{ id: 'doc1', name: 'Belge', content: '<p>x</p>', trackChangesEnabled: true }],
+      cur: 'ws1'
+    },
+    { sanitize }
+  );
+  assert.equal(hydrated.docs[0].trackChangesEnabled, true);
+});
+
+test('hydrate preserves external bibliography reference ids', () => {
+  const hydrated = stateSchema.hydrate(
+    {
+      wss: [{ id: 'ws1', name: 'WS', docId: 'doc1', lib: [] }],
+      docs: [{ id: 'doc1', name: 'Belge', content: '<p>x</p>', bibliographyExtraRefIds: [' r1 ', '', 'r2'] }],
+      cur: 'ws1'
+    },
+    { sanitize }
+  );
+
+  assert.deepEqual(hydrated.docs[0].bibliographyExtraRefIds, ['r1', 'r2']);
+});
+
 test('hydrate normalizes reference fields into stable shapes', () => {
   const hydrated = stateSchema.hydrate(
     {
@@ -89,7 +116,9 @@ test('hydrate normalizes reference fields into stable shapes', () => {
               title: 42,
               authors: 'Doe, Jane',
               labels: null,
-              year: 2024
+              year: 2024,
+              referenceType: 'book',
+              publisher: ' Academic Press '
             }
           ]
         }
@@ -104,6 +133,8 @@ test('hydrate normalizes reference fields into stable shapes', () => {
   assert.deepEqual(ref.authors, ['Doe, Jane']);
   assert.deepEqual(ref.labels, []);
   assert.equal(ref.year, '2024');
+  assert.equal(ref.referenceType, 'book');
+  assert.equal(ref.publisher, 'Academic Press');
 });
 
 test('hydrate normalizes noisy DOI variants into canonical DOI', () => {
@@ -131,6 +162,31 @@ test('hydrate normalizes noisy DOI variants into canonical DOI', () => {
   const ref = hydrated.wss[0].lib[0];
   assert.equal(ref.doi, '10.3389/fpsyg.2019.01267');
   assert.equal(ref.year, '2019');
+});
+
+test('hydrate falls back to article for unsupported reference type', () => {
+  const hydrated = stateSchema.hydrate(
+    {
+      wss: [
+        {
+          id: 'ws11',
+          name: 'Web',
+          lib: [
+            {
+              id: 'ref11',
+              title: 'Site entry',
+              referenceType: 'blog-post',
+              websiteName: 'Example Site'
+            }
+          ]
+        }
+      ]
+    },
+    { sanitize }
+  );
+  const ref = hydrated.wss[0].lib[0];
+  assert.equal(ref.referenceType, 'article');
+  assert.equal(ref.websiteName, 'Example Site');
 });
 
 test('hydrate normalizes legacy notes to current notebook mapping', () => {

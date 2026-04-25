@@ -69,10 +69,19 @@
 
   function syncCommandButtons(doc, defs){
     defs.forEach(function(def){
-      var btn = doc.getElementById(def.id);
-      if(!btn) return;
-      btn.classList[def.active ? 'add' : 'remove']('active');
-      btn.classList[def.active ? 'add' : 'remove']('is-active');
+      var nodes = [];
+      var btn = def.id && doc.getElementById ? doc.getElementById(def.id) : null;
+      if(btn) nodes.push(btn);
+      if(def.selector && typeof doc.querySelectorAll === 'function'){
+        Array.prototype.forEach.call(doc.querySelectorAll(def.selector), function(node){
+          if(nodes.indexOf(node) < 0) nodes.push(node);
+        });
+      }
+      nodes.forEach(function(node){
+        if(!node || !node.classList) return;
+        node.classList[def.active ? 'add' : 'remove']('active');
+        node.classList[def.active ? 'add' : 'remove']('is-active');
+      });
     });
   }
 
@@ -111,10 +120,13 @@
       { id:'btnItalic', active:editor.isActive('italic') },
       { id:'btnUnderline', active:editor.isActive('underline') },
       { id:'btnStrike', active:editor.isActive('strike') },
+      { id:'btnSuperscript', selector:'[data-aq="sup"]', active:editor.isActive('superscript') },
+      { id:'btnSubscript', selector:'[data-aq="sub"]', active:editor.isActive('subscript') },
       { id:'btnParagraph', active:editor.isActive('paragraph') && !editor.isActive('blockquote') },
       { id:'btnBlockQuote', active:editor.isActive('blockquote') },
       { id:'btnUnorderedList', active:editor.isActive('bulletList') },
       { id:'btnOrderedList', active:editor.isActive('orderedList') },
+      { id:'btnMultiLevelList', active:editor.isActive('bulletList') || editor.isActive('orderedList') },
       { id:'btnAlignLeft', active:resolveTextAlign(editor) === 'left' },
       { id:'btnAlignCenter', active:resolveTextAlign(editor) === 'center' },
       { id:'btnAlignRight', active:resolveTextAlign(editor) === 'right' }
@@ -124,6 +136,23 @@
     var sizeSel = doc.getElementById('sizesel');
     var txtColor = doc.getElementById('txtColor');
     var hlColor = doc.getElementById('hlColor');
+    var paragraphStyleSel = doc.getElementById('paragraphStyleSel');
+    if(paragraphStyleSel){
+      var activeId = null;
+      try{
+        var cmds = typeof window !== 'undefined' ? window.AQTipTapWordCommands : null;
+        if(cmds && typeof cmds.getActiveParagraphStyle === 'function'){
+          activeId = cmds.getActiveParagraphStyle(editor);
+        }
+      }catch(_e){}
+      if(activeId && paragraphStyleSel.value !== activeId){
+        var matched = false;
+        for(var oi = 0; oi < paragraphStyleSel.options.length; oi++){
+          if(paragraphStyleSel.options[oi].value === activeId){ matched = true; break; }
+        }
+        if(matched) paragraphStyleSel.value = activeId;
+      }
+    }
     if(fontSel) fontSel.value = attrs.fontFamily || 'Times New Roman';
     if(sizeSel) sizeSel.value = attrs.fontSize ? String(attrs.fontSize).replace(/pt$/i, '') : '12';
     if(txtColor) txtColor.value = normalizeColorValue(attrs.color, '#000000');

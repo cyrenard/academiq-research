@@ -109,6 +109,46 @@ test('title, authors and journal prefer structured metadata before document titl
   assert.equal(journal.value, 'Journal of Great Papers');
 });
 
+test('author extraction supports broader scholarly meta fields and semicolon lists', () => {
+  const authors = utils.extractAuthors({
+    metaEntries: [
+      { name: 'citation_authors', content: 'Ada Lovelace; Grace Hopper' },
+      { name: 'dc.contributor', content: 'Katherine Johnson' }
+    ],
+    jsonLdTexts: []
+  });
+  assert.equal(authors.source, 'scholarly_meta');
+  assert.equal(authors.confidence, 'strong');
+  assert.equal(authors.value, 'Ada Lovelace; Grace Hopper; Katherine Johnson');
+});
+
+test('author extraction falls back to DOM author blocks when meta/jsonld are missing', () => {
+  const authors = utils.extractAuthors({
+    metaEntries: [],
+    jsonLdTexts: [],
+    domAuthors: ['By Ada Lovelace', 'Grace Hopper'],
+    bodyText: ''
+  });
+  assert.equal(authors.source, 'dom');
+  assert.equal(authors.confidence, 'medium');
+  assert.equal(authors.value, 'Ada Lovelace; Grace Hopper');
+});
+
+test('publisher-specific author hints are used with strong confidence', () => {
+  const authors = utils.extractAuthors({
+    metaEntries: [],
+    jsonLdTexts: [],
+    publisherFamily: 'springer',
+    publisherAuthors: ['Ada Lovelace', 'Grace Hopper'],
+    domAuthors: [],
+    bodyText: ''
+  });
+  assert.equal(authors.source, 'dom');
+  assert.equal(authors.sourceField, 'publisher:springer');
+  assert.equal(authors.confidence, 'strong');
+  assert.equal(authors.value, 'Ada Lovelace; Grace Hopper');
+});
+
 test('detectPageMetadata resolves layered candidates conservatively', () => {
   const result = utils.detectPageMetadata({
     metaEntries: [{ name: 'citation_title', content: 'Layered Capture Paper' }],

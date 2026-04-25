@@ -63,7 +63,7 @@
     if(!paragraphs.length) return '';
     var citeText = String(citationCore || '').replace(/^\(|\)$/g, '').trim() || 'Bilinmeyen, t.y.';
     if(locator) citeText += ', ' + locator;
-    var citationHTML = '<span class="cit" data-ref="' + escHTML(refId) + '" contenteditable="false">(' + escHTML(citeText) + ')</span>';
+    var citationHTML = '<span class="cit" data-ref="' + escHTML(refId) + '">(' + escHTML(citeText) + ')</span>';
     var lastIndex = paragraphs.length - 1;
     paragraphs[lastIndex] = ensureFinalSentencePunctuation(paragraphs[lastIndex]);
     return '<blockquote>' + paragraphs.map(function(paragraph, index){
@@ -154,7 +154,7 @@
         if(html) return decorateLinkedNoteHTML(html, note, ref);
       }catch(e){}
     }
-    return decorateLinkedNoteHTML('<span class="cit" data-ref="' + escHTML(ref.id) + '" contenteditable="false">' + escHTML(getInlineCitationTextSafe(ref)) + '</span> ', note, ref);
+    return decorateLinkedNoteHTML('<span class="cit" data-ref="' + escHTML(ref.id) + '">' + escHTML(getInlineCitationTextSafe(ref)) + '</span> ', note, ref);
   }
 
   function insertHTMLIntoEditor(html){

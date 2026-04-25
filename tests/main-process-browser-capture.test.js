@@ -16,6 +16,7 @@ const {
   evaluateBrowserCaptureLifecycle,
   determineBrowserInstallStrategy,
   buildManagedChromiumLaunchArgs,
+  normalizeBrowserCaptureSettings,
   sanitizeCapturePayload,
   buildTargetsFromDataJSON,
   buildCaptureDeepLink,
@@ -42,17 +43,24 @@ test('parseBrowserOpenCommandOutput and extractExecutableFromCommand resolve exe
 
 test('sanitizeCapturePayload normalizes DOI and unsupported comparison ids', () => {
   const payload = sanitizeCapturePayload({
+    referenceType: 'book',
     doi: 'https://doi.org/10.1000/ABC.DEF',
     selectedComparisonId: 'unknown-id',
-    detectedAuthors: ['A', 'B']
+    detectedAuthors: ['A', 'B'],
+    detectedPublisher: 'Academic Press',
+    detectedEdition: '2'
   });
+  assert.equal(payload.referenceType, 'book');
   assert.equal(payload.doi, '10.1000/abc.def');
   assert.equal(payload.selectedComparisonId, '');
   assert.deepEqual(payload.detectedAuthors, ['A', 'B']);
+  assert.equal(payload.detectedPublisher, 'Academic Press');
+  assert.equal(payload.detectedEdition, '2');
 });
 
 test('sanitizeCapturePayload removes unsafe url and invalid ids while preserving detection meta', () => {
   const payload = sanitizeCapturePayload({
+    referenceType: 'unknown-type',
     sourcePageUrl: 'file:///secret',
     pdfUrl: 'javascript:alert(1)',
     selectedWorkspaceId: 'ws 1',
@@ -64,6 +72,7 @@ test('sanitizeCapturePayload removes unsafe url and invalid ids while preserving
   assert.equal(payload.sourcePageUrl, '');
   assert.equal(payload.pdfUrl, '');
   assert.equal(payload.selectedWorkspaceId, '');
+  assert.equal(payload.referenceType, 'article');
   assert.equal(payload.detectionMeta.doi.source, 'citation_meta');
   assert.equal(payload.detectionMeta.pdfUrl.confidence, 'medium');
 });
@@ -109,6 +118,16 @@ test('lifecycle evaluation flags updates and protocol mismatches', () => {
 test('managed install strategy only supports chromium with executable path', () => {
   assert.equal(determineBrowserInstallStrategy({ browserFamily: 'chromium', browserExecutablePath: 'C:/chrome.exe' }).supported, true);
   assert.equal(determineBrowserInstallStrategy({ browserFamily: 'firefox', browserExecutablePath: 'C:/firefox.exe' }).supported, false);
+});
+
+test('normalizeBrowserCaptureSettings keeps agent autostart on by default', () => {
+  const normalized = normalizeBrowserCaptureSettings({});
+  assert.equal(normalized.agentAutoStart, true);
+  assert.equal(normalized.agentAutoStartSupported, false);
+
+  const disabled = normalizeBrowserCaptureSettings({ agentAutoStart: false, agentAutoStartSupported: true });
+  assert.equal(disabled.agentAutoStart, false);
+  assert.equal(disabled.agentAutoStartSupported, true);
 });
 
 test('managed chromium launch args stay deterministic', () => {

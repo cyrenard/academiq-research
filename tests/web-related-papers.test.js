@@ -5,11 +5,13 @@ const webRelated = require('../src/web-related-papers.js');
 
 test('normalizeWebResult normalizes DOI and core metadata', () => {
   const row = webRelated.normalizeWebResult({
+    referenceType: 'book',
     title: '  Sample Paper Title  ',
     authors: ['Doe, Jane', 'Smith, John'],
     year: '2021-05-01',
     doi: 'https://doi.org/10.1000/ABC.123',
     journal: 'Journal of Testing',
+    publisher: 'Academic Press',
     url: 'https://example.org/paper',
     abstract: 'Example abstract'
   }, { provider: 'openalex', providerLabel: 'OpenAlex' });
@@ -17,8 +19,16 @@ test('normalizeWebResult normalizes DOI and core metadata', () => {
   assert.equal(row.title, 'Sample Paper Title');
   assert.equal(row.year, '2021');
   assert.equal(row.doi, '10.1000/abc.123');
+  assert.equal(row.referenceType, 'book');
+  assert.equal(row.publisher, 'Academic Press');
   assert.equal(row.provider, 'openalex');
   assert.equal(row.providerLabel, 'OpenAlex');
+});
+
+test('refLikelyMatch does not merge different reference types without DOI', () => {
+  const website = { referenceType: 'website', title: 'Sample Paper Title', authors: ['Doe, Jane'], year: '2021' };
+  const article = { referenceType: 'article', title: 'Sample Paper Title', authors: ['Doe, Jane'], year: '2021' };
+  assert.equal(webRelated.refLikelyMatch(website, article), false);
 });
 
 test('decideAddToActiveWorkspace prefers already-in-active workspace match', () => {

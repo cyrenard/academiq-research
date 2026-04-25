@@ -11,7 +11,8 @@
     ctxMenu: null,
     ctxDocBound: false,
     ctxHostBound: false,
-    watchRetryTimer: null
+    watchRetryTimer: null,
+    pendingCitationKey: ''
   };
 
   function getSurface(){
@@ -49,11 +50,6 @@
     ].filter(Boolean);
     targets.forEach(function(node){
       node.setAttribute('spellcheck','true');
-      node.setAttribute('data-gramm','true');
-      node.setAttribute('data-gramm_editor','true');
-      node.setAttribute('data-enable-grammarly','true');
-      node.setAttribute('data-grammarly-part','true');
-      node.setAttribute('data-grammarly-integration','true');
     });
     return !!targets.length;
   }
@@ -114,6 +110,39 @@
         if(e.target !== host) return;
         setTimeout(function(){ window.AQEditorCore.focus(false); }, 0);
       });
+      host.addEventListener('click', function(e){
+        var target = e && e.target ? (e.target.nodeType === 3 ? e.target.parentElement : e.target) : null;
+        var citation = target && target.closest ? target.closest('.cit') : null;
+        if(!citation) return;
+        var refId = String(citation.getAttribute('data-ref') || '').split(',').map(function(id){
+          return String(id || '').trim();
+        }).filter(Boolean)[0] || '';
+        if(!refId) return;
+        if(typeof e.preventDefault === 'function') e.preventDefault();
+        if(typeof e.stopPropagation === 'function') e.stopPropagation();
+        var api = window.AQBibliographyState || null;
+        var jump = typeof window.jumpToBibliographyEntry === 'function'
+          ? window.jumpToBibliographyEntry
+          : (api && typeof api.jumpToBibliographyEntry === 'function'
+            ? api.jumpToBibliographyEntry
+            : null);
+        if(jump){
+          jump(refId, {
+            pageEl: document.getElementById('bibpage'),
+            bodyEl: document.getElementById('bibbody'),
+            openBibliography: function(){
+              if(typeof window.updateRefSection === 'function') window.updateRefSection(true);
+              var page = document.getElementById('bibpage');
+              if(page && page.style) page.style.display = 'block';
+            },
+            scroller: document.getElementById('escroll'),
+            behavior: 'smooth',
+            block: 'center'
+          });
+        }else if(typeof window.insRefs === 'function'){
+          window.insRefs();
+        }
+      }, true);
     }
     if(page){
       page.addEventListener('click', function(e){
@@ -173,8 +202,89 @@
     }
   }
 
-  function buildContextMenuModel(hasSelection){
+  function normalizeSelectionText(text){
+    return String(text || '').replace(/\s+/g, ' ').trim().slice(0, 1200);
+  }
+
+  function getSelectedText(editor){
+    if(editor && editor.state && editor.state.selection && editor.state.doc){
+      if(editor.state.selection.empty) return '';
+      return editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ');
+    }
+    var sel = window.getSelection && window.getSelection();
+    return sel && sel.toString ? sel.toString() : '';
+  }
+
+  function getSelectionCitationKey(host){
+    host = host || getHost();
+    if(!host || typeof document === 'undefined') return '';
+    var sel = window.getSelection && window.getSelection();
+    if(!sel || !sel.rangeCount || sel.isCollapsed) return '';
+    var fallbackText = normalizeSelectionText(sel.toString ? sel.toString() : '');
+    var range = sel.getRangeAt(0);
+    function findCitationNode(node){
+      while(node && node !== host){
+        if(node.nodeType === 1 && node.classList && node.classList.contains('cit')){
+          return node;
+        }
+        node = node.parentNode;
+      }
+      return null;
+    }
+    var node = findCitationNode(range.commonAncestorContainer || range.startContainer || null);
+    if(!node && typeof host.querySelectorAll === 'function'){
+      var nodes = Array.prototype.slice.call(host.querySelectorAll('.cit'));
+      node = nodes.find(function(el){
+        try{
+          return !!(range.intersectsNode && range.intersectsNode(el));
+        }catch(_e){
+          return false;
+        }
+      }) || null;
+    }
+    if(!node){
+      return fallbackText ? 'sel:' + encodeURIComponent(fallbackText) + '#1' : '';
+    }
+    var refIds = String(node.getAttribute('data-ref') || '').split(',').map(function(id){
+      return String(id || '').trim();
+    }).filter(Boolean);
+    if(!refIds.length) return '';
+    var seenBySignature = {};
+    var rows = Array.prototype.slice.call(host.querySelectorAll('.cit'));
+    for(var i = 0; i < rows.length; i++){
+      var row = rows[i];
+      var rowRefIds = String(row.getAttribute('data-ref') || '').split(',').map(function(id){
+        return String(id || '').trim();
+      }).filter(Boolean);
+      if(!rowRefIds.length) continue;
+      var signature = rowRefIds.join(',');
+      seenBySignature[signature] = (seenBySignature[signature] || 0) + 1;
+      if(row === node){
+        return 'ref:' + signature + '#' + seenBySignature[signature];
+      }
+    }
+    if(fallbackText) return 'sel:' + encodeURIComponent(fallbackText) + '#1';
+    return 'ref:' + refIds.join(',') + '#1';
+  }
+
+  async function fetchGrammarSuggestions(selectionText){
+    void selectionText;
+    return [];
+  }
+
+  function buildContextMenuModel(hasSelection, options){
+    var opts = options && typeof options === 'object' ? options : {};
+    var citationKey = String(opts.citationKey || '').trim();
     var items = [];
+    if(hasSelection && Array.isArray(opts.grammarSuggestions) && opts.grammarSuggestions.length){
+      opts.grammarSuggestions.forEach(function(item){
+        items.push(item);
+      });
+      items.push({ kind:'sep' });
+    }else if(hasSelection && opts.grammarChecked){
+      items.push({ kind:'hint', label:'Dil kontrolu: onerilen duzeltme yok', disabled:true });
+      items.push({ kind:'sep' });
+    }
     if(hasSelection){
       items.push({ kind:'action', action:'cut', label:'Kes', key:'Ctrl+X' });
       items.push({ kind:'action', action:'copy', label:'Kopyala', key:'Ctrl+C' });
@@ -191,8 +301,19 @@
     return items;
   }
 
-  function runContextMenuAction(action){
+  function runContextMenuAction(action, item, options){
+    options = options || {};
     var editor = typeof window !== 'undefined' ? (window.editor || null) : null;
+    if(action === 'replaceSelection'){
+      var replacement = item && typeof item.replacement === 'string' ? item.replacement : '';
+      if(!replacement) return;
+      if(editor && editor.chain){
+        editor.chain().focus().insertContent(replacement).run();
+        return;
+      }
+      if(typeof document !== 'undefined') document.execCommand('insertText', false, replacement);
+      return;
+    }
     if(action === 'cut'){
       if(editor && editor.state && editor.state.selection){
         var text = editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ');
@@ -278,7 +399,7 @@
     if(!host || state.ctxHostBound) return;
     state.ctxHostBound = true;
 
-    host.addEventListener('contextmenu', function(e){
+    host.addEventListener('contextmenu', async function(e){
       var t = e && e.target;
       if(t && t.nodeType === 3) t = t.parentElement;
       if(t && t.closest && t.closest('.toc-container')) return;
@@ -292,9 +413,30 @@
         var sel = window.getSelection && window.getSelection();
         hasSelection = !!(sel && sel.toString && sel.toString().length);
       }
+      var grammarSuggestions = [];
+      var grammarChecked = false;
+      var citationKey = getSelectionCitationKey(host);
+      if(hasSelection){
+        var grammarResult = await Promise.race([
+          fetchGrammarSuggestions(getSelectedText(editor)).then(function(items){
+            return { checked:true, items:items };
+          }),
+          new Promise(function(resolve){
+            setTimeout(function(){
+              resolve({ checked:false, items:[] });
+            }, 450);
+          })
+        ]);
+        grammarSuggestions = Array.isArray(grammarResult.items) ? grammarResult.items : [];
+        grammarChecked = !!grammarResult.checked;
+      }
       var menu = document.createElement('div');
       menu.className = 'ctx-menu';
-      buildContextMenuModel(hasSelection).forEach(function(item){
+      buildContextMenuModel(hasSelection, {
+        grammarSuggestions: grammarSuggestions,
+        grammarChecked: grammarChecked,
+        citationKey: citationKey
+      }).forEach(function(item){
         if(item.kind === 'sep'){
           var sep = document.createElement('div');
           sep.className = 'ctx-sep';
@@ -303,6 +445,11 @@
         }
         var row = document.createElement('div');
         row.textContent = item.label;
+        if(item.kind === 'hint' || item.disabled){
+          row.className = 'ctx-disabled';
+          menu.appendChild(row);
+          return;
+        }
         if(item.key){
           var key = document.createElement('span');
           key.className = 'ctx-shortcut';
@@ -313,7 +460,7 @@
           ev.preventDefault();
           ev.stopPropagation();
           hideContextMenu();
-          runContextMenuAction(item.action);
+          runContextMenuAction(item.action, item, { citationKey: citationKey });
         });
         menu.appendChild(row);
       });
@@ -380,6 +527,7 @@
     init:init,
     watchSurface:watchSurface,
     applySurfaceAttributes:applySurfaceAttributes,
-    buildContextMenuModel:buildContextMenuModel
+    buildContextMenuModel:buildContextMenuModel,
+    fetchGrammarSuggestions:fetchGrammarSuggestions
   };
 });

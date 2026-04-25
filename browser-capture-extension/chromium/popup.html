@@ -20,7 +20,7 @@
           <strong id="authorSummary">Algilanamadi</strong>
         </div>
         <div class="summary-item">
-          <span class="summary-label">Dergi</span>
+          <span class="summary-label" id="journalSummaryLabel">Dergi</span>
           <strong id="journalSummary">Algilanamadi</strong>
         </div>
         <div class="summary-item">
@@ -34,6 +34,81 @@
         <div class="evidence-row"><span>Baslik kaniti</span><strong id="titleEvidence">Kontrol ediliyor</strong></div>
       </div>
       <div class="muted" id="captureUrl" style="margin-top:8px;word-break:break-word;"></div>
+    </div>
+    <div class="card">
+      <div class="title">Kunye duzenle (istege bagli)</div>
+      <div class="muted" style="margin-top:4px;">Eksik veya hatali alanlari duzeltip duzenlenmis kaydi gonderebilirsiniz.</div>
+      <div class="row stack" style="margin-top:10px;">
+        <div class="field">
+          <label for="editReferenceType">Kaynak Turu</label>
+          <select id="editReferenceType">
+            <option value="article">Makale</option>
+            <option value="book">Kitap</option>
+            <option value="website">Web Sitesi</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="editTitle">Baslik</label>
+          <input id="editTitle" type="text" maxlength="2048" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="editAuthors">Yazarlar</label>
+          <input id="editAuthors" type="text" maxlength="2048" autocomplete="off" placeholder="Ada Lovelace; Grace Hopper">
+          <div class="hint">Yazarlari <code>;</code> ile ayirin.</div>
+        </div>
+        <div class="edit-grid year-grid">
+          <div class="field">
+            <label for="editJournal">Dergi</label>
+            <input id="editJournal" type="text" maxlength="1024" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="editYear">Yil</label>
+            <input id="editYear" type="text" maxlength="4" inputmode="numeric" autocomplete="off">
+          </div>
+        </div>
+        <div class="edit-grid type-only type-book">
+          <div class="field">
+            <label for="editPublisher">Yayinevi</label>
+            <input id="editPublisher" type="text" maxlength="1024" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="editEdition">Baski / Edition</label>
+            <input id="editEdition" type="text" maxlength="128" autocomplete="off" placeholder="2.">
+          </div>
+        </div>
+        <div class="edit-grid type-only type-website">
+          <div class="field">
+            <label for="editWebsiteName">Site Adi</label>
+            <input id="editWebsiteName" type="text" maxlength="1024" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="editPublishedDate">Yayin Tarihi</label>
+            <input id="editPublishedDate" type="date" autocomplete="off">
+          </div>
+        </div>
+        <div class="field type-only type-website">
+          <label for="editAccessedDate">Erisim Tarihi</label>
+          <input id="editAccessedDate" type="date" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="editSourceUrl">Kaynak URL</label>
+          <input id="editSourceUrl" type="url" maxlength="4096" autocomplete="off">
+        </div>
+        <div class="edit-grid">
+          <div class="field">
+            <label for="editDoi">DOI</label>
+            <input id="editDoi" type="text" maxlength="512" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="editPdfUrl">PDF URL</label>
+            <input id="editPdfUrl" type="url" maxlength="4096" autocomplete="off">
+          </div>
+        </div>
+        <div class="field">
+          <label for="editAbstract">Ozet</label>
+          <textarea id="editAbstract" rows="3" maxlength="12000"></textarea>
+        </div>
+      </div>
     </div>
     <div class="card">
       <div class="row stack">
