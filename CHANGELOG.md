@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.4 — Critical hotfixes: Browser Capture install + /t narrative citation
+
+### Fixed (critical)
+- **Browser Capture "Kur" button could not be clicked.** The button was being `disabled` by the renderer whenever the detected install strategy reported `supported: false` — which fired for Firefox users, users without a Windows default browser association, and users with non-standard browsers (Yandex / Whale / Opera GX / portable Chromium). The click handler never even ran, so users saw "click does nothing" with no error. The disable rule is removed; the install button is now always clickable. The same fix applies to the Repair and Launch buttons.
+- **Silent click handlers** for install/update/repair/launch/restart-agent/stop-agent/test now route through a single `bindCaptureActionBtn` helper that:
+  - Shows an "İşleniyor..." busy state on the button so the click is visibly registered.
+  - Console-logs every step (`[browser-capture] dispatching action ...`).
+  - Catches IPC errors and surfaces them in the status bar instead of swallowing them.
+  - On a successful install/repair/update, automatically opens the extension folder in Explorer so the user can immediately see and locate the bundled extension files.
+- **`/t` narrative citations rendered as parenthetical** (same as `/r`). Root cause: the ProseMirror `citation` mark schema did not declare `data-mode` as an allowed attribute, so on insert TipTap silently stripped `data-mode="textual"`. Then the DOM post-processor `normalizeCitationSpans` saw a `.cit` span without `data-mode` and rewrote its text into the parenthetical form. Adding `data-mode` to `addAttributes` (in both `src/tiptap-word-editor.js` and the inlined HTML mirror) preserves it through the editor pipeline so the "Yazar (Yıl)" format survives.
+
+### Notes
+- Extension files are bundled inside `app.asar` and copied on install to `%LOCALAPPDATA%\AcademiQ\browser-capture-extension\<family>\`. The auto-open after install makes that visible to the user without hunting through AppData.
+
 ## 1.1.3 — Hotfix: import & paste hardening
 
 ### Fixed

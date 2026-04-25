@@ -115,6 +115,16 @@
             default:null,
             parseHTML:function(el){ return el.getAttribute('data-note-nb') || null; },
             renderHTML:function(attrs){ return attrs['data-note-nb'] ? { 'data-note-nb':attrs['data-note-nb'] } : {}; }
+          },
+          // /t (narrative) citations carry data-mode="textual" so the DOM
+          // post-processor (normalizeCitationSpans) skips them and preserves
+          // the "Yazar (Yıl)" format. Without this attribute on the schema,
+          // ProseMirror would strip data-mode on insert and the citation
+          // would render identically to /r parenthetical citations.
+          'data-mode':{
+            default:null,
+            parseHTML:function(el){ return el.getAttribute('data-mode') || null; },
+            renderHTML:function(attrs){ return attrs['data-mode'] ? { 'data-mode':attrs['data-mode'] } : {}; }
           }
         };
       },
