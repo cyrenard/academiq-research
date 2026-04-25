@@ -388,14 +388,12 @@ function syncReferenceSectionDeferred(delay){
     var host = document.getElementById('apaed');
     if(!host || !host.addEventListener) return true;
     state.linkedBound = true;
-    host.addEventListener('click', function(){
-      setTimeout(function(){
-        var meta = resolveLinkedMetaFromSelection(getEditor());
-        if(meta && meta.noteId){
-          focusLinkedNoteFallback(meta, { scrollIntoView:true, behavior:'auto' });
-        }
-      }, 0);
-    }, true);
+    // The capture-phase click listener that previously lived here resolved
+    // linked-note metadata from the current selection on every click. That
+    // duplicated the work already performed in `onSelectionUpdate`, and on a
+    // bloated paste it walked the entire ancestor chain twice per click,
+    // which made the editor unresponsive after large pastes from outside.
+    // `onSelectionUpdate` covers the same path; the click handler is dropped.
     return true;
   }
 

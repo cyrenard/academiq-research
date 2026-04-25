@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.3 — Hotfix: import & paste hardening
+
+### Fixed
+- **Word/RTF import:** `normalizeImportHTML` now detects `{\rtf` buffers and detokenises RTF control words (`\par`, `\line`, `\u<n>?`, `\'XX`, font/colour/style tables) before routing to the plain-text path. Previously, an RTF file would land in `formatPlainTextAPA` as raw bytes and the editor rendered control codes as visible prose. New helper `stripRtfControlCodes()` is exported.
+
+### Performance
+- **Paste size cap:** the editor's `apaPaste` ProseMirror plugin now drops HTML pastes larger than 2 MB and falls through to the plain-text path. Pastes from Notion/Google Docs/long Wikipedia tables can carry 10+ MB of markup that turned the editor unresponsive on subsequent interactions.
+- **Removed redundant click listener** in `editor-runtime.attachSurfaceHandlers`. The capture-phase handler duplicated `onSelectionUpdate`'s linked-note resolution; on a bloated paste it walked the ancestor chain twice per click. Selection updates already cover the same path, so the click listener is dropped.
+
 ## 1.1.2
 
 ### Removed

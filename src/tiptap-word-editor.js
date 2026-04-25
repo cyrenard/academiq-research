@@ -406,6 +406,12 @@
               var html = event.clipboardData.getData('text/html');
               var text = event.clipboardData.getData('text/plain');
               if(html && html.includes('class="cit"')) return false;
+              // Cap pasted HTML size: anything over ~2 MB is almost certainly
+              // bloated Word/Web markup that turns the editor unusable on
+              // subsequent interactions. Fall through to the plain-text path
+              // below so the user still gets the prose without the cruft.
+              var PASTE_HTML_CAP = 2 * 1024 * 1024;
+              if(html && html.length > PASTE_HTML_CAP){ html = ''; }
               if(html && !event.shiftKey){
                 var cleaned = typeof hooks.cleanPastedHTML === 'function'
                   ? hooks.cleanPastedHTML(html)

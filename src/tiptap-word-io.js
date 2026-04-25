@@ -923,8 +923,43 @@ function isWordListParagraph(node){
     return kept.join('\n');
   }
 
+  function stripRtfControlCodes(text){
+    var value = String(text || '');
+    if(!value) return '';
+    // Drop RTF font/colour/info groups whose contents are pure metadata noise.
+    value = value.replace(/\{\\(?:fonttbl|colortbl|stylesheet|info|listtable|listoverridetable|rsidtbl|generator|xmlnstbl|themedata|datastore|latentstyles|sn|sv|xmlopen|xmlclose|object|pict|nonshppict|shp|shpinst|sp|sn|sv)\b[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/gi, '');
+    // Convert RTF unicode escapes (\uNNNN) to actual chars; drop trailing fallback char.
+    value = value.replace(/\\u(-?\d+)\??\s?\.?/g, function(_m, code){
+      var n = parseInt(code, 10);
+      if(!isFinite(n)) return '';
+      if(n < 0) n += 65536;
+      try { return String.fromCharCode(n); } catch(_e) { return ''; }
+    });
+    // Decode 8-bit hex escapes (\'XX) as Latin-1 codepoints.
+    value = value.replace(/\\'([0-9a-f]{2})/gi, function(_m, hex){
+      try { return String.fromCharCode(parseInt(hex, 16)); } catch(_e) { return ''; }
+    });
+    // Paragraph / line breaks → newline.
+    value = value.replace(/\\par\b ?/gi, '\n').replace(/\\line\b ?/gi, '\n').replace(/\\sect\b ?/gi, '\n\n').replace(/\\page\b ?/gi, '\n\n');
+    // Tab.
+    value = value.replace(/\\tab\b ?/gi, '\t');
+    // Drop remaining control words and groups.
+    value = value.replace(/\\\*[a-z]+\b[^{}]*?(?=\\|\}|$)/gi, '');
+    value = value.replace(/\\[a-z]+-?\d* ?/gi, '');
+    value = value.replace(/[{}]/g, '');
+    // Common literal escapes that survive the strip.
+    value = value.replace(/\\([\\{}])/g, '$1');
+    return value;
+  }
+
   function normalizeImportHTML(text, formatPlainTextAPA){
     var value = normalizeInputText(text);
+    // RTF buffers must be detokenized before any HTML/plain-text routing,
+    // otherwise the editor would render raw control words like
+    // "\rtf1\ansi\ansicpg1254..." as visible prose.
+    if(/^\s*\{\\rtf/.test(value)){
+      value = stripRtfControlCodes(value);
+    }
     if(looksLikeHTML(value)) return normalizeWordHtml(value);
     if(String(value || '').split('\n').some(looksLikeWordArtifactLine)){
       value = stripWordArtifactPlainText(value);
@@ -1016,6 +1051,7 @@ function isWordListParagraph(node){
     looksLikeHTML: looksLikeHTML,
     normalizeWordHtml: normalizeWordHtml,
     normalizeImportHTML: normalizeImportHTML,
+    stripRtfControlCodes: stripRtfControlCodes,
     applyImportedHTML: applyImportedHTML,
     buildPrintablePageClone: buildPrintablePageClone,
     buildPDFExportOptions: buildPDFExportOptions
