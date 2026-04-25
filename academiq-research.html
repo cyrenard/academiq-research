@@ -24,6 +24,35 @@
 <script src="./src/lean-ui-shell.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <link href="./vendor/pdf_viewer.css" rel="stylesheet"/>
+<link href="./src/themes/liquid-glass.css" rel="stylesheet"/>
+<script>
+  // Liquid-glass theme toggle (experimental).
+  // Persisted in localStorage so the choice survives reloads.
+  // Toggle via:  document.documentElement.dataset.theme = 'liquid-glass' | 'classic'
+  // or call:     window.aqToggleTheme()
+  (function(){
+    try {
+      var stored = localStorage.getItem('aqTheme');
+      if (stored === 'liquid-glass' || stored === 'classic') {
+        document.documentElement.dataset.theme = stored;
+      } else {
+        // Default to liquid-glass on this experimental branch.
+        document.documentElement.dataset.theme = 'liquid-glass';
+      }
+    } catch(_e) {
+      document.documentElement.dataset.theme = 'liquid-glass';
+    }
+    window.aqToggleTheme = function(value){
+      var next = value;
+      if (next !== 'liquid-glass' && next !== 'classic') {
+        next = (document.documentElement.dataset.theme === 'liquid-glass') ? 'classic' : 'liquid-glass';
+      }
+      document.documentElement.dataset.theme = next;
+      try { localStorage.setItem('aqTheme', next); } catch(_e) {}
+      return next;
+    };
+  })();
+</script>
 <style>
 :root{
   --aq-page-width:21cm;

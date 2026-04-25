@@ -1,0 +1,389 @@
+/* ==========================================================================
+   AcademiQ Research — Liquid Glass theme (experimental)
+   Pastel premium-blue palette + glass-morphism surfaces
+   --------------------------------------------------------------------------
+   Loaded as the LAST stylesheet so it cascades on top of the inline classic
+   styles in academiq-research.html. Uses :root[data-theme="liquid-glass"] as
+   a top-level guard so the theme can be toggled at runtime via
+   document.documentElement.dataset.theme.
+   ========================================================================== */
+
+:root[data-theme="liquid-glass"] {
+  /* ---- Pastel blue + premium tones ---- */
+  --lg-bg-deep:        #d6e4f5;   /* far-edge of the radial gradient */
+  --lg-bg-mid:         #e8f1fc;
+  --lg-bg-near:        #f4f9ff;   /* center of the gradient */
+  --lg-surface:        rgba(255, 255, 255, 0.55);
+  --lg-surface-strong: rgba(255, 255, 255, 0.78);
+  --lg-surface-soft:   rgba(255, 255, 255, 0.32);
+  --lg-tint:           rgba(168, 200, 240, 0.18);
+
+  --lg-accent:         #5ea3e6;
+  --lg-accent-soft:    #a4c8f0;
+  --lg-accent-deep:    #2d6db3;
+
+  --lg-text:           #0e2a3f;
+  --lg-text-muted:     #4d6a82;
+  --lg-text-dim:       #7a93a8;
+
+  --lg-border:         rgba(143, 178, 215, 0.32);
+  --lg-border-strong:  rgba(143, 178, 215, 0.55);
+  --lg-divider:        rgba(143, 178, 215, 0.18);
+
+  /* ---- Glass shadows ---- */
+  --lg-shadow-sm: 0 1px 2px rgba(45, 109, 179, 0.06),
+                  0 2px 6px rgba(45, 109, 179, 0.08);
+  --lg-shadow-md: 0 2px 4px rgba(45, 109, 179, 0.08),
+                  0 8px 24px rgba(45, 109, 179, 0.12);
+  --lg-shadow-lg: 0 4px 8px rgba(45, 109, 179, 0.10),
+                  0 16px 48px rgba(45, 109, 179, 0.18);
+
+  /* Specular highlight for liquid glass top edge */
+  --lg-specular: inset 0 1px 0 rgba(255,255,255,0.65),
+                 inset 0 0 0 1px rgba(255,255,255,0.12);
+
+  --lg-radius-sm: 8px;
+  --lg-radius:    12px;
+  --lg-radius-lg: 18px;
+  --lg-radius-xl: 26px;
+
+  --lg-blur:      saturate(180%) blur(22px);
+  --lg-blur-soft: saturate(140%) blur(12px);
+}
+
+/* ==========================================================================
+   Application background — pastel radial gradient
+   ========================================================================== */
+:root[data-theme="liquid-glass"] body,
+:root[data-theme="liquid-glass"] #ctr {
+  background:
+    radial-gradient(1200px 800px at 12% 8%,  #ffffff 0%, transparent 55%),
+    radial-gradient(900px 700px at 100% 100%, var(--lg-bg-deep) 0%, transparent 60%),
+    linear-gradient(160deg, var(--lg-bg-near) 0%, var(--lg-bg-mid) 60%, var(--lg-bg-deep) 100%) !important;
+  background-attachment: fixed !important;
+  color: var(--lg-text) !important;
+  font-family: 'Manrope', system-ui, -apple-system, sans-serif !important;
+}
+
+:root[data-theme="liquid-glass"] {
+  --aq-page-gap-color: transparent;
+}
+
+/* ==========================================================================
+   Generic shell — top toolbar, sidebars, panels
+   ========================================================================== */
+:root[data-theme="liquid-glass"] #editor-shell,
+:root[data-theme="liquid-glass"] #editor-shell-top,
+:root[data-theme="liquid-glass"] #editor-shell-body,
+:root[data-theme="liquid-glass"] #aq-tiptap-shell {
+  background: transparent !important;
+  border: none !important;
+}
+
+:root[data-theme="liquid-glass"] #editor-shell-top,
+:root[data-theme="liquid-glass"] .aq-toolbar,
+:root[data-theme="liquid-glass"] [id*="toolbar"],
+:root[data-theme="liquid-glass"] [id*="Toolbar"],
+:root[data-theme="liquid-glass"] #etb,
+:root[data-theme="liquid-glass"] #lay {
+  background: var(--lg-surface) !important;
+  backdrop-filter: var(--lg-blur);
+  -webkit-backdrop-filter: var(--lg-blur);
+  border: 1px solid var(--lg-border) !important;
+  border-radius: var(--lg-radius-lg) !important;
+  box-shadow: var(--lg-shadow-sm), var(--lg-specular) !important;
+  color: var(--lg-text) !important;
+}
+
+/* Sidebars and panels */
+:root[data-theme="liquid-glass"] aside,
+:root[data-theme="liquid-glass"] [id$="sidebar"],
+:root[data-theme="liquid-glass"] [id$="Sidebar"],
+:root[data-theme="liquid-glass"] [id$="Panel"],
+:root[data-theme="liquid-glass"] [id$="panel"],
+:root[data-theme="liquid-glass"] [class*="sidebar"],
+:root[data-theme="liquid-glass"] [class*="Sidebar"],
+:root[data-theme="liquid-glass"] #ctxlabelpanel,
+:root[data-theme="liquid-glass"] #fn-panel,
+:root[data-theme="liquid-glass"] #findbar,
+:root[data-theme="liquid-glass"] #ctxmenu,
+:root[data-theme="liquid-glass"] #hltip,
+:root[data-theme="liquid-glass"] #aq-paste-popup,
+:root[data-theme="liquid-glass"] #aq-table-ctxbar {
+  background: var(--lg-surface-strong) !important;
+  backdrop-filter: var(--lg-blur);
+  -webkit-backdrop-filter: var(--lg-blur);
+  border: 1px solid var(--lg-border) !important;
+  border-radius: var(--lg-radius) !important;
+  box-shadow: var(--lg-shadow-md), var(--lg-specular) !important;
+  color: var(--lg-text) !important;
+}
+
+/* ==========================================================================
+   Liquid glass buttons — the signature element
+   ========================================================================== */
+:root[data-theme="liquid-glass"] button,
+:root[data-theme="liquid-glass"] .btn,
+:root[data-theme="liquid-glass"] .ddi,
+:root[data-theme="liquid-glass"] [role="button"]:not(.refe):not(.cit) {
+  position: relative;
+  background: linear-gradient(180deg,
+    rgba(255,255,255,0.70) 0%,
+    rgba(255,255,255,0.45) 50%,
+    rgba(213, 230, 247, 0.50) 100%) !important;
+  backdrop-filter: var(--lg-blur-soft);
+  -webkit-backdrop-filter: var(--lg-blur-soft);
+  border: 1px solid var(--lg-border-strong) !important;
+  border-radius: var(--lg-radius) !important;
+  color: var(--lg-text) !important;
+  padding: 6px 14px;
+  font: 500 13px/1.2 'Manrope', system-ui, sans-serif !important;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow:
+    0 1px 1px rgba(45, 109, 179, 0.05),
+    0 2px 6px rgba(45, 109, 179, 0.08),
+    inset 0 1px 0 rgba(255,255,255,0.85),
+    inset 0 -1px 0 rgba(255,255,255,0.20);
+  transition: transform 120ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+/* Specular highlight on top of every button */
+:root[data-theme="liquid-glass"] button::before,
+:root[data-theme="liquid-glass"] .btn::before {
+  content: "";
+  position: absolute;
+  top: 1px; left: 8%; right: 8%;
+  height: 35%;
+  border-radius: var(--lg-radius) var(--lg-radius) 60% 60%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0));
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+:root[data-theme="liquid-glass"] button:hover,
+:root[data-theme="liquid-glass"] .btn:hover,
+:root[data-theme="liquid-glass"] .ddi:hover {
+  background: linear-gradient(180deg,
+    rgba(255,255,255,0.85) 0%,
+    rgba(232, 244, 255, 0.65) 50%,
+    rgba(168, 200, 240, 0.55) 100%) !important;
+  box-shadow:
+    0 2px 4px rgba(45, 109, 179, 0.10),
+    0 8px 22px rgba(45, 109, 179, 0.18),
+    inset 0 1px 0 rgba(255,255,255,0.9),
+    inset 0 0 0 1px rgba(94,163,230,0.18) !important;
+  transform: translateY(-0.5px);
+}
+
+:root[data-theme="liquid-glass"] button:active,
+:root[data-theme="liquid-glass"] .btn:active {
+  transform: translateY(0.5px);
+  box-shadow:
+    0 1px 2px rgba(45, 109, 179, 0.12),
+    inset 0 1px 0 rgba(255,255,255,0.4),
+    inset 0 0 0 1px rgba(94,163,230,0.30) !important;
+}
+
+:root[data-theme="liquid-glass"] button.active,
+:root[data-theme="liquid-glass"] button[aria-pressed="true"],
+:root[data-theme="liquid-glass"] .btn.active {
+  background: linear-gradient(180deg, var(--lg-accent-soft), var(--lg-accent)) !important;
+  color: #ffffff !important;
+  border-color: var(--lg-accent-deep) !important;
+  box-shadow:
+    0 2px 4px rgba(45, 109, 179, 0.20),
+    0 6px 14px rgba(45, 109, 179, 0.28),
+    inset 0 1px 0 rgba(255,255,255,0.45) !important;
+}
+
+:root[data-theme="liquid-glass"] button:disabled,
+:root[data-theme="liquid-glass"] .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: saturate(0.6);
+}
+
+/* ==========================================================================
+   Form controls — inputs, selects, textareas
+   ========================================================================== */
+:root[data-theme="liquid-glass"] input[type="text"],
+:root[data-theme="liquid-glass"] input[type="search"],
+:root[data-theme="liquid-glass"] input[type="number"],
+:root[data-theme="liquid-glass"] input[type="email"],
+:root[data-theme="liquid-glass"] input[type="url"],
+:root[data-theme="liquid-glass"] input[type="password"],
+:root[data-theme="liquid-glass"] textarea,
+:root[data-theme="liquid-glass"] select {
+  background: rgba(255,255,255,0.65) !important;
+  backdrop-filter: var(--lg-blur-soft);
+  -webkit-backdrop-filter: var(--lg-blur-soft);
+  border: 1px solid var(--lg-border) !important;
+  border-radius: var(--lg-radius-sm) !important;
+  color: var(--lg-text) !important;
+  padding: 6px 10px;
+  font: 400 13px/1.4 'Manrope', system-ui, sans-serif !important;
+  box-shadow:
+    inset 0 1px 2px rgba(45, 109, 179, 0.06),
+    0 1px 0 rgba(255,255,255,0.5);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+:root[data-theme="liquid-glass"] input:focus,
+:root[data-theme="liquid-glass"] textarea:focus,
+:root[data-theme="liquid-glass"] select:focus {
+  outline: none !important;
+  border-color: var(--lg-accent) !important;
+  box-shadow:
+    0 0 0 3px rgba(94, 163, 230, 0.25),
+    inset 0 1px 2px rgba(45, 109, 179, 0.08) !important;
+}
+
+/* ==========================================================================
+   Editor page sheets — keep crisp white but soften shadow + corner
+   ========================================================================== */
+:root[data-theme="liquid-glass"] .aq-page-sheet,
+:root[data-theme="liquid-glass"] #apapage,
+:root[data-theme="liquid-glass"] #bibpage,
+:root[data-theme="liquid-glass"] #coverpage {
+  background: #ffffff !important;
+  border-radius: var(--lg-radius) !important;
+  box-shadow:
+    0 1px 2px rgba(45, 109, 179, 0.06),
+    0 12px 36px rgba(45, 109, 179, 0.14) !important;
+  border: 1px solid rgba(143, 178, 215, 0.18) !important;
+}
+
+/* ==========================================================================
+   Document tabs
+   ========================================================================== */
+:root[data-theme="liquid-glass"] #doctabs {
+  background: transparent !important;
+  border: none !important;
+  padding: 4px 6px !important;
+  gap: 4px !important;
+}
+
+:root[data-theme="liquid-glass"] #doctabs > * {
+  background: var(--lg-surface) !important;
+  backdrop-filter: var(--lg-blur-soft);
+  -webkit-backdrop-filter: var(--lg-blur-soft);
+  border: 1px solid var(--lg-border) !important;
+  border-radius: var(--lg-radius-sm) var(--lg-radius-sm) 0 0 !important;
+  color: var(--lg-text-muted) !important;
+  box-shadow: var(--lg-specular);
+}
+
+:root[data-theme="liquid-glass"] #doctabs > .active,
+:root[data-theme="liquid-glass"] #doctabs > [aria-selected="true"] {
+  background: var(--lg-surface-strong) !important;
+  color: var(--lg-text) !important;
+  border-color: var(--lg-border-strong) !important;
+}
+
+/* ==========================================================================
+   Modals
+   ========================================================================== */
+:root[data-theme="liquid-glass"] [class*="modal"],
+:root[data-theme="liquid-glass"] [id*="Modal"],
+:root[data-theme="liquid-glass"] [id*="modal"] {
+  background: var(--lg-surface-strong) !important;
+  backdrop-filter: var(--lg-blur);
+  -webkit-backdrop-filter: var(--lg-blur);
+  border: 1px solid var(--lg-border) !important;
+  border-radius: var(--lg-radius-lg) !important;
+  box-shadow: var(--lg-shadow-lg), var(--lg-specular) !important;
+  color: var(--lg-text) !important;
+}
+
+/* ==========================================================================
+   Status chips, badges, small surfaces
+   ========================================================================== */
+:root[data-theme="liquid-glass"] #aqLeanStatus,
+:root[data-theme="liquid-glass"] #aqStatusPages,
+:root[data-theme="liquid-glass"] #aqStatusWords,
+:root[data-theme="liquid-glass"] #dst {
+  background: var(--lg-surface-soft) !important;
+  border: 1px solid var(--lg-border) !important;
+  border-radius: 999px !important;
+  padding: 4px 10px;
+  color: var(--lg-text-muted) !important;
+  font-weight: 500;
+}
+
+/* ==========================================================================
+   Scrollbars
+   ========================================================================== */
+:root[data-theme="liquid-glass"] ::-webkit-scrollbar { width: 10px; height: 10px; }
+:root[data-theme="liquid-glass"] ::-webkit-scrollbar-track { background: transparent; }
+:root[data-theme="liquid-glass"] ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(168,200,240,0.55), rgba(94,163,230,0.55));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+:root[data-theme="liquid-glass"] ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(94,163,230,0.75), rgba(45,109,179,0.65));
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+/* ==========================================================================
+   Dropdown menus
+   ========================================================================== */
+:root[data-theme="liquid-glass"] .dd,
+:root[data-theme="liquid-glass"] [class*="dropdown"],
+:root[data-theme="liquid-glass"] [class*="Dropdown"] {
+  background: var(--lg-surface-strong) !important;
+  backdrop-filter: var(--lg-blur);
+  -webkit-backdrop-filter: var(--lg-blur);
+  border: 1px solid var(--lg-border) !important;
+  border-radius: var(--lg-radius) !important;
+  box-shadow: var(--lg-shadow-md), var(--lg-specular) !important;
+  color: var(--lg-text) !important;
+  padding: 6px !important;
+}
+
+:root[data-theme="liquid-glass"] .ddi {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--lg-radius-sm) !important;
+  padding: 6px 10px !important;
+  text-align: left !important;
+  font-weight: 500;
+}
+
+:root[data-theme="liquid-glass"] .ddi:hover {
+  background: var(--lg-tint) !important;
+  border-color: var(--lg-border) !important;
+}
+
+:root[data-theme="liquid-glass"] .ddi::before { display: none !important; }
+
+/* ==========================================================================
+   Links + accent text
+   ========================================================================== */
+:root[data-theme="liquid-glass"] a {
+  color: var(--lg-accent-deep) !important;
+  text-decoration-color: var(--lg-accent-soft) !important;
+  text-underline-offset: 2px;
+}
+:root[data-theme="liquid-glass"] a:hover { color: var(--lg-accent) !important; }
+
+/* ==========================================================================
+   Typography polish
+   ========================================================================== */
+:root[data-theme="liquid-glass"] h1,
+:root[data-theme="liquid-glass"] h2,
+:root[data-theme="liquid-glass"] h3,
+:root[data-theme="liquid-glass"] h4,
+:root[data-theme="liquid-glass"] h5 {
+  letter-spacing: -0.01em;
+  color: var(--lg-text) !important;
+}
+
+/* Soften context highlighter */
+:root[data-theme="liquid-glass"] #hlbar {
+  background: linear-gradient(90deg, transparent, var(--lg-tint), transparent) !important;
+  border: none !important;
+}
