@@ -26,31 +26,39 @@
 <link href="./vendor/pdf_viewer.css" rel="stylesheet"/>
 <link href="./src/themes/liquid-glass.css" rel="stylesheet"/>
 <script>
-  // Liquid-glass theme toggle (experimental).
+  // Liquid-glass skin toggle (experimental).
+  // Uses data-aq-skin (NOT data-theme — the legacy dark-theme killer in
+  // academiq-research.html resets data-theme on every load, so we use a
+  // dedicated attribute that the legacy code does not touch).
   // Persisted in localStorage so the choice survives reloads.
-  // Toggle via:  document.documentElement.dataset.theme = 'liquid-glass' | 'classic'
-  // or call:     window.aqToggleTheme()
+  // Toggle via window.aqToggleSkin().
   (function(){
-    try {
-      var stored = localStorage.getItem('aqTheme');
-      if (stored === 'liquid-glass' || stored === 'classic') {
-        document.documentElement.dataset.theme = stored;
-      } else {
-        // Default to liquid-glass on this experimental branch.
-        document.documentElement.dataset.theme = 'liquid-glass';
+    function applySkin(skin){
+      document.documentElement.setAttribute('data-aq-skin', skin);
+      // Re-apply on DOMContentLoaded too in case any other script clobbers it.
+      var reapply = function(){ document.documentElement.setAttribute('data-aq-skin', skin); };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', reapply, { once: true });
       }
-    } catch(_e) {
-      document.documentElement.dataset.theme = 'liquid-glass';
+      // Final guard once the legacy bootstrap has run.
+      setTimeout(reapply, 0);
+      setTimeout(reapply, 200);
     }
-    window.aqToggleTheme = function(value){
+    var stored = '';
+    try { stored = localStorage.getItem('aqSkin') || ''; } catch(_e) {}
+    var initial = (stored === 'classic') ? 'classic' : 'liquid-glass';
+    applySkin(initial);
+    window.aqToggleSkin = function(value){
       var next = value;
       if (next !== 'liquid-glass' && next !== 'classic') {
-        next = (document.documentElement.dataset.theme === 'liquid-glass') ? 'classic' : 'liquid-glass';
+        next = (document.documentElement.getAttribute('data-aq-skin') === 'liquid-glass') ? 'classic' : 'liquid-glass';
       }
-      document.documentElement.dataset.theme = next;
-      try { localStorage.setItem('aqTheme', next); } catch(_e) {}
+      applySkin(next);
+      try { localStorage.setItem('aqSkin', next); } catch(_e) {}
       return next;
     };
+    // Backwards-compat alias
+    window.aqToggleTheme = window.aqToggleSkin;
   })();
 </script>
 <style>
