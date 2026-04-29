@@ -7446,6 +7446,7 @@ function getCompositeExportBodyHTML(){
   var doc=ensureDocAuxFields(getCurrentDocRecord());
   var coverHTML=doc?sanitizeAuxPageHTML(String(doc.coverHTML||'')):'';
   var tocHTML=doc?sanitizeAuxPageHTML(String(doc.tocHTML||'')):'';
+  var appendicesHTML=doc?sanitizeAuxPageHTML(String(doc.appendicesHTML||'')):'';
   var bibBody=document.getElementById('bibbody');
   var bibSource=doc&&String(doc.bibliographyHTML||'').trim()
     ? String(doc.bibliographyHTML||'')
@@ -7453,11 +7454,13 @@ function getCompositeExportBodyHTML(){
   var bibHTML=sanitizeAuxPageHTML(bibSource);
   var contentHTML=applyLineSpacingForExportHTML(edHTML,lineSpacing);
   var bibliographyHTML=applyLineSpacingForExportHTML(bibHTML,lineSpacing);
+  var appendixExportHTML=applyLineSpacingForExportHTML(appendicesHTML,lineSpacing);
   var sections=[];
   if(coverHTML)sections.push('<section class="aq-export-cover aq-export-page">'+coverHTML+'</section>');
   if(tocHTML)sections.push('<section class="aq-export-toc aq-export-page aq-export-page-break-before">'+tocHTML+'</section>');
   sections.push('<section class="aq-export-main aq-export-page'+(sections.length?' aq-export-page-break-before':'')+'">'+contentHTML+'</section>');
   if(bibliographyHTML)sections.push('<section class="aq-export-bib aq-export-page aq-export-page-break-before">'+bibliographyHTML+'</section>');
+  if(appendixExportHTML)sections.push('<section class="aq-export-appendices aq-export-page aq-export-page-break-before">'+appendixExportHTML+'</section>');
   return '<div class="aq-export-composite" style="--aq-line-spacing:'+lineSpacing+'">'+sections.join('')+'</div>';
 }
 function refreshExportAuxSections(){

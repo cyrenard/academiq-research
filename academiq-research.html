@@ -7611,6 +7611,11 @@ a.cross-ref.cross-ref-missing{color:#a04747;text-decoration-color:rgba(160,71,71
 #appendixbody p{margin:0;text-indent:.5in;line-height:24pt;}
 #appendixbody p.ni,#appendixbody p.indent-none{margin:0;text-indent:0;line-height:24pt;}
 #appendixbody .appendix-title:not(:first-child){break-before:page;page-break-before:always;}
+#appendixbody .appendix-block{position:relative;display:block;}
+#appendixbody .appendix-block:not(:first-child){break-before:page;page-break-before:always;}
+#appendixbody .appendix-remove-btn{position:absolute;top:2px;right:0;z-index:3;border:1px solid rgba(178,88,88,.55);background:rgba(255,255,255,.96);color:#8f2e2e;border-radius:999px;padding:2px 10px;font-family:var(--fm);font-size:10px;line-height:1.2;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .16s ease,border-color .16s ease,color .16s ease,background .16s ease;}
+#appendixbody .appendix-block:hover .appendix-remove-btn,#appendixbody .appendix-block:focus-within .appendix-remove-btn{opacity:1;pointer-events:auto;}
+#appendixbody .appendix-remove-btn:hover{border-color:rgba(178,88,88,.8);color:#7a1f1f;background:#fff;}
 #tocbody .toc-container{margin:0;}
 /* Page break overlay — visual gap between pages */
  .page-break-overlay{position:absolute;left:0;width:100%;z-index:40;pointer-events:none;cursor:default;background:var(--aq-page-gap-color);box-shadow:inset 0 8px 14px -10px rgba(22,33,40,.14),inset 0 -8px 14px -10px rgba(22,33,40,.14);}
@@ -7630,6 +7635,7 @@ a.cross-ref.cross-ref-missing{color:#a04747;text-decoration-color:rgba(160,71,71
   #lay,#ctr,#escroll{overflow:visible!important;display:block!important;height:auto!important;}
 #apapage{box-shadow:none;margin:0;padding:2.54cm;width:auto;min-height:auto;overflow:visible;}
   #apaed{min-height:auto;}
+  #appendixbody .appendix-remove-btn{display:none!important;}
   @page{size:A4;margin:0;}
 }
 #aq-tiptap-content:empty::before{content:'Yazmaya başlayın. Atıf için /r veya /t yazın...';color:#bbb;font-style:italic;pointer-events:none;}
@@ -23316,7 +23322,80 @@ function getNextAppendixIndex(html){
 function buildAppendixHTML(index){
   var safeIndex=Math.max(1,parseInt(index,10)||1);
   return '<h1 class="appendix-title" data-appendix-index="'+safeIndex+'">EK-'+safeIndex+'</h1>'
-    + '<p class="ni"><br></p>'
+    + '<p class="ni"><br></p>';
+}
+function createAppendixRemoveButton(){
+  var btn=document.createElement('button');
+  btn.className='appendix-remove-btn';
+  btn.type='button';
+  btn.setAttribute('data-appendix-remove','1');
+  btn.setAttribute('data-editor-only','true');
+  btn.setAttribute('contenteditable','false');
+  btn.title='Bu eki sil';
+  btn.textContent='Eki Sil';
+  return btn;
+}
+function unwrapAppendixBlocks(container){
+  if(!container)return;
+  container.querySelectorAll('.appendix-block').forEach(function(block){
+    if(!block||!block.parentNode)return;
+    while(block.firstChild){
+      block.parentNode.insertBefore(block.firstChild,block);
+    }
+    block.remove();
+  });
+}
+function normalizeAppendixSurface(appendixBody){
+  if(!appendixBody)return;
+  appendixBody.querySelectorAll('.appendix-remove-btn').forEach(function(btn){btn.remove();});
+  unwrapAppendixBlocks(appendixBody);
+  var nodes=Array.from(appendixBody.childNodes||[]);
+  var blocks=[];
+  var current=null;
+  nodes.forEach(function(node){
+    var el=node&&node.nodeType===1?node:null;
+    var isTitle=!!(el&&((el.classList&&el.classList.contains('appendix-title'))||el.hasAttribute('data-appendix-index')));
+    if(isTitle||!current){
+      if(!isTitle&&node.nodeType===3&&!String(node.textContent||'').trim())return;
+      current=document.createElement('section');
+      current.className='appendix-block';
+      blocks.push(current);
+      if(!isTitle){
+        var fallbackTitle=document.createElement('h1');
+        fallbackTitle.className='appendix-title';
+        fallbackTitle.textContent='EK-1';
+        current.appendChild(fallbackTitle);
+      }
+    }
+    current.appendChild(node);
+  });
+  appendixBody.innerHTML='';
+  blocks.forEach(function(block,idx){
+    var n=idx+1;
+    var title=block.querySelector('.appendix-title,[data-appendix-index]');
+    if(!title){
+      title=document.createElement('h1');
+      title.className='appendix-title';
+      block.insertBefore(title,block.firstChild||null);
+    }else if(!title.classList.contains('appendix-title')){
+      title.classList.add('appendix-title');
+    }
+    title.setAttribute('data-appendix-index',String(n));
+    title.textContent='EK-'+n;
+    var removeBtn=createAppendixRemoveButton();
+    title.insertAdjacentElement('afterend',removeBtn);
+    block.setAttribute('data-appendix-index',String(n));
+    appendixBody.appendChild(block);
+  });
+  if(blocks.length){
+    var hasContent=blocks[blocks.length-1].querySelector('p,div,table,blockquote,ul,ol,figure');
+    if(!hasContent){
+      var p=document.createElement('p');
+      p.className='ni';
+      p.innerHTML='<br>';
+      blocks[blocks.length-1].appendChild(p);
+    }
+  }
 }
 function bindAppendixSurface(){
   var appendixBody=document.getElementById('appendixbody');
@@ -23328,8 +23407,38 @@ function bindAppendixSurface(){
     var doc=getCurrentDocRecord();
     if(!doc)return;
     doc.appendicesHTML=sanitizeAuxPageHTML(appendixBody.innerHTML);
+    var appendixPage=document.getElementById('appendixpage');
+    if(appendixPage)appendixPage.style.display=doc.appendicesHTML?'block':'none';
     save();
     if(typeof updatePageHeight==='function')updatePageHeight();
+  });
+  appendixBody.addEventListener('click',function(event){
+    var target=event&&event.target&&event.target.closest?event.target.closest('[data-appendix-remove]'):null;
+    if(!target)return;
+    if(event&&typeof event.preventDefault==='function')event.preventDefault();
+    if(event&&typeof event.stopPropagation==='function')event.stopPropagation();
+    var block=target.closest('.appendix-block');
+    if(!block||!block.parentNode)return;
+    block.remove();
+    normalizeAppendixSurface(appendixBody);
+    var doc=getCurrentDocRecord();
+    if(!doc)return;
+    doc.appendicesHTML=sanitizeAuxPageHTML(appendixBody.innerHTML);
+    var appendixPage=document.getElementById('appendixpage');
+    if(appendixPage)appendixPage.style.display=doc.appendicesHTML?'block':'none';
+    save();
+    try{ if(typeof saveEditorDraftNow==='function') saveEditorDraftNow(); }catch(_e){}
+    try{ if(typeof syncSave==='function') syncSave(); }catch(_e){}
+    if(typeof updatePageHeight==='function')updatePageHeight();
+  });
+  appendixBody.addEventListener('blur',function(){
+    var doc=getCurrentDocRecord();
+    if(!doc)return;
+    doc.appendicesHTML=sanitizeAuxPageHTML(appendixBody.innerHTML);
+    var appendixPage=document.getElementById('appendixpage');
+    if(appendixPage)appendixPage.style.display=doc.appendicesHTML?'block':'none';
+    try{ if(typeof saveEditorDraftNow==='function') saveEditorDraftNow(); }catch(_e){}
+    try{ if(typeof syncSave==='function') syncSave(); }catch(_e){}
   });
 }
 function syncAppendicesPage(){
@@ -23338,7 +23447,8 @@ function syncAppendicesPage(){
   var appendixBody=document.getElementById('appendixbody');
   var appendicesHTML=doc?String(doc.appendicesHTML||'').trim():'';
   bindAppendixSurface();
-  if(appendixBody&&appendixBody.innerHTML!==appendicesHTML)appendixBody.innerHTML=appendicesHTML;
+  if(appendixBody&&sanitizeAuxPageHTML(appendixBody.innerHTML)!==appendicesHTML)appendixBody.innerHTML=appendicesHTML;
+  if(appendixBody)normalizeAppendixSurface(appendixBody);
   if(appendixPage)appendixPage.style.display=appendicesHTML?'block':'none';
   if(appendicesHTML&&appendixPage&&appendixBody&&window.AQTipTapWordLayout&&typeof window.AQTipTapWordLayout.syncPageMetrics==='function'){
     setTimeout(function(){
@@ -23361,10 +23471,12 @@ function insAppendix(){
   doc.appendicesHTML=sanitizeAuxPageHTML((current?current:'')+buildAppendixHTML(nextIndex));
   syncAppendicesPage();
   save();
+  try{ if(typeof saveEditorDraftNow==='function') saveEditorDraftNow(); }catch(_e){}
+  try{ if(typeof syncSave==='function') syncSave(); }catch(_e){}
   if(typeof updatePageHeight==='function')updatePageHeight();
   var appendixBody=document.getElementById('appendixbody');
   var target=appendixBody?appendixBody.querySelector('.appendix-title[data-appendix-index="'+nextIndex+'"]'):null;
-  var focusTarget=target&&target.nextElementSibling?target.nextElementSibling:null;
+  var focusTarget=target&&target.parentElement?target.parentElement.querySelector('p,div,table,blockquote,ul,ol,figure'):null;
   if(target&&typeof target.scrollIntoView==='function'){
     setTimeout(function(){target.scrollIntoView({behavior:'smooth',block:'start'});},0);
   }
@@ -23375,6 +23487,14 @@ function insAppendix(){
 function sanitizeAuxPageHTML(html){
   var holder=document.createElement('div');
   holder.innerHTML=String(html||'');
+  holder.querySelectorAll('[data-editor-only="true"],.appendix-remove-btn').forEach(function(node){node.remove();});
+  holder.querySelectorAll('.appendix-block').forEach(function(block){
+    if(!block||!block.parentNode)return;
+    while(block.firstChild){
+      block.parentNode.insertBefore(block.firstChild,block);
+    }
+    block.remove();
+  });
   holder.querySelectorAll('script,iframe,object,embed,base,meta[http-equiv]').forEach(function(node){node.remove();});
   holder.querySelectorAll('*').forEach(function(node){
     Array.from(node.attributes||[]).forEach(function(attr){
