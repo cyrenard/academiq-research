@@ -1161,6 +1161,7 @@
       T.StarterKit.configure({
         paragraph:false,
         heading:false,
+        underline:false,
         // Keep a deeper history stack so long writing sessions do not lose undo granularity.
         history:{ depth:500, newGroupDelay:500 }
       }),

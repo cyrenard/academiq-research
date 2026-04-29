@@ -91,20 +91,59 @@ test('normalizeWordHtml preserves ordered list style for lower-roman markers in 
   assert.match(html, /<li>Besinci oge<\/li>/);
 });
 
-test('normalizeWordHtml preserves safe Word paragraph and run styles', () => {
+test('normalizeWordHtml keeps inline text styling but strips Word layout styles from blocks', () => {
   const html = io.normalizeWordHtml(
     '<p class="MsoNormal" style="text-align:center;margin-left:36pt;text-indent:-18pt;mso-style-name:Normal">Baslik</p>' +
-    '<p><span style="font-family:Aptos Display;font-size:16pt;color:#0F4761;background-color:#FFFF00;font-weight:bold">Vurgulu</span></p>'
+    '<p><span style="font-family:Aptos Display;font-size:16pt;color:#0F4761;background-color:#FFFF00;font-weight:bold;height:200%;position:absolute">Vurgulu</span></p>'
   );
   assert.match(html, /text-align:center/);
-  assert.match(html, /margin-left:36pt/);
-  assert.match(html, /text-indent:-18pt/);
+  assert.equal(/margin-left:36pt|text-indent:-18pt|position:absolute|height:200/i.test(html), false);
   assert.match(html, /font-family:Aptos Display/);
   assert.match(html, /font-size:16pt/);
   assert.match(html, /color:#0F4761/i);
   assert.match(html, /background-color:#FFFF00/i);
   assert.match(html, /font-weight:bold/);
   assert.equal(/mso-style-name|MsoNormal/i.test(html), false);
+});
+
+test('normalizeWordHtml strips page-breaking Word geometry that can cover the editor', () => {
+  const html = io.normalizeWordHtml(
+    '<p style="line-height:200%;margin-top:72pt;margin-bottom:72pt;width:21cm;height:29.7cm;position:absolute;z-index:9999">Metin</p>' +
+    '<div style="position:fixed;top:0;left:0;height:100%;width:100%">Kaplama</div>'
+  );
+  assert.match(html, /Metin/);
+  assert.equal(/line-height:200|margin-top|margin-bottom|width:21cm|height:29\.7cm|position:absolute|position:fixed|z-index/i.test(html), false);
+});
+
+test('normalizeWordHtml unwraps full Word HTML documents to editor body content', () => {
+  const html = io.normalizeWordHtml(
+    '<html><head><style>p{line-height:200%;height:24pt}</style></head>' +
+    '<body lang="TR"><div class="WordSection1"><div><p>Metin</p></div></div></body></html>'
+  );
+  assert.match(html, /<p>Metin<\/p>/);
+  assert.equal(/^\s*<div\b|<html|<head|<body|WordSection1|line-height|height:/i.test(html), false);
+});
+
+test('normalizeWordHtml drops malformed empty Word span fragments from COM import', () => {
+  const html = io.normalizeWordHtml(
+    '<html><head><style>@page WordSection1{margin:72pt}</style></head>' +
+    '<body><div class=WordSection1><p><spanTahoma",sans-serif;color:black">\uFEFF</span></p><p>Gercek metin</p></div></body></html>'
+  );
+  assert.match(html, /Gercek metin/);
+  assert.equal(/spanTahoma|WordSection|<html|<body|@page/i.test(html), false);
+});
+
+test('normalizeWordHtml makes Word font-family styles attribute safe', () => {
+  const html = io.normalizeWordHtml('<p><span style=\'font-family:"Tahoma",sans-serif;color:black\'>Metin</span></p>');
+  assert.match(html, /Metin/);
+  assert.equal(/font-family:"Tahoma"|spanTahoma/i.test(html), false);
+  assert.match(html, /font-family:Tahoma, sans-serif/);
+});
+
+test('normalizeWordHtml drops empty BOM-only Word paragraphs', () => {
+  const html = io.normalizeWordHtml('<p><span style="font-family:Tahoma;color:black">\uFEFF</span></p><p>Metin</p>');
+  assert.match(html, /<p>Metin<\/p>/);
+  assert.equal(/font-family:Tahoma;color:black">\uFEFF/i.test(html), false);
 });
 
 test('normalizeWordHtml drops Word VML shape artifacts without leaking textbox text', () => {

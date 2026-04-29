@@ -47,6 +47,48 @@
     return /^10\.\d{4,9}\//i.test(doi) ? doi : '';
   }
 
+  function isValidIsbn10(value){
+    var isbn = String(value || '').toUpperCase();
+    if(!/^\d{9}[\dX]$/.test(isbn)) return false;
+    var sum = 0;
+    for(var i = 0; i < 9; i += 1) sum += (10 - i) * Number(isbn[i]);
+    sum += isbn[9] === 'X' ? 10 : Number(isbn[9]);
+    return sum % 11 === 0;
+  }
+
+  function isValidIsbn13(value){
+    var isbn = String(value || '');
+    if(!/^\d{13}$/.test(isbn)) return false;
+    var sum = 0;
+    for(var i = 0; i < 12; i += 1) sum += Number(isbn[i]) * (i % 2 ? 3 : 1);
+    var check = (10 - (sum % 10)) % 10;
+    return check === Number(isbn[12]);
+  }
+
+  function normalizeIsbn(value){
+    var raw = safeDecodeURIComponent(asText(value, 4096))
+      .replace(/[\u200B-\u200D\uFEFF]/g, ' ')
+      .replace(/\b(?:urn:)?isbn(?:-1[03])?\b/ig, ' ');
+    if(!raw) return '';
+    var candidates = [];
+    var explicit = /\bISBN(?:-1[03])?\s*(?::|=)?\s*([0-9Xx][0-9Xx\-\s]{8,28}[0-9Xx])\b/ig;
+    var match;
+    while((match = explicit.exec(String(value || ''))) && candidates.length < 16){
+      candidates.push(match[1]);
+    }
+    var generic = /[0-9Xx][0-9Xx\-\s]{8,28}[0-9Xx]/g;
+    while((match = generic.exec(raw)) && candidates.length < 32){
+      candidates.push(match[0]);
+    }
+    for(var i = 0; i < candidates.length; i += 1){
+      var isbn = String(candidates[i] || '').toUpperCase().replace(/[^0-9X]/g, '');
+      if((isbn.length === 10 && isValidIsbn10(isbn)) || (isbn.length === 13 && isValidIsbn13(isbn))){
+        return isbn;
+      }
+    }
+    return '';
+  }
+
   function normalizeUrl(value){
     var raw = asText(value, 4096);
     if(!/^https?:\/\//i.test(raw)) return '';
@@ -63,6 +105,10 @@
     var hay = safeDecodeURIComponent(String(text || ''));
     var match = hay.match(/10\.\d{4,9}\/[-._;()/:A-Z0-9]+/i);
     return normalizeDoi(match && match[0] ? match[0] : '');
+  }
+
+  function findIsbnInText(text){
+    return normalizeIsbn(text);
   }
 
   function findMetaContent(metaEntries, names){
@@ -116,6 +162,8 @@
     if(source === 'embed_src') return 'gomme kaynak';
     if(source === 'og_meta') return 'Open Graph meta';
     if(source === 'dc_meta') return 'Dublin Core meta';
+    if(source === 'isbn_url') return 'ISBN URL';
+    if(source === 'isbn_lookup') return 'ISBN metadata';
     if(source === 'dom') return 'sayfa alani';
     return 'algilanamadi';
   }
@@ -309,6 +357,42 @@
     return out.filter(Boolean);
   }
 
+  function scoreBodyIsbnContext(snippet, index){
+    var score = 105;
+    var lower = String(snippet || '').toLowerCase();
+    if(/isbn|book|edition|publisher|press|yayinevi|kitap/.test(lower)) score += 55;
+    if(/references|bibliography|kaynakca|cited by/.test(lower)) score -= 20;
+    if(index < 8000) score += 10;
+    return score;
+  }
+
+  function collectBodyIsbnCandidates(bodyText){
+    var text = String(bodyText || '');
+    if(!text) return [];
+    // Body scanning intentionally requires an ISBN label to avoid treating
+    // unrelated product/order numbers as books.
+    var regex = /\bISBN(?:-1[03])?\s*(?::|=)?\s*([0-9Xx][0-9Xx\-\s]{8,28}[0-9Xx])\b/ig;
+    var match;
+    var out = [];
+    var seen = {};
+    while((match = regex.exec(text)) && out.length < 12){
+      var isbn = normalizeIsbn(match[0]);
+      if(!isbn || seen[isbn]) continue;
+      seen[isbn] = true;
+      var start = Math.max(0, match.index - 90);
+      var end = Math.min(text.length, match.index + String(match[0] || '').length + 90);
+      var snippet = text.slice(start, end).replace(/\s+/g, ' ').trim();
+      out.push(buildCandidate(isbn, {
+        source: 'body_text',
+        sourceField: 'isbn_label',
+        score: scoreBodyIsbnContext(snippet, match.index),
+        context: snippet,
+        normalizer: normalizeIsbn
+      }));
+    }
+    return out.filter(Boolean);
+  }
+
   function dedupeCandidates(candidates, normalizer){
     var map = {};
     (Array.isArray(candidates) ? candidates : []).forEach(function(item){
@@ -423,6 +507,77 @@
 
     collectBodyDoiCandidates(bodyText).forEach(function(item){ candidates.push(item); });
     return resolveBestCandidate(candidates, normalizeDoi);
+  }
+
+  function extractIsbnCandidates(input){
+    var source = input && typeof input === 'object' ? input : {};
+    var metaEntries = Array.isArray(source.metaEntries) ? source.metaEntries : [];
+    var bodyText = String(source.bodyText || '');
+    var pageUrl = String(source.pageUrl || '');
+    var canonicalUrl = String(source.canonicalUrl || '');
+    var jsonLdNodes = parseJsonLdBlocks(source.jsonLdTexts);
+    var candidates = [];
+
+    var metaFields = [
+      { names: ['citation_isbn', 'book:isbn', 'isbn'], source: 'citation_meta', score: 345 },
+      { names: ['dc.identifier.isbn', 'dc.identifier', 'prism.isbn', 'rft.isbn'], source: 'dc_meta', score: 310 }
+    ];
+    metaFields.forEach(function(field){
+      var entries = findMetaContents(metaEntries, field.names);
+      entries.forEach(function(content){
+        var isbn = normalizeIsbn(content);
+        if(isbn){
+          candidates.push(buildCandidate(isbn, {
+            source: field.source,
+            sourceField: field.names[0],
+            score: field.score,
+            normalizer: normalizeIsbn
+          }));
+        }
+      });
+    });
+
+    jsonLdNodes.forEach(function(node){
+      var typeName = asText(node && node['@type'], 128);
+      var isBookNode = /book/i.test(typeName);
+      [node && node.isbn, node && node.gtin13].forEach(function(value){
+        var isbn = normalizeIsbn(value);
+        if(isbn){
+          candidates.push(buildCandidate(isbn, {
+            source: 'jsonld',
+            sourceField: typeName || 'jsonld.isbn',
+            score: isBookNode ? 335 : 270,
+            normalizer: normalizeIsbn
+          }));
+        }
+      });
+      var identifiers = Array.isArray(node && node.identifier) ? node.identifier : [node && node.identifier];
+      identifiers.forEach(function(identifier){
+        var property = identifier && typeof identifier === 'object' ? String(identifier.propertyID || identifier.name || '').toLowerCase() : '';
+        var value = normalizeJsonLdValue(identifier);
+        var isbn = normalizeIsbn(value);
+        if(isbn && (isBookNode || /isbn/.test(property) || String(value || '').toLowerCase().indexOf('isbn') >= 0)){
+          candidates.push(buildCandidate(isbn, {
+            source: 'jsonld',
+            sourceField: property || typeName || 'jsonld.identifier',
+            score: isBookNode ? 330 : 285,
+            normalizer: normalizeIsbn
+          }));
+        }
+      });
+    });
+
+    [
+      { value: normalizeIsbn(pageUrl), source: 'isbn_url', sourceField: 'current_url', score: /\/isbn\//i.test(pageUrl) ? 260 : 150 },
+      { value: normalizeIsbn(canonicalUrl), source: 'canonical_url', sourceField: 'canonical_url', score: /\/isbn\//i.test(canonicalUrl) ? 250 : 140 }
+    ].forEach(function(item){
+      if(item.value){
+        candidates.push(buildCandidate(item.value, Object.assign({}, item, { normalizer: normalizeIsbn })));
+      }
+    });
+
+    collectBodyIsbnCandidates(bodyText).forEach(function(item){ candidates.push(item); });
+    return resolveBestCandidate(candidates, normalizeIsbn);
   }
 
   function extractPdfCandidates(input){
@@ -783,6 +938,7 @@
   function detectPageMetadata(input){
     var title = extractTitleDetection(input);
     var doi = extractDoiCandidates(input);
+    var isbn = extractIsbnCandidates(input);
     var pdfUrl = extractPdfCandidates(Object.assign({}, input, { doiDetection: doi }));
     var authors = extractAuthors(input);
     var journal = extractJournalDetection(input);
@@ -790,6 +946,7 @@
     var abstract = extractAbstractDetection(input);
     return {
       doi: doi,
+      isbn: isbn,
       pdfUrl: pdfUrl,
       title: title,
       authors: authors,
@@ -885,8 +1042,10 @@
 
   return {
     normalizeDoi: normalizeDoi,
+    normalizeIsbn: normalizeIsbn,
     normalizeUrl: normalizeUrl,
     findDoiInText: findDoiInText,
+    findIsbnInText: findIsbnInText,
     findMetaContent: findMetaContent,
     findMetaEntry: findMetaEntry,
     findMetaContents: findMetaContents,
@@ -896,8 +1055,10 @@
     confidenceLabel: confidenceLabel,
     inferPdfUrlFromPageUrl: inferPdfUrlFromPageUrl,
     collectBodyDoiCandidates: collectBodyDoiCandidates,
+    collectBodyIsbnCandidates: collectBodyIsbnCandidates,
     resolveBestCandidate: resolveBestCandidate,
     extractDoiCandidates: extractDoiCandidates,
+    extractIsbnCandidates: extractIsbnCandidates,
     extractPdfCandidates: extractPdfCandidates,
     extractTitleDetection: extractTitleDetection,
     extractAuthors: extractAuthors,

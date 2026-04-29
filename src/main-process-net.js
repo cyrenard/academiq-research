@@ -210,6 +210,36 @@ function followRedirects(url, maxRedirects = 5, options = {}) {
   });
 }
 
+async function fetchJSONWithGlobalFetch(parsed, options = {}) {
+  if (typeof fetch !== 'function') throw new Error('Fetch fallback unavailable');
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeout = Math.max(2500, Math.min(parseInt(options.timeout, 10) || 15000, 30000));
+  const timer = controller ? setTimeout(() => controller.abort(), timeout) : null;
+  try {
+    const res = await fetch(parsed.href, {
+      method: 'GET',
+      redirect: 'manual',
+      headers: options.headers || {
+        'User-Agent': 'AcademiQ Research/1.1.7 (local metadata lookup)',
+        'Accept': 'application/json,*/*',
+        'Accept-Encoding': 'identity',
+        'Connection': 'close'
+      },
+      signal: controller ? controller.signal : undefined
+    });
+    if ([301, 302, 307, 308].includes(res.status)) {
+      const loc = res.headers && res.headers.get ? res.headers.get('location') : '';
+      if (!loc) throw new Error('Redirect without location');
+      const next = loc.startsWith('http') ? loc : new URL(loc, parsed.href).href;
+      return fetchJSON(next, options);
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.json();
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function fetchJSON(url, options = {}) {
   return new Promise((resolve, reject) => {
     let parsed;
@@ -219,11 +249,36 @@ function fetchJSON(url, options = {}) {
       reject(e);
       return;
     }
+    if (options.preferGlobalFetch && typeof fetch === 'function') {
+      fetchJSONWithGlobalFetch(parsed, options).then(resolve).catch(reject);
+      return;
+    }
     const mod = parsed.protocol === 'https:' ? https : http;
+    let settled = false;
+    function resolveOnce(value) {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    }
+    function rejectWithFetchFallback(error) {
+      if (settled) return;
+      if (typeof fetch === 'function') {
+        fetchJSONWithGlobalFetch(parsed, options).then(resolveOnce).catch(err => {
+          if (settled) return;
+          settled = true;
+          reject(err || error);
+        });
+        return;
+      }
+      settled = true;
+      reject(error);
+    }
     const req = mod.get(parsed.href, {
       headers: options.headers || {
-        'User-Agent': 'AcademiQ-Updater/1.0',
-        'Accept': 'application/json'
+        'User-Agent': 'AcademiQ Research/1.1.7 (local metadata lookup)',
+        'Accept': 'application/json,*/*',
+        'Accept-Encoding': 'identity',
+        'Connection': 'close'
       },
       timeout: options.timeout || 15000,
       lookup: buildLookup(options)
@@ -245,16 +300,16 @@ function fetchJSON(url, options = {}) {
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
         try {
-          resolve(JSON.parse(data));
+          resolveOnce(JSON.parse(data));
         } catch (e) {
-          reject(e);
+          rejectWithFetchFallback(e);
         }
       });
     });
-    req.on('error', reject);
+    req.on('error', rejectWithFetchFallback);
     req.on('timeout', () => {
       try { req.destroy(new Error('Timeout')); } catch (_e) {}
-      reject(new Error('Timeout'));
+      rejectWithFetchFallback(new Error('Timeout'));
     });
   });
 }

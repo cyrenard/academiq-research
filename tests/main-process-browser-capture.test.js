@@ -45,6 +45,7 @@ test('sanitizeCapturePayload normalizes DOI and unsupported comparison ids', () 
   const payload = sanitizeCapturePayload({
     referenceType: 'book',
     doi: 'https://doi.org/10.1000/ABC.DEF',
+    isbn: 'ISBN-13: 978-0-13-461099-3',
     selectedComparisonId: 'unknown-id',
     detectedAuthors: ['A', 'B'],
     detectedPublisher: 'Academic Press',
@@ -52,6 +53,7 @@ test('sanitizeCapturePayload normalizes DOI and unsupported comparison ids', () 
   });
   assert.equal(payload.referenceType, 'book');
   assert.equal(payload.doi, '10.1000/abc.def');
+  assert.equal(payload.isbn, '9780134610993');
   assert.equal(payload.selectedComparisonId, '');
   assert.deepEqual(payload.detectedAuthors, ['A', 'B']);
   assert.equal(payload.detectedPublisher, 'Academic Press');
@@ -66,6 +68,7 @@ test('sanitizeCapturePayload removes unsafe url and invalid ids while preserving
     selectedWorkspaceId: 'ws 1',
     detectionMeta: {
       doi: { value: '10.1000/test', source: 'citation_meta', confidence: 'strong', found: true },
+      isbn: { value: '978-0-13-461099-3', source: 'isbn_url', confidence: 'medium', found: true },
       pdfUrl: { value: 'https://example.org/a.pdf', source: 'page_link', confidence: 'medium', found: true }
     }
   });
@@ -74,7 +77,18 @@ test('sanitizeCapturePayload removes unsafe url and invalid ids while preserving
   assert.equal(payload.selectedWorkspaceId, '');
   assert.equal(payload.referenceType, 'article');
   assert.equal(payload.detectionMeta.doi.source, 'citation_meta');
+  assert.equal(payload.detectionMeta.isbn.value, '9780134610993');
   assert.equal(payload.detectionMeta.pdfUrl.confidence, 'medium');
+});
+
+test('sanitizeCapturePayload treats ISBN-only captures as books', () => {
+  const payload = sanitizeCapturePayload({
+    referenceType: '',
+    isbn: '978-0-13-461099-3',
+    detectedTitle: 'Computer Systems'
+  });
+  assert.equal(payload.referenceType, 'book');
+  assert.equal(payload.isbn, '9780134610993');
 });
 
 test('safeId and setup state helpers stay conservative', () => {
@@ -170,12 +184,14 @@ test('buildTargetsFromDataJSON exposes workspace list and literature matrix opti
 test('capture deep link roundtrip restores payload', () => {
   const url = buildCaptureDeepLink({
     detectedTitle: 'Sample',
+    isbn: '978-0-13-461099-3',
     selectedWorkspaceId: 'ws1',
     browserSource: 'Chrome'
   });
   const parsed = parseCaptureProtocolUrl(url);
   assert.equal(parsed.action, 'capture');
   assert.equal(parsed.payload.detectedTitle, 'Sample');
+  assert.equal(parsed.payload.isbn, '9780134610993');
   assert.equal(parsed.payload.selectedWorkspaceId, 'ws1');
 });
 

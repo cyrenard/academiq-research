@@ -145,6 +145,7 @@
     if(ogType === 'book' || ogType === 'books.book') return 'book';
     if(findMetaContent(metaEntries, ['citation_book_title', 'book:title', 'book:author', 'citation_isbn'])) return 'book';
     if(jsonLdHasType(jsonLdNodes, 'book')) return 'book';
+    if(resolved && resolved.isbn && resolved.isbn.found) return 'book';
     if(ogType === 'website' || ogType === 'webpage') return 'website';
     if(jsonLdHasType(jsonLdNodes, 'website') || jsonLdHasType(jsonLdNodes, 'webpage')) return 'website';
     if(resolved && resolved.doi && resolved.doi.found) return 'article';
@@ -408,6 +409,7 @@
     }
     var accessedDate = new Date().toISOString().slice(0, 10);
     var doiDetailed = resolved && resolved.doi ? resolved.doi : { value: '', source: 'none', confidence: 'none', found: false };
+    var isbnDetailed = resolved && resolved.isbn ? resolved.isbn : { value: '', source: 'none', confidence: 'none', found: false };
     var pdfDetailed = resolved && resolved.pdfUrl ? resolved.pdfUrl : { value: '', source: 'none', confidence: 'none', found: false };
     var titleDetailed = resolved && resolved.title ? resolved.title : { value: '', source: 'none', confidence: 'none', found: false };
     var authorsDetailed = resolved && resolved.authors ? resolved.authors : { value: '', source: 'none', confidence: 'none', found: false };
@@ -419,6 +421,7 @@
       sourcePageUrl: pageUrl,
       pageTitle: document.title || '',
       doi: doiDetailed && doiDetailed.value ? doiDetailed.value : '',
+      isbn: isbnDetailed && isbnDetailed.value ? isbnDetailed.value : '',
       pdfUrl: pdfDetailed && pdfDetailed.value ? pdfDetailed.value : '',
       detectedTitle: titleDetailed && titleDetailed.value ? titleDetailed.value : (document.title || ''),
       detectedAuthors: authorsDetailed && authorsDetailed.value ? String(authorsDetailed.value).split(';').map(function(item){ return item.trim(); }).filter(Boolean) : [],
@@ -432,6 +435,7 @@
       detectedAbstract: abstractDetailed && abstractDetailed.value ? String(abstractDetailed.value).trim() : '',
       detectionMeta: {
         doi: doiDetailed || { value: '', source: 'none', confidence: 'none', found: false },
+        isbn: isbnDetailed || { value: '', source: 'none', confidence: 'none', found: false },
         pdfUrl: pdfDetailed || { value: '', source: 'none', confidence: 'none', found: false },
         title: titleDetailed || { value: '', source: 'none', confidence: 'none', found: false },
         authors: authorsDetailed || { value: '', source: 'none', confidence: 'none', found: false },

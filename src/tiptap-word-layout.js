@@ -211,9 +211,9 @@
 
   // Parse previously injected margin-top values so we can subtract them from
   // offsetHeight measurements (which don't include margin) — prevents feedback loop.
-  function parsePreviousGaps(doc){
+  function parsePreviousGaps(doc, styleElId){
     var gaps = {};
-    var styleEl = doc ? safeGetElementById(doc, 'aq-page-gap-style') : null;
+    var styleEl = doc ? safeGetElementById(doc, styleElId || 'aq-page-gap-style') : null;
     if(!styleEl || !styleEl.textContent) return gaps;
     var re = /nth-child\((\d+)\)\{margin-top:(\d+)px/g;
     var m;
@@ -321,7 +321,9 @@
   function applyPageGaps(editorDom, pageContentHeight, pageTotalHeight, options){
     options = options || {};
     var doc = editorDom.ownerDocument || (typeof document !== 'undefined' ? document : null);
-    var prevGaps = parsePreviousGaps(doc);
+    var selectorPrefix = options.selectorPrefix || '#apaed .ProseMirror>*';
+    var styleElId = options.styleElId || 'aq-page-gap-style';
+    var prevGaps = parsePreviousGaps(doc, styleElId);
     var blocks = Array.from(editorDom && editorDom.children || []);
     var visualOffset = 0;
     var rules = [];
@@ -341,7 +343,11 @@
         var remaining = Math.max(0, pageContentHeight - withinPage);
         if(canForcePageBreakBefore(block, height, pageContentHeight, remaining, options)){
           var gap = Math.max(0, pageTotalHeight - withinPage);
-          rules.push('#apaed .ProseMirror>*:nth-child(' + (index + 1) + '){margin-top:' + gap + 'px!important;}');
+          var priorGap = prevGaps[index + 1] || 0;
+          if(priorGap > 0 && Math.abs(gap - priorGap) < 20){
+            gap = priorGap;
+          }
+          rules.push(selectorPrefix + ':nth-child(' + (index + 1) + '){margin-top:' + gap + 'px!important;}');
           visualOffset += gap;
           pushed = true;
         }
@@ -359,7 +365,11 @@
           var minFollowUp = Math.max(lineHeightPx * orphanMinLines, Math.min(nextHeight, lineHeightPx * 2));
           if(afterHeading <= pageContentHeight && spaceAfter < minFollowUp){
             var gapKwn = Math.max(0, pageTotalHeight - withinPage);
-            rules.push('#apaed .ProseMirror>*:nth-child(' + (index + 1) + '){margin-top:' + gapKwn + 'px!important;}');
+            var priorKwn = prevGaps[index + 1] || 0;
+            if(priorKwn > 0 && Math.abs(gapKwn - priorKwn) < 20){
+              gapKwn = priorKwn;
+            }
+            rules.push(selectorPrefix + ':nth-child(' + (index + 1) + '){margin-top:' + gapKwn + 'px!important;}');
             visualOffset += gapKwn;
           }
         }
@@ -368,10 +378,10 @@
     });
     var doc = editorDom.ownerDocument || (typeof document !== 'undefined' ? document : null);
     if(doc){
-      var styleEl = safeGetElementById(doc, 'aq-page-gap-style');
+      var styleEl = safeGetElementById(doc, styleElId);
       if(!styleEl && typeof doc.createElement === 'function'){
         styleEl = doc.createElement('style');
-        styleEl.id = 'aq-page-gap-style';
+        styleEl.id = styleElId;
         if(doc.head && typeof doc.head.appendChild === 'function'){
           doc.head.appendChild(styleEl);
         }else if(typeof doc.appendChild === 'function'){
@@ -415,15 +425,31 @@
     if(typeof editorDom.querySelectorAll === 'function'){
       editorDom.querySelectorAll('.pg-spacer').forEach(function(el){ el.remove(); });
     }
-    if(maybeAutoSplitOverflowParagraph(editorDom, pageContentHeight, pageTotalHeight, editorView)){
+    // Page layout sync must never mutate the document by default. The old
+    // auto-split path inserted hidden page-break paragraphs during measurement,
+    // which felt like the app was repeatedly pressing Enter after Word import
+    // and stole focus from the editor.
+    if(options.autoSplitOverflowParagraphs === true && maybeAutoSplitOverflowParagraph(editorDom, pageContentHeight, pageTotalHeight, editorView)){
       return 0;
     }
-    var visualContentHeight = applyPageGaps(editorDom, pageContentHeight, pageStep, {
+    var domId = editorDom && editorDom.id ? String(editorDom.id) : '';
+    var gapOpts = {
       widowOrphan: options.widowOrphan || state.widowOrphan,
       pageMargin: pageMargin,
       pageMarginTop: pageMarginTop,
       pageMarginBottom: pageMarginBottom
-    });
+    };
+    if(domId === 'bibbody'){
+      gapOpts.selectorPrefix = '#bibbody>*';
+      gapOpts.styleElId = 'aq-bib-page-gap-style';
+    }else if(domId === 'tocbody'){
+      gapOpts.selectorPrefix = '#tocbody>*';
+      gapOpts.styleElId = 'aq-toc-page-gap-style';
+    }else if(domId === 'coverbody'){
+      gapOpts.selectorPrefix = '#coverbody>*';
+      gapOpts.styleElId = 'aq-cover-page-gap-style';
+    }
+    var visualContentHeight = applyPageGaps(editorDom, pageContentHeight, pageStep, gapOpts);
     var contentHeight = Math.max(editorDom.scrollHeight || 0, editorDom.offsetHeight || 0, visualContentHeight);
     var pageCount = Math.max(1, Math.ceil(contentHeight / pageStep));
     var viewportMinHeight = scrollEl ? Math.max(pageStep, (scrollEl.clientHeight || 0) + 44) : pageStep;

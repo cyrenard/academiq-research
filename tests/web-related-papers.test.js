@@ -31,6 +31,12 @@ test('refLikelyMatch does not merge different reference types without DOI', () =
   assert.equal(webRelated.refLikelyMatch(website, article), false);
 });
 
+test('refLikelyMatch uses ISBN for exact book duplicates', () => {
+  const left = { referenceType: 'book', title: 'Old title', isbn: '978-0-13-461099-3' };
+  const right = { referenceType: 'book', title: 'New title', isbn: '9780134610993' };
+  assert.equal(webRelated.refLikelyMatch(left, right), true);
+});
+
 test('decideAddToActiveWorkspace prefers already-in-active workspace match', () => {
   const candidate = { title: 'Paper A', doi: '10.1/abc', authors: ['Doe, Jane'], year: '2020' };
   const wss = [

@@ -25,6 +25,305 @@
     return doi;
   }
 
+  function isValidIsbn10(value){
+    var text = String(value || '').toUpperCase();
+    if(!/^\d{9}[\dX]$/.test(text)) return false;
+    var sum = 0;
+    for(var i = 0; i < 10; i++){
+      var ch = text.charAt(i);
+      var digit = ch === 'X' ? 10 : parseInt(ch, 10);
+      if(Number.isNaN(digit)) return false;
+      sum += digit * (10 - i);
+    }
+    return sum % 11 === 0;
+  }
+
+  function isValidIsbn13(value){
+    var text = String(value || '');
+    if(!/^\d{13}$/.test(text)) return false;
+    var sum = 0;
+    for(var i = 0; i < 13; i++){
+      var digit = parseInt(text.charAt(i), 10);
+      if(Number.isNaN(digit)) return false;
+      sum += digit * (i % 2 ? 3 : 1);
+    }
+    return sum % 10 === 0;
+  }
+
+  function normalizeIsbn(value){
+    var raw = String(value || '').trim();
+    if(!raw) return '';
+    try{ raw = decodeURIComponent(raw); }catch(e){}
+    raw = raw.replace(/[\u200B-\u200D\uFEFF]/g, ' ');
+    var candidates = [];
+    function pushCandidate(part){
+      var compact = String(part || '').replace(/[^\dXx]/g, '').toUpperCase();
+      if(compact.length === 10 || compact.length === 13) candidates.push(compact);
+    }
+    pushCandidate(raw);
+    raw.replace(/(?:ISBN(?:-1[03])?\s*[:#]?\s*)?([0-9Xx][0-9Xx\s-]{8,24}[0-9Xx])/g, function(_all, token){
+      pushCandidate(token);
+      return _all;
+    });
+    for(var i = 0; i < candidates.length; i++){
+      var isbn = candidates[i];
+      if((isbn.length === 10 && isValidIsbn10(isbn)) || (isbn.length === 13 && isValidIsbn13(isbn))){
+        return isbn;
+      }
+    }
+    return '';
+  }
+
+  function normalizeOpenLibraryAuthorName(name){
+    var value = String(name || '').replace(/\s+/g, ' ').trim();
+    if(!value) return '';
+    if(value.indexOf(',') >= 0) return value;
+    var parts = value.split(' ').filter(Boolean);
+    if(parts.length < 2) return value;
+    var family = parts.pop();
+    return family + ', ' + parts.join(' ');
+  }
+
+  function mapOpenLibraryBookToReference(data, options){
+    options = options || {};
+    var isbn = normalizeIsbn(options.isbn || '');
+    var source = data || {};
+    var record = null;
+    if(isbn && source['ISBN:' + isbn]) record = source['ISBN:' + isbn];
+    if(!record && source && typeof source === 'object'){
+      var keys = Object.keys(source);
+      if(keys.length) record = source[keys[0]];
+    }
+    if(!record || typeof record !== 'object') return null;
+    var title = String(record.title || '').replace(/\s+/g, ' ').trim();
+    var subtitle = String(record.subtitle || '').replace(/\s+/g, ' ').trim();
+    if(subtitle && title && title.toLowerCase().indexOf(subtitle.toLowerCase()) < 0){
+      title += ': ' + subtitle;
+    }
+    if(!title) return null;
+    var authors = Array.isArray(record.authors) ? record.authors.map(function(author){
+      return normalizeOpenLibraryAuthorName(author && author.name ? author.name : author);
+    }).filter(Boolean) : [];
+    var publishers = Array.isArray(record.publishers) ? record.publishers.map(function(pub){
+      return String(pub && pub.name ? pub.name : pub || '').replace(/\s+/g, ' ').trim();
+    }).filter(Boolean) : [];
+    var publishDate = String(record.publish_date || '').replace(/\s+/g, ' ').trim();
+    var yearMatch = publishDate.match(/\b(15|16|17|18|19|20)\d{2}\b/);
+    var canonicalIsbn = isbn;
+    if(!canonicalIsbn && record.identifiers){
+      var ids = [];
+      if(Array.isArray(record.identifiers.isbn_13)) ids = ids.concat(record.identifiers.isbn_13);
+      if(Array.isArray(record.identifiers.isbn_10)) ids = ids.concat(record.identifiers.isbn_10);
+      for(var i = 0; i < ids.length && !canonicalIsbn; i++) canonicalIsbn = normalizeIsbn(ids[i]);
+    }
+    var recordUrl = String(record.url || '').trim();
+    if(!recordUrl && record.key) recordUrl = 'https://openlibrary.org' + record.key;
+    if(!recordUrl && canonicalIsbn) recordUrl = 'https://openlibrary.org/isbn/' + canonicalIsbn;
+    var createId = typeof options.createId === 'function' ? options.createId : defaultIdFactory;
+    return {
+      id: createId(),
+      referenceType: 'book',
+      title: title,
+      authors: authors,
+      year: yearMatch ? yearMatch[0] : '',
+      journal: '',
+      volume: '',
+      issue: '',
+      fp: '',
+      lp: '',
+      doi: '',
+      url: recordUrl,
+      isbn: canonicalIsbn,
+      publisher: publishers[0] || '',
+      edition: '',
+      publishedDate: publishDate,
+      websiteName: '',
+      pdfData: null,
+      pdfUrl: null,
+      wsId: options.workspaceId || null
+    };
+  }
+
+  function splitBookByStatement(value){
+    var text = String(value || '')
+      .replace(/^by\s+/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if(!text) return [];
+    return text
+      .split(/\s*(?:,|;|\band\b|&)\s*/i)
+      .map(normalizeOpenLibraryAuthorName)
+      .filter(Boolean);
+  }
+
+  function mapOpenLibraryEditionToReference(data, options){
+    options = options || {};
+    var isbn = normalizeIsbn(options.isbn || '');
+    var record = data && typeof data === 'object' ? data : null;
+    if(!record) return null;
+    var title = String(record.title || '').replace(/\s+/g, ' ').trim();
+    var subtitle = String(record.subtitle || '').replace(/\s+/g, ' ').trim();
+    if(subtitle && title && title.toLowerCase().indexOf(subtitle.toLowerCase()) < 0){
+      title += ': ' + subtitle;
+    }
+    if(!title && record.full_title) title = String(record.full_title || '').replace(/\s+/g, ' ').trim();
+    if(!title) return null;
+    var authorNames = Array.isArray(options.authorNames) ? options.authorNames : [];
+    var authors = authorNames.map(normalizeOpenLibraryAuthorName).filter(Boolean);
+    if(!authors.length && Array.isArray(record.authors)){
+      authors = record.authors.map(function(author){
+        return normalizeOpenLibraryAuthorName(author && author.name ? author.name : '');
+      }).filter(Boolean);
+    }
+    if(!authors.length) authors = splitBookByStatement(record.by_statement);
+    var publishers = Array.isArray(record.publishers) ? record.publishers.map(function(pub){
+      return String(pub && pub.name ? pub.name : pub || '').replace(/\s+/g, ' ').trim();
+    }).filter(Boolean) : [];
+    var publishDate = String(record.publish_date || '').replace(/\s+/g, ' ').trim();
+    var yearMatch = publishDate.match(/\b(15|16|17|18|19|20)\d{2}\b/);
+    var canonicalIsbn = isbn;
+    var ids = [];
+    if(Array.isArray(record.isbn_13)) ids = ids.concat(record.isbn_13);
+    if(Array.isArray(record.isbn_10)) ids = ids.concat(record.isbn_10);
+    if(record.identifiers){
+      if(Array.isArray(record.identifiers.isbn_13)) ids = ids.concat(record.identifiers.isbn_13);
+      if(Array.isArray(record.identifiers.isbn_10)) ids = ids.concat(record.identifiers.isbn_10);
+    }
+    for(var i = 0; i < ids.length && !canonicalIsbn; i++) canonicalIsbn = normalizeIsbn(ids[i]);
+    var recordUrl = String(record.url || '').trim();
+    if(!recordUrl && record.key) recordUrl = 'https://openlibrary.org' + record.key;
+    if(!recordUrl && canonicalIsbn) recordUrl = 'https://openlibrary.org/isbn/' + canonicalIsbn;
+    var createId = typeof options.createId === 'function' ? options.createId : defaultIdFactory;
+    return {
+      id: createId(),
+      referenceType: 'book',
+      title: title,
+      authors: authors,
+      year: yearMatch ? yearMatch[0] : '',
+      journal: '',
+      volume: '',
+      issue: '',
+      fp: '',
+      lp: '',
+      doi: '',
+      url: recordUrl,
+      isbn: canonicalIsbn,
+      publisher: publishers[0] || '',
+      edition: '',
+      publishedDate: publishDate,
+      websiteName: '',
+      pdfData: null,
+      pdfUrl: null,
+      wsId: options.workspaceId || null
+    };
+  }
+
+  function mapGoogleBooksVolumeToReference(data, options){
+    options = options || {};
+    var isbn = normalizeIsbn(options.isbn || '');
+    var item = null;
+    if(data && Array.isArray(data.items) && data.items.length){
+      item = data.items[0];
+    }else if(data && data.volumeInfo){
+      item = data;
+    }
+    var info = item && item.volumeInfo ? item.volumeInfo : null;
+    if(!info || typeof info !== 'object') return null;
+    var title = String(info.title || '').replace(/\s+/g, ' ').trim();
+    var subtitle = String(info.subtitle || '').replace(/\s+/g, ' ').trim();
+    if(subtitle && title && title.toLowerCase().indexOf(subtitle.toLowerCase()) < 0){
+      title += ': ' + subtitle;
+    }
+    if(!title) return null;
+    var identifiers = Array.isArray(info.industryIdentifiers) ? info.industryIdentifiers : [];
+    var canonicalIsbn = isbn;
+    for(var i = 0; i < identifiers.length && !canonicalIsbn; i++){
+      canonicalIsbn = normalizeIsbn(identifiers[i] && identifiers[i].identifier);
+    }
+    var authors = Array.isArray(info.authors) ? info.authors.map(normalizeOpenLibraryAuthorName).filter(Boolean) : [];
+    var publishedDate = String(info.publishedDate || '').replace(/\s+/g, ' ').trim();
+    var yearMatch = publishedDate.match(/\b(15|16|17|18|19|20)\d{2}\b/);
+    var createId = typeof options.createId === 'function' ? options.createId : defaultIdFactory;
+    return {
+      id: createId(),
+      referenceType: 'book',
+      title: title,
+      authors: authors,
+      year: yearMatch ? yearMatch[0] : '',
+      journal: '',
+      volume: '',
+      issue: '',
+      fp: '',
+      lp: '',
+      doi: '',
+      url: String(info.canonicalVolumeLink || info.infoLink || (canonicalIsbn ? 'https://books.google.com/books?vid=ISBN' + canonicalIsbn : '')).trim(),
+      isbn: canonicalIsbn,
+      publisher: String(info.publisher || '').replace(/\s+/g, ' ').trim(),
+      edition: '',
+      publishedDate: publishedDate,
+      websiteName: '',
+      pdfData: null,
+      pdfUrl: null,
+      wsId: options.workspaceId || null
+    };
+  }
+
+  function mapCrossrefIsbnWorkToReference(data, options){
+    options = options || {};
+    var isbn = normalizeIsbn(options.isbn || '');
+    var item = null;
+    if(data && data.message && Array.isArray(data.message.items) && data.message.items.length){
+      item = data.message.items[0];
+    }else if(data && data.message && typeof data.message === 'object'){
+      item = data.message;
+    }else if(data && typeof data === 'object'){
+      item = data;
+    }
+    if(!item || typeof item !== 'object') return null;
+    var title = '';
+    if(Array.isArray(item.title) && item.title[0]) title = String(item.title[0]);
+    if(!title && Array.isArray(item['container-title']) && item['container-title'][0]) title = String(item['container-title'][0]);
+    title = title.replace(/\s+/g, ' ').trim();
+    if(!title) return null;
+    var authors = Array.isArray(item.author) ? item.author.map(function(author){
+      if(!author) return '';
+      if(author.family && author.given) return String(author.family).trim() + ', ' + String(author.given).trim();
+      return normalizeOpenLibraryAuthorName(author.family || author.name || '');
+    }).filter(Boolean) : [];
+    var date = item['published-print'] || item['published-online'] || item.published || item.issued || item.created || null;
+    var year = '';
+    if(date && Array.isArray(date['date-parts']) && date['date-parts'][0] && date['date-parts'][0][0]){
+      year = String(date['date-parts'][0][0]);
+    }
+    var identifiers = Array.isArray(item.ISBN) ? item.ISBN : [];
+    var canonicalIsbn = isbn;
+    for(var i = 0; i < identifiers.length && !canonicalIsbn; i++) canonicalIsbn = normalizeIsbn(identifiers[i]);
+    var doi = normalizeDoi(item.DOI || '');
+    var createId = typeof options.createId === 'function' ? options.createId : defaultIdFactory;
+    return {
+      id: createId(),
+      referenceType: 'book',
+      title: title,
+      authors: authors,
+      year: year,
+      journal: '',
+      volume: '',
+      issue: '',
+      fp: '',
+      lp: '',
+      doi: doi,
+      url: String(item.URL || (doi ? 'https://doi.org/' + doi : '') || '').trim(),
+      isbn: canonicalIsbn,
+      publisher: String(item.publisher || '').replace(/\s+/g, ' ').trim(),
+      edition: '',
+      publishedDate: year,
+      websiteName: '',
+      pdfData: null,
+      pdfUrl: null,
+      wsId: options.workspaceId || null
+    };
+  }
+
   function normalizeYear(value){
     var text = String(value || '').trim();
     if(!text) return '';
@@ -643,6 +942,11 @@
 
   var api = {
     normalizeDoi: normalizeDoi,
+    normalizeIsbn: normalizeIsbn,
+    mapOpenLibraryBookToReference: mapOpenLibraryBookToReference,
+    mapOpenLibraryEditionToReference: mapOpenLibraryEditionToReference,
+    mapGoogleBooksVolumeToReference: mapGoogleBooksVolumeToReference,
+    mapCrossrefIsbnWorkToReference: mapCrossrefIsbnWorkToReference,
     parseBibTeX: parseBibTeX,
     parseRIS: parseRIS,
     parseCSLJSON: parseCSLJSON,

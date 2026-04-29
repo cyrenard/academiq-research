@@ -12,6 +12,7 @@
     tocTimer: null,
     refTimer: null,
     academicTimer: null,
+    layoutTimers: [],
     linkedBound: false
   };
 
@@ -23,6 +24,8 @@
     if(state.refTimer){ clearTimeout(state.refTimer); state.refTimer = null; }
     if(state.academicTimer){ clearTimeout(state.academicTimer); state.academicTimer = null; }
     if(state.tocTimer){ clearTimeout(state.tocTimer); state.tocTimer = null; }
+    state.layoutTimers.forEach(function(timer){ clearTimeout(timer); });
+    state.layoutTimers = [];
   }
 
   function getEditor(){
@@ -73,6 +76,52 @@
     if(typeof root.updatePageHeight === 'function'){
       safeCall(root.updatePageHeight);
     }
+  }
+
+  function resolveLayoutTargets(){
+    var doc = root.document || (typeof document !== 'undefined' ? document : null);
+    var editorRef = getEditor();
+    return {
+      doc: doc,
+      page: doc && typeof doc.getElementById === 'function' ? doc.getElementById('apapage') : null,
+      editor: editorRef,
+      editorDom: editorRef && editorRef.view && editorRef.view.dom
+        ? editorRef.view.dom
+        : (doc && typeof doc.getElementById === 'function' ? doc.getElementById('apaed') : null),
+      scrollEl: doc && typeof doc.getElementById === 'function' ? doc.getElementById('escroll') : null
+    };
+  }
+
+  function syncPageLayoutNow(){
+    if(root.AQTipTapWordLayout && typeof root.AQTipTapWordLayout.syncPageMetrics === 'function'){
+      var targets = resolveLayoutTargets();
+      if(targets.page && targets.editorDom){
+        return !!safeCall(function(){
+          root.AQTipTapWordLayout.syncPageMetrics({
+            page: targets.page,
+            editorDom: targets.editorDom,
+            editorView: targets.editor && targets.editor.view ? targets.editor.view : null,
+            scrollEl: targets.scrollEl,
+            showPageNumbers: !!(root.S && root.S.showPageNumbers)
+          });
+          return true;
+        });
+      }
+    }
+    syncPageLayout();
+    return false;
+  }
+
+  function stabilizePageLayout(delays){
+    state.layoutTimers.forEach(function(timer){ clearTimeout(timer); });
+    state.layoutTimers = [];
+    (Array.isArray(delays) && delays.length ? delays : [0, 80, 240, 520]).forEach(function(delay){
+      var timer = setTimeout(function(){
+        syncPageLayoutNow();
+      }, Math.max(0, parseInt(delay, 10) || 0));
+      state.layoutTimers.push(timer);
+    });
+    return true;
   }
 
 function syncReferenceSectionDeferred(delay){
@@ -237,6 +286,9 @@ function syncReferenceSectionDeferred(delay){
       }
       if(options.layout !== false){
         syncPageLayout();
+        if(options.stabilizeLayout){
+          stabilizePageLayout(options.layoutPasses);
+        }
       }
       if(options.syncChrome){
         syncEditorChrome();
@@ -304,6 +356,9 @@ function syncReferenceSectionDeferred(delay){
       ensureEditorWritableState(options.editor || null);
       if(options.layout !== false){
         syncPageLayout();
+        if(options.stabilizeLayout){
+          stabilizePageLayout(options.layoutPasses);
+        }
       }
       if(typeof root.refreshDocumentOutlineIfOpen === 'function'){
         safeCall(root.refreshDocumentOutlineIfOpen);
@@ -416,6 +471,8 @@ function syncReferenceSectionDeferred(delay){
     refreshCitationTrigger: refreshCitationTrigger,
     syncEditorChrome: syncEditorChrome,
     syncCommandUI: syncCommandUI,
+    syncPageLayoutNow: syncPageLayoutNow,
+    stabilizePageLayout: stabilizePageLayout,
     normalizeCitationSpansDeferred: normalizeCitationSpansDeferred,
     runContentApplyEffects: runContentApplyEffects,
     handleMutation: handleMutation,

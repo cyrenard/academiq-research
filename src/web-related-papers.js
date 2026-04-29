@@ -34,6 +34,11 @@
     return doi;
   }
 
+  function normalizeIsbn(value){
+    var raw = asText(value, 256).toUpperCase().replace(/[^0-9X]/g, '');
+    return raw.length === 10 || raw.length === 13 ? raw : '';
+  }
+
   function normalizeYear(value){
     var text = asText(value, 32);
     if(!text) return '';
@@ -131,6 +136,7 @@
       fp: asText(raw && raw.fp, 64),
       lp: asText(raw && raw.lp, 64),
       doi: normalizeDoi(raw && (raw.doi || raw.url)),
+      isbn: normalizeIsbn(raw && raw.isbn),
       url: asText(raw && raw.url, 2048),
       abstract: asText(raw && (raw.abstract || raw.snippet), 6000),
       labels: normalizeLabels(raw && raw.labels),
@@ -144,6 +150,7 @@
     var aa = normalizeWebResult(a || {}, { provider: 'internal' });
     var bb = normalizeWebResult(b || {}, { provider: 'internal' });
     if(aa.doi && bb.doi) return aa.doi === bb.doi;
+    if(aa.isbn && bb.isbn) return aa.isbn === bb.isbn;
     if(aa.referenceType !== bb.referenceType) return false;
 
     var ta = normalizeTextForMatch(aa.title);
@@ -232,6 +239,7 @@
       fp: result.fp,
       lp: result.lp,
       doi: result.doi,
+      isbn: result.isbn,
       url: result.url,
       abstract: result.abstract,
       note: '',
@@ -245,6 +253,7 @@
   function buildSeedKey(ref){
     var normalized = normalizeWebResult(ref || {}, { provider: 'seed' });
     if(normalized.doi) return 'doi:' + normalized.doi;
+    if(normalized.isbn) return 'isbn:' + normalized.isbn;
     var title = normalizeTextForMatch(normalized.title);
     var first = firstAuthorKey(normalized.authors);
     var year = normalized.year || '';

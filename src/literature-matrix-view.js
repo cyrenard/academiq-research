@@ -95,6 +95,12 @@
     return document.getElementById('tbMatrixBtn');
   }
 
+  function getEditorToolbarMatrixHost(){
+    var pageOne = document.querySelector('#etb .etb-page[data-page="1"]');
+    if(!pageOne) return null;
+    return pageOne.querySelector('.tbgrp-matrix');
+  }
+
   function findReferenceInWorkspace(referenceId){
     var refId = text(referenceId);
     if(!refId) return null;
@@ -567,15 +573,20 @@
 
   function ensureTopToolbarButton(){
     var topBtn = getTopMatrixButton();
-    if(topBtn) return topBtn;
-    var exportBtn = document.getElementById('tbExportMenuBtn');
-    if(!exportBtn || !exportBtn.parentElement) return null;
-    topBtn = document.createElement('button');
-    topBtn.className = 'btn';
-    topBtn.id = 'tbMatrixBtn';
+    var host = getEditorToolbarMatrixHost();
+    if(!host) return topBtn;
+    if(topBtn && topBtn.parentElement !== host){
+      host.appendChild(topBtn);
+    }
+    if(!topBtn){
+      topBtn = document.createElement('button');
+      topBtn.id = 'tbMatrixBtn';
+      host.appendChild(topBtn);
+    }
+    topBtn.className = 'efmt';
     topBtn.type = 'button';
-    topBtn.textContent = 'Literatür Matrisi';
-    exportBtn.parentElement.insertAdjacentElement('afterend', topBtn);
+    topBtn.title = 'Literatür matrisini aç/kapat';
+    if(!text(topBtn.textContent)) topBtn.textContent = 'Literatür Matrisi';
     return topBtn;
   }
 
@@ -826,7 +837,15 @@
     var wsId = getCurrentWorkspaceId();
     var table = document.getElementById('matrixTable');
     var empty = document.getElementById('matrixEmptyState');
-    if(!(api && st && wsId && table)) return;
+    if(!(api && st && table)) return;
+    if(!wsId){
+      table.innerHTML = '';
+      if(empty){
+        empty.style.display = 'block';
+        empty.textContent = 'Önce bir çalışma alanı seçin.';
+      }
+      return;
+    }
 
     var wsState = api.ensureWorkspaceMatrix(st, wsId);
     var rows = wsState ? wsState.rows : [];

@@ -61,6 +61,7 @@ test('hydrate fills defaults for missing structures', () => {
   assert.equal(hydrated.docs[0].content, '<p></p>');
   assert.equal(hydrated.docs[0].citationStyle, 'apa7');
   assert.equal(hydrated.docs[0].trackChangesEnabled, false);
+  assert.equal(hydrated.docs[0].appendicesHTML, '');
   assert.deepEqual(hydrated.docs[0].bibliographyExtraRefIds, []);
   assert.equal(hydrated.showPageNumbers, false);
   assert.deepEqual(hydrated.customLabels, []);

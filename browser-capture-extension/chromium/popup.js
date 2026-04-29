@@ -6,7 +6,8 @@
     targets: null,
     bridgeOk: false,
     lookup: null,
-    queueState: null
+    queueState: null,
+    isbnLookup: null
   };
   var STORAGE_KEYS = {
     workspace: 'aqLastWorkspaceId',
@@ -251,6 +252,9 @@
   function captureDefaultsFromDetection(){
     var detection = state.detection || {};
     var inferredType = normalizeReferenceType(detection.referenceType || detection.detectedReferenceType);
+    if(detection.isbn){
+      inferredType = 'book';
+    }
     if(inferredType === 'article' && !detection.doi && !detection.detectedJournal){
       inferredType = 'website';
     }
@@ -268,6 +272,7 @@
       detectedYear: detection.detectedYear || '',
       detectedAbstract: detection.detectedAbstract || '',
       doi: detection.doi || '',
+      isbn: detection.isbn || '',
       pdfUrl: detection.pdfUrl || ''
     };
   }
@@ -286,6 +291,7 @@
     setFieldValue('editAccessedDate', defaults.detectedAccessedDate);
     setFieldValue('editYear', defaults.detectedYear);
     setFieldValue('editDoi', defaults.doi);
+    setFieldValue('editIsbn', defaults.isbn);
     setFieldValue('editPdfUrl', defaults.pdfUrl);
     setFieldValue('editAbstract', defaults.detectedAbstract);
     applyReferenceTypeUI(defaults.referenceType || 'article');
@@ -299,6 +305,10 @@
     var normalizedDoi = api && typeof api.normalizeDoi === 'function'
       ? api.normalizeDoi(rawDoi)
       : rawDoi;
+    var rawIsbn = fieldValue('editIsbn', 128);
+    var normalizedIsbn = api && typeof api.normalizeIsbn === 'function'
+      ? api.normalizeIsbn(rawIsbn)
+      : rawIsbn.replace(/[^0-9Xx]/g, '').toUpperCase();
     var rawPdfUrl = fieldValue('editPdfUrl', 4096);
     var normalizedPdfUrl = api && typeof api.normalizeUrl === 'function'
       ? api.normalizeUrl(rawPdfUrl)
@@ -322,6 +332,7 @@
       detectedYear: normalizeYear(fieldValue('editYear', 16)),
       detectedAbstract: fieldValue('editAbstract', 12000),
       doi: normalizedDoi || '',
+      isbn: normalizedIsbn || '',
       pdfUrl: normalizedPdfUrl || '',
       // Keep raw input to avoid empty-state regressions when popup markup lags.
       _hasEditorFields: !!($('editTitle') || $('editAuthors') || $('editJournal') || $('editPublisher') || $('editWebsiteName') || $('editSourceUrl') || $('editDoi') || $('editPdfUrl') || $('editAbstract')),
@@ -346,6 +357,7 @@
       detectedYear: edited.detectedYear,
       detectedAbstract: edited.detectedAbstract,
       doi: edited.doi,
+      isbn: edited.isbn,
       pdfUrl: edited.pdfUrl
     };
   }
@@ -382,6 +394,154 @@
     }, 220);
   }
 
+  function firstAvailableText(values){
+    for(var i = 0; i < values.length; i += 1){
+      var text = String(values[i] || '').trim();
+      if(text) return text;
+    }
+    return '';
+  }
+
+  function yearFromText(value){
+    var match = String(value || '').match(/\b(19|20)\d{2}\b/);
+    return match && match[0] ? match[0] : '';
+  }
+
+  async function fetchJsonWithTimeout(url, timeoutMs){
+    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timer = controller ? setTimeout(function(){ try{ controller.abort(); }catch(_e){} }, Math.max(1000, Number(timeoutMs) || 4500)) : null;
+    try{
+      var response = await fetch(url, controller ? { signal: controller.signal } : {});
+      if(!response.ok) throw new Error('HTTP ' + response.status);
+      return await response.json();
+    }finally{
+      if(timer) clearTimeout(timer);
+    }
+  }
+
+  function mapOpenLibraryApiBooks(data, isbn){
+    var record = data && data['ISBN:' + isbn];
+    if(!record) return null;
+    var authors = asArray(record.authors).map(function(item){ return String(item && item.name || '').trim(); }).filter(Boolean);
+    var publishers = asArray(record.publishers).map(function(item){ return String(item && item.name || '').trim(); }).filter(Boolean);
+    return {
+      title: firstAvailableText([record.title && record.subtitle ? (record.title + ': ' + record.subtitle) : '', record.title]),
+      authors: authors,
+      publisher: publishers[0] || '',
+      year: yearFromText(record.publish_date),
+      url: firstAvailableText([record.url, 'https://openlibrary.org/isbn/' + isbn]),
+      source: 'openlibrary-api'
+    };
+  }
+
+  function mapOpenLibraryIsbnRecord(record, isbn){
+    if(!record) return null;
+    var publishers = asArray(record.publishers).map(function(item){ return String(item || '').trim(); }).filter(Boolean);
+    return {
+      title: firstAvailableText([record.title && record.subtitle ? (record.title + ': ' + record.subtitle) : '', record.title]),
+      authors: asArray(record.authors).map(function(item){ return String(item && (item.name || item.key) || '').replace(/^\/authors\//, '').trim(); }).filter(Boolean),
+      publisher: publishers[0] || '',
+      year: yearFromText(record.publish_date),
+      url: 'https://openlibrary.org/isbn/' + isbn,
+      source: 'openlibrary-isbn'
+    };
+  }
+
+  function mapGoogleBooksRecord(data, isbn){
+    var item = data && Array.isArray(data.items) && data.items.length ? data.items[0] : null;
+    var info = item && item.volumeInfo ? item.volumeInfo : null;
+    if(!info) return null;
+    return {
+      title: firstAvailableText([info.title && info.subtitle ? (info.title + ': ' + info.subtitle) : '', info.title]),
+      authors: asArray(info.authors).map(function(item){ return String(item || '').trim(); }).filter(Boolean),
+      publisher: String(info.publisher || '').trim(),
+      year: yearFromText(info.publishedDate),
+      url: firstAvailableText([info.infoLink, 'https://books.google.com/books?vid=ISBN' + isbn]),
+      source: 'google-books'
+    };
+  }
+
+  async function lookupBookMetadataByIsbn(isbn){
+    var clean = utils() && typeof utils().normalizeIsbn === 'function' ? utils().normalizeIsbn(isbn) : String(isbn || '').replace(/[^0-9Xx]/g, '').toUpperCase();
+    if(!clean) return null;
+    var attempts = [
+      fetchJsonWithTimeout('https://openlibrary.org/api/books?bibkeys=ISBN:' + encodeURIComponent(clean) + '&format=json&jscmd=data', 4500).then(function(data){ return mapOpenLibraryApiBooks(data, clean); }),
+      fetchJsonWithTimeout('https://openlibrary.org/isbn/' + encodeURIComponent(clean) + '.json', 4500).then(function(data){ return mapOpenLibraryIsbnRecord(data, clean); }),
+      fetchJsonWithTimeout('https://www.googleapis.com/books/v1/volumes?q=isbn:' + encodeURIComponent(clean) + '&maxResults=1', 5500).then(function(data){ return mapGoogleBooksRecord(data, clean); })
+    ];
+    return new Promise(function(resolve){
+      var pending = attempts.length;
+      var settled = false;
+      attempts.forEach(function(promise){
+        promise.then(function(meta){
+          if(settled || !(meta && (meta.title || meta.authors.length || meta.publisher || meta.year))) return;
+          settled = true;
+          resolve(Object.assign({ isbn: clean }, meta));
+        }).catch(function(){}).finally(function(){
+          pending -= 1;
+          if(!settled && pending <= 0) resolve(null);
+        });
+      });
+    });
+  }
+
+  function mergeIsbnMetadataIntoDetection(meta){
+    if(!meta) return false;
+    var detection = state.detection || {};
+    var changed = false;
+    detection.referenceType = 'book';
+    if(meta.isbn && detection.isbn !== meta.isbn){
+      detection.isbn = meta.isbn;
+      changed = true;
+    }
+    if(meta.title && (!detection.detectedTitle || detection.detectedTitle === detection.pageTitle)){
+      detection.detectedTitle = meta.title;
+      changed = true;
+    }
+    if(meta.authors && meta.authors.length && !(Array.isArray(detection.detectedAuthors) && detection.detectedAuthors.length)){
+      detection.detectedAuthors = meta.authors.slice(0, 12);
+      changed = true;
+    }
+    if(meta.publisher && !detection.detectedPublisher){
+      detection.detectedPublisher = meta.publisher;
+      changed = true;
+    }
+    if(meta.year && !detection.detectedYear){
+      detection.detectedYear = meta.year;
+      changed = true;
+    }
+    detection.detectionMeta = detection.detectionMeta || {};
+    detection.detectionMeta.isbn = { value: meta.isbn || detection.isbn || '', source: 'isbn_lookup', sourceField: meta.source || 'isbn_lookup', confidence: 'strong', found: !!(meta.isbn || detection.isbn) };
+    if(meta.title) detection.detectionMeta.title = { value: meta.title, source: 'isbn_lookup', sourceField: meta.source || 'isbn_lookup', confidence: 'medium', found: true };
+    if(meta.authors && meta.authors.length) detection.detectionMeta.authors = { value: meta.authors.join('; '), source: 'isbn_lookup', sourceField: meta.source || 'isbn_lookup', confidence: 'medium', found: true };
+    state.detection = detection;
+    return changed;
+  }
+
+  async function enrichBookFromIsbnIfNeeded(){
+    var api = utils();
+    var detection = state.detection || {};
+    var isbn = api && typeof api.normalizeIsbn === 'function' ? api.normalizeIsbn(detection.isbn || '') : String(detection.isbn || '').trim();
+    if(!isbn) return false;
+    var enoughMetadata = !!(detection.detectedTitle && Array.isArray(detection.detectedAuthors) && detection.detectedAuthors.length && (detection.detectedPublisher || detection.detectedYear));
+    if(enoughMetadata) return false;
+    if(state.isbnLookup && state.isbnLookup.isbn === isbn && state.isbnLookup.done) return false;
+    state.isbnLookup = { isbn: isbn, done: false };
+    setLookupStatus('ISBN metadata aliniyor...', '');
+    var meta = await lookupBookMetadataByIsbn(isbn);
+    state.isbnLookup = { isbn: isbn, done: true, ok: !!meta };
+    if(!meta){
+      setLookupStatus('ISBN bulundu ama kitap metadatasi alinamadi; mevcut sayfa bilgisiyle eklenebilir.', '');
+      return false;
+    }
+    var changed = mergeIsbnMetadataIntoDetection(meta);
+    if(changed){
+      renderDetection();
+      setLookupStatus('ISBN metadatasi eklendi.', 'ok');
+    }
+    return changed;
+  }
+
   async function getActiveTab(){
     var tabs = await queryTabs({ active: true, currentWindow: true });
     return tabs && tabs[0] ? tabs[0] : null;
@@ -390,11 +550,13 @@
   function buildPdfPageDetection(tab){
     var api = utils();
     var doi = api && typeof api.findDoiInText === 'function' ? api.findDoiInText(tab.url || '') : '';
+    var isbn = api && typeof api.findIsbnInText === 'function' ? api.findIsbnInText(tab.url || '') : '';
     return {
-      referenceType: 'article',
+      referenceType: isbn ? 'book' : 'article',
       sourcePageUrl: tab.url || '',
       pageTitle: tab.title || '',
       doi: doi,
+      isbn: isbn,
       pdfUrl: tab.url || '',
       detectedTitle: tab.title || 'PDF',
       detectedAuthors: [],
@@ -408,6 +570,7 @@
       detectedAbstract: '',
       detectionMeta: {
         doi: { value: doi, source: doi ? 'page_url' : 'none', confidence: doi ? 'medium' : 'none', found: !!doi },
+        isbn: { value: isbn, source: isbn ? 'isbn_url' : 'none', confidence: isbn ? 'medium' : 'none', found: !!isbn },
         pdfUrl: { value: tab.url || '', source: 'pdf_page', confidence: 'strong', found: !!(tab.url || '') },
         title: { value: tab.title || 'PDF', source: 'document_title', confidence: 'medium', found: !!(tab.title || 'PDF') },
         authors: { value: '', source: 'none', confidence: 'none', found: false },
@@ -433,6 +596,7 @@
       sourcePageUrl: tab.url || '',
       pageTitle: tab.title || '',
       doi: '',
+      isbn: '',
       pdfUrl: '',
       detectedTitle: tab.title || '',
       detectedAuthors: [],
@@ -446,6 +610,7 @@
       detectedAbstract: '',
       detectionMeta: {
         doi: { value: '', source: 'none', confidence: 'none', found: false },
+        isbn: { value: '', source: 'none', confidence: 'none', found: false },
         pdfUrl: { value: '', source: 'none', confidence: 'none', found: false },
         title: { value: tab.title || '', source: tab.title ? 'document_title' : 'none', confidence: tab.title ? 'weak' : 'none', found: !!tab.title },
         authors: { value: '', source: 'none', confidence: 'none', found: false },
@@ -671,14 +836,18 @@
   function renderDetection(){
     var data = state.detection || {};
     var doiInfo = detectionEntry('doi');
+    var isbnInfo = detectionEntry('isbn');
     var pdfInfo = detectionEntry('pdfUrl');
     populateEditableFields();
     renderCitationSummaryFromForm();
     setText('doiBadge', doiInfo.found ? ('DOI tespit edildi: ' + data.doi) : 'DOI tespit edilemedi');
     setClass('doiBadge', 'badge ' + badgeTone(doiInfo));
+    setText('isbnBadge', isbnInfo.found ? ('ISBN tespit edildi: ' + data.isbn) : 'ISBN tespit edilemedi');
+    setClass('isbnBadge', 'badge ' + badgeTone(isbnInfo));
     setText('pdfBadge', pdfInfo.found ? 'PDF baglantisi tespit edildi' : 'PDF baglantisi tespit edilemedi');
     setClass('pdfBadge', 'badge ' + badgeTone(pdfInfo));
     setText('doiEvidence', evidenceText('doi', 'Bulunamadi'));
+    setText('isbnEvidence', evidenceText('isbn', 'Bulunamadi'));
     setText('pdfEvidence', evidenceText('pdfUrl', 'Bulunamadi'));
     setText('titleEvidence', evidenceText('title', 'Bulunamadi'));
     setText('captureUrl', data.sourcePageUrl || '');
@@ -688,6 +857,7 @@
     setStatus('Sayfa bilgisi algilaniyor...', '');
     state.detection = await detectFromTab();
     renderDetection();
+    await enrichBookFromIsbnIfNeeded();
     await updateLookup();
     var doiInfo = detectionEntry('doi');
     var pdfInfo = detectionEntry('pdfUrl');
@@ -714,6 +884,7 @@
       sourcePageUrl: active.sourcePageUrl || detection.sourcePageUrl || '',
       pageTitle: detection.pageTitle || '',
       doi: active.doi || '',
+      isbn: active.isbn || '',
       pdfUrl: active.pdfUrl || '',
       detectedTitle: active.detectedTitle || detection.detectedTitle || detection.pageTitle || '',
       detectedAuthors: Array.isArray(active.detectedAuthors) ? active.detectedAuthors : [],
@@ -735,8 +906,8 @@
 
   async function sendCapture(){
     var payload = buildPayload();
-    if(!payload.detectedTitle && !payload.doi){
-      setStatus('En azindan baslik veya DOI algilanmali.', 'error');
+    if(!payload.detectedTitle && !payload.doi && !payload.isbn){
+      setStatus('En azindan baslik, DOI veya ISBN algilanmali.', 'error');
       return;
     }
     setStatus('AcademiQ\'a gonderiliyor...', '');
@@ -794,8 +965,8 @@
       return;
     }
     var payload = buildPayload();
-    if(!payload.detectedTitle && !payload.doi){
-      setLookupStatus('On kontrol icin baslik veya DOI gerekli.', '');
+    if(!payload.detectedTitle && !payload.doi && !payload.isbn){
+      setLookupStatus('On kontrol icin baslik, DOI veya ISBN gerekli.', '');
       return;
     }
     try{
@@ -823,7 +994,7 @@
     var createWorkspaceInput = $('workspaceCreateInput');
     var workspaceSel = $('workspaceSel');
     var comparisonSel = $('comparisonSel');
-    var editFieldIds = ['editReferenceType', 'editSourceUrl', 'editTitle', 'editAuthors', 'editJournal', 'editPublisher', 'editWebsiteName', 'editEdition', 'editPublishedDate', 'editAccessedDate', 'editYear', 'editDoi', 'editPdfUrl', 'editAbstract'];
+    var editFieldIds = ['editReferenceType', 'editSourceUrl', 'editTitle', 'editAuthors', 'editJournal', 'editPublisher', 'editWebsiteName', 'editEdition', 'editPublishedDate', 'editAccessedDate', 'editYear', 'editDoi', 'editIsbn', 'editPdfUrl', 'editAbstract'];
     if(refreshBtn){
       refreshBtn.addEventListener('click', function(){ refreshDetection().catch(function(error){ setStatus(error.message || 'Detection hatasi', 'error'); }); });
     }

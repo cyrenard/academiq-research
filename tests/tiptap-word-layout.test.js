@@ -619,6 +619,87 @@ test('syncPageMetrics keeps live ProseMirror page gaps visible and masks disable
   delete globalThis.document;
 });
 
+test('syncPageMetrics does not mutate editor content while measuring page layout', () => {
+  const nodes = [];
+  let inserted = 0;
+  globalThis.editor = {
+    chain(){
+      return {
+        focus(){ return this; },
+        insertContentAt(){ inserted++; return this; },
+        run(){ return true; }
+      };
+    }
+  };
+  globalThis.document = {
+    createElement(){
+      return {
+        className: '',
+        textContent: '',
+        style: {}
+      };
+    },
+    getElementById(){ return null; }
+  };
+  const page = {
+    style: {},
+    querySelector(){ return { innerHTML: '', appendChild(node){ nodes.push(node); } }; },
+    querySelectorAll(){ return []; },
+    appendChild(node){ nodes.push(node); }
+  };
+  function makeBlock(height){
+    return {
+      offsetHeight: height,
+      scrollHeight: height,
+      nodeName: 'P',
+      classList: {
+        contains(name){ return name === 'ProseMirror'; }
+      },
+      style: {},
+      getBoundingClientRect(){ return { height }; }
+    };
+  }
+  const editorDom = {
+    classList: {
+      contains(name){ return name === 'ProseMirror'; }
+    },
+    ownerDocument: globalThis.document,
+    querySelectorAll(){ return []; },
+    children: [makeBlock(700), makeBlock(500)],
+    scrollHeight: 1300,
+    offsetHeight: 1300
+  };
+  const editorView = {
+    state: {
+      doc: {
+        resolve(){ return { nodeAfter:{ type:{ name:'paragraph' }, nodeSize:80 } }; },
+        nodeAt(){ return { type:{ name:'paragraph' }, nodeSize:80 }; },
+        textBetween(){ return ' '; }
+      }
+    },
+    posAtDOM(){ return 2; },
+    domAtPos(){ return { node:{}, offset:0 }; }
+  };
+
+  const count = layout.syncPageMetrics({
+    page,
+    editorDom,
+    editorView,
+    scrollEl: { clientHeight: 700 },
+    pageContentHeight: 931,
+    pageHeight: 1123,
+    pageGap: 32,
+    pageTotalHeight: 1155,
+    pageVerticalPadding: 192
+  });
+
+  assert.equal(count, 2);
+  assert.equal(inserted, 0, 'layout measurement must not insert page-break paragraphs');
+
+  delete globalThis.editor;
+  delete globalThis.document;
+});
+
 test('schedulePageSync triggers sync after delay', async () => {
   let synced = 0;
   const ok = layout.schedulePageSync({

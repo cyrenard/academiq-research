@@ -578,6 +578,14 @@ function normalizeRefDoi(value){
   if(!/^10\.\d{4,9}\//i.test(doi))return '';
   return doi.toLowerCase();
 }
+function normalizeRefIsbn(value){
+  if(window.AQReferenceParse&&typeof window.AQReferenceParse.normalizeIsbn==='function'){
+    try{return window.AQReferenceParse.normalizeIsbn(value);}catch(_e){}
+  }
+  var raw=String(value||'').trim().replace(/[^\dXx]/g,'').toUpperCase();
+  if(raw.length!==10&&raw.length!==13)return '';
+  return raw;
+}
 function normalizeRefRecord(ref){
   if(!ref||typeof ref!=='object')return ref;
   var type=String(ref.referenceType||'').trim().toLowerCase();
@@ -591,6 +599,7 @@ function normalizeRefRecord(ref){
     if(py&&py[0])ref.year=py[0];
   }
   ref.doi=normalizeRefDoi(ref.doi||ref.url||'');
+  ref.isbn=normalizeRefIsbn(ref.isbn||'');
   ref.journal=String(ref.journal||'').replace(/\s+/g,' ').trim();
   ref.publisher=String(ref.publisher||'').replace(/\s+/g,' ').trim();
   ref.edition=String(ref.edition||'').replace(/\s+/g,' ').trim();
@@ -661,6 +670,8 @@ function refKey(ref){
   if(!ref)return'';
   var doi=normalizeRefDoi(ref.doi||'');
   if(doi)return'doi:'+doi;
+  var isbn=normalizeRefIsbn(ref.isbn||'');
+  if(isbn)return'isbn:'+isbn;
   var type=normalizeRefTypeValue(ref.referenceType||'article');
   var title=String(ref.title||'').trim().replace(/\s+/g,' ').toLowerCase();
   var year=(ref.year||'').trim().toLowerCase();
@@ -681,6 +692,9 @@ function refsLikelySame(a,b){
   var aDoi=normalizeRefDoi(a.doi||'');
   var bDoi=normalizeRefDoi(b.doi||'');
   if(aDoi&&bDoi)return aDoi===bDoi;
+  var aIsbn=normalizeRefIsbn(a.isbn||'');
+  var bIsbn=normalizeRefIsbn(b.isbn||'');
+  if(aIsbn&&bIsbn)return aIsbn===bIsbn;
   var aKey=refKey(a);
   var bKey=refKey(b);
   if(!isStrongMetaRefKey(aKey)||!isStrongMetaRefKey(bKey))return false;
@@ -1441,7 +1455,8 @@ function doAddNb(){
 function __aqNetFetchJSON(url,timeoutMs){
   var ms=Math.max(2500,Math.min(parseInt(timeoutMs,10)||8000,30000));
   if(window.electronAPI&&typeof window.electronAPI.netFetchJSON==='function'){
-    return window.electronAPI.netFetchJSON(url,{timeoutMs:ms}).then(function(res){
+    var preferFetch=/^https:\/\/openlibrary\.org\//i.test(String(url||''));
+    return window.electronAPI.netFetchJSON(url,{timeoutMs:ms,preferGlobalFetch:preferFetch}).then(function(res){
       if(res&&res.ok)return res.data||null;
       throw new Error((res&&res.error)||'Net fetch failed');
     });
@@ -1636,6 +1651,178 @@ function fetchCR(doi,cb){
     }).catch(function(e){finish(e);});
 }
 
+function fetchISBN(isbn,cb){
+  var done=false;
+  function finish(err,ref){
+    if(done)return;
+    done=true;
+    cb(err,ref);
+  }
+  var clean=normalizeRefIsbn(isbn);
+  if(!clean){
+    finish(new Error('Geçersiz ISBN'));
+    return;
+  }
+  var openLibraryBooksUrl='https://openlibrary.org/api/books?bibkeys=ISBN:'+encodeURIComponent(clean)+'&format=json&jscmd=data';
+  var openLibraryIsbnUrl='https://openlibrary.org/isbn/'+encodeURIComponent(clean)+'.json';
+  function mapOpenLibrary(data){
+    if(window.AQReferenceParse&&typeof window.AQReferenceParse.mapOpenLibraryBookToReference==='function'){
+      return window.AQReferenceParse.mapOpenLibraryBookToReference(data,{
+        isbn:clean,
+        createId:uid,
+        workspaceId:S.cur
+      });
+    }
+    return null;
+  }
+  function mapOpenLibraryEdition(data,authorNames){
+    if(window.AQReferenceParse&&typeof window.AQReferenceParse.mapOpenLibraryEditionToReference==='function'){
+      return window.AQReferenceParse.mapOpenLibraryEditionToReference(data,{
+        isbn:clean,
+        createId:uid,
+        workspaceId:S.cur,
+        authorNames:authorNames||[]
+      });
+    }
+    return null;
+  }
+  function resolveOpenLibraryAuthorNames(record){
+    var authors=Array.isArray(record&&record.authors)?record.authors:[];
+    var names=authors.map(function(author){
+      return String(author&&author.name?author.name:'').replace(/\s+/g,' ').trim();
+    }).filter(Boolean);
+    var keys=authors.map(function(author){
+      return String(author&&author.key?author.key:'').trim();
+    }).filter(function(key){
+      return /^\/authors\/OL[0-9A-Z]+A$/i.test(key);
+    }).slice(0,6);
+    if(!keys.length)return Promise.resolve(names);
+    return Promise.all(keys.map(function(key){
+      return __aqNetFetchJSON('https://openlibrary.org'+key+'.json',6000)
+        .then(function(data){
+          return String(data&&data.name?data.name:'').replace(/\s+/g,' ').trim();
+        })
+        .catch(function(){return '';});
+    })).then(function(fetched){
+      return names.concat(fetched.filter(Boolean));
+    });
+  }
+  function mapGoogleBooks(data){
+    if(window.AQReferenceParse&&typeof window.AQReferenceParse.mapGoogleBooksVolumeToReference==='function'){
+      return window.AQReferenceParse.mapGoogleBooksVolumeToReference(data,{
+        isbn:clean,
+        createId:uid,
+        workspaceId:S.cur
+      });
+    }
+    return null;
+  }
+  function mapCrossref(data){
+    if(window.AQReferenceParse&&typeof window.AQReferenceParse.mapCrossrefIsbnWorkToReference==='function'){
+      return window.AQReferenceParse.mapCrossrefIsbnWorkToReference(data,{
+        isbn:clean,
+        createId:uid,
+        workspaceId:S.cur
+      });
+    }
+    return null;
+  }
+  function firstSuccessfulLookup(tasks){
+    return new Promise(function(resolve,reject){
+      var remaining=tasks.length;
+      var failures=[];
+      var settled=false;
+      tasks.forEach(function(task,idx){
+        try{
+          task().then(function(ref){
+            if(settled)return;
+            settled=true;
+            resolve(ref);
+          }).catch(function(err){
+            failures[idx]=(err&&err.message)||String(err||'');
+            remaining-=1;
+            if(!remaining&&!settled)reject(new Error(failures.filter(Boolean).join(' | ')));
+          });
+        }catch(err){
+          failures[idx]=(err&&err.message)||String(err||'');
+          remaining-=1;
+          if(!remaining&&!settled)reject(new Error(failures.filter(Boolean).join(' | ')));
+        }
+      });
+    });
+  }
+  function lookupOpenLibraryEdition(){
+    return __aqNetFetchJSON(openLibraryIsbnUrl,12000)
+      .then(function(data){
+        return resolveOpenLibraryAuthorNames(data).then(function(authorNames){
+          var ref=mapOpenLibraryEdition(data,authorNames);
+          if(ref&&ref.title)return ref;
+          throw new Error('Open Library ISBN kaydi bulunamadi');
+        });
+      });
+  }
+  function lookupOpenLibraryBooks(){
+    return __aqNetFetchJSON(openLibraryBooksUrl,12000)
+      .then(function(data){
+        var ref=mapOpenLibrary(data);
+        if(ref&&ref.title)return ref;
+        throw new Error('Open Library books kaydi bulunamadi');
+      });
+  }
+  var errors=[];
+  firstSuccessfulLookup([lookupOpenLibraryBooks,lookupOpenLibraryEdition])
+  /*
+  __aqNetFetchJSON(openLibraryIsbnUrl,12000)
+    .then(function(data){
+      return resolveOpenLibraryAuthorNames(data).then(function(authorNames){
+        var ref=mapOpenLibraryEdition(data,authorNames);
+        if(ref&&ref.title)return ref;
+        throw new Error('Open Library ISBN kaydi bulunamadi');
+      });
+      var ref=mapOpenLibrary(data);
+      if(ref&&ref.title)return ref;
+      throw new Error('Open Library kaydı bulunamadı');
+    })
+    .catch(function(err){
+      errors.push('OpenLibrary ISBN: '+((err&&err.message)||String(err||'')));
+      return __aqNetFetchJSON(openLibraryBooksUrl,12000)
+        .then(function(data){
+          var ref=mapOpenLibrary(data);
+          if(ref&&ref.title)return ref;
+          throw new Error('Open Library books kaydi bulunamadi');
+        });
+    })
+    .catch(function(err){
+      errors.push('OpenLibrary books: '+((err&&err.message)||String(err||'')));
+  */
+    .catch(function(err){
+      errors.push('OpenLibrary: '+((err&&err.message)||String(err||'')));
+      return __aqNetFetchJSON('https://api.crossref.org/works?filter=isbn:'+encodeURIComponent(clean)+'&rows=1&mailto=academiq@example.com',9000)
+        .then(function(data){
+          var ref=mapCrossref(data);
+          if(ref&&ref.title)return ref;
+          throw new Error('Crossref kaydı bulunamadı');
+        });
+    })
+    .catch(function(err){
+      errors.push('Crossref: '+((err&&err.message)||String(err||'')));
+      return __aqNetFetchJSON('https://www.googleapis.com/books/v1/volumes?q=isbn:'+encodeURIComponent(clean)+'&maxResults=1',9000)
+        .then(function(data){
+          var ref=mapGoogleBooks(data);
+          if(ref&&ref.title)return ref;
+          throw new Error('Google Books kaydı bulunamadı');
+        });
+    })
+    .then(function(ref){
+      normalizeRefRecord(ref);
+      finish(null,ref);
+    })
+    .catch(function(e){
+      errors.push('GoogleBooks: '+((e&&e.message)||String(e||'')));
+      finish(new Error('Kitap metadata bulunamadı. '+errors.join(' | ')));
+    });
+}
+
 function addDOI(){
   if(addDoiBusy){
     setDst('DOI ekleme zaten çalışıyor.','ld');
@@ -1645,10 +1832,39 @@ function addDOI(){
   refreshBusyControls();
   ensureStableState('addDOI.before');
   var input=document.getElementById('doiinp').value.trim();
-  if(!input){setDst('DOI veya URL boş.','er');addDoiBusy=false;refreshBusyControls();return;}
+  if(!input){setDst('DOI, URL veya ISBN boş.','er');addDoiBusy=false;refreshBusyControls();return;}
   var isUrl=__isProbablyUrl(input);
   var urlInput=isUrl?__normalizeUrlInput(input):'';
   var normalizedDoi=normalizeRefDoi(input);
+  var normalizedIsbn=normalizeRefIsbn(input);
+  if(normalizedIsbn&&!normalizedDoi&&!isUrl){
+    setDst('ISBN metadata aranıyor...','ld');
+    var isbnTimed=false;
+    var isbnTimer=setTimeout(function(){
+      isbnTimed=true;
+      addDoiBusy=false;
+      refreshBusyControls();
+      setDst('ISBN sorgusu zaman aşımına uğradı. Open Library / Crossref / Google Books yanıt vermedi.','er');
+    },45000);
+    fetchISBN(normalizedIsbn,function(err,ref){
+      clearTimeout(isbnTimer);
+      if(isbnTimed)return;
+      try{
+        if(err){setDst('ISBN metadata alınamadı: '+err.message,'er');return;}
+        ref=addToLib(ref)||ref;
+        document.getElementById('doiinp').value='';
+        setDst(shortRef(ref)+' · Kitap kaynağı eklendi','ok');
+        setTimeout(function(){setDst('','');},3600);
+      }catch(e){
+        logStability('addDOI.isbn',e,{isbn:normalizedIsbn});
+        setDst('ISBN işlenirken hata oluştu.','er');
+      }finally{
+        addDoiBusy=false;
+        refreshBusyControls();
+      }
+    });
+    return;
+  }
   if(!normalizedDoi&&isUrl){
     setDst('? URL metadata aranıyor...','ld');
     var urlTimed=false;
@@ -1679,6 +1895,7 @@ function addDOI(){
           fp:'',
           lp:'',
           doi:'',
+          isbn:normalizeRefIsbn(meta.isbn||''),
           url:finalUrl,
           pdfData:null,
           pdfUrl:null,
@@ -1711,7 +1928,7 @@ function addDOI(){
     return;
   }
   if(!normalizedDoi){
-    setDst('DOI veya URL geçersiz.','er');
+    setDst('DOI, URL veya ISBN geçersiz.','er');
     addDoiBusy=false;
     refreshBusyControls();
     return;
@@ -1966,7 +2183,7 @@ function mergeRefFields(target,source){
   if(!target||!source||target===source)return target;
   normalizeRefRecord(source);
   [
-    'referenceType','title','year','journal','volume','issue','fp','lp','doi','url','pdfUrl',
+    'referenceType','title','year','journal','volume','issue','fp','lp','doi','isbn','url','pdfUrl',
     'publisher','edition','websiteName','publishedDate','accessedDate',
     'booktitle','location','language','abstract','note'
   ].forEach(function(k){

@@ -121,6 +121,8 @@
     var source = payload && typeof payload === 'object' ? payload : {};
     var type = String(source.referenceType || '').trim().toLowerCase();
     if(type !== 'book' && type !== 'website' && type !== 'article') type = 'article';
+    var isbn = String(source.isbn || '').replace(/[^0-9Xx]/g, '').toUpperCase();
+    if(isbn && type !== 'article' && type !== 'website') type = 'book';
     var detectedPublishedDate = String(source.detectedPublishedDate || '').trim();
     var detectedYear = String(source.detectedYear || '').trim();
     if(!detectedYear && detectedPublishedDate){
@@ -132,6 +134,7 @@
       sourcePageUrl: String(source.sourcePageUrl || '').trim(),
       pageTitle: String(source.pageTitle || '').trim(),
       doi: String(source.doi || '').trim(),
+      isbn: isbn,
       pdfUrl: String(source.pdfUrl || '').trim(),
       detectedTitle: String(source.detectedTitle || '').trim(),
       detectedAuthors: Array.isArray(source.detectedAuthors) ? source.detectedAuthors.slice(0, 12) : [],

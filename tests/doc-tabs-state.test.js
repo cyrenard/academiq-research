@@ -145,15 +145,15 @@ test('deleteWorkspaceWithDocState removes linked document and falls back to rema
   assert.equal(current.doc.id, 'doc1');
 });
 
-test('switchWorkspaceState keeps toc and bibliography scoped to each workspace document', () => {
+test('switchWorkspaceState keeps auxiliary sections scoped to each workspace document', () => {
   const state = {
     wss: [
       { id: 'ws1', name: 'Alan 1', lib: [], docId: 'doc1' },
       { id: 'ws2', name: 'Alan 2', lib: [], docId: 'doc2' }
     ],
     docs: [
-      { id: 'doc1', name: 'Alan 1', content: '<p>A</p>', tocHTML: '<div>toc-a</div>', bibliographyHTML: '<p>b-a</p>', bibliographyManual: false },
-      { id: 'doc2', name: 'Alan 2', content: '<p>B</p>', tocHTML: '<div>toc-b</div>', bibliographyHTML: '<p>b-b</p>', bibliographyManual: true }
+      { id: 'doc1', name: 'Alan 1', content: '<p>A</p>', tocHTML: '<div>toc-a</div>', bibliographyHTML: '<p>b-a</p>', appendicesHTML: '<section>ek-a</section>', bibliographyManual: false },
+      { id: 'doc2', name: 'Alan 2', content: '<p>B</p>', tocHTML: '<div>toc-b</div>', bibliographyHTML: '<p>b-b</p>', appendicesHTML: '<section>ek-b</section>', bibliographyManual: true }
     ],
     cur: 'ws1',
     curDoc: 'doc1',
@@ -166,6 +166,8 @@ test('switchWorkspaceState keeps toc and bibliography scoped to each workspace d
   assert.equal(switched.doc.id, 'doc2');
   assert.equal(switched.doc.tocHTML, '<div>toc-b</div>');
   assert.equal(switched.doc.bibliographyHTML, '<p>b-b</p>');
+  assert.equal(switched.doc.appendicesHTML, '<section>ek-b</section>');
   assert.equal(state.docs.find(d => d.id === 'doc1').tocHTML, '<div>toc-a</div>');
   assert.equal(state.docs.find(d => d.id === 'doc1').bibliographyHTML, '<p>b-a</p>');
+  assert.equal(state.docs.find(d => d.id === 'doc1').appendicesHTML, '<section>ek-a</section>');
 });

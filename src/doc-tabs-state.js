@@ -18,6 +18,7 @@
         : [],
       coverHTML: typeof doc.coverHTML === 'string' ? doc.coverHTML : '',
       tocHTML: typeof doc.tocHTML === 'string' ? doc.tocHTML : '',
+      appendicesHTML: typeof doc.appendicesHTML === 'string' ? doc.appendicesHTML : '',
       citationStyle: citationStyle
     };
   }
@@ -60,6 +61,7 @@
           bibliographyExtraRefIds: [],
           coverHTML: '',
           tocHTML: '',
+          appendicesHTML: '',
           citationStyle: 'apa7'
         };
         next.docs.push(linked);
@@ -109,6 +111,7 @@
       bibliographyExtraRefIds: [],
       coverHTML: '',
       tocHTML: '',
+      appendicesHTML: '',
       citationStyle: 'apa7'
     };
     var ws = {
@@ -182,6 +185,7 @@
       bibliographyExtraRefIds: [],
       coverHTML: '',
       tocHTML: '',
+      appendicesHTML: '',
       citationStyle: 'apa7'
     };
     next.docs = Array.isArray(next.docs) ? next.docs.slice() : [];

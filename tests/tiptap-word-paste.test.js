@@ -24,7 +24,7 @@ test('cleanPastedHTML fallback strips dangerous nodes and events without DOM', (
   const cleaned = paste.cleanPastedHTML('<p onclick="evil()" style="mso-line-height-alt:120%;line-height:1.4">X</p><script>alert(1)</script>');
   assert.equal(cleaned.includes('<script'), false);
   assert.equal(cleaned.includes('onclick='), false);
-  assert.match(cleaned, /line-height:1.4/);
+  assert.equal(/line-height/i.test(cleaned), false);
 });
 
 test('cleanPastedHTML fallback strips style/meta/link blocks and MSO classes', () => {
@@ -45,9 +45,7 @@ test('cleanPastedHTML fallback drops non-whitelisted style properties', () => {
   const cleaned = paste.cleanPastedHTML('<p style="position:absolute;top:100px;color:red;font-family:Arial;font-size:20pt">X</p>');
   assert.equal(cleaned.includes('position'), false);
   assert.equal(cleaned.includes('top:'), false);
-  assert.match(cleaned, /color:red/i);
-  assert.match(cleaned, /font-family:Arial/i);
-  assert.match(cleaned, /font-size:20pt/i);
+  assert.equal(/color:red|font-family:Arial|font-size:20pt/i.test(cleaned), false);
 });
 
 test('cleanPastedHTML fallback removes Word VML shapes without keeping textbox text', () => {
@@ -71,9 +69,29 @@ test('normalizeStyleAttribute preserves safe Word visual and paragraph styles', 
   assert.equal(/mso-style-name|position/i.test(style), false);
 });
 
-test('cleanPastedHTML fallback preserves paragraph layout styles', () => {
+test('cleanPastedHTML fallback strips paragraph layout styles except alignment', () => {
   const cleaned = paste.cleanPastedHTML('<p style="text-align:right;margin-left:36pt;text-indent:-18pt">Paragraf</p>');
   assert.match(cleaned, /text-align:right/);
-  assert.match(cleaned, /margin-left:36pt/);
-  assert.match(cleaned, /text-indent:-18pt/);
+  assert.equal(/margin-left:36pt|text-indent:-18pt/i.test(cleaned), false);
+});
+
+test('cleanPastedHTML unwraps full Word document wrappers when DOM is available', () => {
+  if(typeof document === 'undefined') return;
+  const cleaned = paste.cleanPastedHTML(
+    '<html><head><style>p{line-height:200%}</style></head><body><div class="WordSection1"><p>Metin</p></div></body></html>'
+  );
+  assert.match(cleaned, /<p[^>]*>Metin<\/p>/);
+  assert.equal(/<html|<head|<body|WordSection1|line-height/i.test(cleaned), false);
+});
+
+test('cleanPastedHTML fallback drops malformed empty Word span fragments', () => {
+  const cleaned = paste.cleanPastedHTML('<p><spanTahoma",sans-serif;color:black">\uFEFF</span></p><p>Metin</p>');
+  assert.match(cleaned, /Metin/);
+  assert.equal(/spanTahoma/i.test(cleaned), false);
+});
+
+test('cleanPastedHTML fallback drops empty BOM-only Word paragraphs', () => {
+  const cleaned = paste.cleanPastedHTML('<p><span style="font-family:Tahoma;color:black">\uFEFF</span></p><p>Metin</p>');
+  assert.match(cleaned, /Metin/);
+  assert.equal(/font-family:Tahoma;color:black">\uFEFF/i.test(cleaned), false);
 });

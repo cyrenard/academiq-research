@@ -19,6 +19,8 @@ const SAFE_DETECTION_SOURCES = {
   button_link: true,
   pdf_page: true,
   embed_src: true,
+  isbn_url: true,
+  isbn_lookup: true,
   dom: true,
   jsonld: true,
   og_meta: true,
@@ -66,6 +68,46 @@ function normalizeDoi(value) {
   return doi;
 }
 
+function isValidIsbn10(value) {
+  const isbn = String(value || '').toUpperCase();
+  if (!/^\d{9}[\dX]$/.test(isbn)) return false;
+  let sum = 0;
+  for (let index = 0; index < 9; index += 1) sum += (10 - index) * Number(isbn[index]);
+  sum += isbn[9] === 'X' ? 10 : Number(isbn[9]);
+  return sum % 11 === 0;
+}
+
+function isValidIsbn13(value) {
+  const isbn = String(value || '');
+  if (!/^\d{13}$/.test(isbn)) return false;
+  let sum = 0;
+  for (let index = 0; index < 12; index += 1) sum += Number(isbn[index]) * (index % 2 ? 3 : 1);
+  const check = (10 - (sum % 10)) % 10;
+  return check === Number(isbn[12]);
+}
+
+function normalizeIsbn(value) {
+  const raw = safeDecodeURIComponent(asText(value, 4096))
+    .replace(/[\u200B-\u200D\uFEFF]/g, ' ')
+    .replace(/\b(?:urn:)?isbn(?:-1[03])?\b/ig, ' ');
+  if (!raw) return '';
+  const candidates = [];
+  let match;
+  const explicit = /\bISBN(?:-1[03])?\s*(?::|=)?\s*([0-9Xx][0-9Xx\-\s]{8,28}[0-9Xx])\b/ig;
+  while ((match = explicit.exec(String(value || ''))) && candidates.length < 16) {
+    candidates.push(match[1]);
+  }
+  const generic = /[0-9Xx][0-9Xx\-\s]{8,28}[0-9Xx]/g;
+  while ((match = generic.exec(raw)) && candidates.length < 32) {
+    candidates.push(match[0]);
+  }
+  for (let index = 0; index < candidates.length; index += 1) {
+    const isbn = String(candidates[index] || '').toUpperCase().replace(/[^0-9X]/g, '');
+    if ((isbn.length === 10 && isValidIsbn10(isbn)) || (isbn.length === 13 && isValidIsbn13(isbn))) return isbn;
+  }
+  return '';
+}
+
 function isSafeRemoteUrl(value) {
   try {
     const parsed = new URL(String(value || '').trim());
@@ -90,6 +132,7 @@ function normalizeDetectionEntry(raw, fieldName) {
     found: !!source.found
   };
   if (fieldName === 'doi') normalized.value = normalizeDoi(normalized.value);
+  if (fieldName === 'isbn') normalized.value = normalizeIsbn(normalized.value);
   if (fieldName === 'pdfUrl' && !isSafeRemoteUrl(normalized.value)) normalized.value = '';
   if (!SAFE_DETECTION_SOURCES[normalized.source]) normalized.source = 'none';
   if (!SAFE_DETECTION_CONFIDENCE[normalized.confidence]) normalized.confidence = normalized.value ? 'weak' : 'none';
@@ -106,6 +149,7 @@ function sanitizeDetectionMeta(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
   return {
     doi: normalizeDetectionEntry(source.doi, 'doi'),
+    isbn: normalizeDetectionEntry(source.isbn, 'isbn'),
     pdfUrl: normalizeDetectionEntry(source.pdfUrl, 'pdfUrl'),
     title: normalizeDetectionEntry(source.title, 'title'),
     authors: normalizeDetectionEntry(source.authors, 'authors'),
@@ -382,6 +426,7 @@ function sanitizeCapturePayload(payload) {
     sourcePageUrl: isSafeRemoteUrl(source.sourcePageUrl) ? asText(source.sourcePageUrl, 4096) : '',
     pageTitle: asText(source.pageTitle, 2048),
     doi: normalizeDoi(source.doi),
+    isbn: normalizeIsbn(source.isbn),
     pdfUrl: isSafeRemoteUrl(source.pdfUrl) ? asText(source.pdfUrl, 4096) : '',
     detectedTitle: asText(source.detectedTitle || source.title, 2048),
     detectedAuthors: authors,
@@ -400,6 +445,9 @@ function sanitizeCapturePayload(payload) {
     timestamp: Number(source.timestamp) > 0 ? Number(source.timestamp) : Date.now(),
     detectionMeta: sanitizeDetectionMeta(source.detectionMeta)
   };
+  if (normalized.isbn && referenceTypeRaw !== 'article' && referenceTypeRaw !== 'website') {
+    normalized.referenceType = 'book';
+  }
   if (!normalized.sourcePageUrl && isSafeRemoteUrl(source.url)) normalized.sourcePageUrl = asText(source.url, 4096);
   if (!normalized.detectedTitle) normalized.detectedTitle = normalized.pageTitle;
   if (!normalized.detectedYear && normalized.detectedPublishedDate) {

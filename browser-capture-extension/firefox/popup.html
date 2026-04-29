@@ -12,6 +12,7 @@
       <div class="title" id="detectedTitle">Makale algilaniyor...</div>
       <div class="row" style="margin-top:8px;flex-wrap:wrap;">
         <span class="badge" id="doiBadge">DOI kontrol ediliyor</span>
+        <span class="badge" id="isbnBadge">ISBN kontrol ediliyor</span>
         <span class="badge" id="pdfBadge">PDF kontrol ediliyor</span>
       </div>
       <div class="summary-grid">
@@ -30,6 +31,7 @@
       </div>
       <div class="evidence-list">
         <div class="evidence-row"><span>DOI kaniti</span><strong id="doiEvidence">Kontrol ediliyor</strong></div>
+        <div class="evidence-row"><span>ISBN kaniti</span><strong id="isbnEvidence">Kontrol ediliyor</strong></div>
         <div class="evidence-row"><span>PDF kaniti</span><strong id="pdfEvidence">Kontrol ediliyor</strong></div>
         <div class="evidence-row"><span>Baslik kaniti</span><strong id="titleEvidence">Kontrol ediliyor</strong></div>
       </div>
@@ -98,6 +100,10 @@
           <div class="field">
             <label for="editDoi">DOI</label>
             <input id="editDoi" type="text" maxlength="512" autocomplete="off">
+          </div>
+          <div class="field type-only type-book">
+            <label for="editIsbn">ISBN</label>
+            <input id="editIsbn" type="text" maxlength="128" autocomplete="off">
           </div>
           <div class="field">
             <label for="editPdfUrl">PDF URL</label>

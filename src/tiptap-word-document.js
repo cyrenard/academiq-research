@@ -326,6 +326,8 @@
       + '.aq-export-root .aq-keep-with-next{break-after:avoid-page;page-break-after:avoid;}'
       + '.aq-export-root .aq-biblio-heading{margin-bottom:0;}'
       + '.aq-export-root .aq-ref-entry + .aq-ref-entry{margin-top:0;}'
+      + '.aq-export-root .aq-export-appendices .appendix-title:not(:first-child){break-before:page;page-break-before:always;}'
+      + '.aq-export-root .appendix-title{text-transform:uppercase;}'
       + '.aq-export-root .aq-keep-target{break-before:auto;page-break-before:auto;}'
       + '.aq-export-root .aq-table-block,.aq-export-root .aq-figure-block{margin:6pt 0 10pt 0;}'
       + '.aq-export-root .aq-table-note{margin-top:4pt;text-indent:0;font-size:10.5pt;line-height:1.6;}'
@@ -362,8 +364,153 @@
       .replace(/<div[^>]*class="pg-spacer"[^>]*>[\s\S]*?<\/div>/gi, '');
   }
 
+  function pickLoadedStyle(tagName, styleText){
+    var tag = String(tagName || '').toLowerCase();
+    var allowed = {};
+    if(/^(p|div|h1|h2|h3|h4|h5|h6|li|blockquote)$/i.test(tag)){
+      allowed = {'text-align':1};
+    }else if(/^(table|tr|td|th|thead|tbody|tfoot)$/i.test(tag)){
+      allowed = {
+        'text-align':1,
+        'border':1,
+        'border-left':1,
+        'border-right':1,
+        'border-top':1,
+        'border-bottom':1,
+        'border-width':1,
+        'border-style':1,
+        'border-color':1,
+        'background-color':1
+      };
+    }else if(/^(span|a|strong|em|u|s|sup|sub)$/i.test(tag)){
+      allowed = {
+        'font-family':1,
+        'font-size':1,
+        'font-weight':1,
+        'font-style':1,
+        'text-decoration':1,
+        'color':1,
+        'background-color':1,
+        'vertical-align':1
+      };
+    }
+    var out = [];
+    String(styleText || '').split(';').forEach(function(part){
+      var idx = String(part || '').indexOf(':');
+      if(idx <= 0) return;
+      var prop = part.slice(0, idx).trim().toLowerCase();
+      var value = part.slice(idx + 1).trim();
+      if(!prop || !value || !allowed[prop]) return;
+      if(prop.indexOf('mso-') === 0) return;
+      if(/[<>]/.test(value) || /expression\s*\(|javascript\s*:|url\s*\(/i.test(value)) return;
+      if(prop === 'font-family'){
+        value = value.replace(/["']/g, '').split(',').map(function(item){ return item.trim(); }).filter(Boolean).slice(0, 3).join(', ');
+      }
+      if(value) out.push(prop + ':' + value);
+    });
+    return out.join(';');
+  }
+
+  function stripEmptyWordParagraphs(html){
+    return String(html || '')
+      .replace(/^\uFEFF+/, '')
+      .replace(/<p>\s*<span(?![\s>/])[^>]{0,220}>\s*(?:\uFEFF|&nbsp;|\s)*<\/span\s*>\s*<\/p>/gi, '')
+      .replace(/<span(?![\s>/])[^>]{0,220}>\s*(?:\uFEFF|&nbsp;|\s)*<\/span\s*>/gi, '')
+      .replace(/<span(?![\s>/])[^>]{0,220}>/gi, '')
+      .replace(/<p(?:\s[^>]*)?>\s*(?:<[^>]+>\s*)*(?:\uFEFF|&nbsp;|\s)*(?:\s*<\/[^>]+>)*\s*<\/p>/gi, '')
+      .replace(/<p>\s*(?:\uFEFF|&nbsp;|\s)*<\/p>/gi, '');
+  }
+
+  function stripSinglePlainFlowDiv(html){
+    var out = String(html || '').trim();
+    while(/^<div\s*>\s*[\s\S]*<\/div\s*>$/i.test(out)){
+      var inner = out.replace(/^<div\s*>\s*/i, '').replace(/\s*<\/div\s*>$/i, '').trim();
+      if(!inner || !/<(?:p|h[1-6]|ul|ol|blockquote|table)\b/i.test(inner)) break;
+      out = inner;
+    }
+    return out;
+  }
+
+  function unwrapPlainFlowDivs(root){
+    if(!root || !root.querySelectorAll) return;
+    Array.from(root.querySelectorAll('div')).forEach(function(node){
+      if(!node || !node.parentNode) return;
+      if(node.attributes && node.attributes.length) return;
+      if(!node.querySelector('p,h1,h2,h3,h4,h5,h6,ul,ol,blockquote,table')) return;
+      while(node.firstChild) node.parentNode.insertBefore(node.firstChild, node);
+      node.remove();
+    });
+  }
+
+  function unwrapWordShellWithDOM(html){
+    if(typeof document === 'undefined' || !document.createElement) return null;
+    try{
+      var root = document.createElement('div');
+      root.innerHTML = String(html || '');
+      var importedBody = root.querySelector && root.querySelector('body');
+      if(importedBody) root.innerHTML = importedBody.innerHTML || '';
+      root.querySelectorAll('script,style,link,meta,title,base,head').forEach(function(node){ node.remove(); });
+      root.querySelectorAll('html,body').forEach(function(node){
+        if(!node.parentNode) return;
+        while(node.firstChild) node.parentNode.insertBefore(node.firstChild, node);
+        node.remove();
+      });
+      root.querySelectorAll('div[class*="WordSection"],section[class*="WordSection"]').forEach(function(node){
+        if(!node.parentNode) return;
+        while(node.firstChild) node.parentNode.insertBefore(node.firstChild, node);
+        node.remove();
+      });
+      unwrapPlainFlowDivs(root);
+      root.querySelectorAll('*').forEach(function(node){
+        Array.from(node.attributes || []).forEach(function(attr){
+          var name = String(attr.name || '').toLowerCase();
+          if(name === 'style'){
+            var safe = pickLoadedStyle(node.tagName, attr.value || '');
+            if(safe) node.setAttribute('style', safe);
+            else node.removeAttribute(attr.name);
+            return;
+          }
+          if(name === 'class' && /\b(?:Mso|WordSection)/i.test(attr.value || '')){
+            node.removeAttribute(attr.name);
+            return;
+          }
+          if(/^on/.test(name) || /^mso-/.test(name) || /^(width|height|valign|align|lang|page)$/i.test(name)){
+            if(!(name === 'align' && /^(p|div|h1|h2|h3|h4|h5|h6|td|th)$/i.test(String(node.tagName || '')))){
+              node.removeAttribute(attr.name);
+            }
+          }
+        });
+      });
+      return stripSinglePlainFlowDiv(stripEmptyWordParagraphs(root.innerHTML));
+    }catch(_e){
+      return null;
+    }
+  }
+
+  function sanitizeLoadedEditorLayout(html){
+    var source = String(html || '');
+    var domClean = unwrapWordShellWithDOM(source);
+    if(domClean != null) source = domClean;
+    else{
+      source = source
+        .replace(/<head\b[\s\S]*?<\/head\s*>/gi, '')
+        .replace(/<style\b[\s\S]*?<\/style\s*>/gi, '')
+        .replace(/<\/?(?:html|body)\b[^>]*>/gi, '')
+        .replace(/<div\b[^>]*class\s*=\s*(?:(["'])[^"']*\bWordSection\d*\b[^"']*\1|[^\s>]*\bWordSection\d*\b[^\s>]*)[^>]*>/gi, '')
+        .replace(/<\/div>\s*$/i, '');
+      source = stripSinglePlainFlowDiv(source);
+      source = source.replace(/<([a-z0-9]+)([^>]*?)\sstyle\s*=\s*("([^"]*)"|'([^']*)')([^>]*)>/gi, function(_match, tagName, before, _q, doubleValue, singleValue, after){
+        var safe = pickLoadedStyle(tagName, doubleValue != null ? doubleValue : singleValue);
+        return '<' + tagName + before + (safe ? ' style="' + safe + '"' : '') + after + '>';
+      });
+      source = source.replace(/\sclass\s*=\s*("[^"]*\b(?:Mso|WordSection)[^"]*"|'[^']*\b(?:Mso|WordSection)[^']*')/gi, '');
+      source = stripSinglePlainFlowDiv(stripEmptyWordParagraphs(source));
+    }
+    return stripLegacyEditorArtifacts(source);
+  }
+
   function prepareLoadedHTML(html, blankHTML){
-    var cleaned = stripLegacyEditorArtifacts(html);
+    var cleaned = sanitizeLoadedEditorLayout(stripLegacyEditorArtifacts(html));
     cleaned = String(cleaned || '').trim();
     return cleaned || String(blankHTML || '<p></p>');
   }
@@ -453,13 +600,16 @@
     }
     var html = typeof options.getHTML === 'function' ? options.getHTML() : blankHTML;
     if(typeof options.commitState === 'function'){
-      html = options.commitState(state, html, { sanitize:options.sanitizeHTML });
+      var commitSanitize = typeof options.sanitizeHTML === 'function'
+        ? function(value){ return prepareLoadedHTML(options.sanitizeHTML(value), blankHTML); }
+        : function(value){ return prepareLoadedHTML(value, blankHTML); };
+      html = options.commitState(state, html, { sanitize:commitSanitize });
       return html || blankHTML;
     }
     var sanitizeHTML = typeof options.sanitizeHTML === 'function'
       ? options.sanitizeHTML
       : function(value){ return String(value || ''); };
-    html = sanitizeHTML(html);
+    html = prepareLoadedHTML(sanitizeHTML(html), blankHTML);
     var current = state.docs.find(function(doc){ return doc && doc.id === currentDocId; });
     if(current) current.content = html;
     state.doc = html;
@@ -591,6 +741,8 @@
           focusToEndFn: options.focusToEndFn || null,
           focusSurface: !!options.focusAtEnd && !options.editor,
           focusSurfaceFn: options.focusSurfaceFn || null,
+          stabilizeLayout: options.stabilizeLayout !== false,
+          layoutPasses: options.layoutPasses || [0, 80, 240, 520],
           afterLayout: function(){
             if(!isActiveLoad()) return;
             if(typeof options.afterLayout === 'function') options.afterLayout();
@@ -668,6 +820,8 @@
       normalize: options.normalize || null,
       syncRefs: options.syncRefs || null,
       syncChrome: options.syncChrome || null,
+      stabilizeLayout: options.stabilizeLayout,
+      layoutPasses: options.layoutPasses,
       loadToken: options.loadToken != null ? options.loadToken : null,
       isLoadTokenActive: typeof options.isLoadTokenActive === 'function' ? options.isLoadTokenActive : null,
       syncLayout: options.syncLayout || null,
@@ -704,6 +858,8 @@
       normalize: options.normalize || null,
       syncRefs: options.syncRefs || null,
       syncChrome: options.syncChrome || null,
+      stabilizeLayout: options.stabilizeLayout,
+      layoutPasses: options.layoutPasses,
       loadToken: options.loadToken != null ? options.loadToken : null,
       isLoadTokenActive: typeof options.isLoadTokenActive === 'function' ? options.isLoadTokenActive : null,
       syncLayout: options.syncLayout || null,

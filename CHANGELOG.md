@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.7 - Minimal UI, ISBN books, notebooks, and capture hardening
+
+### Added
+- Minimal UI skin promoted into the main app bundle under the `minimal` skin name.
+- ISBN lookup support for adding books from the DOI/URL input flow.
+- Browser Capture extension can detect ISBNs on pages and submit book captures.
+- Workspace-scoped notebooks and folder-style library organization improvements.
+
+### Fixed
+- Word import/page-layout regressions around editor focus and APA page flow.
+- PDF download/viewer recovery paths and related article lookup resilience.
+- Browser Capture payload validation now preserves book ISBN metadata.
+
+### Notes
+- Existing legacy experimental skin preferences are migrated to `minimal` automatically.
+
 ## 1.1.6 — Diagnostics build for capture button + /t citation
 
 If users still report the disabled cursor on Browser Capture buttons or `/t` rendering as parenthetical, this build makes the source of the bug self-evident:

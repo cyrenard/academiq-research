@@ -10,6 +10,12 @@ test('findDoiInText extracts DOI from free text', () => {
   );
 });
 
+test('findIsbnInText validates and normalizes ISBN values', () => {
+  assert.equal(utils.findIsbnInText('ISBN-13: 978-0-13-461099-3'), '9780134610993');
+  assert.equal(utils.findIsbnInText('ISBN 0-13-110362-8'), '0131103628');
+  assert.equal(utils.findIsbnInText('ISBN 978-0-13-461099-0'), '');
+});
+
 test('meta DOI extraction beats weak body DOI candidates', () => {
   const details = utils.extractDoiCandidates({
     metaEntries: [{ name: 'citation_doi', content: '10.1000/xyz' }],
@@ -37,6 +43,32 @@ test('jsonld DOI extraction works for scholarly article nodes', () => {
   assert.equal(details.value, '10.5555/jsonld.123');
   assert.equal(details.source, 'jsonld');
   assert.equal(details.confidence, 'strong');
+});
+
+test('ISBN extraction prefers structured book metadata', () => {
+  const details = utils.extractIsbnCandidates({
+    metaEntries: [{ name: 'citation_isbn', content: '978-0-13-461099-3' }],
+    jsonLdTexts: [JSON.stringify({ '@type': 'Book', isbn: '9780134610993' })],
+    bodyText: 'ISBN 978-0-321-14653-3',
+    pageUrl: 'https://example.org/book'
+  });
+  assert.equal(details.value, '9780134610993');
+  assert.equal(details.source, 'citation_meta');
+  assert.equal(details.confidence, 'strong');
+});
+
+test('detectPageMetadata includes ISBN beside DOI/PDF signals', () => {
+  const result = utils.detectPageMetadata({
+    metaEntries: [{ name: 'citation_isbn', content: '978-0-13-461099-3' }],
+    jsonLdTexts: [JSON.stringify({ '@type': 'Book', name: 'A Book', author: [{ name: 'Book Author' }] })],
+    anchorEntries: [],
+    pageUrl: 'https://example.org/book',
+    canonicalUrl: '',
+    bodyText: '',
+    docTitle: 'Fallback'
+  });
+  assert.equal(result.isbn.value, '9780134610993');
+  assert.equal(result.title.value, 'A Book');
 });
 
 test('body DOI candidates are conservative near references context', () => {

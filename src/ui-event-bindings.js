@@ -177,6 +177,7 @@
     on('ddInsCoverBtn', 'click', function(){ execAndClose('insCover'); });
     on('ddInsAbstractBtn', 'click', function(){ execAndClose('insAbstract'); });
     on('ddInsRefsBtn', 'click', function(){ execAndClose('insRefs'); });
+    on('ddInsAppendixBtn', 'click', function(){ execAndClose('insAppendix'); });
     on('ddTplTezBtn', 'click', function(){ call('applyTemplate', 'tez'); closeDropdown(); });
     on('ddTplMakaleBtn', 'click', function(){ call('applyTemplate', 'makale'); closeDropdown(); });
     on('ddTplRaporBtn', 'click', function(){ call('applyTemplate', 'rapor'); closeDropdown(); });
@@ -314,6 +315,7 @@
     on('ddInsEditorCoverBtn', 'click', function(){ execAndHideModal('insCover', 'editorInsertQuickMenuModal'); });
     on('ddInsEditorAbstractBtn', 'click', function(){ execAndHideModal('insAbstract', 'editorInsertQuickMenuModal'); });
     on('ddInsEditorRefsBtn', 'click', function(){ execAndHideModal('insRefs', 'editorInsertQuickMenuModal'); });
+    on('ddInsEditorAppendixBtn', 'click', function(){ execAndHideModal('insAppendix', 'editorInsertQuickMenuModal'); });
     on('ddInsEditorTplTezBtn', 'click', function(){ call('applyTemplate', 'tez'); call('hideM', 'editorInsertQuickMenuModal'); closeDropdown(); });
     on('ddInsEditorTplMakaleBtn', 'click', function(){ call('applyTemplate', 'makale'); call('hideM', 'editorInsertQuickMenuModal'); closeDropdown(); });
     on('ddInsEditorTplRaporBtn', 'click', function(){ call('applyTemplate', 'rapor'); call('hideM', 'editorInsertQuickMenuModal'); closeDropdown(); });

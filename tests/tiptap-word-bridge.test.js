@@ -44,6 +44,33 @@ test('getCurrentEditorHTML and setCurrentEditorHTML use content bridge when avai
   ]);
 });
 
+test('setCurrentEditorHTML sanitizes saved Word layout styles before delegation', () => {
+  const previousWindow = global.window;
+  global.window = {
+    AQTipTapWordPaste: {
+      cleanPastedHTML(value) {
+        return String(value || '').replace(/\sstyle="[^"]*"/g, '');
+      }
+    }
+  };
+  try {
+    const calls = [];
+    const ok = bridge.setCurrentEditorHTML({
+      contentApi: {
+        setEditorHTML(opts) {
+          calls.push(opts.html);
+          return true;
+        }
+      },
+      html: '<p style="position:absolute;line-height:200%">x</p>'
+    });
+    assert.equal(ok, true);
+    assert.deepEqual(calls, ['<p>x</p>']);
+  } finally {
+    global.window = previousWindow;
+  }
+});
+
 test('runEditorMutationEffects falls back to local callbacks when no api exists', () => {
   const calls = [];
   const ok = bridge.runEditorMutationEffects({

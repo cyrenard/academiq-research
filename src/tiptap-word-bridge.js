@@ -17,6 +17,19 @@
     return options && options.runtimeApi ? options.runtimeApi : null;
   }
 
+  function sanitizeEditorHTML(options, html){
+    options = options || {};
+    var next = String(html || '<p></p>');
+    if(typeof options.sanitizeHTML === 'function'){
+      try{ next = String(options.sanitizeHTML(next) || '<p></p>'); }catch(_e){}
+    }
+    var host = typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null);
+    if(host && host.AQTipTapWordPaste && typeof host.AQTipTapWordPaste.cleanPastedHTML === 'function'){
+      try{ next = String(host.AQTipTapWordPaste.cleanPastedHTML(next) || '<p></p>'); }catch(_e2){}
+    }
+    return next || '<p></p>';
+  }
+
   function getCurrentEditorHTML(options){
     options = options || {};
     var contentApi = getContentApi(options);
@@ -50,6 +63,7 @@
 
   function setCurrentEditorHTML(options){
     options = options || {};
+    var nextHTML = sanitizeEditorHTML(options, options.html || '<p></p>');
     var contentApi = getContentApi(options);
     if(contentApi && typeof contentApi.setEditorHTML === 'function'){
       return !!contentApi.setEditorHTML({
@@ -57,7 +71,7 @@
         editor: options.editor || null,
         shell: options.shell || null,
         host: options.host || null,
-        html: String(options.html || '<p></p>')
+        html: nextHTML
       });
     }
     var documentApi = getDocumentApi(options);
@@ -66,22 +80,22 @@
         editor: options.editor || null,
         shell: options.shell || null,
         host: options.host || null,
-        html: String(options.html || '<p></p>')
+        html: nextHTML
       });
     }
     var editor = options.editor || null;
     if(editor && editor.commands && typeof editor.commands.setContent === 'function'){
-      editor.commands.setContent(String(options.html || '<p></p>'));
+      editor.commands.setContent(nextHTML);
       return true;
     }
     var shell = options.shell || null;
     if(shell && typeof shell.setHTML === 'function'){
-      shell.setHTML(String(options.html || '<p></p>'));
+      shell.setHTML(nextHTML);
       return true;
     }
     var host = options.host || null;
     if(host){
-      host.innerHTML = String(options.html || '<p></p>');
+      host.innerHTML = nextHTML;
       return true;
     }
     return false;
@@ -159,7 +173,7 @@
       });
       return true;
     }
-    var nextHTML = String(options.html || '<p></p>');
+    var nextHTML = sanitizeEditorHTML(options, options.html || '<p></p>');
     setCurrentEditorHTML({
       contentApi: contentApi,
       documentApi: getDocumentApi(options),

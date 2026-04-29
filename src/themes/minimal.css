@@ -1,0 +1,1885 @@
+/* ==========================================================================
+   AcademiQ Research - Minimal theme
+   Pastel minimal surfaces, cool hairlines, compact layout.
+   All colour values, spacing, and selectors are original to this file.
+   --------------------------------------------------------------------------
+   Activated when document.documentElement[data-aq-skin="minimal"].
+   ========================================================================== */
+
+:root[data-aq-skin="minimal"] {
+  /* ---- Background field — pure white, cool ---- */
+  --lg-bg:        #ffffff;
+  --lg-bg-tint:   #f7f8fa;
+  --lg-bg-deep:   #eef0f4;
+
+  /* ---- Surface ---- */
+  --lg-surface:        #ffffff;
+  --lg-surface-warm:   #fbfcfd;
+  --lg-surface-hover:  #f3f4f6;
+  --lg-surface-active: #e8eaee;
+
+  /* ---- Borders (cool hairline) ---- */
+  --lg-border:        #e7e9ee;
+  --lg-border-strong: #d3d6dd;
+  --lg-divider:       #eef0f4;
+
+  /* ---- Text — cool near-black ---- */
+  --lg-text:        #0e1320;
+  --lg-text-soft:   #2a2f3c;
+  --lg-text-muted:  #5b6273;
+  --lg-text-dim:    #8b91a0;
+
+  /* ---- Accent — indigo / periwinkle pastel ---- */
+  --lg-accent:        #5b6cff;
+  --lg-accent-hover:  #4855e0;
+  --lg-accent-soft:   #dde1ff;
+  --lg-accent-tint:   rgba(91, 108, 255, 0.07);
+  --lg-accent-glow:   rgba(91, 108, 255, 0.18);
+
+  /* ---- Shadows (compact, subtle) ---- */
+  --lg-shadow-xs: 0 1px 0 rgba(14, 19, 32, 0.04);
+  --lg-shadow-sm: 0 1px 2px rgba(14, 19, 32, 0.05);
+  --lg-shadow-md: 0 1px 2px rgba(14, 19, 32, 0.05),
+                  0 4px 12px rgba(14, 19, 32, 0.06);
+  --lg-shadow-lg: 0 1px 2px rgba(14, 19, 32, 0.06),
+                  0 12px 32px rgba(14, 19, 32, 0.08);
+
+  /* ---- Geometry (tighter) ---- */
+  --lg-r-xs: 3px;
+  --lg-r-sm: 5px;
+  --lg-r:    6px;
+  --lg-r-lg: 9px;
+  --lg-r-xl: 12px;
+
+  /* ---- Density (compact) ---- */
+  --lg-text-size:    11.5px;
+  --lg-text-size-sm: 10.5px;
+  --lg-text-size-xs: 9.5px;
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+:root[data-aq-skin="minimal"] body,
+:root[data-aq-skin="minimal"] #ctr {
+  background: var(--lg-bg) !important;
+  color: var(--lg-text) !important;
+  font: 400 var(--lg-text-size)/1.45 'Manrope', system-ui, -apple-system, "Segoe UI", sans-serif !important;
+  letter-spacing: -0.003em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ==========================================================================
+   Top toolbar — slim, hairline only
+   ========================================================================== */
+:root[data-aq-skin="minimal"] #tb {
+  height: 38px !important;
+  background: var(--lg-bg) !important;
+  border: none !important;
+  border-bottom: 1px solid var(--lg-border) !important;
+  box-shadow: none !important;
+  padding: 0 10px !important;
+  gap: 3px !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+:root[data-aq-skin="minimal"] .logo {
+  font-family: 'Manrope', system-ui, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  font-style: normal !important;
+  color: var(--lg-text) !important;
+  letter-spacing: -0.025em !important;
+  text-shadow: none !important;
+  margin-right: 10px !important;
+}
+
+:root[data-aq-skin="minimal"] .sep {
+  height: 14px !important;
+  background: var(--lg-divider) !important;
+  margin: 0 3px !important;
+  width: 1px !important;
+}
+
+/* ==========================================================================
+   Sidebars — pale cool inset
+   ========================================================================== */
+:root[data-aq-skin="minimal"] #sbl,
+:root[data-aq-skin="minimal"] #sbr,
+:root[data-aq-skin="minimal"] #sbar,
+:root[data-aq-skin="minimal"] #pdfpanel,
+:root[data-aq-skin="minimal"] #pdftb,
+:root[data-aq-skin="minimal"] #nbtabs,
+:root[data-aq-skin="minimal"] #ctxlabelpanel,
+:root[data-aq-skin="minimal"] #fn-panel {
+  background: var(--lg-bg-tint) !important;
+  border-color: var(--lg-border) !important;
+  box-shadow: none !important;
+  color: var(--lg-text) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Editor toolbar — flat with hairline */
+:root[data-aq-skin="minimal"] #etb {
+  background: var(--lg-surface) !important;
+  border: 1px solid var(--lg-border) !important;
+  border-radius: var(--lg-r) !important;
+  box-shadow: var(--lg-shadow-xs) !important;
+  padding: 3px !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ==========================================================================
+   BUTTONS — small, ghost, indigo on active
+   Aggressive selectors so the top toolbar (#tb) buttons and dropdown
+   triggers also get the minimal styling — earlier the inline `.btn` rules
+   in the HTML were winning on those elements because of source order.
+   ========================================================================== */
+:root[data-aq-skin="minimal"] #tb .btn,
+:root[data-aq-skin="minimal"] #tb button,
+:root[data-aq-skin="minimal"] .btn,
+:root[data-aq-skin="minimal"] button:not(.refe):not(.cit):not([class*="page-"]):not([class*="img-"]) {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--lg-r-sm) !important;
+  color: var(--lg-text-soft) !important;
+  padding: 3px 8px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  font: 500 var(--lg-text-size)/1 'Manrope', system-ui, sans-serif !important;
+  letter-spacing: -0.003em !important;
+  cursor: pointer;
+  box-shadow: none !important;
+  transition: background 110ms ease, color 110ms ease, border-color 110ms ease !important;
+  text-transform: none !important;
+}
+
+/* Editor toolbar GROUP CONTAINERS (.tbgrp) — keep the pill look but
+   make it tighter and lighter. Smaller radius, thinner border, no
+   shadow, less padding. */
+:root[data-aq-skin="minimal"] #etb .tbgrp,
+:root[data-aq-skin="minimal"] .tbgrp {
+  background: var(--lg-surface-warm) !important;
+  border: 1px solid var(--lg-border) !important;
+  border-radius: 8px !important;
+  box-shadow: var(--lg-shadow-xs) !important;
+  padding: 0 3px !important;
+  gap: 0 !important;
+}
+
+/* Page 1 (Anahat / Başlıklar / İçindekiler / Kaynak / Kaynakça) — match
+   page 2's compact full-pill look: rounded 999px, padding 5px 9px,
+   row gap 7px → that's what the user already liked. */
+:root[data-aq-skin="minimal"] #etb .etb-page[data-page="1"] .etb-row:not(.etb-row-search) .tbgrp {
+  padding: 5px 9px !important;
+  border-radius: 999px !important;
+  flex: 0 0 auto !important;
+  min-width: max-content !important;
+  justify-content: flex-start !important;
+}
+:root[data-aq-skin="minimal"] #etb .etb-page[data-page="1"] .etb-row:not(.etb-row-search) {
+  gap: 7px !important;
+}
+:root[data-aq-skin="minimal"] #etb .etb-page[data-page="1"] .tbgrp .efmt {
+  padding-left: 6px !important;
+  padding-right: 6px !important;
+}
+
+/* Bul (find) toolbar — collapsed by default, expands on focus-within.
+   The row keeps Referans (Dipn/Sonn/→Ref) always visible alongside.
+   Default: just the "Bul" title chip with a tiny input behind a width-0
+   shell. On focus, the input animates open to its working size. */
+:root[data-aq-skin="minimal"] #etb .etb-page[data-page="1"] .etb-row-search .tb-find {
+  flex: 0 0 auto !important;
+  max-width: none !important;
+  width: auto !important;
+  padding: 4px 7px !important;
+  transition: max-width 180ms ease, padding 180ms ease !important;
+  overflow: hidden !important;
+}
+:root[data-aq-skin="minimal"] #etb .etb-page[data-page="1"] .etb-row-search .tb-find .tb-find-input {
+  flex: 0 0 0 !important;
+  width: 0 !important;
+  max-width: 0 !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  box-sizing: border-box !important;
+  padding: 0 !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  transition: width 180ms ease, max-width 180ms ease, padding 180ms ease !important;
+}
+/* When the find pill is focused or when the input has content, expand */
+:root[data-aq-skin="minimal"] #etb .etb-page[data-page="1"] .etb-row-search .tb-find:hover .tb-find-input,
+:root[data-aq-skin="minimal"] #etb .etb-page[data-page="1"] .etb-row-search .tb-find:focus-within .tb-find-input,
+:root[data-aq-skin="minimal"] #etb .etb-page[data-page="1"] .etb-row-search .tb-find .tb-find-input:not(:placeholder-shown) {
+  width: 200px !important;
+  max-width: 200px !important;
+  padding: 0 13px !important;
+  flex: 0 1 200px !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: var(--lg-border) !important;
+}
+/* Collapse the result count + preview + nav buttons until the input is
+   in use (focused or has content). */
+:root[data-aq-skin="minimal"] #etb .etb-page[data-page="1"] .etb-row-search .tb-find .tb-find-count,
+:root[data-aq-skin="minimal"] #etb .etb-page[data-page="1"] .etb-row-search .tb-find .tb-find-preview,
+:root[data-aq-skin="minimal"] #etb .etb-page[data-page="1"] .etb-row-search .tb-find #toolbarFindPrevBtn,
+:root[data-aq-skin="minimal"] #etb .etb-page[data-page="1"] .etb-row-search .tb-find #toolbarFindNextBtn,
+:root[data-aq-skin="minimal"] #etb .etb-page[data-page="1"] .etb-row-search .tb-find #toolbarFindReplaceBtn {
+  display: none !important;
+}
+:root[data-aq-skin="minimal"] #etb .etb-page[data-page="1"] .etb-row-search .tb-find:hover .tb-find-count,
+:root[data-aq-skin="minimal"] #etb .etb-page[data-page="1"] .etb-row-search .tb-find:focus-within .tb-find-count,
+:root[data-aq-skin="minimal"] #etb .etb-page[data-page="1"] .etb-row-search .tb-find:focus-within .tb-find-preview,
+:root[data-aq-skin="minimal"] #etb .etb-page[data-page="1"] .etb-row-search .tb-find:focus-within #toolbarFindPrevBtn,
+:root[data-aq-skin="minimal"] #etb .etb-page[data-page="1"] .etb-row-search .tb-find:focus-within #toolbarFindNextBtn,
+:root[data-aq-skin="minimal"] #etb .etb-page[data-page="1"] .etb-row-search .tb-find:focus-within #toolbarFindReplaceBtn {
+  display: inline-flex !important;
+}
+/* Group separators — the inline rule put a faint vertical line between
+   adjacent groups; we don't need it now that each group is its own pill. */
+:root[data-aq-skin="minimal"] #etb .tbgrp + .tbgrp::before,
+:root[data-aq-skin="minimal"] .tbgrp + .tbgrp::before {
+  display: none !important;
+}
+:root[data-aq-skin="minimal"] #etb .tbgrp-title,
+:root[data-aq-skin="minimal"] .tbgrp-title {
+  display: inline-flex !important;
+  align-items: center !important;
+  font: 600 8.5px/1 'Manrope', system-ui, sans-serif !important;
+  color: var(--lg-text-dim) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.06em !important;
+  margin-right: 4px !important;
+}
+
+/* Editor toolbar buttons (#etb .efmt and any inner .btn) — square,
+   compact, sharp corners. NOT pill-shaped. The [style] selector matches
+   the legacy inline CSS specificity so we win the cascade. */
+:root[data-aq-skin="minimal"] #etb .efmt,
+:root[data-aq-skin="minimal"] #etb .efmt[style],
+:root[data-aq-skin="minimal"] #etb .btn,
+:root[data-aq-skin="minimal"] #etb button {
+  height: 20px !important;
+  min-height: 20px !important;
+  padding: 0 5px !important;
+  font: 500 var(--lg-text-size-sm)/1 'Manrope', system-ui, sans-serif !important;
+  border-radius: 3px !important;
+  border: 1px solid transparent !important;
+  letter-spacing: 0 !important;
+  background: transparent !important;
+  color: var(--lg-text-soft) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+:root[data-aq-skin="minimal"] #etb .efmt:hover,
+:root[data-aq-skin="minimal"] #etb .efmt[style]:hover,
+:root[data-aq-skin="minimal"] #etb .btn:hover,
+:root[data-aq-skin="minimal"] #etb button:hover {
+  background: var(--lg-surface-hover) !important;
+  border-color: transparent !important;
+  color: var(--lg-text) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+:root[data-aq-skin="minimal"] #tb .btn:hover,
+:root[data-aq-skin="minimal"] #tb button:hover,
+:root[data-aq-skin="minimal"] #etb .btn:hover,
+:root[data-aq-skin="minimal"] #etb button:hover,
+:root[data-aq-skin="minimal"] .btn:hover,
+:root[data-aq-skin="minimal"] button:not(.refe):not(.cit):hover {
+  background: var(--lg-surface-hover) !important;
+  color: var(--lg-text) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+:root[data-aq-skin="minimal"] #tb .btn:active,
+:root[data-aq-skin="minimal"] #tb button:active,
+:root[data-aq-skin="minimal"] .btn:active,
+:root[data-aq-skin="minimal"] button:not(.refe):not(.cit):active {
+  background: var(--lg-surface-active) !important;
+  transform: none !important;
+}
+
+:root[data-aq-skin="minimal"] .btn.active,
+:root[data-aq-skin="minimal"] .btn[aria-pressed="true"],
+:root[data-aq-skin="minimal"] button.active {
+  background: var(--lg-accent-tint) !important;
+  color: var(--lg-accent) !important;
+  border-color: transparent !important;
+  font-weight: 600 !important;
+}
+
+/* Primary action — same compact geometry as other buttons, just a
+   solid accent fill so it reads as the call-to-action without
+   visually dominating the toolbar. */
+:root[data-aq-skin="minimal"] .btn.prim,
+:root[data-aq-skin="minimal"] #tb .btn.prim {
+  background: var(--lg-accent) !important;
+  color: #ffffff !important;
+  border: 1px solid var(--lg-accent) !important;
+  border-radius: var(--lg-r-sm) !important;
+  padding: 3px 10px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  font: 600 var(--lg-text-size)/1 'Manrope', system-ui, sans-serif !important;
+  letter-spacing: -0.003em !important;
+  box-shadow: none !important;
+}
+:root[data-aq-skin="minimal"] .btn.prim:hover,
+:root[data-aq-skin="minimal"] #tb .btn.prim:hover {
+  background: var(--lg-accent-hover) !important;
+  border-color: var(--lg-accent-hover) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 3px var(--lg-accent-glow) !important;
+}
+
+:root[data-aq-skin="minimal"] .btn.tog {
+  border: 1px solid var(--lg-border) !important;
+  background: var(--lg-surface) !important;
+  font-size: var(--lg-text-size-sm) !important;
+}
+:root[data-aq-skin="minimal"] .btn.tog.on {
+  background: var(--lg-accent-tint) !important;
+  color: var(--lg-accent) !important;
+  border-color: var(--lg-accent-soft) !important;
+}
+
+/* Browser Capture buttons — preserve always-clickable behavior */
+:root[data-aq-skin="minimal"] #browserCaptureInstallBtn,
+:root[data-aq-skin="minimal"] #browserCaptureRepairBtn,
+:root[data-aq-skin="minimal"] #browserCaptureLaunchBtn {
+  cursor: pointer !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+/* ==========================================================================
+   Form controls — compact, hairline, indigo focus halo
+   ========================================================================== */
+:root[data-aq-skin="minimal"] input[type="text"],
+:root[data-aq-skin="minimal"] input[type="search"],
+:root[data-aq-skin="minimal"] input[type="number"],
+:root[data-aq-skin="minimal"] input[type="email"],
+:root[data-aq-skin="minimal"] input[type="url"],
+:root[data-aq-skin="minimal"] input[type="password"],
+:root[data-aq-skin="minimal"] textarea,
+:root[data-aq-skin="minimal"] select {
+  background: var(--lg-surface) !important;
+  border: 1px solid var(--lg-border) !important;
+  border-radius: var(--lg-r-sm) !important;
+  color: var(--lg-text) !important;
+  padding: 3px 8px !important;
+  height: 25px;
+  font: 400 var(--lg-text-size)/1.4 'Manrope', system-ui, sans-serif !important;
+  box-shadow: none !important;
+  transition: border-color 110ms ease, box-shadow 110ms ease;
+}
+:root[data-aq-skin="minimal"] textarea { height: auto; }
+
+:root[data-aq-skin="minimal"] input:focus,
+:root[data-aq-skin="minimal"] textarea:focus,
+:root[data-aq-skin="minimal"] select:focus {
+  outline: none !important;
+  border-color: var(--lg-accent) !important;
+  box-shadow: 0 0 0 2px var(--lg-accent-glow) !important;
+}
+
+::placeholder { color: var(--lg-text-dim) !important; }
+
+/* ==========================================================================
+   Page sheets — pristine white, compact shadow
+   ========================================================================== */
+:root[data-aq-skin="minimal"] .aq-page-sheet,
+:root[data-aq-skin="minimal"] #apapage,
+:root[data-aq-skin="minimal"] #bibpage,
+:root[data-aq-skin="minimal"] #coverpage {
+  background: var(--lg-surface) !important;
+  border-radius: var(--lg-r-sm) !important;
+  border: 1px solid var(--lg-border) !important;
+  box-shadow: var(--lg-shadow-md) !important;
+}
+
+/* ==========================================================================
+   Document/Workspace tabs (#doctabs) — minimal pills
+   Each .doctab represents a workspace; active one is accent-tinted.
+   ========================================================================== */
+:root[data-aq-skin="minimal"] #doctabs {
+  background: rgba(247,248,250,0.82) !important;
+  border: none !important;
+  padding: 5px 10px 0 !important;
+  gap: 2px !important;
+  border-bottom: 1px solid var(--lg-border) !important;
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+  overflow-x: auto !important;
+}
+
+:root[data-aq-skin="minimal"] #doctabs > .doctab,
+:root[data-aq-skin="minimal"] #doctabs > * {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-bottom-color: transparent !important;
+  border-radius: 8px 8px 0 0 !important;
+  color: var(--lg-text-muted) !important;
+  padding: 0 16px !important;
+  font: 500 var(--lg-text-size-sm)/1 'Manrope', system-ui, sans-serif !important;
+  height: 27px !important;
+  min-height: 27px !important;
+  min-width: 118px !important;
+  max-width: 220px !important;
+  box-shadow: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  cursor: pointer !important;
+  overflow: hidden !important;
+  transition: background 110ms ease, color 110ms ease, border-color 110ms ease !important;
+}
+
+:root[data-aq-skin="minimal"] #doctabs > .doctab:hover,
+:root[data-aq-skin="minimal"] #doctabs > *:hover {
+  background: rgba(255,255,255,.48) !important;
+  border-color: rgba(211,214,221,.58) !important;
+  border-bottom-color: transparent !important;
+  color: var(--lg-text) !important;
+  box-shadow: none !important;
+}
+
+:root[data-aq-skin="minimal"] #doctabs > .doctab.on,
+:root[data-aq-skin="minimal"] #doctabs > .active,
+:root[data-aq-skin="minimal"] #doctabs > [aria-selected="true"] {
+  background: var(--lg-surface) !important;
+  color: var(--lg-text) !important;
+  border-color: var(--lg-border) !important;
+  border-bottom-color: var(--lg-surface) !important;
+  font-weight: 600 !important;
+  box-shadow: 0 -1px 0 rgba(255,255,255,.9), 0 1px 0 var(--lg-surface) !important;
+  position: relative !important;
+  margin-bottom: -1px !important;
+}
+
+:root[data-aq-skin="minimal"] #doctabs .dtlabel {
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  text-align: center !important;
+}
+
+/* Inline close × inside a doctab pill */
+:root[data-aq-skin="minimal"] #doctabs .dtclose {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 14px !important;
+  height: 14px !important;
+  border-radius: 999px !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  color: var(--lg-text-dim) !important;
+  cursor: pointer !important;
+  margin-left: -1px !important;
+  margin-right: -6px !important;
+  transition: background 110ms ease, color 110ms ease !important;
+}
+:root[data-aq-skin="minimal"] #doctabs .dtclose:hover {
+  background: rgba(181, 58, 58, 0.12) !important;
+  color: #b53a3a !important;
+}
+
+/* The "+" add-workspace button — same small pill, distinct as ghost */
+:root[data-aq-skin="minimal"] #doctab-add {
+  width: 30px !important;
+  height: 25px !important;
+  min-width: 30px !important;
+  padding: 0 !important;
+  border-radius: 7px 7px 0 0 !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: var(--lg-text-muted) !important;
+  font: 600 14px/1 'Manrope', system-ui, sans-serif !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+}
+:root[data-aq-skin="minimal"] #doctab-add:hover {
+  background: var(--lg-accent-tint) !important;
+  color: var(--lg-text) !important;
+  border-color: rgba(211,214,221,.58) !important;
+  border-bottom-color: transparent !important;
+}
+
+/* ==========================================================================
+   Modals — translucent panel with blur, app visible underneath
+   IMPORTANT: only target the inner panel (.modal). Do NOT match
+   [id*="modal"] because that catches the backdrop wrapper too
+   (which has id="syncmodal", id="metaHealthModal" etc. and class
+   "modal-bg") — that was turning the entire app surface white.
+   ========================================================================== */
+:root[data-aq-skin="minimal"] .modal,
+:root[data-aq-skin="minimal"] [class*="modal"]:not(.modal-backdrop):not(.modal-bg) {
+  /* More transparent now (0.62) and lighter blur (16px) so the editor
+     underneath stays clearly visible. */
+  background: rgba(255, 255, 255, 0.62) !important;
+  backdrop-filter: saturate(160%) blur(16px) !important;
+  -webkit-backdrop-filter: saturate(160%) blur(16px) !important;
+  border: 1px solid rgba(231, 233, 238, 0.55) !important;
+  border-radius: var(--lg-r-lg) !important;
+  box-shadow: var(--lg-shadow-lg) !important;
+  color: var(--lg-text) !important;
+}
+
+/* The dimming/backdrop layer — almost transparent so the app shows
+   through clearly. */
+:root[data-aq-skin="minimal"] .modal-bg,
+:root[data-aq-skin="minimal"] .modal-bg.show {
+  background: rgba(14, 19, 32, 0.10) !important;
+  backdrop-filter: saturate(130%) blur(6px) !important;
+  -webkit-backdrop-filter: saturate(130%) blur(6px) !important;
+}
+
+/* Modal panel — fade + slight scale on open */
+@keyframes lgModalIn {
+  from { opacity: 0; transform: scale(0.98) translateY(6px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes lgModalBgIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+:root[data-aq-skin="minimal"] .modal-bg.show {
+  animation: lgModalBgIn 160ms ease-out;
+}
+:root[data-aq-skin="minimal"] .modal-bg.show > .modal {
+  animation: lgModalIn 200ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  transform-origin: center top;
+}
+
+/* Modal title — consistent header treatment */
+:root[data-aq-skin="minimal"] .modal .mt {
+  font: 600 14px/1.3 'Manrope', system-ui, sans-serif !important;
+  letter-spacing: -0.012em !important;
+  color: var(--lg-text) !important;
+  margin-bottom: 12px !important;
+  padding-bottom: 8px !important;
+  border-bottom: 1px solid var(--lg-divider) !important;
+}
+
+/* Modal action row — buttons aligned right */
+:root[data-aq-skin="minimal"] .modal .mb {
+  display: flex !important;
+  gap: 6px !important;
+  margin-top: 14px !important;
+  padding-top: 10px !important;
+  border-top: 1px solid var(--lg-divider) !important;
+  justify-content: center !important;
+  flex-wrap: wrap !important;
+}
+
+/* Modal buttons (.mbtn) — consistent geometry */
+:root[data-aq-skin="minimal"] .mbtn {
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 14px !important;
+  border-radius: var(--lg-r-sm) !important;
+  font: 500 var(--lg-text-size)/1 'Manrope', system-ui, sans-serif !important;
+  letter-spacing: -0.003em !important;
+  border: 1px solid var(--lg-border) !important;
+  background: var(--lg-surface) !important;
+  color: var(--lg-text-soft) !important;
+  cursor: pointer !important;
+  box-shadow: none !important;
+  transition: background 110ms ease, color 110ms ease, border-color 110ms ease, box-shadow 180ms ease !important;
+}
+:root[data-aq-skin="minimal"] .mbtn:hover {
+  background: var(--lg-surface-hover) !important;
+  color: var(--lg-text) !important;
+  border-color: var(--lg-border-strong) !important;
+}
+:root[data-aq-skin="minimal"] .mbtn.p {
+  background: var(--lg-accent) !important;
+  color: #ffffff !important;
+  border-color: var(--lg-accent) !important;
+  font-weight: 600 !important;
+}
+:root[data-aq-skin="minimal"] .mbtn.p:hover {
+  background: var(--lg-accent-hover) !important;
+  border-color: var(--lg-accent-hover) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 3px var(--lg-accent-glow) !important;
+}
+:root[data-aq-skin="minimal"] .mbtn.s {
+  background: var(--lg-surface) !important;
+}
+
+/* ==========================================================================
+   Pills & chips — minimal, ghost, hairline border, accent on active
+   Covers: filter chips (.aq-crd-chip), library badges (.lbadge),
+   tag chips (.tgtag), theme chips (.thchip), collection buttons
+   (.collection-btn), sort buttons (.mh-sortbtn), matrix buttons
+   (.mx-cell-btn / .mx-row-btn), pill-style buttons (.aq-pp-btn /
+   .ppb / .pdf-pill / .aq-tcb-btn).
+   ========================================================================== */
+:root[data-aq-skin="minimal"] .aq-crd-chip,
+:root[data-aq-skin="minimal"] .lbadge,
+:root[data-aq-skin="minimal"] .tgtag,
+:root[data-aq-skin="minimal"] .thchip,
+:root[data-aq-skin="minimal"] .collection-btn,
+:root[data-aq-skin="minimal"] .mh-sortbtn,
+:root[data-aq-skin="minimal"] .mx-cell-btn,
+:root[data-aq-skin="minimal"] .mx-row-btn,
+:root[data-aq-skin="minimal"] .aq-pp-btn,
+:root[data-aq-skin="minimal"] .pdf-pill,
+:root[data-aq-skin="minimal"] .aq-tcb-btn {
+  background: transparent !important;
+  border: 1px solid var(--lg-border) !important;
+  border-radius: 999px !important;
+  color: var(--lg-text-muted) !important;
+  padding: 2px 9px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  font: 500 var(--lg-text-size-sm)/1 'Manrope', system-ui, sans-serif !important;
+  letter-spacing: 0 !important;
+  cursor: pointer;
+  box-shadow: none !important;
+  text-transform: none !important;
+  transition: background 110ms ease, color 110ms ease, border-color 110ms ease !important;
+}
+
+:root[data-aq-skin="minimal"] .aq-crd-chip:hover,
+:root[data-aq-skin="minimal"] .lbadge:hover,
+:root[data-aq-skin="minimal"] .tgtag:hover,
+:root[data-aq-skin="minimal"] .thchip:hover,
+:root[data-aq-skin="minimal"] .collection-btn:hover,
+:root[data-aq-skin="minimal"] .mh-sortbtn:hover,
+:root[data-aq-skin="minimal"] .mx-cell-btn:hover,
+:root[data-aq-skin="minimal"] .mx-row-btn:hover,
+:root[data-aq-skin="minimal"] .aq-pp-btn:hover,
+:root[data-aq-skin="minimal"] .pdf-pill:hover,
+:root[data-aq-skin="minimal"] .aq-tcb-btn:hover {
+  background: var(--lg-surface-hover) !important;
+  color: var(--lg-text) !important;
+  border-color: var(--lg-border-strong) !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Active / selected state — soft accent tint, no fill flood */
+:root[data-aq-skin="minimal"] .aq-crd-chip.active,
+:root[data-aq-skin="minimal"] .aq-crd-chip[aria-pressed="true"],
+:root[data-aq-skin="minimal"] .mh-sortbtn.on,
+:root[data-aq-skin="minimal"] .aq-pp-btn.aq-pp-active,
+:root[data-aq-skin="minimal"] .thchip.on,
+:root[data-aq-skin="minimal"] .ppb.on {
+  background: var(--lg-accent-tint) !important;
+  color: var(--lg-accent) !important;
+  border-color: var(--lg-accent-soft) !important;
+  font-weight: 600 !important;
+}
+
+/* Danger variant (delete-row, removable items) */
+:root[data-aq-skin="minimal"] .mx-row-btn.danger,
+:root[data-aq-skin="minimal"] .collection-btn-danger,
+:root[data-aq-skin="minimal"] .aq-tcb-btn.aq-tcb-danger {
+  color: #b53a3a !important;
+  border-color: rgba(181, 58, 58, 0.20) !important;
+}
+:root[data-aq-skin="minimal"] .mx-row-btn.danger:hover,
+:root[data-aq-skin="minimal"] .collection-btn-danger:hover,
+:root[data-aq-skin="minimal"] .aq-tcb-btn.aq-tcb-danger:hover {
+  background: rgba(181, 58, 58, 0.06) !important;
+  color: #b53a3a !important;
+  border-color: rgba(181, 58, 58, 0.32) !important;
+}
+
+/* Literature matrix: keep "PDFte Goster" button always clickable and
+   reserve top space in textarea so text never overlaps the action row. */
+:root[data-aq-skin="minimal"] .mx-cell {
+  position: relative !important;
+}
+:root[data-aq-skin="minimal"] .mx-cell-actions {
+  z-index: 4 !important;
+  pointer-events: auto !important;
+}
+:root[data-aq-skin="minimal"] .mx-cell-input {
+  position: relative !important;
+  z-index: 1 !important;
+  height: auto !important;
+  min-height: 92px !important;
+  padding: 27px 8px 7px !important;
+  box-sizing: border-box !important;
+}
+
+/* lbadge variants — semantic colour, but everything stays as quiet pills */
+:root[data-aq-skin="minimal"] .lbadge.pdf,
+:root[data-aq-skin="minimal"] .lbadge.pdfv-ok {
+  color: #2f7a4d !important;
+  border-color: rgba(47, 122, 77, 0.28) !important;
+  background: rgba(47, 122, 77, 0.06) !important;
+}
+:root[data-aq-skin="minimal"] .lbadge.doi,
+:root[data-aq-skin="minimal"] .lbadge.oa {
+  color: var(--lg-accent) !important;
+  border-color: var(--lg-accent-soft) !important;
+  background: var(--lg-accent-tint) !important;
+}
+:root[data-aq-skin="minimal"] .lbadge.pdfv-warn {
+  color: #8a6d1f !important;
+  border-color: rgba(138, 109, 31, 0.28) !important;
+  background: rgba(138, 109, 31, 0.06) !important;
+}
+:root[data-aq-skin="minimal"] .lbadge.pdfv-bad {
+  color: #b53a3a !important;
+  border-color: rgba(181, 58, 58, 0.28) !important;
+  background: rgba(181, 58, 58, 0.06) !important;
+}
+
+/* ==========================================================================
+   Bottom status bar (#sbar) + status chips — refined, balanced spacing
+   ========================================================================== */
+:root[data-aq-skin="minimal"] #sbar {
+  height: 26px !important;
+  background: var(--lg-bg-tint) !important;
+  border-top: 1px solid var(--lg-border) !important;
+  padding: 0 14px !important;
+  gap: 8px !important;
+  font-size: var(--lg-text-size-xs) !important;
+  color: var(--lg-text-muted) !important;
+  backdrop-filter: none !important;
+}
+
+:root[data-aq-skin="minimal"] #aqLeanStatus,
+:root[data-aq-skin="minimal"] #aqStatusPages,
+:root[data-aq-skin="minimal"] #aqStatusWords,
+:root[data-aq-skin="minimal"] #dst {
+  background: transparent !important;
+  border: 1px solid var(--lg-border) !important;
+  border-radius: 999px !important;
+  padding: 1px 9px !important;
+  height: 18px;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  color: var(--lg-text-muted) !important;
+  font-size: var(--lg-text-size-xs) !important;
+  font-weight: 500 !important;
+  box-shadow: none !important;
+  letter-spacing: 0.01em;
+  white-space: nowrap !important;
+}
+
+/* The lean status row sits at the bottom: APA badge + sorun + saved time */
+:root[data-aq-skin="minimal"] #aqLeanStatus {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+}
+:root[data-aq-skin="minimal"] #aqLeanStatus > * {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+/* "Kaydedildi" + time — render with a space and a small green dot */
+:root[data-aq-skin="minimal"] #aqLeanStatus [class*="saved"],
+:root[data-aq-skin="minimal"] #aqLeanStatus [class*="Saved"] {
+  color: #2f7a4d !important;
+}
+:root[data-aq-skin="minimal"] #aqLeanStatus [class*="saved"]::before,
+:root[data-aq-skin="minimal"] #aqLeanStatus [class*="Saved"]::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #46a571;
+  margin-right: 4px;
+  box-shadow: 0 0 0 2px rgba(70, 165, 113, 0.18);
+}
+
+/* ==========================================================================
+   Scrollbars — thin
+   ========================================================================== */
+:root[data-aq-skin="minimal"] ::-webkit-scrollbar { width: 8px; height: 8px; }
+:root[data-aq-skin="minimal"] ::-webkit-scrollbar-track { background: transparent; }
+:root[data-aq-skin="minimal"] ::-webkit-scrollbar-thumb {
+  background: rgba(14, 19, 32, 0.16);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+:root[data-aq-skin="minimal"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(14, 19, 32, 0.32);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+/* ==========================================================================
+   Dropdowns + popovers — small floating panels
+   ========================================================================== */
+:root[data-aq-skin="minimal"] .dd,
+:root[data-aq-skin="minimal"] [class*="dropdown"]:not([class*="Item"]),
+:root[data-aq-skin="minimal"] [class*="Dropdown"]:not([class*="Item"]),
+:root[data-aq-skin="minimal"] #ctxmenu,
+:root[data-aq-skin="minimal"] #folderCtxmenu,
+:root[data-aq-skin="minimal"] #findbar,
+:root[data-aq-skin="minimal"] #hltip,
+:root[data-aq-skin="minimal"] #aq-paste-popup,
+:root[data-aq-skin="minimal"] #aq-table-ctxbar,
+:root[data-aq-skin="minimal"] .ctx-menu {
+  background: var(--lg-surface) !important;
+  border: 1px solid var(--lg-border-strong) !important;
+  border-radius: var(--lg-r) !important;
+  box-shadow: var(--lg-shadow-lg) !important;
+  color: var(--lg-text) !important;
+  padding: 3px !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+:root[data-aq-skin="minimal"] .ddi {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--lg-r-xs) !important;
+  padding: 4px 8px !important;
+  height: 24px !important;
+  text-align: left !important;
+  font-size: var(--lg-text-size) !important;
+  font-weight: 500 !important;
+  color: var(--lg-text) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+:root[data-aq-skin="minimal"] .ddi:hover {
+  background: var(--lg-accent-tint) !important;
+  border-color: transparent !important;
+  color: var(--lg-text) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+:root[data-aq-skin="minimal"] .ddi:active {
+  background: var(--lg-surface-active) !important;
+  transform: none !important;
+}
+
+/* ==========================================================================
+   Cards — flat, hairline, lift on hover
+   ========================================================================== */
+:root[data-aq-skin="minimal"] .card,
+:root[data-aq-skin="minimal"] .ri,
+:root[data-aq-skin="minimal"] .nc {
+  background: var(--lg-surface) !important;
+  border: 1px solid var(--lg-border) !important;
+  border-radius: var(--lg-r) !important;
+  box-shadow: none !important;
+  color: var(--lg-text) !important;
+  padding: 9px 11px !important;
+  margin-bottom: 5px !important;
+  transition: border-color 140ms ease, box-shadow 180ms ease, transform 140ms ease !important;
+  cursor: pointer;
+}
+:root[data-aq-skin="minimal"] .card:hover,
+:root[data-aq-skin="minimal"] .ri:hover,
+:root[data-aq-skin="minimal"] .nc:hover {
+  border-color: var(--lg-border-strong) !important;
+  box-shadow: var(--lg-shadow-md) !important;
+  transform: translateY(-1px) !important;
+}
+:root[data-aq-skin="minimal"] .card:active,
+:root[data-aq-skin="minimal"] .ri:active,
+:root[data-aq-skin="minimal"] .nc:active {
+  transform: translateY(0) !important;
+  box-shadow: var(--lg-shadow-sm) !important;
+}
+
+/* Library card title (visible cite) — bigger, weight, accent colour */
+:root[data-aq-skin="minimal"] .ri .ricite {
+  font: 600 var(--lg-text-size)/1.35 'Manrope', system-ui, sans-serif !important;
+  color: var(--lg-text) !important;
+  letter-spacing: -0.005em !important;
+  margin-bottom: 4px !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+}
+/* Full reference / metadata line — smaller, muted, monospace for that
+   bibliographic catalog feel. */
+:root[data-aq-skin="minimal"] .ri .rifull {
+  font: 400 10.5px/1.5 'IBM Plex Mono', 'Consolas', monospace !important;
+  color: var(--lg-text-muted) !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+}
+/* Action row inside card — Kopyala / PDF buttons compact */
+:root[data-aq-skin="minimal"] .ri .riacts {
+  display: flex !important;
+  gap: 4px !important;
+  margin-top: 6px !important;
+  opacity: 0;
+  transition: opacity 140ms ease !important;
+}
+:root[data-aq-skin="minimal"] .ri:hover .riacts,
+:root[data-aq-skin="minimal"] .ri:focus-within .riacts {
+  opacity: 1;
+}
+:root[data-aq-skin="minimal"] .ri .rib {
+  background: var(--lg-bg-tint) !important;
+  border: 1px solid var(--lg-border) !important;
+  color: var(--lg-text-muted) !important;
+  border-radius: var(--lg-r-xs) !important;
+  font: 500 9.5px/1 'Manrope', system-ui, sans-serif !important;
+  padding: 3px 8px !important;
+  height: 18px !important;
+  min-height: 18px !important;
+  cursor: pointer;
+  transition: background 110ms ease, color 110ms ease, border-color 110ms ease !important;
+}
+:root[data-aq-skin="minimal"] .ri .rib:hover {
+  background: var(--lg-accent-tint) !important;
+  color: var(--lg-accent) !important;
+  border-color: var(--lg-accent-soft) !important;
+}
+
+/* ==========================================================================
+   Links + accent text
+   ========================================================================== */
+:root[data-aq-skin="minimal"] a {
+  color: var(--lg-accent) !important;
+  text-decoration: none !important;
+  border-bottom: 1px solid transparent;
+  transition: border-color 110ms ease;
+}
+:root[data-aq-skin="minimal"] a:hover {
+  color: var(--lg-accent-hover) !important;
+  border-bottom-color: var(--lg-accent-soft);
+}
+
+:root[data-aq-skin="minimal"] #hlbar {
+  background: var(--lg-accent) !important;
+  border: none !important;
+  height: 2px !important;
+}
+
+/* ==========================================================================
+   Headings — UI chrome only. The editor body (#apaed and the page sheets)
+   must stay APA 7-compliant: Times New Roman 12pt, double-spaced, NO
+   custom font / letter-spacing / colour overrides. The :not() guards
+   below exclude any heading that lives inside an APA page or the editor
+   surface so the manuscript stays untouched.
+   ========================================================================== */
+:root[data-aq-skin="minimal"] h1:not(#apaed *):not(.aq-page-sheet *):not(.aq-export-root *),
+:root[data-aq-skin="minimal"] h2:not(#apaed *):not(.aq-page-sheet *):not(.aq-export-root *),
+:root[data-aq-skin="minimal"] h3:not(#apaed *):not(.aq-page-sheet *):not(.aq-export-root *),
+:root[data-aq-skin="minimal"] h4:not(#apaed *):not(.aq-page-sheet *):not(.aq-export-root *),
+:root[data-aq-skin="minimal"] h5:not(#apaed *):not(.aq-page-sheet *):not(.aq-export-root *) {
+  letter-spacing: -0.018em;
+  color: var(--lg-text) !important;
+  font-feature-settings: 'kern' 1, 'liga' 1;
+}
+
+/* The text-rendering hint shouldn't fight APA's expected metrics — the
+   existing inline rules already enforce Times New Roman 12pt / 24pt
+   line height, but turn off our antialias hints inside the manuscript. */
+:root[data-aq-skin="minimal"] #apaed,
+:root[data-aq-skin="minimal"] .aq-page-sheet {
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
+  letter-spacing: normal;
+}
+
+/* Notebook tabs / segmented controls */
+:root[data-aq-skin="minimal"] .nbtab,
+:root[data-aq-skin="minimal"] .rtab {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 2px solid transparent !important;
+  border-radius: 0 !important;
+  color: var(--lg-text-muted) !important;
+  font-size: var(--lg-text-size) !important;
+  padding: 4px 10px !important;
+  height: 26px !important;
+  box-shadow: none !important;
+  font-weight: 500;
+  transition: color 110ms ease, border-color 110ms ease;
+}
+:root[data-aq-skin="minimal"] .nbtab:hover,
+:root[data-aq-skin="minimal"] .rtab:hover {
+  color: var(--lg-text) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+:root[data-aq-skin="minimal"] .nbtab.on,
+:root[data-aq-skin="minimal"] .rtab.on {
+  color: var(--lg-text) !important;
+  border-bottom-color: var(--lg-accent) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-weight: 600 !important;
+}
+
+/* ==========================================================================
+   Selection
+   ========================================================================== */
+:root[data-aq-skin="minimal"] ::selection {
+  background: var(--lg-accent-soft);
+  color: var(--lg-text);
+}
+
+/* ==========================================================================
+   Soft fade-up animation
+   ========================================================================== */
+@keyframes lgFadeUp {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+:root[data-aq-skin="minimal"] .ctx-menu,
+:root[data-aq-skin="minimal"] [class*="dropdown"]:not([class*="Item"]),
+:root[data-aq-skin="minimal"] #aq-paste-popup,
+:root[data-aq-skin="minimal"] #ctxmenu,
+:root[data-aq-skin="minimal"] #folderCtxmenu {
+  animation: lgFadeUp 110ms ease-out;
+}
+
+/* ==========================================================================
+   PDF viewer toolbar (#pdftb) — square icon buttons, NOT pills
+   The .ppb class is used for tiny single-glyph buttons (◀ ▶ + - F11 X);
+   styling them as text pills made everything overlap. Force square.
+   ========================================================================== */
+:root[data-aq-skin="minimal"] #pdftb {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 4px 8px !important;
+  background: var(--lg-bg-tint) !important;
+  border-bottom: 1px solid var(--lg-border) !important;
+}
+:root[data-aq-skin="minimal"] .pdf-toolbar-group {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 1px !important;
+}
+:root[data-aq-skin="minimal"] .pdf-toolbar-spacer {
+  flex: 1 !important;
+}
+:root[data-aq-skin="minimal"] .ppb {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--lg-r-sm) !important;
+  color: var(--lg-text-soft) !important;
+  width: 26px !important;
+  height: 26px !important;
+  min-width: 26px !important;
+  min-height: 26px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font: 500 12px/1 'Manrope', system-ui, sans-serif !important;
+  cursor: pointer;
+  box-shadow: none !important;
+  transition: background 110ms ease, color 110ms ease, border-color 110ms ease !important;
+}
+:root[data-aq-skin="minimal"] .ppb:hover {
+  background: var(--lg-surface-hover) !important;
+  color: var(--lg-text) !important;
+}
+:root[data-aq-skin="minimal"] .ppb.on,
+:root[data-aq-skin="minimal"] .ppb.active {
+  background: var(--lg-accent-tint) !important;
+  color: var(--lg-accent) !important;
+}
+:root[data-aq-skin="minimal"] .ppb.pdf-close-btn:hover {
+  background: rgba(181, 58, 58, 0.10) !important;
+  color: #b53a3a !important;
+}
+:root[data-aq-skin="minimal"] .pdf-brand {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  margin-right: 8px !important;
+  flex: 0 1 auto !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+:root[data-aq-skin="minimal"] .pdf-kicker {
+  font: 600 var(--lg-text-size-xs)/1 'Manrope', system-ui, sans-serif !important;
+  color: var(--lg-text-muted) !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+  flex-shrink: 0 !important;
+}
+:root[data-aq-skin="minimal"] #pdftitle {
+  font: 500 var(--lg-text-size)/1 'Manrope', system-ui, sans-serif !important;
+  color: var(--lg-text) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  min-width: 0 !important;
+}
+:root[data-aq-skin="minimal"] #pdfpg,
+:root[data-aq-skin="minimal"] #pdfzoom {
+  font: 500 var(--lg-text-size-sm)/1 'Manrope', system-ui, sans-serif !important;
+  color: var(--lg-text) !important;
+  padding: 0 6px !important;
+  min-width: 38px !important;
+  text-align: center !important;
+  cursor: pointer !important;
+}
+
+/* ==========================================================================
+   PDF tools / highlight toolbar (#hlbar) — second row with all the tools
+   ========================================================================== */
+:root[data-aq-skin="minimal"] #hlbar {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 4px 8px !important;
+  background: var(--lg-bg-tint) !important;
+  border-top: 1px solid var(--lg-border) !important;
+  border-bottom: 1px solid var(--lg-border) !important;
+  height: auto !important;
+  min-height: 36px !important;
+  flex-wrap: nowrap !important;
+  overflow-x: auto !important;
+}
+:root[data-aq-skin="minimal"] .pdf-tools-group {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 2px !important;
+  flex-shrink: 0 !important;
+}
+:root[data-aq-skin="minimal"] .pdf-tools-divider {
+  width: 1px !important;
+  height: 18px !important;
+  background: var(--lg-divider) !important;
+  flex-shrink: 0 !important;
+  margin: 0 2px !important;
+}
+
+/* Highlight color picker swatches — small square color chips */
+:root[data-aq-skin="minimal"] .hlc {
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: var(--lg-r-xs) !important;
+  border: 1px solid var(--lg-border) !important;
+  cursor: pointer !important;
+  box-shadow: var(--lg-shadow-xs) !important;
+  flex-shrink: 0 !important;
+  transition: transform 110ms ease, box-shadow 110ms ease, border-color 110ms ease !important;
+}
+:root[data-aq-skin="minimal"] .hlc:hover {
+  transform: scale(1.08) !important;
+  border-color: var(--lg-border-strong) !important;
+}
+:root[data-aq-skin="minimal"] .hlc.on {
+  border: 2px solid var(--lg-text) !important;
+  box-shadow: 0 0 0 2px var(--lg-bg) !important;
+}
+
+/* The ".pdf-pill" buttons (Benzer Makaleler etc.) override the square
+   .ppb default — these need text + icon + pill shape. */
+:root[data-aq-skin="minimal"] .ppb.pdf-pill,
+:root[data-aq-skin="minimal"] .pdf-pill {
+  width: auto !important;
+  min-width: auto !important;
+  padding: 0 10px !important;
+  height: 24px !important;
+  border-radius: 999px !important;
+  border: 1px solid var(--lg-border) !important;
+  background: var(--lg-surface) !important;
+  font: 500 var(--lg-text-size-sm)/1 'Manrope', system-ui, sans-serif !important;
+  gap: 4px !important;
+}
+:root[data-aq-skin="minimal"] .ppb.pdf-pill:hover,
+:root[data-aq-skin="minimal"] .pdf-pill:hover {
+  background: var(--lg-surface-hover) !important;
+  border-color: var(--lg-border-strong) !important;
+  color: var(--lg-text) !important;
+}
+:root[data-aq-skin="minimal"] .ppb.pdf-pill.on,
+:root[data-aq-skin="minimal"] .pdf-pill.on,
+:root[data-aq-skin="minimal"] .ppb.pdf-pill.active {
+  background: var(--lg-accent-tint) !important;
+  color: var(--lg-accent) !important;
+  border-color: var(--lg-accent-soft) !important;
+  font-weight: 600 !important;
+}
+
+/* PDF draw color picker + width select — slim inline */
+:root[data-aq-skin="minimal"] .pdf-draw-color {
+  width: 22px !important;
+  height: 22px !important;
+  padding: 0 !important;
+  border: 1px solid var(--lg-border) !important;
+  border-radius: var(--lg-r-xs) !important;
+  cursor: pointer !important;
+  background: transparent !important;
+}
+:root[data-aq-skin="minimal"] .pdf-draw-width {
+  height: 24px !important;
+  font-size: var(--lg-text-size-sm) !important;
+  padding: 0 6px !important;
+}
+
+/* Search bar inside PDF panel */
+:root[data-aq-skin="minimal"] #pdfsearchbar {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 4px 8px !important;
+  background: var(--lg-surface-warm) !important;
+  border-bottom: 1px solid var(--lg-border) !important;
+}
+:root[data-aq-skin="minimal"] #pdfsearchinp {
+  flex: 1 !important;
+  height: 24px !important;
+  font-size: var(--lg-text-size-sm) !important;
+}
+
+/* ==========================================================================
+   Editor toolbar — selected/active formatting buttons must stay highlighted.
+   The HTML has high-specificity inline rules at #etb .efmt.active etc.
+   that paint the legacy slate-blue gradient. We need at least equal
+   specificity (ID + class + class) PLUS data-aq-skin attribute and
+   !important to win the cascade and apply the soft accent-tint instead.
+   ========================================================================== */
+:root[data-aq-skin="minimal"] #etb .efmt.active,
+:root[data-aq-skin="minimal"] #etb .efmt.is-active,
+:root[data-aq-skin="minimal"] #etb .efmt.efmt-active,
+:root[data-aq-skin="minimal"] #etb .efmt-state.active,
+:root[data-aq-skin="minimal"] #etb .efmt[aria-pressed="true"],
+:root[data-aq-skin="minimal"] .efmt.active,
+:root[data-aq-skin="minimal"] .efmt.is-active {
+  background: var(--lg-accent-tint) !important;
+  color: var(--lg-accent) !important;
+  border: 1px solid transparent !important;
+  border-radius: 3px !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+}
+
+/* Headings get a slightly stronger fill so the chosen level reads at a
+   glance, but stay in the same accent family. Still square, not pill. */
+:root[data-aq-skin="minimal"] #etb .efmt.heading-active,
+:root[data-aq-skin="minimal"] .efmt.heading-active {
+  background: var(--lg-accent) !important;
+  color: #ffffff !important;
+  border: 1px solid transparent !important;
+  border-radius: 3px !important;
+  box-shadow: none !important;
+}
+
+/* Reset the inline ":root .efmt.active b/i/u/s {color:inherit}" inheritance
+   so bolded glyphs inside an active button render in the accent colour. */
+:root[data-aq-skin="minimal"] #etb .efmt.active b,
+:root[data-aq-skin="minimal"] #etb .efmt.active i,
+:root[data-aq-skin="minimal"] #etb .efmt.active u,
+:root[data-aq-skin="minimal"] #etb .efmt.active s,
+:root[data-aq-skin="minimal"] #etb .efmt.is-active b,
+:root[data-aq-skin="minimal"] #etb .efmt.is-active i,
+:root[data-aq-skin="minimal"] #etb .efmt.is-active u,
+:root[data-aq-skin="minimal"] #etb .efmt.is-active s {
+  color: var(--lg-accent) !important;
+}
+:root[data-aq-skin="minimal"] #etb .efmt.heading-active b,
+:root[data-aq-skin="minimal"] #etb .efmt.heading-active i,
+:root[data-aq-skin="minimal"] #etb .efmt.heading-active u,
+:root[data-aq-skin="minimal"] #etb .efmt.heading-active s {
+  color: #ffffff !important;
+}
+
+/* Group separator hairline between toolbar groups */
+:root[data-aq-skin="minimal"] .tbgrp + .tbgrp::before {
+  background: var(--lg-divider) !important;
+}
+:root[data-aq-skin="minimal"] .tbgrp .sep {
+  background: var(--lg-divider) !important;
+}
+
+/* ==========================================================================
+   Recovery banner — make it a small inline pill in the top-right corner,
+   not a full-width header strip.
+   ========================================================================== */
+:root[data-aq-skin="minimal"] #recoveryBanner {
+  background: var(--lg-accent-tint) !important;
+  border-bottom: none !important;
+  border-top: 1px solid var(--lg-border) !important;
+  border-bottom: 1px solid var(--lg-border) !important;
+  padding: 4px 12px !important;
+  font-size: var(--lg-text-size-sm) !important;
+  color: var(--lg-text-soft) !important;
+}
+:root[data-aq-skin="minimal"] #recoveryBannerText {
+  font-weight: 500 !important;
+  color: var(--lg-text-soft) !important;
+}
+:root[data-aq-skin="minimal"] #recoveryBannerClose {
+  background: transparent !important;
+  border: 1px solid var(--lg-border) !important;
+  color: var(--lg-text-muted) !important;
+  border-radius: var(--lg-r-sm) !important;
+  padding: 2px 8px !important;
+  font-size: var(--lg-text-size-xs) !important;
+  height: 20px !important;
+}
+:root[data-aq-skin="minimal"] #recoveryBannerClose:hover {
+  background: var(--lg-surface-hover) !important;
+  color: var(--lg-text) !important;
+  border-color: var(--lg-border-strong) !important;
+}
+
+/* ==========================================================================
+   Sidebar inputs and selects — compact, hairline, consistent
+   Targets: DOI input (.doinp), library search (.srch), modal inputs
+   (.minp), all <select> dropdowns in sidebars and notes filter row.
+   ========================================================================== */
+:root[data-aq-skin="minimal"] .doinp,
+:root[data-aq-skin="minimal"] .srch,
+:root[data-aq-skin="minimal"] .minp,
+:root[data-aq-skin="minimal"] #sbl select,
+:root[data-aq-skin="minimal"] #sbr select,
+:root[data-aq-skin="minimal"] #sbl input[type="text"],
+:root[data-aq-skin="minimal"] #sbl input[type="search"],
+:root[data-aq-skin="minimal"] #sbr input[type="text"],
+:root[data-aq-skin="minimal"] #sbr input[type="search"] {
+  height: 26px !important;
+  min-height: 26px !important;
+  padding: 0 9px !important;
+  font: 400 var(--lg-text-size-sm)/1.3 'Manrope', system-ui, sans-serif !important;
+  background: var(--lg-surface) !important;
+  border: 1px solid var(--lg-border) !important;
+  border-radius: var(--lg-r-sm) !important;
+  color: var(--lg-text) !important;
+  box-shadow: none !important;
+  margin-bottom: 4px !important;
+  transition: border-color 110ms ease, box-shadow 110ms ease;
+}
+
+:root[data-aq-skin="minimal"] .doinp:focus,
+:root[data-aq-skin="minimal"] .srch:focus,
+:root[data-aq-skin="minimal"] .minp:focus,
+:root[data-aq-skin="minimal"] #sbl select:focus,
+:root[data-aq-skin="minimal"] #sbr select:focus,
+:root[data-aq-skin="minimal"] #sbl input:focus,
+:root[data-aq-skin="minimal"] #sbr input:focus {
+  border-color: var(--lg-accent) !important;
+  box-shadow: 0 0 0 2px var(--lg-accent-glow) !important;
+}
+
+/* DOI input + Çek button — joined into a single inset pill row.
+   The input is borderless and bg-transparent; the addrow itself carries
+   the hairline border and rounded shape so the two appear unified. */
+:root[data-aq-skin="minimal"] .addrow {
+  display: flex !important;
+  align-items: center !important;
+  margin: 4px 8px !important;
+  gap: 0 !important;
+  padding: 0 4px 0 0 !important;
+  background: var(--lg-surface) !important;
+  border: 1px solid var(--lg-border) !important;
+  border-radius: var(--lg-r-sm) !important;
+  height: 26px !important;
+  transition: border-color 110ms ease, box-shadow 110ms ease !important;
+}
+:root[data-aq-skin="minimal"] .addrow:focus-within {
+  border-color: var(--lg-accent) !important;
+  box-shadow: 0 0 0 2px var(--lg-accent-glow) !important;
+}
+:root[data-aq-skin="minimal"] .addrow .doinp {
+  flex: 1 !important;
+  border: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  height: 24px !important;
+  box-shadow: none !important;
+  padding: 0 9px !important;
+}
+:root[data-aq-skin="minimal"] .addrow .doinp:focus {
+  box-shadow: none !important;
+  border: none !important;
+}
+:root[data-aq-skin="minimal"] .addrow .addbtn {
+  flex: 0 0 auto !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  padding: 0 8px !important;
+  background: var(--lg-accent) !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: var(--lg-r-xs) !important;
+  font: 600 var(--lg-text-size-sm)/1 'Manrope', system-ui, sans-serif !important;
+  cursor: pointer !important;
+  margin-left: 4px !important;
+  box-shadow: none !important;
+}
+:root[data-aq-skin="minimal"] .addrow .addbtn:hover {
+  background: var(--lg-accent-hover) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+/* ==========================================================================
+   Notlar / Kaynakça segmented control (#rtype with .rtab buttons)
+   Replace the underline-only style with a true segmented pill — one
+   rounded background, two halves, active half gets the accent fill.
+   ========================================================================== */
+:root[data-aq-skin="minimal"] #rtype {
+  display: flex !important;
+  align-items: stretch !important;
+  margin: 6px 8px !important;
+  padding: 2px !important;
+  background: var(--lg-bg-tint) !important;
+  border: 1px solid var(--lg-border) !important;
+  border-radius: var(--lg-r) !important;
+  gap: 0 !important;
+  height: 28px !important;
+}
+:root[data-aq-skin="minimal"] #rtype .rtab {
+  flex: 1 !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  padding: 0 8px !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: var(--lg-r-sm) !important;
+  color: var(--lg-text-muted) !important;
+  font: 500 var(--lg-text-size-sm)/1 'Manrope', system-ui, sans-serif !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: background 110ms ease, color 110ms ease !important;
+  box-shadow: none !important;
+}
+:root[data-aq-skin="minimal"] #rtype .rtab:hover {
+  background: rgba(255, 255, 255, 0.5) !important;
+  color: var(--lg-text) !important;
+  border: none !important;
+}
+:root[data-aq-skin="minimal"] #rtype .rtab.on {
+  background: var(--lg-surface) !important;
+  color: var(--lg-text) !important;
+  border: none !important;
+  box-shadow: var(--lg-shadow-xs), 0 0 0 1px var(--lg-border) !important;
+  font-weight: 600 !important;
+}
+
+/* Tighten the rows that hold libsrch / collection / format filters */
+:root[data-aq-skin="minimal"] #collectionbar {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  margin: 0 8px 4px !important;
+  padding: 0 !important;
+  justify-content: center !important;
+}
+:root[data-aq-skin="minimal"] #collectionManageBtn {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 26px !important;
+  min-height: 26px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: var(--lg-r-sm) !important;
+  border: 1px solid var(--lg-border) !important;
+  background: var(--lg-surface) !important;
+  color: var(--lg-text) !important;
+  font: 400 var(--lg-text-size-sm)/1.3 'Manrope', system-ui, sans-serif !important;
+  letter-spacing: 0 !important;
+  padding: 0 9px !important;
+  box-shadow: none !important;
+  white-space: nowrap !important;
+}
+:root[data-aq-skin="minimal"] #collectionManageBtn:hover {
+  border-color: rgba(135, 164, 181, .82) !important;
+  color: #243f52 !important;
+  background: rgba(255,255,255,.96) !important;
+  transform: none !important;
+}
+:root[data-aq-skin="minimal"] .lib-folder-group {
+  gap: 5px !important;
+  margin: 1px 0 7px !important;
+}
+:root[data-aq-skin="minimal"] .lib-folder-row {
+  background: var(--lg-surface) !important;
+  border: 1px solid var(--lg-border) !important;
+  border-radius: var(--lg-r) !important;
+  color: var(--lg-text-soft) !important;
+  min-height: 28px !important;
+  padding: 6px 9px !important;
+  box-shadow: var(--lg-shadow-xs) !important;
+}
+:root[data-aq-skin="minimal"] .lib-folder-row:hover {
+  background: var(--lg-surface-hover) !important;
+  border-color: var(--lg-border-strong) !important;
+}
+:root[data-aq-skin="minimal"] .lib-folder-row.is-dragover {
+  background: var(--lg-accent-tint) !important;
+  border-color: var(--lg-accent-soft) !important;
+}
+:root[data-aq-skin="minimal"] .lib-folder-chevron,
+:root[data-aq-skin="minimal"] .lib-folder-count,
+:root[data-aq-skin="minimal"] .lib-folder-subtitle {
+  color: var(--lg-text-dim) !important;
+}
+:root[data-aq-skin="minimal"] .lib-folder-icon {
+  color: var(--folder-color, var(--lg-text-dim)) !important;
+}
+:root[data-aq-skin="minimal"] .lib-folder-count {
+  background: var(--lg-surface-warm) !important;
+  border-color: var(--lg-border) !important;
+}
+:root[data-aq-skin="minimal"] .lib-folder-items {
+  padding-left: 12px !important;
+  gap: 5px !important;
+}
+:root[data-aq-skin="minimal"] .lib-folder-dropzone {
+  background: var(--lg-surface) !important;
+  border: 1px dashed var(--lg-border-strong) !important;
+  border-radius: var(--lg-r) !important;
+  color: var(--lg-text-dim) !important;
+}
+:root[data-aq-skin="minimal"] .lib-uncategorized-zone {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 5px !important;
+}
+:root[data-aq-skin="minimal"] .lib-folder-dropzone.is-dragover {
+  background: var(--lg-accent-tint) !important;
+  border-color: var(--lg-accent) !important;
+  color: var(--lg-accent-hover) !important;
+}
+:root[data-aq-skin="minimal"] #collectionModal .wr {
+  align-items: flex-end !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+}
+:root[data-aq-skin="minimal"] #collectionModal .wf {
+  flex: 0 1 305px !important;
+  max-width: 305px !important;
+}
+:root[data-aq-skin="minimal"] #collectionModal #collectionCreateBtn {
+  flex: 0 0 auto !important;
+  min-width: 82px !important;
+  height: 31px !important;
+  padding: 0 14px !important;
+}
+/* libactions is a 2-column grid of <details class="libgroup"> accordions:
+   "İçe Aktar" / "PDF" on the first row, "Atıf ve Kalite" full-width on
+   the second row. Keep the grid, just tighten gaps. */
+:root[data-aq-skin="minimal"] #libactions {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 4px !important;
+  margin: 0 8px 4px !important;
+  padding: 0 !important;
+}
+
+/* Each accordion trigger (<summary>) — compact ghost pill */
+:root[data-aq-skin="minimal"] #libactions .libgroup > summary,
+:root[data-aq-skin="minimal"] .libgroup > summary {
+  min-height: 24px !important;
+  padding: 0 10px !important;
+  font: 500 var(--lg-text-size-sm)/1 'Manrope', system-ui, sans-serif !important;
+  background: var(--lg-surface) !important;
+  border: 1px solid var(--lg-border) !important;
+  border-radius: var(--lg-r-sm) !important;
+  color: var(--lg-text-soft) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  cursor: pointer !important;
+  transition: background 110ms ease, color 110ms ease, border-color 110ms ease !important;
+}
+:root[data-aq-skin="minimal"] .libgroup > summary:hover {
+  background: var(--lg-surface-hover) !important;
+  border-color: var(--lg-border-strong) !important;
+  color: var(--lg-text) !important;
+}
+:root[data-aq-skin="minimal"] .libgroup[open] > summary {
+  background: var(--lg-accent-tint) !important;
+  border-color: var(--lg-accent-soft) !important;
+  color: var(--lg-accent) !important;
+  font-weight: 600 !important;
+}
+:root[data-aq-skin="minimal"] .libgroup > summary::after {
+  font-size: 9px !important;
+  opacity: 0.7 !important;
+}
+
+/* The popup menu that appears under each accordion — wider than the
+   trigger so long button labels (Word İçe Aktar / Metadata Health /
+   OA PDF İndir) are not truncated. */
+:root[data-aq-skin="minimal"] .libgroup-menu {
+  min-width: 180px !important;
+  padding: 4px !important;
+  gap: 2px !important;
+  background: var(--lg-surface) !important;
+  border: 1px solid var(--lg-border-strong) !important;
+  border-radius: var(--lg-r) !important;
+  box-shadow: var(--lg-shadow-lg) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  top: calc(100% + 4px) !important;
+  z-index: 120 !important;
+}
+
+/* Buttons inside the libgroup popup — left-aligned, no truncation */
+:root[data-aq-skin="minimal"] .libgroup-menu .pdfupbtn,
+:root[data-aq-skin="minimal"] .libgroup-menu .pdfupbtn[style],
+:root[data-aq-skin="minimal"] #libactions .libgroup-menu .pdfupbtn,
+:root[data-aq-skin="minimal"] #libactions .libgroup-menu .pdfupbtn[style] {
+  width: 100% !important;
+  height: 26px !important;
+  min-height: 26px !important;
+  margin: 0 !important;
+  padding: 0 10px !important;
+  font: 500 var(--lg-text-size-sm)/1 'Manrope', system-ui, sans-serif !important;
+  text-align: left !important;
+  white-space: nowrap !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--lg-r-xs) !important;
+  color: var(--lg-text-soft) !important;
+  box-shadow: none !important;
+  display: flex !important;
+  align-items: center !important;
+  cursor: pointer !important;
+}
+:root[data-aq-skin="minimal"] .libgroup-menu .pdfupbtn:hover,
+:root[data-aq-skin="minimal"] .libgroup-menu .pdfupbtn[style]:hover {
+  background: var(--lg-accent-tint) !important;
+  border-color: transparent !important;
+  color: var(--lg-text) !important;
+}
+
+/* libquickrow (sometimes used for the inline filter / format pickers) */
+:root[data-aq-skin="minimal"] .libquickrow {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 0 8px 4px !important;
+}
+:root[data-aq-skin="minimal"] .libquickrow .pdfupbtn {
+  flex: 1 !important;
+  width: auto !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  padding: 0 10px !important;
+  margin: 0 !important;
+  font: 500 var(--lg-text-size-sm)/1 'Manrope', system-ui, sans-serif !important;
+  background: var(--lg-surface) !important;
+  border: 1px solid var(--lg-border) !important;
+  border-radius: var(--lg-r-sm) !important;
+  color: var(--lg-text-soft) !important;
+}
+:root[data-aq-skin="minimal"] .libquickrow .pdfupbtn:hover {
+  background: var(--lg-surface-hover) !important;
+  border-color: var(--lg-border-strong) !important;
+  color: var(--lg-text) !important;
+}
+
+/* Right sidebar filter rows — consistent compact heights */
+:root[data-aq-skin="minimal"] #sbr select,
+:root[data-aq-skin="minimal"] #sbr .nfilters select,
+:root[data-aq-skin="minimal"] #notetag {
+  height: 26px !important;
+  min-height: 26px !important;
+  padding: 0 9px !important;
+  font-size: var(--lg-text-size-sm) !important;
+}
+
+/* Notes composer must stay multi-line; do not collapse the container.
+   The previous compact-input rule accidentally forced #noteinp to 26px
+   and hid the add/save button in the experimental skin. */
+:root[data-aq-skin="minimal"] #noteinp {
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 8px !important;
+  background: var(--lg-bg-tint) !important;
+  border-top: 1px solid var(--lg-border) !important;
+}
+
+:root[data-aq-skin="minimal"] #noteinp #noteta {
+  min-height: 76px !important;
+  border-radius: 10px !important;
+  border: 1px solid var(--lg-border) !important;
+  background: var(--lg-surface) !important;
+  color: var(--lg-text) !important;
+  padding: 8px 10px !important;
+}
+
+:root[data-aq-skin="minimal"] #noteinp #noteta:focus {
+  border-color: var(--lg-accent) !important;
+  box-shadow: 0 0 0 2px var(--lg-accent-glow) !important;
+}
+
+:root[data-aq-skin="minimal"] #noteinp #bsn {
+  width: 100% !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  margin-top: 8px !important;
+  border-radius: 999px !important;
+  border: 1px solid var(--lg-border-strong) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(244,247,255,.96)) !important;
+  color: var(--lg-text-soft) !important;
+  font: 600 var(--lg-text-size-sm)/1 'Manrope', system-ui, sans-serif !important;
+  letter-spacing: -0.01em !important;
+  box-shadow: var(--lg-shadow-sm) !important;
+}
+
+:root[data-aq-skin="minimal"] #noteinp #bsn:hover {
+  border-color: var(--lg-accent) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,1), rgba(236,241,255,.98)) !important;
+  color: var(--lg-accent-hover) !important;
+}
+
+/* Right sidebar note filters — keep the 2-column grid but tighten gap and
+   make every .nflt control the same compact size. */
+:root[data-aq-skin="minimal"] #notefilters {
+  padding: 6px 8px !important;
+  gap: 4px !important;
+  background: var(--lg-bg-tint) !important;
+  border-bottom: 1px solid var(--lg-border) !important;
+}
+:root[data-aq-skin="minimal"] #notefilters .nflt,
+:root[data-aq-skin="minimal"] #notefilters select,
+:root[data-aq-skin="minimal"] #notefilters input {
+  height: 24px !important;
+  min-height: 24px !important;
+  padding: 0 8px !important;
+  margin: 0 !important;
+  font-size: var(--lg-text-size-sm) !important;
+  border-radius: var(--lg-r-sm) !important;
+  background: var(--lg-surface) !important;
+  border: 1px solid var(--lg-border) !important;
+  color: var(--lg-text) !important;
+}
+:root[data-aq-skin="minimal"] #notefilters .nflt:focus,
+:root[data-aq-skin="minimal"] #notefilters select:focus,
+:root[data-aq-skin="minimal"] #notefilters input:focus {
+  border-color: var(--lg-accent) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px var(--lg-accent-glow) !important;
+}
+
+/* ==========================================================================
+   Empty states — friendlier "no data yet" placeholders
+   ========================================================================== */
+:root[data-aq-skin="minimal"] #notes-empty,
+:root[data-aq-skin="minimal"] .doc-outline-empty,
+:root[data-aq-skin="minimal"] [class*="empty-state"],
+:root[data-aq-skin="minimal"] [class*="EmptyState"] {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  padding: 28px 18px !important;
+  color: var(--lg-text-muted) !important;
+  font-size: var(--lg-text-size-sm) !important;
+  text-align: center !important;
+  line-height: 1.55 !important;
+}
+/* Soft icon-like leading dot for any element that looks like an empty hint */
+:root[data-aq-skin="minimal"] [data-empty="true"]::before,
+:root[data-aq-skin="minimal"] .empty-hint::before {
+  content: '';
+  display: block;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--lg-accent-tint);
+  border: 1px dashed var(--lg-accent-soft);
+  margin-bottom: 4px;
+}
+
+/* The notes panel placeholder text ("PDF'ten metin seç → Nota Kaydet") */
+:root[data-aq-skin="minimal"] #rpnotes .nlempty,
+:root[data-aq-skin="minimal"] #rpnotes [class*="empty"] {
+  padding: 24px 14px !important;
+  color: var(--lg-text-dim) !important;
+  font-size: var(--lg-text-size-sm) !important;
+  text-align: center !important;
+  line-height: 1.6 !important;
+}
+
+/* ==========================================================================
+   Panel transitions — smooth open/close on left/right sidebars + PDF panel
+   ========================================================================== */
+:root[data-aq-skin="minimal"] #sbl,
+:root[data-aq-skin="minimal"] #sbr,
+:root[data-aq-skin="minimal"] #pdfpanel {
+  transition: transform 220ms cubic-bezier(0.4, 0.0, 0.2, 1),
+              width 220ms cubic-bezier(0.4, 0.0, 0.2, 1),
+              opacity 220ms ease,
+              border-color 180ms ease !important;
+}
+
+/* The right notes panel (.rpnl) and library detail panels — soft fade
+   when switching between Notlar / Kaynakça via the segmented control. */
+:root[data-aq-skin="minimal"] .rpnl {
+  transition: opacity 160ms ease !important;
+}
+:root[data-aq-skin="minimal"] .rpnl:not(.on) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   Button scale-on-click — tactile feedback for primary actions
+   ========================================================================== */
+:root[data-aq-skin="minimal"] .btn.prim:active,
+:root[data-aq-skin="minimal"] .mbtn.p:active,
+:root[data-aq-skin="minimal"] .addrow .addbtn:active,
+:root[data-aq-skin="minimal"] #rtype .rtab.on:active {
+  transform: scale(0.97) !important;
+  transition: transform 80ms ease !important;
+}
+
+/* ==========================================================================
+   Focus halo — visible accent ring for keyboard nav across all interactive
+   elements. Mouse users won't see it (we keep :focus-visible scoped).
+   ========================================================================== */
+:root[data-aq-skin="minimal"] button:focus-visible,
+:root[data-aq-skin="minimal"] .btn:focus-visible,
+:root[data-aq-skin="minimal"] .mbtn:focus-visible,
+:root[data-aq-skin="minimal"] .ddi:focus-visible,
+:root[data-aq-skin="minimal"] .efmt:focus-visible,
+:root[data-aq-skin="minimal"] .rtab:focus-visible,
+:root[data-aq-skin="minimal"] .nbtab:focus-visible,
+:root[data-aq-skin="minimal"] .doctab:focus-visible,
+:root[data-aq-skin="minimal"] .ri:focus-visible,
+:root[data-aq-skin="minimal"] .nc:focus-visible,
+:root[data-aq-skin="minimal"] .card:focus-visible,
+:root[data-aq-skin="minimal"] [tabindex]:focus-visible {
+  outline: none !important;
+  box-shadow: 0 0 0 2px var(--lg-bg),
+              0 0 0 4px var(--lg-accent-glow) !important;
+  border-color: var(--lg-accent) !important;
+  z-index: 1 !important;
+}

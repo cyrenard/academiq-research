@@ -109,6 +109,65 @@
     return declarations.join(';');
   }
 
+  function pickStyleDeclarations(styleText, allowed){
+    var out = [];
+    var allow = allowed || {};
+    String(styleText || '').split(';').forEach(function(part){
+      var idx = String(part || '').indexOf(':');
+      if(idx <= 0) return;
+      var prop = part.slice(0, idx).trim().toLowerCase();
+      var value = part.slice(idx + 1).trim();
+      if(prop && value && allow[prop]) out.push(prop + ':' + value);
+    });
+    return out.join(';');
+  }
+
+  function normalizeContentStyleForElement(el, styleText){
+    var tag = String(el && el.tagName || '').toLowerCase();
+    var safe = normalizeStyleAttribute(styleText);
+    if(/^(p|div|h1|h2|h3|h4|h5|h6|li|blockquote)$/i.test(tag)){
+      return pickStyleDeclarations(safe, {'text-align':1});
+    }
+    if(/^(table|tr|td|th|thead|tbody|tfoot)$/i.test(tag)){
+      return pickStyleDeclarations(safe, {
+        'text-align':1,
+        'border':1,
+        'border-left':1,
+        'border-right':1,
+        'border-top':1,
+        'border-bottom':1,
+        'border-width':1,
+        'border-style':1,
+        'border-color':1,
+        'background-color':1
+      });
+    }
+    if(tag === 'span' || tag === 'a' || tag === 'strong' || tag === 'em' || tag === 'u' || tag === 's' || tag === 'sup' || tag === 'sub'){
+      return pickStyleDeclarations(safe, {
+        'font-family':1,
+        'font-size':1,
+        'font-weight':1,
+        'font-style':1,
+        'text-decoration':1,
+        'color':1,
+        'background-color':1,
+        'vertical-align':1
+      });
+    }
+    return safe;
+  }
+
+  function stripBrokenWordInlineFragments(html){
+    return String(html || '')
+      .replace(/^\uFEFF+/, '')
+      // Invalid Word font-span fragments should never become editor text.
+      .replace(/<p>\s*<span(?![\s>/])[^>]{0,220}>\s*(?:\uFEFF|&nbsp;|\s)*<\/span\s*>\s*<\/p>/gi, '')
+      .replace(/<span(?![\s>/])[^>]{0,220}>\s*(?:\uFEFF|&nbsp;|\s)*<\/span\s*>/gi, '')
+      .replace(/<span(?![\s>/])[^>]{0,220}>/gi, '')
+      .replace(/<p(?:\s[^>]*)?>\s*(?:<[^>]+>\s*)*(?:\uFEFF|&nbsp;|\s)*(?:\s*<\/[^>]+>)*\s*<\/p>/gi, '')
+      .replace(/<p>\s*(?:\uFEFF|&nbsp;|\s)*<\/p>/gi, '');
+  }
+
   function cleanPastedHTMLFallback(html){
     var out = String(html || '');
     // Drop HTML/MSO conditional comments in full
@@ -120,12 +179,19 @@
     out = out.replace(/<(script|style)[^>]*>[\s\S]*?<\/\1\s*>/gi, '');
     // Drop self-closing or unclosed <meta>/<link> tags (no inner content)
     out = out.replace(/<\/?(script|style|link|meta)[^>]*>/gi, '');
+    out = out
+      .replace(/<head\b[\s\S]*?<\/head\s*>/gi, '')
+      .replace(/<\/?(?:html|body)\b[^>]*>/gi, '')
+      .replace(/<div\b[^>]*class\s*=\s*(?:(["'])[^"']*\bWordSection\d*\b[^"']*\1|[^\s>]*\bWordSection\d*\b[^\s>]*)[^>]*>/gi, '')
+      .replace(/<\/div>\s*$/i, '');
+    out = stripBrokenWordInlineFragments(out);
     out = out.replace(/\son[a-z]+\s*=\s*(".*?"|'.*?'|[^\s>]+)/gi, '');
     out = out.replace(/\s(?:id|class)\s*=\s*("[^"]*Mso[^"]*"|'[^']*Mso[^']*')/gi, '');
-    out = out.replace(/\sstyle\s*=\s*("([^"]*)"|'([^']*)')/gi, function(match, _all, quotedDouble, quotedSingle){
+    out = out.replace(/<([a-z0-9]+)([^>]*?)\sstyle\s*=\s*("([^"]*)"|'([^']*)')([^>]*)>/gi, function(_match, tagName, before, _all, quotedDouble, quotedSingle, after){
       var raw = quotedDouble != null ? quotedDouble : quotedSingle;
-      var next = normalizeStyleAttribute(raw);
-      return next ? ' style="' + next + '"' : '';
+      var fakeEl = { tagName: String(tagName || '').toUpperCase() };
+      var next = normalizeContentStyleForElement(fakeEl, raw);
+      return '<' + tagName + before + (next ? ' style="' + next + '"' : '') + after + '>';
     });
     return out;
   }
@@ -167,9 +233,23 @@
     if(typeof document === 'undefined') return cleanPastedHTMLFallback(html);
     var div = document.createElement('div');
     div.innerHTML = html || '';
+    var importedBody = div.querySelector && div.querySelector('body');
+    if(importedBody){
+      div.innerHTML = importedBody.innerHTML || '';
+    }
 
     // Remove potentially dangerous and editor-hostile nodes first.
     div.querySelectorAll('script,style,link,meta,o\\:p').forEach(function(el){ el.remove(); });
+    div.querySelectorAll('html,head,body').forEach(function(node){
+      if(!node.parentNode) return;
+      while(node.firstChild) node.parentNode.insertBefore(node.firstChild, node);
+      node.remove();
+    });
+    div.querySelectorAll('div[class*="WordSection"],section[class*="WordSection"]').forEach(function(node){
+      if(!node.parentNode) return;
+      while(node.firstChild) node.parentNode.insertBefore(node.firstChild, node);
+      node.remove();
+    });
     Array.from(div.querySelectorAll('*')).forEach(function(el){
       var tag = String(el.tagName || '').toLowerCase();
       var localName = tag.indexOf(':') >= 0 ? tag.split(':').pop() : tag;
@@ -186,7 +266,7 @@
     div.querySelectorAll('br.Apple-interchange-newline').forEach(function(el){ el.remove(); });
 
     div.querySelectorAll('[style]').forEach(function(el){
-      var nextStyle = normalizeStyleAttribute(el.getAttribute('style') || '');
+      var nextStyle = normalizeContentStyleForElement(el, el.getAttribute('style') || '');
       if(nextStyle){
         el.setAttribute('style', nextStyle);
       }else{

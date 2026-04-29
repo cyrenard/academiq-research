@@ -53,12 +53,14 @@ test('buildExportDocHTML preserves composite export sections and page breaks', (
       '<section class="aq-export-cover aq-export-page"><p>Kapak</p></section>' +
       '<section class="aq-export-main aq-export-page aq-export-page-break-before"><p>Metin</p></section>' +
       '<section class="aq-export-bib aq-export-page aq-export-page-break-before"><h1>References</h1><p class="refe">Yazar, A. (2026).</p></section>' +
+      '<section class="aq-export-appendices aq-export-page aq-export-page-break-before"><h1 class="appendix-title">EK-1</h1><p>Ek metni</p></section>' +
     '</div>'
   );
 
   assert.match(html, /aq-export-cover/);
   assert.match(html, /aq-export-main/);
   assert.match(html, /aq-export-bib/);
+  assert.match(html, /aq-export-appendices/);
   assert.match(html, /aq-export-page-break-before/);
   assert.match(html, /aq-biblio-heading/);
   assert.match(html, /aq-ref-entry/);
@@ -144,6 +146,37 @@ test('prepareLoadedHTML strips legacy wrappers and falls back to blank html', ()
     docmod.prepareLoadedHTML('', '<p></p>'),
     '<p></p>'
   );
+});
+
+test('prepareLoadedHTML strips persisted Word layout that breaks page flow', () => {
+  const clean = docmod.prepareLoadedHTML(
+    '<html><head><style>@page WordSection1{margin:72pt}</style></head><body><div class="WordSection1">' +
+    '<div><p style="line-height:200%;height:29.7cm;position:absolute;margin-top:72pt;text-align:center">Metin</p>' +
+    '<p><span style=\'font-family:"Tahoma",sans-serif;color:black\'>Devam</span></p>' +
+    '</div></div></body></html>',
+    '<p></p>'
+  );
+  assert.match(clean, /Metin/);
+  assert.match(clean, /Devam/);
+  assert.match(clean, /text-align:center/);
+  assert.match(clean, /font-family:Tahoma, sans-serif/);
+  assert.equal(/^\s*<div\b|WordSection|<html|<head|<body|@page|line-height|height:29\.7cm|position:absolute|margin-top|font-family:"Tahoma"/i.test(clean), false);
+});
+
+test('commitActiveDocument persists loaded-html sanitizer output', () => {
+  const state = { docs:[{ id:'d1', content:'' }], curDoc:'d1', doc:'' };
+  const html = docmod.commitActiveDocument({
+    state,
+    currentDocId:'d1',
+    blankHTML:'<p></p>',
+    getHTML(){
+      return '<p style="line-height:200%;height:29.7cm;position:absolute">Metin</p>';
+    },
+    sanitizeHTML(value){ return value; }
+  });
+  assert.match(html, /Metin/);
+  assert.equal(/line-height|height:29\.7cm|position:absolute/i.test(html), false);
+  assert.equal(state.docs[0].content, html);
 });
 
 test('getEditorHTML and setEditorHTML prefer editor then shell then host', () => {

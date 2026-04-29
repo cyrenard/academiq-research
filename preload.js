@@ -133,6 +133,9 @@ function pickNetFetchOptions(options) {
   if (src.allowAnyHost != null) {
     out.allowAnyHost = !!src.allowAnyHost;
   }
+  if (src.preferGlobalFetch != null) {
+    out.preferGlobalFetch = !!src.preferGlobalFetch;
+  }
   return out;
 }
 

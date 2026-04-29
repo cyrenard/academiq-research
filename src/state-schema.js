@@ -141,6 +141,7 @@
         : [],
       coverHTML: typeof doc.coverHTML === 'string' ? doc.coverHTML : '',
       tocHTML: typeof doc.tocHTML === 'string' ? doc.tocHTML : '',
+      appendicesHTML: typeof doc.appendicesHTML === 'string' ? doc.appendicesHTML : '',
       citationStyle: citationStyle,
       trackChangesEnabled: trackChangesEnabled
     };

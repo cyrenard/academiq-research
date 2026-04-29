@@ -49,6 +49,10 @@
     var referenceType = (referenceTypeRaw === 'book' || referenceTypeRaw === 'website' || referenceTypeRaw === 'article')
       ? referenceTypeRaw
       : 'article';
+    var isbn = text(source.isbn, 128).replace(/[^0-9Xx]/g, '').toUpperCase();
+    if(isbn && referenceTypeRaw !== 'article' && referenceTypeRaw !== 'website'){
+      referenceType = 'book';
+    }
     var detectedYear = text(source.detectedYear || source.year, 32);
     var detectedPublishedDate = text(source.detectedPublishedDate || source.publishedDate, 64);
     if(!detectedYear && detectedPublishedDate){
@@ -60,6 +64,7 @@
       sourcePageUrl: text(source.sourcePageUrl || source.url, 4096),
       pageTitle: text(source.pageTitle, 2048),
       doi: text(source.doi, 256),
+      isbn: isbn,
       pdfUrl: text(source.pdfUrl, 4096),
       detectedTitle: text(source.detectedTitle || source.title, 2048),
       detectedAuthors: Array.isArray(source.detectedAuthors) ? source.detectedAuthors.map(function(item){ return text(item, 256); }).filter(Boolean).slice(0, 12) : [],
@@ -78,6 +83,7 @@
       timestamp: Number(source.timestamp) > 0 ? Number(source.timestamp) : Date.now(),
       detectionMeta: {
         doi: normalizeDetectionEntry(source.detectionMeta && source.detectionMeta.doi),
+        isbn: normalizeDetectionEntry(source.detectionMeta && source.detectionMeta.isbn),
         pdfUrl: normalizeDetectionEntry(source.detectionMeta && source.detectionMeta.pdfUrl),
         title: normalizeDetectionEntry(source.detectionMeta && source.detectionMeta.title),
         authors: normalizeDetectionEntry(source.detectionMeta && source.detectionMeta.authors),
@@ -106,6 +112,7 @@
           publishedDate: safe.detectedPublishedDate,
           accessedDate: safe.detectedAccessedDate,
           doi: safe.doi,
+          isbn: safe.isbn,
           url: safe.sourcePageUrl,
           abstract: safe.detectedAbstract,
           pdfUrl: safe.pdfUrl,
@@ -136,6 +143,7 @@
         fp: '',
         lp: '',
         doi: safe.doi,
+        isbn: safe.isbn,
         url: safe.sourcePageUrl,
         abstract: safe.detectedAbstract,
         pdfData: null,
@@ -154,6 +162,60 @@
       detectionMeta: safe.detectionMeta
     };
     return ref;
+  }
+
+  function mergeIsbnMetadataPayload(payload, meta){
+    var safe = normalizePayload(payload);
+    var source = payload && typeof payload === 'object' ? Object.assign({}, payload) : {};
+    var book = meta && typeof meta === 'object' ? meta : {};
+    source.referenceType = 'book';
+    source.isbn = safe.isbn || text(book.isbn, 128);
+    source.detectedTitle = safe.detectedTitle || text(book.title, 2048);
+    source.detectedAuthors = safe.detectedAuthors.length
+      ? safe.detectedAuthors.slice()
+      : (Array.isArray(book.authors) ? book.authors.slice(0, 12) : []);
+    source.detectedPublisher = safe.detectedPublisher || text(book.publisher, 1024);
+    source.detectedEdition = safe.detectedEdition || text(book.edition, 128);
+    source.detectedYear = safe.detectedYear || text(book.year, 32);
+    source.detectedPublishedDate = safe.detectedPublishedDate || text(book.publishedDate, 64);
+    source.sourcePageUrl = safe.sourcePageUrl || text(book.url, 4096);
+    source.detectionMeta = Object.assign({}, safe.detectionMeta || {}, {
+      isbn: { value: source.isbn || safe.isbn || '', source: 'isbn_lookup', confidence: 'strong', found: !!(source.isbn || safe.isbn) }
+    });
+    return source;
+  }
+
+  function enrichPayloadWithIsbn(payload){
+    var safe = normalizePayload(payload);
+    if(!safe.isbn || typeof root.fetchISBN !== 'function') return Promise.resolve(payload);
+    var hasUsefulBookMeta = !!(safe.detectedTitle && safe.detectedAuthors.length && (safe.detectedPublisher || safe.detectedYear));
+    if(hasUsefulBookMeta) return Promise.resolve(payload);
+    return new Promise(function(resolve){
+      var done = false;
+      var timer = setTimeout(function(){
+        if(done) return;
+        done = true;
+        resolve(payload);
+      }, 6500);
+      try{
+        root.fetchISBN(safe.isbn, function(error, meta){
+          if(done) return;
+          done = true;
+          clearTimeout(timer);
+          if(error || !meta){
+            resolve(payload);
+            return;
+          }
+          resolve(mergeIsbnMetadataPayload(payload, meta));
+        });
+      }catch(_e){
+        if(!done){
+          done = true;
+          clearTimeout(timer);
+          resolve(payload);
+        }
+      }
+    });
   }
 
   function findEquivalentAcrossWorkspaces(candidateRef){
@@ -197,6 +259,7 @@
     targetRef.browserCaptureMeta.sourcePageUrl = safe.sourcePageUrl || targetRef.browserCaptureMeta.sourcePageUrl || '';
     targetRef.browserCaptureMeta.browserSource = safe.browserSource || targetRef.browserCaptureMeta.browserSource || '';
     targetRef.browserCaptureMeta.capturedAt = safe.timestamp || targetRef.browserCaptureMeta.capturedAt || Date.now();
+    targetRef.browserCaptureMeta.detectedIsbn = safe.isbn || targetRef.browserCaptureMeta.detectedIsbn || '';
     targetRef.browserCaptureMeta.detectedPdfUrl = safe.pdfUrl || targetRef.browserCaptureMeta.detectedPdfUrl || '';
     targetRef.browserCaptureMeta.detectionMeta = safe.detectionMeta || targetRef.browserCaptureMeta.detectionMeta || {};
   }
@@ -598,10 +661,11 @@
       return { ok:false, queued:true, error:'Uygulama durumu henüz hazır değil' };
     }
     var prefs = await refreshSettings() || {};
-    var result = ensureInWorkspace(payload, prefs);
+    var enrichedPayload = await enrichPayloadWithIsbn(payload);
+    var result = ensureInWorkspace(enrichedPayload, prefs);
     if(api && typeof api.updateBrowserCapturePrefs === 'function'){
       try{
-        var safe = normalizePayload(payload);
+        var safe = normalizePayload(enrichedPayload);
         await api.updateBrowserCapturePrefs({
           lastUsedWorkspaceId: safe.selectedWorkspaceId || '',
           lastUsedComparisonId: safe.selectedComparisonId || ''
@@ -696,6 +760,7 @@
         bibliographyManual: !!doc.bibliographyManual,
         coverHTML: String(doc.coverHTML || ''),
         tocHTML: String(doc.tocHTML || ''),
+        appendicesHTML: String(doc.appendicesHTML || ''),
         citationStyle: String(doc.citationStyle || 'apa7')
       });
     }

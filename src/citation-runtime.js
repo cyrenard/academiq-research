@@ -233,7 +233,6 @@
       const txt = state.doc.textBetween(Math.max(0,pos-128),pos,' ',' ');
       const m = txt.match(/\/([rt])(?:\s*([^\n\r]*))?$/i);
       if(!m) return null;
-      try{ console.info('[aq-citation] currentQuery match', { query:(m[2]||'').trim(), pos:pos, mode:m[1] }); }catch(_e){}
       return {
         query: (m[2] || '').trim(),
         full: m[0],
@@ -250,7 +249,6 @@
     const txt2 = node.textContent.substring(0, range.startOffset);
     const m2 = txt2.match(/\/([rt])(?:\s*([^\n\r]*))?$/i);
     if(!m2) return null;
-    try{ console.info('[aq-citation] currentQuery dom match', { query:(m2[2]||'').trim(), mode:m2[1] }); }catch(_e){}
     return {
       query: (m2[2] || '').trim(),
       full: m2[0],
@@ -758,7 +756,6 @@
     },
 
     openFromSlash: function(query, mode){
-      try{ console.info('[aq-citation] openFromSlash', { query:query || '', mode:mode || 'inline' }); }catch(_e){}
       runtime.saveScroll();
       runtime.state.open = true;
       runtime.state.query = query || '';
@@ -830,7 +827,6 @@
     refreshFromEditor: function(){
       const found = currentQuery();
       if(!found){
-        try{ console.info('[aq-citation] refreshFromEditor miss'); }catch(_e){}
         if(runtime.state.open) runtime.close(true, { preserveSelection:true });
         return;
       }
@@ -851,7 +847,6 @@
       runtime.state.lastRefreshMode = found.mode || 'r';
       runtime.state.triggerMode = (found.mode === 't') ? 'textual' : 'inline';
       window.__aqCitationTriggerMode = runtime.state.triggerMode;
-      try{ console.info('[aq-citation] refreshFromEditor hit', { query:found.query || '' }); }catch(_e){}
       window.editorTrigRange = found.from != null ? { from: found.from, to: found.to, mode: found.mode } : null;
       if(!runtime.state.open) runtime.openFromSlash(found.query, runtime.state.triggerMode);
       else{

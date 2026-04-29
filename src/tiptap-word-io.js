@@ -87,6 +87,65 @@
     return Object.keys(map).map(function(prop){ return prop + ':' + map[prop]; }).join(';');
   }
 
+  function pickStyleDeclarations(styleText, allowed){
+    var out = [];
+    var allow = allowed || {};
+    String(styleText || '').split(';').forEach(function(part){
+      var idx = String(part || '').indexOf(':');
+      if(idx <= 0) return;
+      var prop = part.slice(0, idx).trim().toLowerCase();
+      var value = part.slice(idx + 1).trim();
+      if(prop && value && allow[prop]){
+        if(prop === 'font-family'){
+          value = value.replace(/["']/g, '').split(',').map(function(item){ return item.trim(); }).filter(Boolean).slice(0, 3).join(', ');
+        }
+        if(value) out.push(prop + ':' + value);
+      }
+    });
+    return out.join(';');
+  }
+
+  function normalizeWordBlockStyle(styleText){
+    var safe = normalizeImportStyle(styleText);
+    // Word block layout styles (margins, text-indent, line-height, height,
+    // position, etc.) fight the AcademiQ APA page engine and can create
+    // invisible click/focus overlays. Keep only semantic alignment at block
+    // level; the editor's APA engine owns page geometry and spacing.
+    return pickStyleDeclarations(safe, {'text-align':1});
+  }
+
+  function normalizeWordInlineStyle(styleText){
+    var safe = normalizeImportStyle(styleText);
+    // Inline visual emphasis is useful, but dimensions/positioning on spans
+    // from Word can cover the editor and steal clicks. Keep text-only styling.
+    return pickStyleDeclarations(safe, {
+      'font-family':1,
+      'font-size':1,
+      'font-weight':1,
+      'font-style':1,
+      'text-decoration':1,
+      'color':1,
+      'background-color':1,
+      'vertical-align':1
+    });
+  }
+
+  function normalizeWordTableStyle(styleText){
+    var safe = normalizeImportStyle(styleText);
+    return pickStyleDeclarations(safe, {
+      'text-align':1,
+      'border':1,
+      'border-left':1,
+      'border-right':1,
+      'border-top':1,
+      'border-bottom':1,
+      'border-width':1,
+      'border-style':1,
+      'border-color':1,
+      'background-color':1
+    });
+  }
+
   function extractWordClassStyles(html){
     var out = {};
     String(html || '').replace(/<style[^>]*>([\s\S]*?)<\/style\s*>/gi, function(_match, css){
@@ -173,6 +232,43 @@
       .replace(/[�□■]+/g, ' ')
       .replace(/\s+/g, ' ');
     return cleaned.trim();
+  }
+
+  function stripBrokenWordInlineFragments(html){
+    return String(html || '')
+      .replace(/^\uFEFF+/, '')
+      // Word COM sometimes emits malformed font-span fragments such as
+      // <spanTahoma",sans-serif;color:black">﻿</span>. They are not valid
+      // editable content and can leak into ProseMirror as visible junk.
+      .replace(/<p>\s*<span(?![\s>/])[^>]{0,220}>\s*(?:\uFEFF|&nbsp;|\s)*<\/span\s*>\s*<\/p>/gi, '')
+      .replace(/<span(?![\s>/])[^>]{0,220}>\s*(?:\uFEFF|&nbsp;|\s)*<\/span\s*>/gi, '')
+      .replace(/<span(?![\s>/])[^>]{0,220}>/gi, '')
+      .replace(/<p(?:\s[^>]*)?>\s*(?:<[^>]+>\s*)*(?:\uFEFF|&nbsp;|\s)*(?:\s*<\/[^>]+>)*\s*<\/p>/gi, '')
+      .replace(/<p>\s*(?:\uFEFF|&nbsp;|\s)*<\/p>/gi, '');
+  }
+
+  function stripSinglePlainFlowDiv(html){
+    var out = String(html || '').trim();
+    // Word COM often nests all body flow inside <div class=WordSection1><div>...</div></div>.
+    // ProseMirror should receive top-level paragraphs/headings/lists, not a whole-document
+    // div wrapper, otherwise pagination can treat the import as one large block.
+    while(/^<div\s*>\s*[\s\S]*<\/div\s*>$/i.test(out)){
+      var inner = out.replace(/^<div\s*>\s*/i, '').replace(/\s*<\/div\s*>$/i, '').trim();
+      if(!inner || !/<(?:p|h[1-6]|ul|ol|blockquote|table)\b/i.test(inner)) break;
+      out = inner;
+    }
+    return out;
+  }
+
+  function unwrapPlainFlowDivs(wrapper){
+    if(!wrapper || !wrapper.querySelectorAll) return;
+    Array.from(wrapper.querySelectorAll('div')).forEach(function(node){
+      if(!node || !node.parentNode) return;
+      if(node.attributes && node.attributes.length) return;
+      if(!node.querySelector('p,h1,h2,h3,h4,h5,h6,ul,ol,blockquote,table')) return;
+      while(node.firstChild) node.parentNode.insertBefore(node.firstChild, node);
+      node.remove();
+    });
   }
 
   function hasClassName(className, expected){
@@ -485,9 +581,29 @@ function isWordListParagraph(node){
     var classStyles = extractWordClassStyles(rawHtml);
     var wrapper = document.createElement('div');
     wrapper.innerHTML = stripOfficeConditionalMarkup(rawHtml);
+    // Word COM filtered HTML is a full document (<html><head><body><div
+    // class="WordSection1">...). The editor must receive only body flow
+    // content; keeping html/body/WordSection wrappers inside ProseMirror makes
+    // the page engine treat imported content as foreign layout and can swallow
+    // clicks/focus.
+    var importedBody = wrapper.querySelector && wrapper.querySelector('body');
+    if(importedBody){
+      wrapper.innerHTML = importedBody.innerHTML || '';
+    }
     inlineWordClassStyles(wrapper, classStyles);
 
     wrapper.querySelectorAll('meta,link,style,title,base').forEach(function(node){ node.remove(); });
+    wrapper.querySelectorAll('html,head,body').forEach(function(node){
+      if(!node.parentNode) return;
+      while(node.firstChild) node.parentNode.insertBefore(node.firstChild, node);
+      node.remove();
+    });
+    wrapper.querySelectorAll('div[class*="WordSection"],section[class*="WordSection"]').forEach(function(node){
+      if(!node.parentNode) return;
+      while(node.firstChild) node.parentNode.insertBefore(node.firstChild, node);
+      node.remove();
+    });
+    unwrapPlainFlowDivs(wrapper);
     removeOfficeArtifactElements(wrapper);
     normalizeWordNoteReferencesWithDOM(wrapper);
     removeWordTextArtifacts(wrapper);
@@ -503,7 +619,7 @@ function isWordListParagraph(node){
         }
       }
       if(node.hasAttribute('style')){
-        var style = normalizeImportStyle(String(node.getAttribute('style') || '')
+        var style = normalizeWordBlockStyle(String(node.getAttribute('style') || '')
           .replace(/\btab-stops:[^;"]+;?/gi, ''));
         if(style) node.setAttribute('style', style);
         else node.removeAttribute('style');
@@ -525,10 +641,10 @@ function isWordListParagraph(node){
 
     // Clean table markup — strip Word-specific col/row attributes, keep structure
     wrapper.querySelectorAll('table').forEach(function(table){
-      if(table.style) table.style.cssText = normalizeImportStyle(table.style.cssText || '');
+      if(table.style) table.style.cssText = normalizeWordTableStyle(table.style.cssText || '');
       table.querySelectorAll('td,th').forEach(function(cell){
         if(cell.style){
-          cell.style.cssText = normalizeImportStyle(cell.style.cssText || '');
+          cell.style.cssText = normalizeWordTableStyle(cell.style.cssText || '');
         }
       });
     });
@@ -609,7 +725,10 @@ function isWordListParagraph(node){
         }else{
           var paragraph = document.createElement('p');
           paragraph.innerHTML = node.innerHTML || '';
-          if(node.getAttribute('style')) paragraph.setAttribute('style', normalizeImportStyle(node.getAttribute('style') || ''));
+          if(node.getAttribute('style')){
+            var paragraphStyle = normalizeWordBlockStyle(node.getAttribute('style') || '');
+            if(paragraphStyle) paragraph.setAttribute('style', paragraphStyle);
+          }
           node.replaceWith(paragraph);
         }
       }else if(!normalizeWhitespace(node.textContent || '') && !node.querySelector('img,table,br,ul,ol,blockquote')){
@@ -643,7 +762,9 @@ function isWordListParagraph(node){
       else node.removeAttribute('class');
       node.removeAttribute('lang');
       if(node.hasAttribute('style')){
-        var blockStyle = normalizeImportStyle(node.getAttribute('style') || '');
+        var blockStyle = /^(table|td|th|tr|thead|tbody|tfoot)$/i.test(String(node.tagName || ''))
+          ? normalizeWordTableStyle(node.getAttribute('style') || '')
+          : normalizeWordBlockStyle(node.getAttribute('style') || '');
         if(blockStyle) node.setAttribute('style', blockStyle);
         else node.removeAttribute('style');
       }
@@ -658,7 +779,7 @@ function isWordListParagraph(node){
     // but keep the span wrapper so data-ref citations survive.
     wrapper.querySelectorAll('span').forEach(function(node){
       if(node.hasAttribute('style')){
-        var spanStyle = normalizeImportStyle(node.getAttribute('style') || '');
+        var spanStyle = normalizeWordInlineStyle(node.getAttribute('style') || '');
         if(spanStyle) node.setAttribute('style', spanStyle);
         else node.removeAttribute('style');
       }
@@ -698,7 +819,7 @@ function isWordListParagraph(node){
       }
     });
 
-    return wrapper.innerHTML;
+    return stripSinglePlainFlowDiv(wrapper.innerHTML);
   }
 
   function removeWordTextArtifacts(wrapper){
@@ -781,6 +902,13 @@ function isWordListParagraph(node){
 
   function normalizeWordHtmlFallback(html){
     var out = stripOfficeConditionalMarkup(stripDangerousTags(html));
+    out = out
+      .replace(/<head\b[\s\S]*?<\/head\s*>/gi, '')
+      .replace(/<\/?(?:html|body)\b[^>]*>/gi, '')
+      .replace(/<div\b[^>]*class\s*=\s*(?:(["'])[^"']*\bWordSection\d*\b[^"']*\1|[^\s>]*\bWordSection\d*\b[^\s>]*)[^>]*>/gi, '')
+      .replace(/<\/div>\s*$/i, '');
+    out = stripSinglePlainFlowDiv(out);
+    out = stripBrokenWordInlineFragments(out);
     out = out.replace(
       /<(p|div|span)[^>]*(?:class\s*=\s*(?:"[^"]*\bMsoComment(?:Reference|Text)?\b[^"]*"|'[^']*\bMsoComment(?:Reference|Text)?\b[^']*')|style\s*=\s*(?:"[^"]*(?:display\s*:\s*none|visibility\s*:\s*hidden|mso-hide\s*:\s*all|mso-element\s*:\s*comment)[^"]*"|'[^']*(?:display\s*:\s*none|visibility\s*:\s*hidden|mso-hide\s*:\s*all|mso-element\s*:\s*comment)[^']*'))[^>]*>[\s\S]*?<\/\1>/gi,
       ''
@@ -804,9 +932,13 @@ function isWordListParagraph(node){
       return match;
     });
     out = out.replace(/<(p|div)[^>]*>\s*(?:section break(?:\s*\((?:next|odd|even)\s+page\))?|b[o\u00f6]l[u\u00fc]m sonu(?:\s*\((?:sonraki|tek|cift)\s+sayfa\))?|bolum sonu(?:\s*\((?:sonraki|tek|cift)\s+sayfa\))?|page break)\s*<\/\1>/gi, '<p class="aq-page-break" data-indent-mode="none"><br></p>');
-    out = out.replace(/\sstyle\s*=\s*("([^"]*)"|'([^']*)')/gi, function(_match, _quoted, doubleValue, singleValue){
-      var safe = normalizeImportStyle(doubleValue != null ? doubleValue : singleValue);
-      return safe ? ' style="' + safe + '"' : '';
+    out = out.replace(/<([a-z0-9]+)([^>]*?)\sstyle\s*=\s*("([^"]*)"|'([^']*)')([^>]*)>/gi, function(_match, tagName, before, _quoted, doubleValue, singleValue, after){
+      var tag = String(tagName || '').toLowerCase();
+      var rawStyle = doubleValue != null ? doubleValue : singleValue;
+      var safe = /^(p|div|h1|h2|h3|h4|h5|h6|li|blockquote)$/i.test(tag)
+        ? normalizeWordBlockStyle(rawStyle)
+        : (/^(table|tr|td|th|thead|tbody|tfoot)$/i.test(tag) ? normalizeWordTableStyle(rawStyle) : normalizeWordInlineStyle(rawStyle));
+      return '<' + tagName + before + (safe ? ' style="' + safe + '"' : '') + after + '>';
     });
     out = out.replace(/\sclass="[^"]*Mso[^"]*"/gi, '');
     out = out.replace(/<(p|div)[^>]*>(\s*(?:[•·▪◦\-–—]|\d+[.)])\s+)([\s\S]*?)<\/\1>/gi, function(_m, _tag, _marker, content){
@@ -836,7 +968,7 @@ function isWordListParagraph(node){
     });
     out = markFallbackReferenceEntries(out);
     out = markFallbackReferenceEntriesFlexible(out);
-    return out;
+    return stripSinglePlainFlowDiv(out);
   }
 
   function markFallbackReferenceEntries(html){
@@ -969,6 +1101,27 @@ function isWordListParagraph(node){
     return '<p>' + value.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>';
   }
 
+  function restoreEditorFocusAfterImport(editor){
+    if(typeof window === 'undefined' || !editor) return;
+    setTimeout(function(){
+      try{
+        if(window.AQTipTapWordFocus && typeof window.AQTipTapWordFocus.focusEditorSurface === 'function'){
+          window.AQTipTapWordFocus.focusEditorSurface({
+            editor: editor,
+            toEnd: true,
+            preserveScroll: true
+          });
+          return;
+        }
+        if(editor.commands && typeof editor.commands.focus === 'function'){
+          editor.commands.focus('end');
+        }else if(editor.view && editor.view.dom && typeof editor.view.dom.focus === 'function'){
+          editor.view.dom.focus();
+        }
+      }catch(_e){}
+    }, 0);
+  }
+
   function applyImportedHTML(options){
     options = options || {};
     var editor = options.editor || null;
@@ -981,22 +1134,26 @@ function isWordListParagraph(node){
     }
     if(editor && editor.commands && typeof editor.commands.setContent === 'function'){
       editor.commands.setContent(html || '<p></p>', false);
+      var finishEditorImport = function(){
+        if(typeof options.afterEditorImport === 'function') options.afterEditorImport();
+        restoreEditorFocusAfterImport(editor);
+      };
       if(typeof window !== 'undefined' && window.AQEditorRuntime && typeof window.AQEditorRuntime.runContentApplyEffects === 'function'){
         window.AQEditorRuntime.runContentApplyEffects({
           target: editor && editor.view ? editor.view.dom : null,
           normalize: true,
           layout: true,
+          stabilizeLayout: true,
+          layoutPasses: [0, 80, 240, 520],
           syncChrome: true,
           syncTOC: false,
           syncRefs: false,
           refreshTrigger: false,
-          onApplied: options.afterEditorImport
+          onApplied: finishEditorImport
         });
         return true;
       }
-      if(typeof options.afterEditorImport === 'function'){
-        setTimeout(options.afterEditorImport, 0);
-      }
+      setTimeout(finishEditorImport, 0);
       return true;
     }
     if(typeof options.setCurrentEditorHTML === 'function'){
@@ -1005,6 +1162,8 @@ function isWordListParagraph(node){
         window.AQEditorRuntime.runContentApplyEffects({
           normalize: false,
           layout: true,
+          stabilizeLayout: true,
+          layoutPasses: [0, 80, 240, 520],
           syncChrome: true,
           syncTOC: false,
           syncRefs: false,
