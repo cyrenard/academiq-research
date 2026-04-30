@@ -2668,7 +2668,7 @@ ipcMain.handle('net:fetch-json', async (_ev, url, options = {}) => {
       allowedHosts: NET_ALLOWED_HOSTS,
       preferGlobalFetch: !!safeOptions.preferGlobalFetch || /^openlibrary\.org$/i.test(requestHost),
       headers: {
-        'User-Agent': 'AcademiQ Research/1.1.7 (local metadata lookup)',
+        'User-Agent': 'AcademiQ Research/1.1.8 (local metadata lookup)',
         'Accept': 'application/json,*/*',
         'Accept-Encoding': 'identity',
         'Connection': 'close'

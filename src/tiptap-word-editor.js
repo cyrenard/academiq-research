@@ -1167,7 +1167,6 @@
       }),
       createApaParagraph(T),
       createApaHeading(T).configure({ levels:[1,2,3,4,5] }),
-      T.Underline,
       T.TextAlign.configure({ types:['heading','paragraph'] }),
       T.Placeholder.configure({ placeholder: hooks.placeholder || 'Yazmaya başlayın...' }),
       T.TextStyle,

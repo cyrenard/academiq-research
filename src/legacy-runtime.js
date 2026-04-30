@@ -11473,7 +11473,15 @@ function applyTemplate(type){
 }
 function initTipTapEditor(){
   if(window.AQTipTapWordInit&&typeof window.AQTipTapWordInit.init==='function'){
+    window.__aqTipTapInitRetryCount=0;
     editor=window.AQTipTapWordInit.init();
+    return;
+  }
+  var retryCount=parseInt(window.__aqTipTapInitRetryCount||0,10)||0;
+  if(retryCount<20){
+    window.__aqTipTapInitRetryCount=retryCount+1;
+    clearTimeout(window.__aqTipTapInitRetryTimer);
+    window.__aqTipTapInitRetryTimer=setTimeout(initTipTapEditor,50);
     return;
   }
   console.warn('TipTap word init module missing');

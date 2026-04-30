@@ -220,7 +220,7 @@ async function fetchJSONWithGlobalFetch(parsed, options = {}) {
       method: 'GET',
       redirect: 'manual',
       headers: options.headers || {
-        'User-Agent': 'AcademiQ Research/1.1.7 (local metadata lookup)',
+        'User-Agent': 'AcademiQ Research/1.1.8 (local metadata lookup)',
         'Accept': 'application/json,*/*',
         'Accept-Encoding': 'identity',
         'Connection': 'close'
@@ -275,7 +275,7 @@ function fetchJSON(url, options = {}) {
     }
     const req = mod.get(parsed.href, {
       headers: options.headers || {
-        'User-Agent': 'AcademiQ Research/1.1.7 (local metadata lookup)',
+        'User-Agent': 'AcademiQ Research/1.1.8 (local metadata lookup)',
         'Accept': 'application/json,*/*',
         'Accept-Encoding': 'identity',
         'Connection': 'close'

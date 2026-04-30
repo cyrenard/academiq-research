@@ -22,3 +22,16 @@ test('canonical editor runtime modules load after stale embedded copies', () => 
     );
   });
 });
+
+test('startup retries TipTap init until canonical init module is available', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  const legacy = fs.readFileSync(path.join(__dirname, '..', 'src', 'legacy-runtime.js'), 'utf8');
+  [html, legacy].forEach((source) => {
+    assert.match(source, /__aqTipTapInitRetryTimer/);
+    assert.match(source, /retryCount<20/);
+    assert.ok(
+      source.indexOf('__aqTipTapInitRetryTimer') < source.indexOf("console.warn('TipTap word init module missing')"),
+      'missing init module should only warn after retry budget is exhausted'
+    );
+  });
+});
