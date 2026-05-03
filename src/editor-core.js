@@ -255,6 +255,7 @@
   }
 
   function init(){
+    if(typeof console !== 'undefined'){ console.log('[AQ] editor-core.init called') }
     ensureReady();
     window.__aqEditorArchitectureV1 = true;
     // Ensure the editor content root is above overlays to receive clicks
@@ -277,9 +278,16 @@
         if(rootEl && typeof rootEl.focus === 'function') rootEl.focus({ preventScroll:true });
       }catch(e){}
     }, 0);
+    // Ensure the actual ProseMirror/TipTap editor surface is explicitly editable
+    try{
+      var ed = getEditor();
+      if(ed && ed.view && ed.view.dom && ed.view.dom.setAttribute){
+        ed.view.dom.setAttribute('contenteditable','true');
+      }
+    }catch(_e){}
     // Ensure the editor root is clearly above overlays in stacking context
     if(rootEl && rootEl.style){
-      rootEl.style.zIndex = '1000';
+      rootEl.style.zIndex = '99999';
     }
     // Ensure the root is focusable programmatically
     if(rootEl && typeof rootEl.setAttribute === 'function' && rootEl.getAttribute('tabindex') == null){
