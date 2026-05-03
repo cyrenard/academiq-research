@@ -11674,6 +11674,12 @@ function updateRefSection(forceAuto){
       doc.bibliographyManual=false;
     }
   }
+  
+  // Trigger AQ Engine reflow if active
+  if(window.__aqEngineActive && window.editor && typeof window.editor._reflow === 'function'){
+    window.editor._reflow();
+  }
+  
   save();
 }
 function renderRelatedPapers(){

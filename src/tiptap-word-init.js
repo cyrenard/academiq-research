@@ -71,7 +71,58 @@
       });
     }
 
+    // ── Shared event callbacks ────────────────────────────────────────────
+    var _onUpdate = function(ctx){
+      if(window.AQEditorRuntime && typeof window.AQEditorRuntime.onEditorUpdate === 'function'){
+        window.AQEditorRuntime.onEditorUpdate(ctx);
+        return;
+      }
+      if(window.__aqDocSwitching) return;
+      if(typeof window.uSt === 'function') window.uSt();
+      if(typeof window.save === 'function') window.save();
+      if(typeof window.normalizeCitationSpans === 'function'){
+        setTimeout(function(){ window.normalizeCitationSpans(ctx.editor.view.dom); }, 0);
+      }
+      if(typeof window.updatePageHeight === 'function') window.updatePageHeight();
+      if(typeof window.autoUpdateTOC === 'function') window.autoUpdateTOC();
+      setTimeout(function(){
+        if(typeof window.checkTrig === 'function') window.checkTrig();
+      }, 0);
+      clearTimeout(window._refTimer);
+      window._refTimer = setTimeout(function(){
+        var edDom = ctx.editor.view.dom;
+        var refH1 = Array.from(edDom.querySelectorAll('h1')).find(function(h){
+          return h.textContent.trim() === 'Kaynakça';
+        });
+        if(refH1 && typeof window.scheduleRefSectionSync === 'function') window.scheduleRefSectionSync();
+      }, 2000);
+    };
+    var _onSelectionUpdate = function(){
+      if(window.AQEditorRuntime && typeof window.AQEditorRuntime.onSelectionUpdate === 'function'){
+        window.AQEditorRuntime.onSelectionUpdate();
+        return;
+      }
+      if(typeof window.updateFmtState === 'function') window.updateFmtState();
+      setTimeout(function(){
+        if(typeof window.checkTrig === 'function') window.checkTrig();
+      }, 0);
+    };
+
     try{
+      // ── AQ Engine path — use custom engine if available ────────────────
+      if(window.AQEngineCompat && window.AQEngine && window.AQEngineDocument){
+        edEl.removeAttribute('contenteditable');
+        mountEl.innerHTML = '';
+        window.editor = window.AQEngineCompat.createEditor({
+          element: mountEl,
+          content: existingHTML || '<p></p>',
+          onUpdate: _onUpdate,
+          onSelectionUpdate: _onSelectionUpdate
+        });
+        console.log('AQ Engine initialized (custom layout engine)');
+      }
+      // ── TipTap path — original ────────────────────────────────────────
+      else {
       if(!factory || typeof factory.createEditor !== 'function'){
         console.error('TipTap word editor module missing');
         return enableFallbackEditable(edEl, existingHTML || '<p></p>');
@@ -95,42 +146,10 @@
             if(typeof window.updatePageHeight === 'function') window.updatePageHeight();
           }
         },
-        onUpdate: function(ctx){
-          if(window.AQEditorRuntime && typeof window.AQEditorRuntime.onEditorUpdate === 'function'){
-            window.AQEditorRuntime.onEditorUpdate(ctx);
-            return;
-          }
-          if(window.__aqDocSwitching) return;
-          if(typeof window.uSt === 'function') window.uSt();
-          if(typeof window.save === 'function') window.save();
-          if(typeof window.normalizeCitationSpans === 'function'){
-            setTimeout(function(){ window.normalizeCitationSpans(ctx.editor.view.dom); }, 0);
-          }
-          if(typeof window.updatePageHeight === 'function') window.updatePageHeight();
-          if(typeof window.autoUpdateTOC === 'function') window.autoUpdateTOC();
-          setTimeout(function(){
-            if(typeof window.checkTrig === 'function') window.checkTrig();
-          }, 0);
-          clearTimeout(window._refTimer);
-          window._refTimer = setTimeout(function(){
-            var edDom = ctx.editor.view.dom;
-            var refH1 = Array.from(edDom.querySelectorAll('h1')).find(function(h){
-              return h.textContent.trim() === 'Kaynakça';
-            });
-            if(refH1 && typeof window.scheduleRefSectionSync === 'function') window.scheduleRefSectionSync();
-          }, 2000);
-        },
-        onSelectionUpdate: function(){
-          if(window.AQEditorRuntime && typeof window.AQEditorRuntime.onSelectionUpdate === 'function'){
-            window.AQEditorRuntime.onSelectionUpdate();
-            return;
-          }
-          if(typeof window.updateFmtState === 'function') window.updateFmtState();
-          setTimeout(function(){
-            if(typeof window.checkTrig === 'function') window.checkTrig();
-          }, 0);
-        }
+        onUpdate: _onUpdate,
+        onSelectionUpdate: _onSelectionUpdate
       });
+      } // end else (TipTap path)
       // Init footnotes module
       if(window.AQFootnotes && typeof window.AQFootnotes.init === 'function'){
         window.AQFootnotes.init();
@@ -152,6 +171,12 @@
           window.AQTipTapWordCommands.applyLineSpacing('2');
         }
       }catch(e){}
+      if(window.AQTipTapWordEvents && typeof window.AQTipTapWordEvents.init === 'function'){
+        console.log('[tiptap-word-init] calling AQTipTapWordEvents.init()');
+        window.AQTipTapWordEvents.init();
+      }else{
+        console.log('[tiptap-word-init] AQTipTapWordEvents.init() not available:', window.AQTipTapWordEvents ? 'module exists' : 'module missing');
+      }
       if(window.AQTipTapWordEvents && typeof window.AQTipTapWordEvents.applySurfaceAttributes === 'function'){
         window.AQTipTapWordEvents.applySurfaceAttributes(edEl);
         if(mountEl && mountEl !== edEl) window.AQTipTapWordEvents.applySurfaceAttributes(mountEl);

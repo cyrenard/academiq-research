@@ -5,6 +5,13 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; media-src 'self' data: blob: https:; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none';">
 <title>AcademiQ Research</title>
 <script src="tiptap-bundle.js"></script>
+<!-- AQ Engine — custom layout engine (replaces TipTap when loaded) -->
+<script src="./experiments/aq-engine/engine.js"></script>
+<script src="./experiments/aq-engine/document.js"></script>
+<script src="./experiments/aq-engine/selection.js"></script>
+<script src="./experiments/aq-engine/input.js"></script>
+<script src="./experiments/aq-engine/tiptap-adapter.js"></script>
+<script src="./experiments/aq-engine/compat-shim.js"></script>
 <script src="./vendor/pdf.min.js"></script>
 <script src="./vendor/file-saver-shim.js"></script>
 <script src="./vendor/mammoth.browser.min.js"></script>
@@ -8055,7 +8062,7 @@ body.aq-track-changes-on #apaed .aq-track-delete{
 .htb-ghost:hover{color:#b04a43;background:rgba(176,74,67,.10);}
 
 /* /r TRIGGER */
-#trig{display:none;position:fixed;z-index:900;background:rgba(255,252,248,.96);border:1px solid rgba(214,202,184,.92);border-radius:18px;width:396px;box-shadow:0 28px 54px rgba(42,29,12,.16);overflow:hidden;backdrop-filter:blur(24px);pointer-events:none;}
+#trig{display:none;position:fixed;z-index:200;background:rgba(255,252,248,.96);border:1px solid rgba(214,202,184,.92);border-radius:18px;width:396px;box-shadow:0 28px 54px rgba(42,29,12,.16);overflow:hidden;backdrop-filter:blur(24px);pointer-events:none;}
 #trig.show{display:block;pointer-events:auto;}
 .tgh{background:var(--bg3);padding:7px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--b);}
 .tgtag{font-family:var(--fm);font-size:9.5px;color:var(--acc);letter-spacing:.1em;text-transform:uppercase;}
@@ -9907,6 +9914,13 @@ body.aq-track-changes-on #apaed .aq-track-delete{
   #noteCtxmenu .ctx-label-title{font-family:var(--fm);font-size:10px;color:#7d919b;padding:3px 8px 5px;text-transform:uppercase;letter-spacing:.09em;}
   #noteCtxmenu .ctxi{display:flex;align-items:center;gap:8px;}
   @media (max-width:760px){.notebook-detail-panel{top:10px;right:10px;bottom:10px;width:calc(100vw - 20px);}}
+#apaed {
+  border: 2px solid red !important;
+}
+
+#aq-tiptap-content {
+  border: 2px solid blue !important;
+}
 </style>
 
 <!-- SYNC SETTINGS MODAL -->
@@ -18958,6 +18972,7 @@ var _refTimer=null;
 // ¦¦ PAGE HEIGHT AUTO-ADJUST WITH PAGE BREAKS ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
 var _pgTimer=null;
 function updatePageHeight(){
+  if(window.__aqEngineActive) return; // AQ Engine handles its own pagination
   if(window.AQTipTapWordLayout&&typeof window.AQTipTapWordLayout.schedulePageSync==='function'){
     window.AQTipTapWordLayout.schedulePageSync({
       delay:300,
@@ -18973,6 +18988,7 @@ function updatePageHeight(){
   _pgTimer=setTimeout(_doUpdatePageHeight,300);
 }
 function _doUpdatePageHeight(){
+  if(window.__aqEngineActive) return; // AQ Engine handles its own pagination
   var page=document.getElementById('apapage');
   var ed=editor?editor.view.dom:document.getElementById('apaed');
   if(!page||!ed)return;
@@ -26458,8 +26474,10 @@ deleteCustomLabel=function(name){
   save();
 };
 updatePageHeight=function(){
+  if(window.__aqEngineActive) return; // AQ Engine handles its own pagination
   clearTimeout(_pgTimer);
   _pgTimer=setTimeout(function(){
+    if(window.__aqEngineActive) return;
     var page=document.getElementById('apapage');
     var ed=editor?editor.view.dom:document.getElementById('apaed');
     var sc=(window.AQEditorIntegration&&typeof window.AQEditorIntegration.getScrollEl==='function')
@@ -29417,6 +29435,10 @@ updatePageHeight=function(){
   }
 
   function getHostEl(doc){
+    if(typeof window !== 'undefined' && window.__aqEngineActive){
+      var engineHost = (doc || document).getElementById('aq-engine-host');
+      if(engineHost) return engineHost;
+    }
     return doc ? doc.getElementById('apaed') : null;
   }
 
@@ -38168,6 +38190,10 @@ updatePageHeight=function(){
 
   function syncPageMetrics(options){
     options = options || {};
+    // AQ Engine has its own pagination + page numbers; the host layout system
+    // must stay completely out of its way or it fights the engine and we get
+    // an infinite loop of page-number redraws (causing UI freeze).
+    if(typeof window !== 'undefined' && window.__aqEngineActive) return 0;
     var page = options.page;
     var editorDom = options.editorDom;
     var scrollEl = options.scrollEl || null;
@@ -39924,7 +39950,92 @@ updatePageHeight=function(){
       });
     }
 
+    // Shared event callbacks
+    var _onUpdate = function(ctx){
+      if(window.AQEditorRuntime && typeof window.AQEditorRuntime.onEditorUpdate === 'function'){
+        window.AQEditorRuntime.onEditorUpdate(ctx);
+        return;
+      }
+      if(window.__aqDocSwitching) return;
+      if(typeof window.uSt === 'function') window.uSt();
+      if(typeof window.save === 'function') window.save();
+      if(typeof window.normalizeCitationSpans === 'function'){
+        setTimeout(function(){ window.normalizeCitationSpans(ctx.editor.view.dom); }, 0);
+      }
+      if(typeof window.updatePageHeight === 'function') window.updatePageHeight();
+      if(typeof window.autoUpdateTOC === 'function') window.autoUpdateTOC();
+      setTimeout(function(){
+        if(typeof window.checkTrig === 'function') window.checkTrig();
+      }, 0);
+      clearTimeout(window._refTimer);
+      window._refTimer = setTimeout(function(){
+        var edDom = ctx.editor.view.dom;
+        var refH1 = Array.from(edDom.querySelectorAll('h1')).find(function(h){
+          return h.textContent.trim() === 'Kaynakça';
+        });
+        if(refH1 && typeof window.scheduleRefSectionSync === 'function') window.scheduleRefSectionSync();
+      }, 2000);
+    };
+    var _onSelectionUpdate = function(){
+      if(window.AQEditorRuntime && typeof window.AQEditorRuntime.onSelectionUpdate === 'function'){
+        window.AQEditorRuntime.onSelectionUpdate();
+        return;
+      }
+      if(typeof window.updateFmtState === 'function') window.updateFmtState();
+      setTimeout(function(){
+        if(typeof window.checkTrig === 'function') window.checkTrig();
+      }, 0);
+    };
+
     try{
+      // ── AQ Engine path ──
+      // Mount in a dedicated host inside #escroll, completely bypassing the
+      // legacy #apapage shell (its pagination/mask/observer layers conflict
+      // with the engine's own pagination).
+      if(window.AQEngineCompat && window.AQEngine && window.AQEngineDocument){
+        var scrollEl = document.getElementById('escroll');
+        if(!scrollEl) throw new Error('escroll missing');
+        // Hide every legacy page wrapper so it cannot intercept clicks or
+        // run its observers against engine output.
+        ['coverpage','tocpage','apapage','bibpage','appendixpage'].forEach(function(id){
+          var el = document.getElementById(id);
+          if(el) el.style.display = 'none';
+        });
+        // Stop legacy pagination calls dead.
+        window.__aqEngineActive = true;
+        // Build/locate the engine host.
+        var engineHost = document.getElementById('aq-engine-host');
+        if(!engineHost){
+          engineHost = document.createElement('div');
+          engineHost.id = 'aq-engine-host';
+          engineHost.style.cssText = 'position:relative;width:100%;';
+          scrollEl.appendChild(engineHost);
+        } else {
+          engineHost.style.display = '';
+          engineHost.innerHTML = '';
+        }
+        // Diagnostic: dump initial doc model + DOM after first render
+        setTimeout(function(){
+          try {
+            var ed = window.editor;
+            var blocks = ed && ed._docModel ? ed._docModel.get().blocks : null;
+            console.log('[AQ Engine diag] blocks:', JSON.stringify(blocks));
+            var stage = document.getElementById('aq-engine-stage');
+            console.log('[AQ Engine diag] stage children:', stage ? stage.children.length : 'no stage');
+            if(stage) console.log('[AQ Engine diag] first page HTML head:', stage.innerHTML.substring(0, 400));
+          } catch(e){ console.error('diag fail', e); }
+        }, 500);
+        edEl.removeAttribute('contenteditable');
+        window.editor = window.AQEngineCompat.createEditor({
+          element: engineHost,
+          content: existingHTML || '<p></p>',
+          onUpdate: _onUpdate,
+          onSelectionUpdate: _onSelectionUpdate
+        });
+        console.log('AQ Engine initialized (standalone host in #escroll)');
+      }
+      // ── TipTap path ──
+      else {
       if(!factory || typeof factory.createEditor !== 'function'){
         console.error('TipTap word editor module missing');
         return enableFallbackEditable(edEl, existingHTML || '<p></p>');
@@ -39948,42 +40059,10 @@ updatePageHeight=function(){
             if(typeof window.updatePageHeight === 'function') window.updatePageHeight();
           }
         },
-        onUpdate: function(ctx){
-          if(window.AQEditorRuntime && typeof window.AQEditorRuntime.onEditorUpdate === 'function'){
-            window.AQEditorRuntime.onEditorUpdate(ctx);
-            return;
-          }
-          if(window.__aqDocSwitching) return;
-          if(typeof window.uSt === 'function') window.uSt();
-          if(typeof window.save === 'function') window.save();
-          if(typeof window.normalizeCitationSpans === 'function'){
-            setTimeout(function(){ window.normalizeCitationSpans(ctx.editor.view.dom); }, 0);
-          }
-          if(typeof window.updatePageHeight === 'function') window.updatePageHeight();
-          if(typeof window.autoUpdateTOC === 'function') window.autoUpdateTOC();
-          setTimeout(function(){
-            if(typeof window.checkTrig === 'function') window.checkTrig();
-          }, 0);
-          clearTimeout(window._refTimer);
-          window._refTimer = setTimeout(function(){
-            var edDom = ctx.editor.view.dom;
-            var refH1 = Array.from(edDom.querySelectorAll('h1')).find(function(h){
-              return h.textContent.trim() === 'Kaynakça';
-            });
-            if(refH1 && typeof window.scheduleRefSectionSync === 'function') window.scheduleRefSectionSync();
-          }, 2000);
-        },
-        onSelectionUpdate: function(){
-          if(window.AQEditorRuntime && typeof window.AQEditorRuntime.onSelectionUpdate === 'function'){
-            window.AQEditorRuntime.onSelectionUpdate();
-            return;
-          }
-          if(typeof window.updateFmtState === 'function') window.updateFmtState();
-          setTimeout(function(){
-            if(typeof window.checkTrig === 'function') window.checkTrig();
-          }, 0);
-        }
+        onUpdate: _onUpdate,
+        onSelectionUpdate: _onSelectionUpdate
       });
+      } // end TipTap path
       // Init footnotes module
       if(window.AQFootnotes && typeof window.AQFootnotes.init === 'function'){
         window.AQFootnotes.init();
@@ -42699,7 +42778,7 @@ updatePageHeight=function(){
     try{
       if(!ed.state || !ed.state.doc || !ed.commands || typeof ed.commands.setContent !== 'function') return false;
       var dom = ed.view && ed.view.dom ? ed.view.dom : null;
-      var hasWritableBlock = !!(dom && dom.querySelector && dom.querySelector('p,h1,h2,h3,h4,h5,blockquote,ul,ol,table'));
+      var hasWritableBlock = !!(dom && dom.querySelector && dom.querySelector('p,h1,h2,h3,h4,h5,blockquote,ul,ol,table,div.aq-engine-page'));
       var text = String(ed.state.doc.textContent || '').replace(/\u00a0/g, ' ').trim();
       if(!hasWritableBlock && !text){
         ed.commands.setContent('<p></p>', false);
@@ -46119,6 +46198,10 @@ function isWordListParagraph(node){
 
   function syncPageMetrics(options){
     options = options || {};
+    // AQ Engine has its own pagination + page numbers; the host layout system
+    // must stay completely out of its way or it fights the engine and we get
+    // an infinite loop of page-number redraws (causing UI freeze).
+    if(typeof window !== 'undefined' && window.__aqEngineActive) return 0;
     var page = options.page;
     var editorDom = options.editorDom;
     var scrollEl = options.scrollEl || null;
@@ -46614,7 +46697,7 @@ function isWordListParagraph(node){
     try{
       if(!ed.state || !ed.state.doc || !ed.commands || typeof ed.commands.setContent !== 'function') return false;
       var dom = ed.view && ed.view.dom ? ed.view.dom : null;
-      var hasWritableBlock = !!(dom && dom.querySelector && dom.querySelector('p,h1,h2,h3,h4,h5,blockquote,ul,ol,table'));
+      var hasWritableBlock = !!(dom && dom.querySelector && dom.querySelector('p,h1,h2,h3,h4,h5,blockquote,ul,ol,table,div.aq-engine-page'));
       var text = String(ed.state.doc.textContent || '').replace(/\u00a0/g, ' ').trim();
       if(!hasWritableBlock && !text){
         ed.commands.setContent('<p></p>', false);
@@ -56565,6 +56648,144 @@ on('ddExpLibBtn', 'click', function(){ execAndClose('expLib'); });
   <span class="sep"></span>
   <button class="btn" id="zenExitBtn" style="font-size:11px;">✕ Çık</button>
 </div>
+
+<!-- ─────────── AQ ENGINE — Experimental Word-like layout viewer ─────────── -->
+<style>
+  #aq-engine-toggle{position:fixed;bottom:24px;right:24px;z-index:9000;padding:10px 16px;border:1px solid #d8cfbe;background:#fff;border-radius:999px;font:12px/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1d1b16;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.18);}
+  #aq-engine-toggle:hover{background:#f4ecdc;}
+  #aq-engine-overlay{position:fixed;inset:0;z-index:8500;background:rgba(20,16,10,.5);display:none;}
+  #aq-engine-overlay.open{display:block;}
+  #aq-engine-panel{position:fixed;top:0;right:0;bottom:0;width:min(720px,55vw);z-index:8800;background:#f6f1e7;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .25s ease;box-shadow:-8px 0 32px rgba(0,0,0,.18);}
+  #aq-engine-overlay.open + #aq-engine-panel,#aq-engine-panel.open{transform:translateX(0);}
+  #aq-engine-bar{display:flex;gap:10px;align-items:center;padding:10px 14px;background:#fff;border-bottom:1px solid #e6dfd1;}
+  #aq-engine-bar .ttl{font:600 13px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1d1b16;margin-right:auto;}
+  #aq-engine-bar select,#aq-engine-bar button{font:12px/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:5px 10px;border:1px solid #d8cfbe;background:#fff;color:#1d1b16;border-radius:6px;cursor:pointer;}
+  #aq-engine-bar button:hover{background:#f4ecdc;}
+  #aq-engine-bar .stat{font:11px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#7a6c5a;}
+  #aq-engine-stage{flex:1;overflow:auto;}
+</style>
+
+<button id="aq-engine-toggle" title="Deneysel Word-benzeri sayfa görünümü">📄 Word Görünüm</button>
+<div id="aq-engine-overlay"></div>
+<aside id="aq-engine-panel">
+  <div id="aq-engine-bar">
+    <span class="ttl">Word Görünüm <span style="color:#9a7a3f;font-weight:500;">(deneysel)</span></span>
+    <select id="aq-engine-align">
+      <option value="left">Sola</option>
+      <option value="justify" selected>İki yana yasla</option>
+    </select>
+    <button id="aq-engine-refresh" type="button">↻ Yenile</button>
+    <button id="aq-engine-close" type="button">✕</button>
+    <span id="aq-engine-stat" class="stat"></span>
+  </div>
+  <div id="aq-engine-stage"></div>
+</aside>
+
+<script src="experiments/aq-engine/engine.js"></script>
+<script src="experiments/aq-engine/tiptap-adapter.js"></script>
+<script src="experiments/aq-engine/selection.js"></script>
+<script>
+(function(){
+  if(!window.AQEngine || !window.AQEngineTipTapAdapter){
+    console.warn('[aq-engine] modules not loaded'); return;
+  }
+  var toggle  = document.getElementById('aq-engine-toggle');
+  var overlay = document.getElementById('aq-engine-overlay');
+  var panel   = document.getElementById('aq-engine-panel');
+  var stage   = document.getElementById('aq-engine-stage');
+  var stat    = document.getElementById('aq-engine-stat');
+  var refresh = document.getElementById('aq-engine-refresh');
+  var closeBtn= document.getElementById('aq-engine-close');
+  var alignSel= document.getElementById('aq-engine-align');
+
+  var engine = window.AQEngine.create({
+    pageSize: { widthPt: 595.276, heightPt: 841.89 },
+    margins:  { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+    baseFont: { family: '"Times New Roman", Times, serif', sizePt: 12, weight:'400', style:'normal' },
+    lineHeightFactor: 2.0,
+    pageGapPx: 32
+  });
+
+  var debounceTimer = null;
+  var isOpen = false;
+  var sideSelection = null;
+
+  function rebuild(){
+    if(!isOpen) return;
+    if(!window.editor || typeof window.editor.getJSON !== 'function'){
+      stage.innerHTML = '<div style="padding:40px;color:#7a6c5a;font:13px system-ui;">Editor henüz hazır değil.</div>';
+      stat.textContent = '';
+      return;
+    }
+    var t0 = performance.now();
+    try {
+      var doc = window.editor.getJSON();
+      var blocks = window.AQEngineTipTapAdapter.convertDoc(doc);
+      var align = alignSel.value;
+      blocks = blocks.map(function(b){ return Object.assign({}, b, { align: align }); });
+      engine.setContent(blocks);
+      engine.layout();
+      engine.render(stage, { showMarginGuides: false });
+      var ms = (performance.now() - t0).toFixed(0);
+      var baseStat = engine.getPages().length + ' sayfa · ' + ms + ' ms';
+      stat.textContent = baseStat;
+      // Reattach selection layer (DOM is rebuilt every render)
+      if(window.AQEngineSelection){
+        var preserved = sideSelection ? sideSelection.getRange() : null;
+        if(sideSelection) sideSelection.detach();
+        sideSelection = window.AQEngineSelection.create({ container: stage });
+        sideSelection.attach();
+        sideSelection.onChange(function(ev){
+          if(ev.isCollapsed) stat.textContent = baseStat + ' · caret @ ' + ev.focus;
+          else stat.textContent = baseStat + ' · seçim ' + ev.from + '–' + ev.to + ' (' + (ev.to-ev.from) + ' karakter)';
+        });
+        if(preserved) try { sideSelection.setRange(preserved.anchor, preserved.focus); } catch(_e){}
+      }
+    } catch(e){
+      console.error('[aq-engine] render failed:', e);
+      stage.innerHTML = '<div style="padding:40px;color:#b03a3a;font:13px system-ui;">Render hatası: ' + (e.message || e) + '</div>';
+    }
+  }
+  function scheduleRebuild(){
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(rebuild, 280);
+  }
+
+  function open(){
+    isOpen = true;
+    overlay.classList.add('open');
+    panel.classList.add('open');
+    rebuild();
+  }
+  function close(){
+    isOpen = false;
+    overlay.classList.remove('open');
+    panel.classList.remove('open');
+  }
+
+  toggle.addEventListener('click', open);
+  overlay.addEventListener('click', close);
+  closeBtn.addEventListener('click', close);
+  refresh.addEventListener('click', rebuild);
+  alignSel.addEventListener('change', rebuild);
+
+  // Hook into TipTap update events for live preview. The editor instance is
+  // created later than this script runs, so we poll briefly for it.
+  function hookEditor(){
+    if(!window.editor || typeof window.editor.on !== 'function') return false;
+    window.editor.on('update', scheduleRebuild);
+    window.editor.on('selectionUpdate', function(){}); // reserved
+    return true;
+  }
+  if(!hookEditor()){
+    var attempts = 0;
+    var pollId = setInterval(function(){
+      attempts++;
+      if(hookEditor() || attempts > 40){ clearInterval(pollId); }
+    }, 250);
+  }
+})();
+</script>
 
 </body>
 </html>

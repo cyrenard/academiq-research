@@ -30,10 +30,11 @@
     var style = doc.createElement('style');
     style.id = STYLE_ID;
     style.textContent = [
-      '#aq-tiptap-shell{display:block;width:var(--aq-page-width,21cm);max-width:100%;min-height:var(--aq-page-height,29.7cm);padding:var(--aq-page-margin,2.54cm);box-sizing:border-box;position:relative;margin:0 auto;}',
-      '#aq-tiptap-body{display:block;width:var(--aq-page-content-width,calc(21cm - (2.54cm * 2)));max-width:100%;min-height:var(--aq-page-content-height,calc(29.7cm - (2.54cm * 2)));margin:0 auto;position:relative;pointer-events:auto;}',
-      '#aq-tiptap-content{display:block;width:100%;max-width:100%;min-height:var(--aq-page-content-height,calc(29.7cm - (2.54cm * 2)));position:relative;pointer-events:auto;cursor:text;}',
-      '#aq-tiptap-content.ProseMirror,#aq-tiptap-content .ProseMirror{pointer-events:auto;display:block;width:100%;max-width:100%;min-height:var(--aq-page-content-height,calc(29.7cm - (2.54cm * 2)));cursor:text;}',
+      '#aq-tiptap-shell{display:block;width:min(100%,var(--aq-page-width,21cm));max-width:100%;min-height:var(--aq-page-height,29.7cm);padding:var(--aq-page-margin,2.54cm);box-sizing:border-box;position:relative;margin:0 auto;outline:none;}',
+      '#aq-tiptap-body{display:block;width:100%;max-width:100%;min-height:var(--aq-page-content-height,calc(21cm - (2.54cm * 2)));margin:0 auto;position:relative;pointer-events:auto;outline:none;box-sizing:border-box;}',
+      '#aq-tiptap-content{display:block;width:100%;max-width:100%;min-height:var(--aq-page-content-height,calc(21cm - (2.54cm * 2)));position:relative;pointer-events:auto;cursor:text;outline:none;box-sizing:border-box;}',
+      '#aq-tiptap-content.ProseMirror,#aq-tiptap-content .ProseMirror{pointer-events:auto;display:block;width:100%;max-width:100%;min-height:var(--aq-page-content-height,calc(21cm - (2.54cm * 2)));cursor:text;outline:none;box-sizing:border-box;}',
+      '#aq-tiptap-shell:focus-within,#aq-tiptap-content.ProseMirror:focus,#aq-tiptap-content .ProseMirror:focus{outline:none;}',
       '@media print{#aq-tiptap-shell{padding:0;min-height:auto;}#aq-tiptap-body,#aq-tiptap-content{min-height:auto;}}'
     ].join('');
     doc.head.appendChild(style);

@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>AQ Engine — Pagination Demo</title>
+<style>
+  body { margin:0; font-family:-apple-system,Segoe UI,Roboto,sans-serif; background:#f6f1e7; color:#1d1b16; }
+  #toolbar { position:sticky; top:0; z-index:10; display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; padding:10px 20px; background:#fff; border-bottom:1px solid #e6dfd1; box-shadow:0 2px 8px rgba(0,0,0,.04); }
+  #toolbar label { font-size:12px; color:#54493b; display:flex; align-items:center; gap:6px; }
+  #toolbar input[type=number] { width:64px; padding:4px 6px; border:1px solid #d8cfbe; border-radius:6px; font:inherit; }
+  #toolbar input[type=checkbox] { accent-color:#9a7a3f; }
+  #toolbar select { padding:4px 8px; border:1px solid #d8cfbe; border-radius:6px; font:inherit; background:#fff; }
+  #toolbar button { padding:6px 14px; border:1px solid #d8cfbe; background:#fff; color:#1d1b16; border-radius:6px; cursor:pointer; font:inherit; }
+  #toolbar button:hover { background:#f4ecdc; }
+  #status { margin-left:auto; font-size:12px; color:#7a6c5a; }
+  #stage { display:block; }
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <label>Sayfa:
+    <select id="pageSize">
+      <option value="A4" selected>A4</option>
+      <option value="Letter">Letter</option>
+      <option value="A5">A5</option>
+    </select>
+  </label>
+  <label>Margin (in): <input type="number" id="margin" value="1" step="0.25" min="0.5" max="2"></label>
+  <label>Font (pt): <input type="number" id="fontSize" value="12" step="1" min="8" max="24"></label>
+  <label>Spacing: <input type="number" id="lineHeight" value="2.0" step="0.1" min="1" max="3"></label>
+  <label>Girinti (in): <input type="number" id="firstIndent" value="0.5" step="0.05" min="0" max="2"></label>
+  <label>Aile:
+    <select id="fontFamily">
+      <option value='"Times New Roman", Times, serif' selected>Times New Roman</option>
+      <option value='Georgia, serif'>Georgia</option>
+      <option value='"Cambria", serif'>Cambria</option>
+      <option value='"Calibri", "Segoe UI", sans-serif'>Calibri</option>
+      <option value='Arial, sans-serif'>Arial</option>
+    </select>
+  </label>
+  <label>Hizalama:
+    <select id="align">
+      <option value="left" selected>Sola</option>
+      <option value="justify">İki yana yasla</option>
+      <option value="center">Ortala</option>
+      <option value="right">Sağa</option>
+    </select>
+  </label>
+  <label><input type="checkbox" id="guides" checked> Margin guide</label>
+  <label>Stil:
+    <select id="blockType">
+      <option value="paragraph">Gövde metni</option>
+      <option value="h1">Başlık 1</option>
+      <option value="h2">Başlık 2</option>
+      <option value="h3">Başlık 3</option>
+      <option value="h4">Başlık 4</option>
+      <option value="h5">Başlık 5</option>
+      <option value="h6">Başlık 6</option>
+    </select>
+  </label>
+  <span style="display:inline-flex;gap:2px;border:1px solid #d8cfbe;border-radius:6px;overflow:hidden;">
+    <button id="markBold"      type="button" title="Kalın (Ctrl+B)" style="font:600 13px serif;padding:4px 10px;border:0;background:#fff;cursor:pointer;border-right:1px solid #ece4d3;">B</button>
+    <button id="markItalic"    type="button" title="İtalik (Ctrl+I)" style="font:italic 600 13px serif;padding:4px 10px;border:0;background:#fff;cursor:pointer;border-right:1px solid #ece4d3;">I</button>
+    <button id="markUnderline" type="button" title="Altı çizili (Ctrl+U)" style="font:13px serif;text-decoration:underline;padding:4px 10px;border:0;background:#fff;cursor:pointer;">U</button>
+  </span>
+  <span style="display:inline-flex;gap:2px;align-items:center;border:1px solid #d8cfbe;border-radius:6px;overflow:hidden;">
+    <label title="Yazı rengi" style="padding:2px 6px;cursor:pointer;display:flex;align-items:center;gap:2px;font-size:13px;border-right:1px solid #ece4d3;">
+      A<input type="color" id="textColor" value="#000000" style="width:18px;height:18px;padding:0;border:0;cursor:pointer;">
+    </label>
+    <label title="Vurgu rengi" style="padding:2px 6px;cursor:pointer;display:flex;align-items:center;gap:2px;font-size:13px;">
+      <span style="background:#ffff00;padding:0 4px;border-radius:2px;">ab</span><input type="color" id="highlightColor" value="#ffff00" style="width:18px;height:18px;padding:0;border:0;cursor:pointer;">
+    </label>
+  </span>
+  <span style="display:inline-flex;gap:2px;border:1px solid #d8cfbe;border-radius:6px;overflow:hidden;">
+    <button id="listBullet"  type="button" title="Madde işaretli liste" style="font:13px sans-serif;padding:4px 10px;border:0;background:#fff;cursor:pointer;border-right:1px solid #ece4d3;">•</button>
+    <button id="listOrdered" type="button" title="Sıralı liste" style="font:13px sans-serif;padding:4px 10px;border:0;background:#fff;cursor:pointer;">1.</button>
+  </span>
+  <button id="reflow">Yeniden hesapla</button>
+  <button id="loadSample">Native örnek</button>
+  <button id="loadTipTap">TipTap örneği</button>
+  <button id="pasteJson">JSON yapıştır</button>
+  <span id="status"></span>
+</div>
+<dialog id="pasteDialog" style="border:1px solid #d8cfbe;border-radius:10px;padding:18px;width:min(640px,90vw);font:inherit;">
+  <h3 style="margin:0 0 8px;font-size:14px;font-weight:600;">TipTap JSON yapıştır</h3>
+  <p style="margin:0 0 8px;font-size:12px;color:#7a6c5a;">
+    Ana uygulamada DevTools açıp <code>JSON.stringify(editor.getJSON())</code> sonucunu buraya yapıştır.
+  </p>
+  <textarea id="pasteArea" rows="14" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #d8cfbe;border-radius:6px;font:12px/1.4 ui-monospace,Menlo,monospace;resize:vertical;"></textarea>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;">
+    <button id="pasteCancel" type="button" style="padding:6px 14px;border:1px solid #d8cfbe;background:#fff;border-radius:6px;cursor:pointer;">İptal</button>
+    <button id="pasteApply" type="button" style="padding:6px 14px;border:1px solid #9a7a3f;background:#9a7a3f;color:#fff;border-radius:6px;cursor:pointer;">Yükle</button>
+  </div>
+  <div id="pasteError" style="color:#b03a3a;font-size:12px;margin-top:8px;"></div>
+</dialog>
+<div id="findBar" style="display:none;position:sticky;top:48px;z-index:9;background:#fffdf6;border-bottom:1px solid #e6dfd1;padding:8px 20px;box-shadow:0 2px 6px rgba(0,0,0,.04);">
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <label style="font-size:12px;color:#54493b;">Bul:</label>
+    <input type="text" id="findInput" placeholder="Metin ara..." style="width:200px;padding:4px 8px;border:1px solid #d8cfbe;border-radius:6px;font:13px inherit;">
+    <button id="findPrev" type="button" style="padding:4px 10px;border:1px solid #d8cfbe;background:#fff;border-radius:6px;cursor:pointer;font:inherit;">&#9650;</button>
+    <button id="findNext" type="button" style="padding:4px 10px;border:1px solid #d8cfbe;background:#fff;border-radius:6px;cursor:pointer;font:inherit;">&#9660;</button>
+    <span id="findCount" style="font-size:12px;color:#7a6c5a;min-width:60px;"></span>
+    <span id="replaceRow" style="display:none;gap:8px;align-items:center;">
+      <label style="font-size:12px;color:#54493b;">Değiştir:</label>
+      <input type="text" id="replaceInput" placeholder="Yerine..." style="width:200px;padding:4px 8px;border:1px solid #d8cfbe;border-radius:6px;font:13px inherit;">
+      <button id="replaceOne" type="button" style="padding:4px 10px;border:1px solid #d8cfbe;background:#fff;border-radius:6px;cursor:pointer;font:inherit;">Değiştir</button>
+      <button id="replaceAll" type="button" style="padding:4px 10px;border:1px solid #d8cfbe;background:#fff;border-radius:6px;cursor:pointer;font:inherit;">Tümünü</button>
+    </span>
+    <label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="findCase"> Büyük/küçük</label>
+    <button id="findClose" type="button" style="margin-left:auto;padding:4px 10px;border:1px solid #d8cfbe;background:#fff;border-radius:6px;cursor:pointer;font:inherit;">&times;</button>
+  </div>
+</div>
+<div id="stage"></div>
+
+<script src="./engine.js"></script>
+<script src="./tiptap-adapter.js"></script>
+<script src="./selection.js"></script>
+<script src="./document.js"></script>
+<script src="./input.js"></script>
+<script>
+  // Sample academic content. Mix of long paragraphs, varying styles, headings.
+  // Long enough to span multiple pages so pagination is visible.
+  var SAMPLE = [
+    { text:'Bilimsel Araştırmada Sayfa Düzeninin Rolü', font:{ sizePt:16, weight:'700' }, spaceAfterPx:12 },
+    { runs:[
+        { text:'Bu çalışma, akademik metinlerde ' },
+        { text:'görsel düzenin', italic:true },
+        { text:' okunurluk üzerindeki etkilerini incelemektedir. ' },
+        { text:'APA 7', bold:true },
+        { text:' sürümü, sayfa kenar boşlukları, satır aralığı ve yazı tipi seçimi gibi unsurların standardize edilmiş bir biçimde uygulanmasını şart koşar. Söz konusu kuralların altında yatan motivasyon, metnin görsel yükünü hafifleterek okuyucunun bilişsel kaynaklarını içeriğin kendisine ayırabilmesini sağlamaktır. Örneğin H' },
+        { text:'2', baselineShift:-4, fontScale:0.75 },
+        { text:'O ya da E=mc' },
+        { text:'2', baselineShift:6, fontScale:0.75 },
+        { text:' gibi simgeler altsimge ve üstsimge desteğini gerektirir.' }
+    ] },
+    { text:'Yöntem bölümünde, bir paragrafın sayfa sınırına ulaştığında nasıl bölündüğüne dair çeşitli yaklaşımlar karşılaştırılmıştır. Geleneksel kelime işlemcileri (örneğin Microsoft Word) açgözlü bir satır ayırma algoritması ile her satırı sığdırabildiği maksimum kelimeyi içerecek şekilde doldurur; sayfa boyu aşıldığında ise ek yer açmadan kelime sınırından bir sonraki sayfaya geçer. Bu yaklaşımın avantajı, bir paragrafın yazıcıdan çıktısı alındığında satır sayısının önceden öngörülebilmesidir.' },
+    { text:'Knuth ve Plass (1981) tarafından önerilen küresel optimizasyon yaklaşımı, paragrafın tamamını ele alarak satırlar arası boşluk dağılımını dengeler ve böylece nehirler (vertical rivers of whitespace) gibi tipografik kusurları azaltır. Bu yöntem TeX dizgi sisteminin temelini oluşturur ve bilimsel yayın endüstrisinde altın standart kabul edilir. Ancak hesaplama maliyeti açısından açgözlü algoritmaya göre çok daha pahalıdır; bu nedenle WYSIWYG düzenleyiciler nadiren tercih ederler.' },
+    { text:'Mevcut çalışmada açgözlü algoritma temel alınmıştır, çünkü amaç gerçek zamanlı bir düzenleyici akışı simüle etmektir. İlerleyen iterasyonlarda paragraf düzeyinde lokal bir Knuth-Plass uygulamasına geçiş düşünülmektedir.', spaceAfterPx:8 },
+    { text:'Bulgular', font:{ sizePt:14, weight:'700' }, spaceAfterPx:8 },
+    { text:'Otuz katılımcı ile yürütülen okunurluk testlerinde, çift satır aralıklı APA biçiminin tek satır aralıklı eşdeğerlerine kıyasla anlamlı şekilde daha iyi anlama puanları ürettiği gözlemlenmiştir. Bu sonuç, beyaz alanın bilişsel yük üzerindeki olumlu etkisine dair önceki bulgularla tutarlıdır (Smith, 2018; Yılmaz, 2021). İlginç bir gözlem olarak, özellikle uzun cümle yapılarında bu fark daha belirgin hale gelmiş, kısa cümlelerde ise iki biçim arasındaki performans farkı istatistiksel olarak anlamsızlaşmıştır.' },
+    { text:'Sayfa kenar boşluğu manipülasyonu kapsamında, bir inçten daha dar boşluklara sahip metinlerin okunma sürelerinde belirgin bir uzama gözlemlenmiştir; bu durum, bir kelime ile sayfa kenarı arasındaki minimum mesafenin yalnızca estetik değil aynı zamanda bilişsel bir gereksinim olduğunu desteklemektedir.' },
+    { text:'Sayfa Sonu ve Dul-Yetim Kuralları', font:{ sizePt:14, weight:'700' }, spaceAfterPx:8 },
+    { text:'Yazıcı çıktısı alındığında bir paragrafın yalnızca son satırının yeni sayfada görünmesi (dul satır) ya da yalnızca ilk satırının önceki sayfada kalması (yetim satır) tipografik açıdan kabul görmez. Bu çalışmadaki motor, paragrafların en az iki satırlık ardışık bir blok halinde gruplanmasını sağlamak için bir öngörü adımı uygular.' },
+    { text:'Başlıklar ise daima takip eden paragrafla bağlı tutulur; aksi takdirde sayfa altında öksüz kalabilirler. Bu davranış APA 7 stilinin keep-with-next kuralıyla uyumludur.' },
+    { text:'Tartışma', font:{ sizePt:14, weight:'700' }, spaceAfterPx:8 },
+    { text:'Bu prototip motor, tarayıcı tabanlı kelime işlemcilerinin yapısal sınırlamalarından bağımsız bir sayfalandırma yaklaşımı önermektedir. CSS akışı yerine ölçüm tabanlı bir mizanpaj kullanmanın temel kazancı, sayfa sınırlarının kesin olarak kontrol edilebilmesidir.' },
+    { text:'Gelecek çalışmalarda, motorun TipTap doc modeli ile hibrit modda çalıştırılması ve mevcut atıf, kaynakça ve ek bölümleri özelliklerinin yeniden bağlanması planlanmaktadır. Ayrıca metin seçimi, imleç pozisyonlama ve klavye kısayolları gibi etkileşim katmanlarının nasıl ele alınacağı ayrı bir araştırma konusu olarak ele alınacaktır.' },
+    { text:'Sınırlılıklar olarak, mevcut sürümde paragrafların yalnızca tek bir font tek bir ağırlıkta render edildiği belirtilmelidir; satır içi italik, kalın, alt simge gibi inline stiller bir sonraki iterasyonda eklenecektir. Bunun yanı sıra, dengeli satır kırma için Knuth-Plass benzeri bir algoritmaya geçiş, özellikle dar sütun genişliklerinde estetik kazanç sağlayacaktır.' },
+    { text:'Sonuç olarak bu çalışma, mevcut kelime işlemcilerinin gerçek zamanlı düzenleme deneyimini koruyarak Word benzeri sayfalandırma davranışını taklit etmenin teknik olarak uygulanabilir olduğunu göstermiştir. Açgözlü algoritmanın hız avantajı, akademik düzenleyiciler için yeterli kalite sağlarken kullanıcı arayüzü gecikmesi 16 ms eşiğinin altında kalmaktadır.', spaceAfterPx:12 },
+    { text:'Kaynakça', font:{ sizePt:14, weight:'700' }, spaceAfterPx:8 },
+    { text:'Knuth, D. E., & Plass, M. F. (1981). Breaking paragraphs into lines. Software: Practice and Experience, 11(11), 1119-1184.' },
+    { text:'Smith, J. (2018). Cognitive load and typography. Journal of Reading Research, 42(3), 215-238.' },
+    { text:'Yılmaz, A. (2021). Akademik metinlerde tipografik düzen ve okunurluk. Eğitim Araştırmaları, 18(2), 88-104.' }
+  ];
+
+  var PAGE_SIZES = {
+    A4:     { widthPt: 595.276, heightPt: 841.89 },
+    Letter: { widthPt: 612,     heightPt: 792 },
+    A5:     { widthPt: 419.528, heightPt: 595.276 }
+  };
+
+  var stage = document.getElementById('stage');
+  var status = document.getElementById('status');
+  var engine = AQEngine.create();
+  var selection = null;
+  var input = null;
+  var docModel = AQEngineDocument.create(SAMPLE);
+  var selStatus = '';
+
+  function reflow(){
+    var t0 = performance.now();
+    var marginIn = parseFloat(document.getElementById('margin').value) || 1;
+    var fontSize = parseFloat(document.getElementById('fontSize').value) || 12;
+    var lineHeight = parseFloat(document.getElementById('lineHeight').value) || 2;
+    var pageSel = document.getElementById('pageSize').value;
+    var fontFamily = document.getElementById('fontFamily').value;
+    var showGuides = document.getElementById('guides').checked;
+
+    engine.setOptions({
+      pageSize: PAGE_SIZES[pageSel] || PAGE_SIZES.A4,
+      margins: { topPt: marginIn*72, rightPt: marginIn*72, bottomPt: marginIn*72, leftPt: marginIn*72 },
+      baseFont: { family: fontFamily, sizePt: fontSize, weight:'400', style:'normal' },
+      lineHeightFactor: lineHeight
+    });
+    engine.setContent(SAMPLE);
+    engine.layout();
+    engine.render(stage, { showMarginGuides: showGuides });
+
+    var ms = (performance.now() - t0).toFixed(1);
+    status.textContent = engine.getPages().length + ' sayfa · ' + ms + ' ms';
+  }
+
+  // TipTap (ProseMirror) JSON örneği — gerçek bir akademik metin parçası,
+  // marks ve list/heading karışımıyla. Adapter'ın doğru çevirdiğini test eder.
+  var TIPTAP_SAMPLE = {
+    type:'doc',
+    content:[
+      { type:'heading', attrs:{ level:1 }, content:[{ type:'text', text:'TipTap Belge → Engine Block Adapter' }] },
+      { type:'paragraph', content:[
+        { type:'text', text:'Bu paragraf, TipTap doc modelinden engine block formatına dönüşümü test etmektedir. ' },
+        { type:'text', marks:[{ type:'bold' }], text:'Kalın metin' },
+        { type:'text', text:', ' },
+        { type:'text', marks:[{ type:'italic' }], text:'italik metin' },
+        { type:'text', text:', ' },
+        { type:'text', marks:[{ type:'underline' }], text:'altı çizili' },
+        { type:'text', text:' ve ' },
+        { type:'text', marks:[{ type:'strike' }], text:'üstü çizili' },
+        { type:'text', text:' işaretleri ayrı run\'lar olarak akarak satır kırmaya katılır. Aritmetik ifadelerde x' },
+        { type:'text', marks:[{ type:'superscript' }], text:'2' },
+        { type:'text', text:' + y' },
+        { type:'text', marks:[{ type:'superscript' }], text:'2' },
+        { type:'text', text:' = z' },
+        { type:'text', marks:[{ type:'superscript' }], text:'2' },
+        { type:'text', text:' yazımı veya CO' },
+        { type:'text', marks:[{ type:'subscript' }], text:'2' },
+        { type:'text', text:' kimyasal formülü gibi alt/üst simgeler de doğal akış içinde işlenmelidir.' }
+      ]},
+      { type:'heading', attrs:{ level:2 }, content:[{ type:'text', text:'Yöntem' }] },
+      { type:'paragraph', content:[
+        { type:'text', text:'Çalışmada üç ana adım izlenmiştir:' }
+      ]},
+      { type:'orderedList', content:[
+        { type:'listItem', content:[{ type:'paragraph', content:[
+          { type:'text', text:'TipTap belgesinin tüm üst düzey düğümleri ' },
+          { type:'text', marks:[{ type:'bold' }], text:'block listesine' },
+          { type:'text', text:' düşürüldü. Heading\'ler kendi font boyutlarını alır; paragraflar inline mark\'lara göre run\'lara bölünür.' }
+        ]}]},
+        { type:'listItem', content:[{ type:'paragraph', content:[
+          { type:'text', text:'Mark dönüşüm tablosu hazırlandı: bold, italic, underline, strike, sub/sup ve textStyle (renk, font ailesi, font boyutu).' }
+        ]}]},
+        { type:'listItem', content:[{ type:'paragraph', content:[
+          { type:'text', text:'Liste öğeleri marker (1., 2., •) ile birlikte tek paragraf haline getirilip sol indent ' },
+          { type:'text', marks:[{ type:'italic' }], text:'leftIndentPx' },
+          { type:'text', text:' ile uygulandı.' }
+        ]}]}
+      ]},
+      { type:'heading', attrs:{ level:2 }, content:[{ type:'text', text:'Sonuç ve Bulgular' }] },
+      { type:'paragraph', content:[
+        { type:'text', text:'Önceki çalışmalar ' },
+        { type:'text', marks:[{ type:'citation', attrs:{ 'data-ref':'(Smith, 2018)', 'data-id':'smith2018', 'data-mode':'parenthetical' } }], text:'(Smith, 2018)' },
+        { type:'text', text:' ve ' },
+        { type:'text', marks:[{ type:'citation', attrs:{ 'data-ref':'Yılmaz (2021)', 'data-id':'yilmaz2021', 'data-mode':'textual' } }], text:'Yılmaz (2021)' },
+        { type:'text', text:' tipografik düzenin okunurluk üzerindeki etkisini farklı yaklaşımlarla incelemiştir' },
+        { type:'footnoteRef', attrs:{ fnId:'1', fnType:'footnote' } },
+        { type:'text', text:'. Bu çalışma, bahsi geçen iki yaklaşımı tek bir motorda birleştirerek hibrit bir model önermektedir' },
+        { type:'footnoteRef', attrs:{ fnId:'2', fnType:'footnote' } },
+        { type:'text', text:'.' }
+      ]},
+      { type:'paragraph', content:[
+        { type:'text', text:'Bu örnek başarılı şekilde render edilirse adapter çalışıyor demektir. Bir sonraki adımda gerçek AcademiQ TipTap belgelerinin (citation widget, footnote, image vs.) entegrasyonu üzerinde çalışılacaktır. Bu paragraf yeterince uzun tutularak sayfa kırmanın TipTap kaynaklı içerikte de doğru çalıştığı doğrulanır. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' }
+      ]}
+    ]
+  };
+
+  function setSource(blocks){
+    docModel.replace(blocks);
+    reflow();
+  }
+
+  // Override reflow to use currentSource
+  var originalReflow = reflow;
+  reflow = function(){
+    var t0 = performance.now();
+    var marginIn = parseFloat(document.getElementById('margin').value) || 1;
+    var fontSize = parseFloat(document.getElementById('fontSize').value) || 12;
+    var lineHeight = parseFloat(document.getElementById('lineHeight').value) || 2;
+    var pageSel = document.getElementById('pageSize').value;
+    var fontFamily = document.getElementById('fontFamily').value;
+    var showGuides = document.getElementById('guides').checked;
+
+    engine.setOptions({
+      pageSize: PAGE_SIZES[pageSel] || PAGE_SIZES.A4,
+      margins: { topPt: marginIn*72, rightPt: marginIn*72, bottomPt: marginIn*72, leftPt: marginIn*72 },
+      baseFont: { family: fontFamily, sizePt: fontSize, weight:'400', style:'normal' },
+      lineHeightFactor: lineHeight
+    });
+    var firstIndentIn = parseFloat(document.getElementById('firstIndent').value) || 0;
+    var firstIndentPx = firstIndentIn * 96;
+    var sourceBlocks = docModel.get().blocks;
+    var aligned = sourceBlocks.map(function(b){
+      var isHeading = b.type === 'heading';
+      var isList    = !!b.list;
+      var indent = (isHeading || isList) ? 0 : (b.firstLineIndentPx != null ? b.firstLineIndentPx : firstIndentPx);
+      // align: use the block's own value; default left
+      return Object.assign({}, b, { align: b.align || 'left', firstLineIndentPx: indent });
+    });
+    engine.setContent(aligned);
+    engine.layout();
+    engine.render(stage, { showMarginGuides: showGuides });
+    var ms = (performance.now() - t0).toFixed(1);
+    var baseStatus = engine.getPages().length + ' sayfa · ' + ms + ' ms · ' + sourceBlocks.length + ' block';
+    status.textContent = baseStatus;
+
+    // (Re)attach selection layer after each render. The DOM is rebuilt so the
+    // previous selection is invalidated; we keep range across layouts.
+    var preserved = selection ? selection.getRange() : { anchor: 0, focus: 0 };
+    if(selection) selection.detach();
+    selection = AQEngineSelection.create({ container: stage });
+    selection.attach();
+    selection.onChange(function(ev){
+      if(ev.isCollapsed){
+        selStatus = '· caret @ ' + ev.focus;
+      }else{
+        selStatus = '· seçim ' + ev.from + '–' + ev.to + ' (' + (ev.to - ev.from) + ' karakter)';
+      }
+      status.textContent = baseStatus + ' ' + selStatus;
+      reflectToolbarState(ev);
+    });
+    var maxOff = docModel.length();
+    var preservedAnchor = Math.min(preserved.anchor, maxOff);
+    var preservedFocus  = Math.min(preserved.focus,  maxOff);
+    selection.setRange(preservedAnchor, preservedFocus);
+
+    // Input layer: create once. It reads the *current* selection via a getter
+    // each time so reflow's recreated selection is always picked up live.
+    if(!input){
+      input = AQEngineInput.create({
+        container: stage,
+        doc: docModel,
+        selectionRef: function(){ return selection; },
+        onChanged: reflow
+      });
+    }
+    if(input.syncCapturePosition) input.syncCapturePosition();
+    input.focus();
+  };
+
+  // Reflect formatting + block type at the current selection back into the
+  // toolbar UI so the user can see what's active (Word-style live state).
+  function reflectToolbarState(ev){
+    var bBtn = document.getElementById('markBold');
+    var iBtn = document.getElementById('markItalic');
+    var uBtn = document.getElementById('markUnderline');
+    var bt = document.getElementById('blockType');
+    if(!bBtn || !iBtn || !uBtn || !bt) return;
+    var from = ev.from, to = ev.to;
+    var probeFrom, probeTo;
+    if(from === to){
+      // Collapsed: sample the char immediately before caret if any
+      probeFrom = Math.max(0, from - 1);
+      probeTo = from;
+    } else {
+      probeFrom = from; probeTo = to;
+    }
+    function setActive(btn, on){
+      btn.style.background = on ? '#f4ecdc' : '#fff';
+      btn.style.boxShadow = on ? 'inset 0 0 0 2px #9a7a3f' : 'none';
+    }
+    // If pending marks are set (collapsed + user pressed Ctrl+B etc.), show that
+    var pb = document.body.dataset.aqPendingBold === 'true';
+    var pi = document.body.dataset.aqPendingItalic === 'true';
+    var pu = document.body.dataset.aqPendingUnderline === 'true';
+    var hasPendingB = document.body.dataset.aqPendingBold !== undefined && document.body.dataset.aqPendingBold !== 'false';
+    var hasPendingI = document.body.dataset.aqPendingItalic !== undefined && document.body.dataset.aqPendingItalic !== 'false';
+    var hasPendingU = document.body.dataset.aqPendingUnderline !== undefined && document.body.dataset.aqPendingUnderline !== 'false';
+    setActive(bBtn, (from === to && hasPendingB) ? pb : docModel.rangeHasMark(probeFrom, probeTo, 'bold'));
+    setActive(iBtn, (from === to && hasPendingI) ? pi : docModel.rangeHasMark(probeFrom, probeTo, 'italic'));
+    setActive(uBtn, (from === to && hasPendingU) ? pu : docModel.rangeHasMark(probeFrom, probeTo, 'underline'));
+    var blkIdx = docModel.blockIndexAt(from);
+    var blk = docModel.get().blocks[blkIdx];
+    if(blk && blk.type === 'heading') bt.value = 'h' + (blk.level || 1);
+    else bt.value = 'paragraph';
+    // Reflect block's alignment in the dropdown
+    var alignSel = document.getElementById('align');
+    if(alignSel && blk) alignSel.value = blk.align || 'left';
+  }
+
+  function applyMarkFromButton(mark){
+    var range = selection ? selection.getRange() : null;
+    if(!range) return;
+    if(range.from === range.to){
+      // Collapsed: simulate keyboard shortcut to trigger pending marks via input layer
+      var keyMap = { bold:'b', italic:'i', underline:'u' };
+      var kc = keyMap[mark];
+      if(kc && input && input.focus){
+        input.focus();
+        // Dispatch a synthetic Ctrl+key event so input.js toggleMark handles it
+        var ta = document.querySelector('.aq-input-capture');
+        if(ta){
+          var ev = new KeyboardEvent('keydown', { key: kc, ctrlKey: true, bubbles: true });
+          ta.dispatchEvent(ev);
+        }
+      }
+      // Re-reflect toolbar after pending change
+      if(selection) reflectToolbarState(selection.getRange());
+      return;
+    }
+    var has = docModel.rangeHasMark(range.from, range.to, mark);
+    docModel.applyMark(range.from, range.to, mark, !has);
+    reflow();
+    selection.setRange(range.anchor, range.focus);
+    if(input && input.focus) input.focus();
+  }
+  document.getElementById('markBold').addEventListener('mousedown', function(e){ e.preventDefault(); applyMarkFromButton('bold'); });
+  document.getElementById('markItalic').addEventListener('mousedown', function(e){ e.preventDefault(); applyMarkFromButton('italic'); });
+  document.getElementById('markUnderline').addEventListener('mousedown', function(e){ e.preventDefault(); applyMarkFromButton('underline'); });
+
+  // Color picker — apply text color to selection
+  document.getElementById('textColor').addEventListener('input', function(e){
+    var range = selection ? selection.getRange() : null;
+    if(!range || range.from === range.to) return;
+    docModel.applyMark(range.from, range.to, 'color', e.target.value);
+    reflow();
+    selection.setRange(range.anchor, range.focus);
+    if(input && input.focus) input.focus();
+  });
+  // Highlight picker — apply background highlight to selection
+  document.getElementById('highlightColor').addEventListener('input', function(e){
+    var range = selection ? selection.getRange() : null;
+    if(!range || range.from === range.to) return;
+    docModel.applyMark(range.from, range.to, 'highlight', e.target.value);
+    reflow();
+    selection.setRange(range.anchor, range.focus);
+    if(input && input.focus) input.focus();
+  });
+
+  function applyListType(type){
+    var range = selection ? selection.getRange() : null;
+    if(!range) return;
+    var firstBlk = docModel.get().blocks[docModel.blockIndexAt(range.from)];
+    var already = firstBlk && firstBlk.list && firstBlk.list.type === type;
+    docModel.setListTypeForRange(range.from, range.to, already ? null : type, 0);
+    reflow();
+    selection.setRange(range.anchor, range.focus);
+    if(input && input.focus) input.focus();
+  }
+  document.getElementById('listBullet').addEventListener('mousedown', function(e){ e.preventDefault(); applyListType('bullet'); });
+  document.getElementById('listOrdered').addEventListener('mousedown', function(e){ e.preventDefault(); applyListType('ordered'); });
+
+  document.getElementById('blockType').addEventListener('change', function(e){
+    var v = e.target.value;
+    var range = selection ? selection.getRange() : null;
+    if(!range) return;
+    if(v === 'paragraph') docModel.setBlockTypeForRange(range.from, range.to, 'paragraph');
+    else docModel.setBlockTypeForRange(range.from, range.to, 'heading', { level: parseInt(v.slice(1), 10) });
+    reflow();
+    selection.setRange(range.anchor, range.focus);
+    if(input && input.focus) input.focus();
+  });
+
+  document.getElementById('reflow').addEventListener('click', reflow);
+  document.getElementById('loadSample').addEventListener('click', function(){ setSource(SAMPLE); });
+  document.getElementById('loadTipTap').addEventListener('click', function(){
+    setSource(AQEngineTipTapAdapter.convertDoc(TIPTAP_SAMPLE));
+  });
+
+  // ── JSON paste flow ───────────────────────────────────────────────────────
+  // Ana uygulamadan DevTools console: JSON.stringify(editor.getJSON())
+  // Yapıştırma diyalogu motorun gerçek belgelerle stres testini sağlar.
+  var pasteDialog = document.getElementById('pasteDialog');
+  document.getElementById('pasteJson').addEventListener('click', function(){
+    document.getElementById('pasteError').textContent = '';
+    document.getElementById('pasteArea').value = '';
+    if(typeof pasteDialog.showModal === 'function') pasteDialog.showModal();
+    else pasteDialog.setAttribute('open', '');
+  });
+  document.getElementById('pasteCancel').addEventListener('click', function(){
+    if(typeof pasteDialog.close === 'function') pasteDialog.close();
+    else pasteDialog.removeAttribute('open');
+  });
+  document.getElementById('pasteApply').addEventListener('click', function(){
+    var raw = document.getElementById('pasteArea').value.trim();
+    var errEl = document.getElementById('pasteError');
+    errEl.textContent = '';
+    if(!raw){ errEl.textContent = 'Boş içerik.'; return; }
+    var doc;
+    try { doc = JSON.parse(raw); } catch(e){
+      errEl.textContent = 'Geçersiz JSON: ' + e.message;
+      return;
+    }
+    if(!doc || (doc.type && doc.type !== 'doc' && !Array.isArray(doc.content))){
+      errEl.textContent = 'TipTap doc beklendi (type:"doc" + content[]).';
+      return;
+    }
+    try {
+      var blocks = AQEngineTipTapAdapter.convertDoc(doc);
+      if(!blocks.length){ errEl.textContent = 'Hiç tanınan blok bulunamadı.'; return; }
+      if(typeof pasteDialog.close === 'function') pasteDialog.close();
+      else pasteDialog.removeAttribute('open');
+      setSource(blocks);
+    } catch(e){
+      errEl.textContent = 'Dönüşüm hatası: ' + e.message;
+    }
+  });
+  // The "Hizalama" select now applies to blocks under the current selection
+  // rather than overriding all blocks globally — matches Word's behaviour.
+  document.getElementById('align').addEventListener('change', function(e){
+    var range = selection ? selection.getRange() : null;
+    if(!range) return;
+    docModel.setAlignForRange(range.from, range.to, e.target.value);
+    reflow();
+    selection.setRange(range.anchor, range.focus);
+    if(input && input.focus) input.focus();
+  });
+  // Other toolbar inputs continue to trigger a generic reflow (they affect
+  // engine options like page size, margins, font, line spacing).
+  document.querySelectorAll('#toolbar input, #toolbar select').forEach(function(el){
+    if(el.id === 'align') return;
+    el.addEventListener('change', reflow);
+  });
+  reflow();
+
+  // ── Find & Replace ──────────────────────────────────────────────────────
+  var findBarEl   = document.getElementById('findBar');
+  var findInputEl = document.getElementById('findInput');
+  var replaceRowEl = document.getElementById('replaceRow');
+  var replaceInputEl = document.getElementById('replaceInput');
+  var findCountEl = document.getElementById('findCount');
+  var findCaseEl  = document.getElementById('findCase');
+  var findMatches = [];   // [{from, to}, ...]
+  var findIdx     = -1;   // current match index
+  var findMode    = '';   // 'find' or 'replace'
+
+  function openFind(mode){
+    findMode = mode || 'find';
+    findBarEl.style.display = '';
+    replaceRowEl.style.display = (mode === 'replace') ? 'inline-flex' : 'none';
+    findInputEl.focus();
+    findInputEl.select();
+    runFind();
+  }
+  function closeFind(){
+    findBarEl.style.display = 'none';
+    findMatches = [];
+    findIdx = -1;
+    findCountEl.textContent = '';
+    if(input && input.focus) input.focus();
+  }
+  function runFind(){
+    var q = findInputEl.value;
+    findMatches = [];
+    findIdx = -1;
+    if(!q){ findCountEl.textContent = ''; return; }
+    var text = docModel.getPlainText();
+    var caseSensitive = findCaseEl.checked;
+    var search = caseSensitive ? q : q.toLowerCase();
+    var hay    = caseSensitive ? text : text.toLowerCase();
+    var pos = 0;
+    while(true){
+      var idx = hay.indexOf(search, pos);
+      if(idx < 0) break;
+      findMatches.push({ from: idx, to: idx + q.length });
+      pos = idx + 1;
+    }
+    if(findMatches.length > 0){
+      // Jump to first match after current caret, or first overall
+      var caret = selection ? selection.getRange().from : 0;
+      findIdx = 0;
+      for(var i = 0; i < findMatches.length; i++){
+        if(findMatches[i].from >= caret){ findIdx = i; break; }
+      }
+      selectMatch();
+    }
+    findCountEl.textContent = findMatches.length + ' sonuç';
+  }
+  function selectMatch(){
+    if(findIdx < 0 || findIdx >= findMatches.length) return;
+    var m = findMatches[findIdx];
+    if(selection) selection.setRange(m.from, m.to);
+    findCountEl.textContent = (findIdx + 1) + ' / ' + findMatches.length;
+  }
+  function findNext(){
+    if(!findMatches.length) return;
+    findIdx = (findIdx + 1) % findMatches.length;
+    selectMatch();
+  }
+  function findPrev(){
+    if(!findMatches.length) return;
+    findIdx = (findIdx - 1 + findMatches.length) % findMatches.length;
+    selectMatch();
+  }
+  function replaceOne(){
+    if(findIdx < 0 || findIdx >= findMatches.length) return;
+    var m = findMatches[findIdx];
+    var rep = replaceInputEl.value;
+    docModel.deleteRange(m.from, m.to);
+    if(rep) docModel.insertText(m.from, rep);
+    reflow();
+    if(selection) selection.setRange(m.from + rep.length, m.from + rep.length);
+    runFind();
+  }
+  function replaceAllMatches(){
+    var rep = replaceInputEl.value;
+    var q = findInputEl.value;
+    if(!q) return;
+    // Replace from end to start to preserve offsets
+    runFind();
+    for(var i = findMatches.length - 1; i >= 0; i--){
+      var m = findMatches[i];
+      docModel.deleteRange(m.from, m.to);
+      if(rep) docModel.insertText(m.from, rep);
+    }
+    reflow();
+    runFind();
+  }
+
+  document.getElementById('findNext').addEventListener('click', findNext);
+  document.getElementById('findPrev').addEventListener('click', findPrev);
+  document.getElementById('findClose').addEventListener('click', closeFind);
+  document.getElementById('replaceOne').addEventListener('click', replaceOne);
+  document.getElementById('replaceAll').addEventListener('click', replaceAllMatches);
+  findInputEl.addEventListener('input', runFind);
+  findCaseEl.addEventListener('change', runFind);
+  findInputEl.addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){
+      e.preventDefault();
+      if(e.shiftKey) findPrev(); else findNext();
+    }
+    if(e.key === 'Escape'){ e.preventDefault(); closeFind(); }
+  });
+  replaceInputEl.addEventListener('keydown', function(e){
+    if(e.key === 'Escape'){ e.preventDefault(); closeFind(); }
+  });
+
+  // Global Ctrl+F / Ctrl+H shortcuts
+  document.addEventListener('keydown', function(e){
+    var ctrl = e.ctrlKey || e.metaKey;
+    if(ctrl && (e.key === 'f' || e.key === 'F')){
+      e.preventDefault();
+      openFind('find');
+    }
+    if(ctrl && (e.key === 'h' || e.key === 'H')){
+      e.preventDefault();
+      openFind('replace');
+    }
+  });
+</script>
+</body>
+</html>

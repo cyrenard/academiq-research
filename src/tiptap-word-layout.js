@@ -397,6 +397,7 @@
   }
 
   function syncPageMetrics(options){
+    if(typeof window !== 'undefined' && window.__aqEngineActive) return 0;
     options = options || {};
     var page = options.page;
     var editorDom = options.editorDom;

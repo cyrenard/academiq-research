@@ -1,4 +1,5 @@
 (function(){
+  if(typeof console !== 'undefined'){ console.log('[AQ] editor-core loaded') }
   var state = {
     initialized: false,
     ready: false,
@@ -256,7 +257,53 @@
   function init(){
     ensureReady();
     window.__aqEditorArchitectureV1 = true;
-    return getContentRoot();
+    // Ensure the editor content root is above overlays to receive clicks
+    var rootEl = getContentRoot();
+    if(rootEl && rootEl.style){
+      rootEl.style.position = rootEl.style.position || 'relative';
+      // Give editor content a reasonably high stacking context
+      rootEl.style.zIndex = rootEl.style.zIndex || '60';
+    }
+    // Debug: log clicks to verify events reach editor root
+    if(rootEl){
+      try{
+        rootEl.addEventListener('mousedown', function(){ console.log('[AQ] Editor root clicked (mousedown)'); }, true);
+        rootEl.addEventListener('keydown', function(e){ console.log('[AQ] Editor root keydown', e.key); }, true);
+      }catch(_e){}
+    }
+    // Try to focus the editor root to enable typing immediately
+    setTimeout(function(){
+      try{
+        if(rootEl && typeof rootEl.focus === 'function') rootEl.focus({ preventScroll:true });
+      }catch(e){}
+    }, 0);
+    // Ensure the editor root is clearly above overlays in stacking context
+    if(rootEl && rootEl.style){
+      rootEl.style.zIndex = '1000';
+    }
+    // Ensure the root is focusable programmatically
+    if(rootEl && typeof rootEl.setAttribute === 'function' && rootEl.getAttribute('tabindex') == null){
+      rootEl.setAttribute('tabindex','-1');
+    }
+    // Lightweight visible debug banner to verify patch is active
+    try{
+      if(typeof document !== 'undefined' && !document.getElementById('aq-debug-banner')){
+        var b = document.createElement('div');
+        b.id = 'aq-debug-banner';
+        b.style.position = 'fixed';
+        b.style.bottom = '8px';
+        b.style.right = '12px';
+        b.style.background = 'rgba(0,0,0,0.75)';
+        b.style.color = '#fff';
+        b.style.padding = '6px 10px';
+        b.style.borderRadius = '6px';
+        b.style.fontFamily = 'Arial, sans-serif';
+        b.style.zIndex = '99999';
+        b.textContent = 'AQ Patch Active';
+        document.body.appendChild(b);
+      }
+    }catch(e){}
+    return rootEl;
   }
 
   window.AQEditorCore = {

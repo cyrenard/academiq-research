@@ -11,12 +11,12 @@
       '#editor-shell{display:flex;flex:1;min-height:0;flex-direction:column;position:relative;}',
       '#editor-shell-top{display:flex;flex-direction:column;flex-shrink:0;min-height:0;}',
       '#editor-shell-body{display:flex;flex:1;min-height:0;flex-direction:column;position:relative;overflow:hidden;}',
-      '#editor-shell-overlay{position:absolute;inset:0;z-index:30;pointer-events:none;}',
+      '#editor-shell-overlay{position:absolute;inset:0;z-index:1;pointer-events:none;}',
       '#editor-shell #doctabs,#editor-shell #etb,#editor-shell #findbar{position:relative;z-index:2;}',
       '#editor-shell #escroll{position:relative;z-index:1;flex:1;min-height:0;}',
       '#editor-shell #apapage{flex:0 0 auto;margin-left:auto;margin-right:auto;}',
       '#editor-shell #zoomBar{z-index:35;}',
-      '#editor-shell #trig{position:absolute;z-index:90;pointer-events:auto;}'
+      '#editor-shell #trig{position:absolute;z-index:200;pointer-events:auto;}'
     ].join('');
     document.head.appendChild(st);
   }

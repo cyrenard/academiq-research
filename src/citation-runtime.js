@@ -215,6 +215,11 @@
     const ed = getEditor();
     let rect = { left:24, bottom:140 };
     try{
+      if(ed && ed._aqEngine){
+        // In AQ Engine, the caret is a .aq-sel-caret element inside the stage
+        const caret = document.querySelector('.aq-sel-caret');
+        if(caret) return caret.getBoundingClientRect();
+      }
       if(ed && ed.view){
         const sel = window.getSelection();
         if(sel && sel.rangeCount) rect = sel.getRangeAt(0).getBoundingClientRect();
