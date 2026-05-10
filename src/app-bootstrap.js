@@ -1,4 +1,4 @@
-﻿window.addEventListener('load', function(){
+window.addEventListener('load', function(){
   try{refreshBusyControls();}catch(_e){}
   if(window.AQStability && typeof window.AQStability.init === 'function'){
     window.AQStability.init();
@@ -10,4 +10,3 @@
     window.AQAppShell.init();
   }
 });
-

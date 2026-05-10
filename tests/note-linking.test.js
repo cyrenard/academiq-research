@@ -124,3 +124,35 @@ test('resolveLinkFromEditorSelection returns null when no metadata exists', func
   };
   assert.equal(noteLinking.resolveLinkFromEditorSelection({ editor: editor }), null);
 });
+
+test('notes module prefers direct AQ Engine insertion before legacy citation runtime', function(){
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'notes-module.js'), 'utf8');
+  assert.match(source, /editorRef && editorRef\._aqEngine && fallbackInsertNoteCitation\(id\)/);
+  assert.match(source, /editorRef\.commands\.insertContent\(html/);
+  assert.match(source, /document\.addEventListener\('pointerdown', captureBeforeNoteAction, true\)/);
+});
+
+test('notes module opens notebook detail panel from note card clicks', function(){
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'notes-module.js'), 'utf8');
+  assert.match(source, /function openNotebookDetail\(noteId\)/);
+  assert.match(source, /function getNoteCardTarget\(event\)/);
+  assert.match(source, /event\.target\.closest\('\[data-note-action\],button,input,textarea,select,a'\)/);
+  assert.match(source, /openBtn\.addEventListener\('click', function\(\)\{ openNotebookDetail\(''\); \}\)/);
+  assert.match(source, /openNotebookDetail: openNotebookDetail/);
+});
+
+test('notes sidebar always renders Metne Ekle and inserts plain notes without refs', function(){
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const stateSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'notes-state.js'), 'utf8');
+  const moduleSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'notes-module.js'), 'utf8');
+  assert.match(stateSource, /\+ '<button class="ncb" style="'\s*\+ btnStyle \+ '" data-note-action="insert-cite"/);
+  assert.doesNotMatch(stateSource, /note\.rid \? '<button class="ncb" style="' \+ btnStyle \+ '" data-note-action="insert-cite"/);
+  assert.match(moduleSource, /function fallbackInsertPlainNote\(id\)/);
+  assert.match(moduleSource, /editorRef && editorRef\._aqEngine && fallbackInsertPlainNote\(id\)/);
+  assert.match(moduleSource, /var isQuote = note && \(note\.noteType === 'direct_quote' \|\| note\.type === 'hl' \|\| note\.q\)/);
+});

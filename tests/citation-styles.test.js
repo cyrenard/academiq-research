@@ -30,6 +30,24 @@ test('formatInlineCitation supports key style variants', () => {
   assert.equal(styles.formatInlineCitation(sample, { style: 'ieee', index: 4 }), '[4]');
 });
 
+test('formatInlineCitation uses surnames for APA7 author names', () => {
+  assert.equal(styles.formatInlineCitation({
+    id: 'r-full-name',
+    authors: ['Elfrid Krossbakken'],
+    year: '2018'
+  }, { style: 'apa7' }), '(Krossbakken, 2018)');
+  assert.equal(styles.formatInlineCitation({
+    id: 'r-inverted-name',
+    authors: ['Krossbakken, Elfrid'],
+    year: '2018'
+  }, { style: 'apa7' }), '(Krossbakken, 2018)');
+  assert.equal(styles.formatInlineCitation({
+    id: 'r-many-full-names',
+    authors: ['Elfrid Krossbakken', 'Stale Pallesen', 'Rune Aune Mentzoni'],
+    year: '2018'
+  }, { style: 'apa7' }), '(Krossbakken vd., 2018)');
+});
+
 test('formatInlineCitation uses Turkish "vd." label for 3+ authors', () => {
   const manyAuthors = {
     id: 'r2',

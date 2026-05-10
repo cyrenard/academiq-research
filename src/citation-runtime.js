@@ -1,6 +1,16 @@
 (function(){
   function noop() {}
 
+  function citationDiag(event, meta){
+    try{
+      var payload = Object.assign({
+        t: Date.now(),
+        event: event
+      }, meta || {});
+      console.warn('[AQ-CITE-DIAG] ' + JSON.stringify(payload));
+    }catch(_e){}
+  }
+
   function qs(id){ return document.getElementById(id); }
 
   function getEditor(){
@@ -455,6 +465,250 @@
     return null;
   }
 
+  function targetInsideCitationPopup(target){
+    var box = getTriggerBox();
+    if(!box || !target) return false;
+    try{
+      return box === target || box.contains(target);
+    }catch(e){
+      return false;
+    }
+  }
+
+  function stopCitationPopupPointerEvent(event){
+    if(!event || !targetInsideCitationPopup(event.target)) return false;
+    if(typeof event.preventDefault === 'function') event.preventDefault();
+    if(typeof event.stopPropagation === 'function') event.stopPropagation();
+    if(typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+    if(event.type === 'pointerdown'){
+      try{
+        var item = event.target && event.target.closest ? event.target.closest('.tgi[data-ref-id]') : null;
+        var refId = item && item.dataset ? item.dataset.refId : '';
+        if(refId && runtime && typeof runtime.insertSelection === 'function'){
+          if(event.ctrlKey || event.metaKey || event.shiftKey) runtime.toggleSelected(refId);
+          else runtime.insertSelection(refId);
+        }
+      }catch(e){}
+    }
+    return true;
+  }
+
+  function textFromHTML(html){
+    var value = String(html || '');
+    if(typeof document !== 'undefined'){
+      try{
+        var div = document.createElement('div');
+        div.innerHTML = value;
+        return (div.textContent || div.innerText || '').replace(/\s+/g, ' ').trim();
+      }catch(_e){}
+    }
+    return value.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+  }
+
+  function getAQEngineCitationText(refs, mode, html){
+    var list = normalizeCitationRefs(refs);
+    if(!list.length) return '';
+    var styleId = 'apa7';
+    try{
+      if(typeof window.getCurrentCitationStyle === 'function') styleId = window.getCurrentCitationStyle() || 'apa7';
+    }catch(_styleErr){}
+    if(mode === 'textual'){
+      if(typeof window.getNarrativeCitationText === 'function'){
+        return list.map(function(ref){ return window.getNarrativeCitationText(ref); }).filter(Boolean).join('; ');
+      }
+      return list.map(function(ref){ return ref && (ref.author || ref.title || ref.id) || ''; }).filter(Boolean).join('; ');
+    }
+    if(window.AQCitationStyles){
+      try{
+        if(typeof window.AQCitationStyles.visibleCitationText === 'function'){
+          return window.AQCitationStyles.visibleCitationText(list, { style: styleId });
+        }
+        if(typeof window.AQCitationStyles.formatInlineCitation === 'function'){
+          return window.AQCitationStyles.formatInlineCitation(list[0], { style: styleId });
+        }
+      }catch(_formatErr){}
+    }
+    var label = '';
+    if(typeof window.visibleCitationText === 'function'){
+      try{ label = window.visibleCitationText(list); }catch(_e){}
+    }
+    if(!label) label = getCitationLabel(list);
+    if(!label && html) label = textFromHTML(html);
+    return label;
+  }
+
+  function normalizeCitationDuplicateText(text){
+    return String(text || '').replace(/[\s\u00a0\u1680\u180e\u2000-\u200a\u202f\u205f\u3000\ufeff]+/g, ' ').trim();
+  }
+
+  function recentTextAlreadyEndsWithCitation(docModel, insertStart, citationText){
+    if(!docModel || typeof docModel.getPlainText !== 'function') return false;
+    var plain = docModel.getPlainText();
+    var normalizedCitation = normalizeCitationDuplicateText(citationText);
+    if(!normalizedCitation) return false;
+
+    // Check if it's already BEFORE the insertion point
+    var before = plain.slice(Math.max(0, insertStart - citationText.length - 12), insertStart);
+    var normalizedBefore = normalizeCitationDuplicateText(before);
+    if(normalizedBefore.endsWith(normalizedCitation)) return true;
+
+    // Check if it's already AT or AFTER the insertion point (handles case where trigger was already replaced)
+    var atOrAfter = plain.slice(insertStart, insertStart + citationText.length + 12);
+    var normalizedAtOrAfter = normalizeCitationDuplicateText(atOrAfter);
+    if(normalizedAtOrAfter.startsWith(normalizedCitation)) return true;
+
+    return false;
+  }
+
+  function buildPostCitationSuppressionTexts(refs, citationText){
+    var out = [citationText];
+    normalizeCitationRefs(refs).forEach(function(ref){
+      if(!ref) return;
+      if(ref.title) out.push(ref.title);
+      if(ref.author) out.push(ref.author);
+      var year = ref.year || ref.date || 't.y.';
+      var authors = Array.isArray(ref.authors) ? ref.authors : (ref.authors ? [ref.authors] : []);
+      authors.forEach(function(author){
+        if(!author) return;
+        out.push(author);
+        out.push(author + ' (' + year + ')');
+        var surname = String(author || '').indexOf(',') >= 0
+          ? String(author || '').split(',')[0].trim()
+          : String(author || '').trim().split(/\s+/).pop();
+        if(surname){
+          out.push(surname);
+          out.push(surname + ' (' + year + ')');
+          out.push(surname + ', ' + year);
+        }
+      });
+    });
+    return out
+      .map(function(value){ return normalizeCitationDuplicateText(value).toLocaleLowerCase('tr'); })
+      .filter(function(value, index, arr){ return value && arr.indexOf(value) === index; });
+  }
+
+  function suppressPostCitationCapture(refs, citationText){
+    if(typeof window === 'undefined') return;
+    window.__aqSuppressNextInputUntil = Date.now() + 1800;
+    window.__aqSuppressNextInputTexts = buildPostCitationSuppressionTexts(refs, citationText);
+  }
+
+  function beginCitationTransaction(refs, citationText){
+    if(typeof window === 'undefined') return;
+    window.__aqCitationTransactionActive = true;
+    window.__aqCitationInputBlockedUntil = Date.now() + 2200;
+    suppressPostCitationCapture(refs, citationText || '');
+  }
+
+  function finishCitationTransaction(delay){
+    if(typeof window === 'undefined') return;
+    var ms = Math.max(120, parseInt(delay, 10) || 700);
+    window.__aqCitationInputBlockedUntil = Date.now() + ms;
+    setTimeout(function(){
+      window.__aqCitationTransactionActive = false;
+    }, ms);
+  }
+
+  function insertAQEngineCitation(editorRef, refs, mode, html, delRange){
+    if(!editorRef || !editorRef._aqEngine || !editorRef._docModel) return false;
+    var docModel = editorRef._docModel;
+    var refIds = normalizeCitationRefs(refs).map(function(ref){ return ref && ref.id; }).filter(Boolean);
+    if(!refIds.length) return false;
+    var citationText = getAQEngineCitationText(refs, mode, html);
+    if(!citationText) return false;
+    citationDiag('insertAQEngineCitation.start', {
+      refs: refIds,
+      mode: mode,
+      citationText: citationText,
+      delRange: delRange || null,
+      selection: editorRef && editorRef.state && editorRef.state.selection ? {
+        from: editorRef.state.selection.from,
+        to: editorRef.state.selection.to
+      } : null
+    });
+    beginCitationTransaction(refs, citationText);
+    var text = citationText;
+    var selection = editorRef.state && editorRef.state.selection ? editorRef.state.selection : null;
+    var from = selection && typeof selection.from === 'number' ? selection.from : docModel.length();
+    var to = selection && typeof selection.to === 'number' ? selection.to : from;
+    if(delRange && delRange.from >= 0 && delRange.to >= delRange.from){
+      from = delRange.from;
+      to = delRange.to;
+    }
+    var insertStart = Math.max(0, Math.min(from, to));
+    var insertEnd;
+    try{
+      if(typeof editorRef._clearInputCapture === 'function') editorRef._clearInputCapture();
+      if(!(to > from) && typeof docModel.getPlainText === 'function'){
+        var plainBeforeInsert = docModel.getPlainText();
+        var beforeInsert = plainBeforeInsert.slice(Math.max(0, insertStart - 160), insertStart);
+        var triggerMatch = beforeInsert.match(/\/([rt])(?:\s*([^\n\r()]*))?$/i);
+        if(triggerMatch){
+          from = insertStart - triggerMatch[0].length;
+          to = insertStart;
+          insertStart = from;
+          if(triggerMatch[1] && triggerMatch[1].toLowerCase() === 't') mode = 'textual';
+        }
+      }
+      if(recentTextAlreadyEndsWithCitation(docModel, insertStart, citationText)){
+        if(to > from) docModel.deleteRange(from, to);
+        if(typeof editorRef._reflow === 'function') editorRef._reflow();
+        if(editorRef.commands && typeof editorRef.commands.setTextSelection === 'function'){
+          editorRef.commands.setTextSelection({ from: insertStart, to: insertStart });
+        }
+        if(typeof editorRef._clearInputCapture === 'function') editorRef._clearInputCapture();
+        editorRef.__aqLastCitationCaret = insertStart;
+        if(typeof window !== 'undefined') window.__aqLastCitationCaret = insertStart;
+        if(typeof editorRef.emit === 'function') editorRef.emit('update');
+        return true;
+      }
+      if(to > from) docModel.deleteRange(from, to);
+      docModel.insertText(insertStart, text);
+      insertEnd = insertStart + text.length;
+      var citationEnd = insertStart + citationText.length;
+      docModel.applyMark(insertStart, citationEnd, 'citation', {
+        ref: refIds.join(','),
+        mode: mode === 'textual' ? 'textual' : 'inline'
+      });
+      if(citationEnd < insertEnd) docModel.applyMark(citationEnd, insertEnd, 'citation', false);
+      if(typeof editorRef._reflow === 'function') editorRef._reflow();
+      if(editorRef.commands && typeof editorRef.commands.setTextSelection === 'function'){
+        editorRef.commands.setTextSelection({ from: insertEnd, to: insertEnd });
+      }
+      if(typeof editorRef._clearInputCapture === 'function') editorRef._clearInputCapture();
+      if(editorRef.commands && typeof editorRef.commands.setTextSelection === 'function'){
+        setTimeout(function(){
+          try{
+            editorRef.commands.setTextSelection({ from: insertEnd, to: insertEnd });
+            if(typeof editorRef._clearInputCapture === 'function') editorRef._clearInputCapture();
+          }catch(_e){}
+        }, 0);
+      }
+      editorRef.__aqLastCitationCaret = insertEnd;
+      if(typeof window !== 'undefined'){
+        window.__aqLastCitationCaret = insertEnd;
+        window.__aqLastCitationText = citationText;
+        window.__aqLastCitationSuppressTexts = buildPostCitationSuppressionTexts(refs, citationText);
+      }
+      if(typeof editorRef.emit === 'function') editorRef.emit('update');
+      citationDiag('insertAQEngineCitation.done', {
+        refs: refIds,
+        insertStart: insertStart,
+        insertEnd: insertEnd,
+        citationEnd: citationEnd,
+        plainTail: docModel && typeof docModel.getPlainText === 'function'
+          ? docModel.getPlainText().slice(Math.max(0, insertStart - 40), insertEnd + 80)
+          : ''
+      });
+      return true;
+    }catch(_e){
+      citationDiag('insertAQEngineCitation.error', {
+        message: _e && _e.message ? _e.message : String(_e)
+      });
+      return false;
+    }
+  }
+
   function restoreEditorCaretPos(pos){
     var ed = getEditor();
     if(!ed || !ed.state || !ed.chain) return false;
@@ -521,6 +775,60 @@
     return true;
   }
 
+  function finishAQEngineCitationInsert(caretPos, refs, citationHTML){
+    if(typeof window === 'undefined') return false;
+    var ed = getEditor();
+    if(!ed || !ed._aqEngine) return false;
+    var targetCaret = parseInt(caretPos, 10);
+    if(!Number.isFinite(targetCaret) || targetCaret < 0){
+      targetCaret = ed.state && ed.state.selection ? ed.state.selection.from : 0;
+    }
+    citationDiag('aqEngineCitation.finish.start', {
+      caretPos: targetCaret,
+      citationText: textFromHTML(citationHTML || ''),
+      refs: normalizeCitationRefs(refs).map(function(ref){ return ref && ref.id; }).filter(Boolean)
+    });
+    var syncToken = runtime.beginSyncCycle();
+    runtime.state.retainedSelectedIds = [];
+    runtime.close(false, { preserveSelection:false });
+    window.__aqCitationSyncInProgress = true;
+    setTimeout(function(){ window.__aqCitationSyncInProgress = false; }, 260);
+    runtime.queueSyncTask(0, syncToken, function(){
+      try{
+        if(typeof window.updateRefSection === 'function'){
+          window.updateRefSection(true);
+        }else{
+          if(typeof window.rRefs === 'function') window.rRefs();
+          if(typeof window.save === 'function') window.save();
+        }
+      }catch(e){
+        citationDiag('aqEngineCitation.finish.refSyncError', {
+          message: e && e.message ? e.message : String(e)
+        });
+      }
+      restoreEditorCaretPos(targetCaret);
+      if(ed && typeof ed._clearInputCapture === 'function') ed._clearInputCapture();
+      citationDiag('aqEngineCitation.finish.synced', {
+        caretPos: targetCaret,
+        selection: ed && ed.state && ed.state.selection ? {
+          from: ed.state.selection.from,
+          to: ed.state.selection.to
+        } : null,
+        plainTail: ed && ed._docModel && typeof ed._docModel.getPlainText === 'function'
+          ? ed._docModel.getPlainText().slice(Math.max(0, targetCaret - 80), targetCaret + 80)
+          : ''
+      });
+    });
+    runtime.queueSyncTask(260, syncToken, function(){
+      restoreEditorCaretPos(targetCaret);
+      if(ed && typeof ed._clearInputCapture === 'function') ed._clearInputCapture();
+      runtime.state.citationTransactionActive = false;
+      finishCitationTransaction(160);
+      citationDiag('aqEngineCitation.finish.done', { caretPos: targetCaret });
+    });
+    return true;
+  }
+
   function syncLegacyState(){
     window.trigOn = !!runtime.state.open;
     window.trigIdx = runtime.state.open ? runtime.state.activeIndex : -1;
@@ -545,6 +853,11 @@
       lastRefreshFrom: null,
       lastRefreshTo: null,
       lastRefreshMode: 'r',
+      lastInsertSignature: '',
+      lastInsertAt: 0,
+      suppressTriggerUntil: 0,
+      blockCitationInsertUntil: 0,
+      citationTransactionActive: false,
       results: [],
       originalUpdateRefSection: null,
       originalScheduleRefSectionSync: null,
@@ -744,15 +1057,6 @@
           '</div>' +
           '<div class="tgic" style="padding-left:20px">→ ' + (window.getInlineCitationText ? window.getInlineCitationText(ref) : '') + '</div>' +
           (reasonText ? ('<div class="tgic" style="padding-left:20px;color:var(--txt3);font-size:10px">Öneri: ' + escHTML(reasonText) + '</div>') : '');
-        div.addEventListener('mousedown', function(e){
-          e.preventDefault();
-          e.stopPropagation();
-        });
-        div.addEventListener('click', function(e){
-          e.preventDefault();
-          e.stopPropagation();
-          runtime.insertSelection(ref.id);
-        });
         list.appendChild(div);
       });
       runtime.ensureActiveItemVisible();
@@ -761,6 +1065,9 @@
     },
 
     openFromSlash: function(query, mode){
+      if(window.__aqCitationTransactionActive || Date.now() < (window.__aqCitationInputBlockedUntil || 0) || Date.now() < (runtime.state.suppressTriggerUntil || 0)){
+        return;
+      }
       runtime.saveScroll();
       runtime.state.open = true;
       runtime.state.query = query || '';
@@ -830,6 +1137,9 @@
     },
 
     refreshFromEditor: function(){
+      if(window.__aqCitationTransactionActive || Date.now() < (window.__aqCitationInputBlockedUntil || 0) || Date.now() < (runtime.state.suppressTriggerUntil || 0)){
+        return;
+      }
       const found = currentQuery();
       if(!found){
         if(runtime.state.open) runtime.close(true, { preserveSelection:true });
@@ -952,64 +1262,156 @@
     },
 
     insertSelection: function(forcedId){
+      citationDiag('insertSelection.enter', {
+        forcedId: forcedId || null,
+        open: !!runtime.state.open,
+        active: !!runtime.state.citationTransactionActive,
+        windowActive: typeof window !== 'undefined' ? !!window.__aqCitationTransactionActive : false,
+        blockUntilMs: Math.max(0, (runtime.state.blockCitationInsertUntil || 0) - Date.now())
+      });
+      if(runtime.state.citationTransactionActive || (typeof window !== 'undefined' && window.__aqCitationTransactionActive)){
+        return;
+      }
+      
+      var now = Date.now();
+      if(Date.now() < (runtime.state.blockCitationInsertUntil || 0)){
+        runtime.close(true, { preserveSelection:false });
+        window.editorTrigRange = null;
+        window.__aqCitationTriggerMode = null;
+        return;
+      }
+      if(!runtime.state.open && !forcedId) return;
       const ids = forcedId ? [forcedId] : (runtime.state.selectedIds.length ? runtime.state.selectedIds.slice() : []);
       const finalIds = ids.length ? ids : (runtime.getActiveRef() ? [runtime.getActiveRef().id] : []);
       if(!finalIds.length) return;
-      const preservedTop = getScrollEl() ? getScrollEl().scrollTop : runtime.state.scrollTop;
-      runtime.setScrollTop(preservedTop);
-      const refs = normalizeCitationRefs(finalIds.map(function(id){
-        const rm = getReferenceManager();
-        if(rm && typeof rm.findReference === 'function') return rm.findReference(id, window.S && window.S.cur);
-        if(window.findRef) return window.findRef(id, window.S && window.S.cur);
-        return null;
-      }).filter(Boolean));
-      if(!refs.length) return;
-      if(window.buildCitationHTML){
+      
+      var insertMode = runtime.state.triggerMode || window.__aqCitationTriggerMode || 'inline';
+      var savedTrigRange = window.editorTrigRange;
+      var insertSignature = finalIds.slice().sort().join(',') + '|' + insertMode;
+      
+      if(insertSignature === runtime.state.lastInsertSignature && (now - (runtime.state.lastInsertAt || 0)) < 1500){
+        citationDiag('insertSelection.dedupeSignature', { signature: insertSignature });
+        runtime.state.suppressTriggerUntil = now + 1200;
+        runtime.close(true, { preserveSelection:false });
+        window.editorTrigRange = null;
+        window.__aqCitationTriggerMode = null;
+        return;
+      }
+      
+      // IMMEDIATE LOCK
+      runtime.state.lastInsertSignature = insertSignature;
+      runtime.state.lastInsertAt = now;
+      runtime.state.citationTransactionActive = true;
+      if(typeof window !== 'undefined') window.__aqCitationTransactionActive = true;
+      runtime.state.suppressTriggerUntil = now + 1800;
+      runtime.state.blockCitationInsertUntil = now + 1800;
+      
+      runtime.close(true, { preserveSelection:false });
+
+      var rm = getReferenceManager();
+      var refs = finalIds.map(function(id){
+        return rm && typeof rm.findReference === 'function'
+          ? rm.findReference(id, window.S && window.S.cur)
+          : (window.findRef ? window.findRef(id, window.S && window.S.cur) : null);
+      }).filter(Boolean);
+
+      if(typeof window.dedupeRefs === 'function'){
+        try{ refs = window.dedupeRefs(refs); }catch(_e){}
+      }
+
+      var citationHTML = '';
+      if(window.buildCitationHTML && refs.length){
         let html = '';
         // Prefer mode stored in editorTrigRange (most reliable — set at trigger-open time)
-        const _tr = window.editorTrigRange;
+        const ed = getEditor();
+        const _tr = savedTrigRange;
+        let trigRangeIsLive = false;
+        let liveTrigText = '';
+        try{
+          if(ed && _tr && _tr.from != null && _tr.to != null && ed.state && ed.state.doc){
+            liveTrigText = ed.state.doc.textBetween(_tr.from, _tr.to, ' ', ' ');
+            trigRangeIsLive = /^\/[rt](?:\s|$)/i.test(String(liveTrigText || ''));
+          }
+        }catch(_liveTrigErr){}
         let mode = (_tr && _tr.mode === 't') ? 'textual'
           : runtime.state.triggerMode || window.__aqCitationTriggerMode || 'inline';
         try{
           if(mode !== 'textual'){
-            const ed = getEditor();
-            if(ed && _tr && _tr.from != null && _tr.to != null && ed.state && ed.state.doc){
-              const trigText = ed.state.doc.textBetween(_tr.from, _tr.to, ' ', ' ');
-              if(/\/t/i.test(trigText)) mode = 'textual';
+            if(trigRangeIsLive){
+              if(/\/t/i.test(liveTrigText)) mode = 'textual';
             }
           }
         }catch(_e){}
         if(mode === 'textual'){
+          var getNarrative = typeof window.getNarrativeCitationText === 'function' 
+            ? window.getNarrativeCitationText 
+            : function(r){ return (r.author || r.title || r.id || ''); };
+
           if(refs.length === 1){
-            html = '<span class="cit" data-ref="'+refs[0].id+'" data-mode="textual">'+window.getNarrativeCitationText(refs[0])+'</span> ';
+            html = '<span class="cit" data-ref="'+refs[0].id+'" data-mode="textual">'+getNarrative(refs[0])+'</span> ';
           }else{
-            var txt = refs.map(function(r){ return window.getNarrativeCitationText(r); }).join('; ');
+            var txt = refs.map(function(r){ return getNarrative(r); }).join('; ');
             html = '<span class="cit" data-ref="'+refs.map(function(r){return r.id;}).join(',')+'" data-mode="textual">'+txt+'</span> ';
           }
         }else{
           html = window.buildCitationHTML(refs);
         }
-        const ed = getEditor();
-        if(ed && ed.chain){
-          const chain = ed.chain().focus();
-          const trigRange = window.editorTrigRange;
-          let fallbackRange = null;
-          if((!trigRange || trigRange.from == null || trigRange.to == null) && ed.state && ed.state.selection){
-            const pos = ed.state.selection.from;
-            const txt = ed.state.doc.textBetween(Math.max(0, pos - 128), pos, ' ', ' ');
-            const m = txt.match(/\/([rt])(?:\s*([^\n\r]*))?$/i);
-            if(m){
-              fallbackRange = {
-                from: Math.max(0, pos - m[0].length),
-                to: pos
-              };
+        citationHTML = html;
+
+        // Transaction must start BEFORE any editor modification or popup closing
+        beginCitationTransaction(refs, textFromHTML(citationHTML));
+
+        const trigRange = trigRangeIsLive ? savedTrigRange : null;
+        let fallbackRange = null;
+        if(ed && ed.state && ed.state.selection && ed.state.doc){
+          const pos = ed.state.selection.from;
+          const txt = ed.state.doc.textBetween(Math.max(0, pos - 128), pos, ' ', ' ');
+          const m = txt.match(/\/([rt])(?:\s*([^\n\r]*))?$/i);
+          if(m){
+            fallbackRange = {
+              from: Math.max(0, pos - m[0].length),
+              to: pos
+            };
+          }
+        }
+        const delRange = (trigRange && trigRange.from >= 0 && trigRange.to >= trigRange.from) ? trigRange : fallbackRange;
+        let aqEngineInsertionCaret = null;
+        if(ed && ed._aqEngine && insertAQEngineCitation(ed, refs, mode, html, delRange)){
+          citationDiag('insertSelection.aqEnginePath', {
+            refs: finalIds,
+            mode: mode,
+            delRange: delRange || null
+          });
+          aqEngineInsertionCaret = ed.__aqLastCitationCaret || window.__aqLastCitationCaret || null;
+          window.editorTrigRange = null;
+        }else if(ed && ed.chain){
+          // Deduplication check: if the citation is already there at this position, don't insert it again.
+          var alreadyPresent = false;
+          try {
+            if (ed.state && ed.state.doc) {
+              var _pos = ed.state.selection.from;
+              var _txt = ed.state.doc.textBetween(Math.max(0, _pos - 12), Math.min(ed.state.doc.content.size, _pos + html.length + 12), ' ');
+              var _normTxt = normalizeCitationDuplicateText(_txt);
+              var _normCite = normalizeCitationDuplicateText(textFromHTML(html));
+              if (_normCite && _normTxt.indexOf(_normCite) >= 0) {
+                alreadyPresent = true;
+              }
             }
+          } catch(_e) {}
+
+          if (!alreadyPresent) {
+            const chain = ed.chain().focus();
+            if(delRange && delRange.from >= 0 && delRange.to >= delRange.from){
+              chain.deleteRange({ from: delRange.from, to: delRange.to });
+            }
+            chain.insertContent(html, { parseOptions:{ preserveWhitespace:false } }).run();
+          } else if (delRange && delRange.from >= 0 && delRange.to >= delRange.from) {
+            // Even if already present, we should still delete the trigger if it's there
+            try {
+               ed.chain().focus().deleteRange({ from: delRange.from, to: delRange.to }).run();
+            } catch(_e) {}
           }
-          const delRange = (trigRange && trigRange.from >= 0 && trigRange.to >= trigRange.from) ? trigRange : fallbackRange;
-          if(delRange && delRange.from >= 0 && delRange.to >= delRange.from){
-            chain.deleteRange({ from: delRange.from, to: delRange.to });
-          }
-          chain.insertContent(html, { parseOptions:{ preserveWhitespace:false } }).run();
+
           try{
             if(ed.state && ed.state.selection && ed.chain){
               var insertedCaret = ed.state.selection.to || ed.state.selection.from;
@@ -1025,9 +1427,29 @@
             ei.insertHTML(html);
           }
         }
+      }else{
+        runtime.state.citationTransactionActive = false;
+        finishCitationTransaction(300);
+        return;
       }
-      const caretPos = captureEditorCaretPos();
-      const bookmark = captureEditorSelectionBookmark();
+      // Re-finalize transaction state (redundancy is safer than missing it after async work)
+      if (refs.length) beginCitationTransaction(refs, textFromHTML(citationHTML));
+
+      let bookmark = captureEditorSelectionBookmark();
+      let caretPos = null;
+      const activeEditorAfterInsert = getEditor();
+      if(activeEditorAfterInsert && activeEditorAfterInsert._aqEngine && window.__aqLastCitationCaret != null){
+        caretPos = window.__aqLastCitationCaret;
+        bookmark = null;
+        restoreEditorCaretPos(caretPos);
+        window.__aqLastCitationCaret = null;
+      }else{
+        caretPos = captureEditorCaretPos();
+      }
+      if(activeEditorAfterInsert && activeEditorAfterInsert._aqEngine){
+        finishAQEngineCitationInsert(caretPos, refs, citationHTML);
+        return;
+      }
       const syncToken = runtime.beginSyncCycle();
       runtime.state.retainedSelectedIds = [];
       runtime.close(false, { preserveSelection:false });
@@ -1055,7 +1477,7 @@
           if(typeof window.rRefs === 'function'){
             try{ window.rRefs(); }catch(e){}
           }
-          runtime.syncReferenceSection(preservedTop, {
+          runtime.syncReferenceSection(runtime.state.scrollTop, {
             restoreScroll:index === 0,
             restoreFocus:false,
             forceAuto:true,
@@ -1065,7 +1487,15 @@
           });
           restoreEditorCaretPos(caretPos);
           restoreEditorSelectionBookmark(bookmark);
+          if(index === 2){
+            runtime.state.citationTransactionActive = false;
+            finishCitationTransaction(900);
+          }
         });
+      });
+      runtime.queueSyncTask(900, syncToken, function(){
+        runtime.state.citationTransactionActive = false;
+        finishCitationTransaction(300);
       });
     },
 
@@ -1174,6 +1604,9 @@
     },
 
     handleKeydown: function(event){
+      if(Date.now() < (runtime.state.suppressTriggerUntil || 0)){
+        return false;
+      }
       if(!runtime.state.open) return false;
       if(event.ctrlKey || event.metaKey || event.altKey) return false;
       const key = event.key;
@@ -1212,6 +1645,10 @@
       runtime.installReferenceSyncGuard();
       runtime.installDeferredReferenceSyncGuard();
       window.__aqCitationRuntimeV1 = true;
+      ['pointerdown','mousedown','click'].forEach(function(type){
+        window.addEventListener(type, stopCitationPopupPointerEvent, true);
+        document.addEventListener(type, stopCitationPopupPointerEvent, true);
+      });
       window.openTrig = function(q, mode){ runtime.openFromSlash(q, mode || 'inline'); };
       window.renderTrig = function(q){
         runtime.state.query = q || '';
@@ -1255,6 +1692,11 @@
         box.style.display = 'none';
         box.style.visibility = 'hidden';
         box.style.pointerEvents = 'none';
+        box.addEventListener('pointerdown', function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          if(typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+        }, true);
         box.addEventListener('mousedown', function(e){ e.stopPropagation(); }, true);
         box.addEventListener('click', function(e){ e.stopPropagation(); }, true);
       }
@@ -1309,7 +1751,7 @@
           if(typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
         }
       }, true);
-      document.addEventListener('keyup', function(event){
+      window.addEventListener('keyup', function(event){
         if(!event || (event.ctrlKey || event.metaKey || event.altKey)) return;
         var key = String(event.key || '');
         if(key !== '/' && key.toLowerCase() !== 'r' && key.toLowerCase() !== 't' && key !== 'Backspace') return;
@@ -1323,7 +1765,7 @@
           }
         }, 0);
       }, true);
-      document.addEventListener('input', function(event){
+      window.addEventListener('input', function(event){
         var target = event && event.target && event.target.nodeType === 3 ? event.target.parentNode : (event ? event.target : null);
         if(!targetInsideEditor(target)) return;
         setTimeout(function(){

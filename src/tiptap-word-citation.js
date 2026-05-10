@@ -48,6 +48,26 @@
 
   function collectUsedReferences(editorRoot, deps){
     deps = deps || {};
+    // AQ Engine path: if we are in custom layout mode, use the doc model instead of DOM
+    var activeEditor = deps.editor || ((typeof window !== 'undefined') ? window.editor : null);
+    if(activeEditor && activeEditor._aqEngine && activeEditor._docModel){
+      var model = activeEditor._docModel.get();
+      var refs = [];
+      (model.blocks || []).forEach(function(block){
+        (block.runs || []).forEach(function(run){
+          if(run && run.citation){
+            String(run.citation.ref || run.citation.id || '').split(',').forEach(function(id){
+              id = String(id || '').trim();
+              if(!id) return;
+              var ref = typeof deps.findReference === 'function' ? deps.findReference(id) : null;
+              if(ref) refs.push(ref);
+            });
+          }
+        });
+      });
+      return normalizeRefs(refs, deps);
+    }
+
     if(!editorRoot || typeof editorRoot.querySelectorAll !== 'function') return [];
     var rawIds = Array.from(editorRoot.querySelectorAll('.cit'))
       .map(function(node){
@@ -167,6 +187,7 @@
     root = resolveRoot(root, deps);
     if(!root || !domState || typeof domState.normalizeCitationSpans !== 'function') return false;
     domState.normalizeCitationSpans(root, {
+      editor: deps.editor,
       findReference: deps.findReference,
       dedupeReferences: deps.dedupeReferences,
       visibleCitationText: deps.visibleCitationText

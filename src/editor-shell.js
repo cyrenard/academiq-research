@@ -48,13 +48,11 @@
   }
 
   function init(){
-    if(typeof console !== 'undefined'){ console.log('[AQ] editor-shell.init called') }
     injectStyles();
     var shell = ensureStructure();
     if(!shell) return;
     var top = qs('editor-shell-top');
     var body = qs('editor-shell-body');
-    var overlay = qs('editor-shell-overlay');
     moveIfNeeded(top, qs('doctabs'));
     moveIfNeeded(top, qs('etb'));
     moveIfNeeded(top, qs('findbar'));
@@ -67,29 +65,6 @@
       _boundResize = true;
       window.addEventListener('resize', syncLayout);
     }
-    // Diagnostic: print stacking order of major elements
-    try{
-      function logStack(){
-        var shellEl = document.getElementById('editor-shell');
-        var overlayEl = document.getElementById('editor-shell-overlay');
-        var trigEl = document.getElementById('trig');
-        var contentRootEl = document.getElementById('apaed');
-        var items = [
-          {name:'shell', el: shellEl},
-          {name:'overlay', el: overlayEl},
-          {name:'trig', el: trigEl},
-          {name:'contentRoot', el: contentRootEl}
-        ];
-        items.forEach(function(it){
-          if(!it.el){ console.log('[AQ-STACK] '+ it.name +': not found'); return; }
-          var cs = window.getComputedStyle(it.el);
-          var z = parseInt(cs.zIndex, 10);
-          if(isNaN(z)) z = 0;
-          console.log('[AQ-STACK] '+ it.name +' zIndex='+ z +' display='+ cs.display +' pointerEvents='+ cs.pointerEvents);
-        });
-      }
-      logStack();
-    }catch(_e){}
   }
 
   function getRoot(){ return qs('editor-shell'); }

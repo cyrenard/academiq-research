@@ -126,9 +126,7 @@ test('bindEditorToolbarEvents routes select controls through selection-safe help
     etb: makeElement('etb'),
     fontsel: makeElement('fontsel', 'Georgia'),
     sizesel: makeElement('sizesel', '14'),
-    lineSpacing: makeElement('lineSpacing', '2'),
-    txtColor: makeElement('txtColor', '#111111'),
-    hlColor: makeElement('hlColor', '#ffee00')
+    lineSpacing: makeElement('lineSpacing', '2')
   };
   const calls = [];
   const previous = {
@@ -158,12 +156,12 @@ test('bindEditorToolbarEvents routes select controls through selection-safe help
     listeners['fontsel:change']({ target: { value: 'Georgia' } });
     listeners['sizesel:change']({ target: { value: '14' } });
     listeners['lineSpacing:change']({ target: { value: '2' } });
-    listeners['txtColor:change']({ target: { value: '#111111' } });
-    listeners['hlColor:change']({ target: { value: '#ffee00' } });
 
+    // Color and highlight pickers are now custom popovers triggered by button
+    // clicks (txtColorBtn / hlColorBtn) rather than native <input type="color">
+    // change events. The selection-safe wrapper still applies for the three
+    // remaining <select> controls.
     assert.deepEqual(calls.filter((entry) => entry === 'capture'), [
-      'capture',
-      'capture',
       'capture',
       'capture',
       'capture'
@@ -171,15 +169,11 @@ test('bindEditorToolbarEvents routes select controls through selection-safe help
     assert.deepEqual(calls.filter((entry) => entry === 'restore'), [
       'restore',
       'restore',
-      'restore',
-      'restore',
       'restore'
     ]);
     assert.ok(calls.some((entry) => Array.isArray(entry) && entry[0] === 'ec' && entry[1] === 'fontName'));
     assert.ok(calls.some((entry) => Array.isArray(entry) && entry[0] === 'applyFontSize'));
     assert.ok(calls.some((entry) => Array.isArray(entry) && entry[0] === 'setLineSpacing'));
-    assert.ok(calls.some((entry) => Array.isArray(entry) && entry[0] === 'ec' && entry[1] === 'foreColor'));
-    assert.ok(calls.some((entry) => Array.isArray(entry) && entry[0] === 'ec' && entry[1] === 'hiliteColor'));
   } finally {
     global.document = previous.document;
     global.captureEditorListStyleSelection = previous.capture;

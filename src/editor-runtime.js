@@ -64,13 +64,11 @@
       var dom = ed.view && ed.view.dom ? ed.view.dom : null;
       var hasWritableBlock = !!(dom && dom.querySelector && dom.querySelector('p,h1,h2,h3,h4,h5,blockquote,ul,ol,table,div.aq-engine-page'));
       var text = String(ed.state.doc.textContent || '').replace(/\u00a0/g, ' ').trim();
-      console.log('[AQ] ensureEditorWritableState', { hasWritableBlock: hasWritableBlock, textLen: text.length, text: text });
       if(!hasWritableBlock && !text){
-        console.warn('[AQ] Editor appears empty and lacks writable blocks. Resetting to <p></p>.');
         ed.commands.setContent('<p></p>', false);
         return true;
       }
-    }catch(e){ console.error('[AQ] ensureEditorWritableState error', e); }
+    }catch(_e){}
     return false;
   }
 

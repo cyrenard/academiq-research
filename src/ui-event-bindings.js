@@ -79,6 +79,108 @@
     });
   }
 
+  function bindMetadataHealthFallback(){
+    if(typeof document === 'undefined' || document.__aqMetaHealthFallbackBound) return;
+    document.__aqMetaHealthFallbackBound = true;
+    document.addEventListener('click', function(event){
+      var target = event && event.target;
+      var btn = target && target.closest ? target.closest('[data-mh-action]') : null;
+      if(!btn) return;
+      var action = String(btn.getAttribute('data-mh-action') || '');
+      var refId = String(btn.getAttribute('data-ref-id') || '');
+      if(!action || !refId) return;
+      if(event && typeof event.preventDefault === 'function') event.preventDefault();
+      if(event && typeof event.stopPropagation === 'function') event.stopPropagation();
+
+      function resolveRef(id){
+        try{
+          if(typeof root.findRef === 'function'){
+            var direct = root.findRef(id, root.S && root.S.cur);
+            if(direct) return direct;
+            direct = root.findRef(id);
+            if(direct) return direct;
+          }
+        }catch(_e){}
+        try{
+          var wss = root.S && Array.isArray(root.S.wss) ? root.S.wss : [];
+          for(var i=0;i<wss.length;i++){
+            var lib = wss[i] && Array.isArray(wss[i].lib) ? wss[i].lib : [];
+            for(var j=0;j<lib.length;j++){
+              var ref = lib[j];
+              if(ref && String(ref.id || '') === id) return ref;
+            }
+          }
+        }catch(_e2){}
+        return null;
+      }
+
+      var ref = resolveRef(refId);
+      if(!ref){
+        if(typeof root.setDst === 'function') root.setDst('Kayit bulunamadi. Listeyi yenileyin.', 'er');
+        return;
+      }
+
+      if(action === 'edit'){
+        if(typeof root.hideM === 'function') root.hideM('metaHealthModal');
+        setTimeout(function(){
+          try{ if(typeof root.editRefMetadata === 'function') root.editRefMetadata(ref); }catch(_e3){}
+        }, 30);
+        return;
+      }
+
+      if(action === 'refetch'){
+        if(!ref.doi){
+          if(typeof root.setDst === 'function') root.setDst('DOI olmayan kaynakta yeniden cekme yapilamaz.', 'er');
+          return;
+        }
+        if(typeof root.setDst === 'function') root.setDst('Metadata DOI uzerinden guncelleniyor...', 'ld');
+        if(typeof root.fetchCR !== 'function') return;
+        root.fetchCR(ref.doi, function(err, fetched){
+          if(err || !fetched){
+            if(typeof root.setDst === 'function') root.setDst('DOI metadata alinamadi.', 'er');
+            return;
+          }
+          try{
+            if(typeof root.mergeRefFields === 'function') root.mergeRefFields(ref, fetched);
+            if(typeof root.save === 'function') root.save();
+            if(typeof root.rLib === 'function') root.rLib();
+            if(typeof root.rRefs === 'function') root.rRefs();
+            if(typeof root.updateRefSection === 'function') root.updateRefSection();
+            if(typeof root.__renderMetadataHealth === 'function') root.__renderMetadataHealth();
+            if(typeof root.setDst === 'function'){
+              root.setDst('Metadata guncellendi.', 'ok');
+              setTimeout(function(){ try{ root.setDst('', ''); }catch(_e4){} }, 3000);
+            }
+          }catch(_e5){}
+        });
+        return;
+      }
+
+      if(action === 'normalize'){
+        try{
+          if(root.AQMetadataHealth && typeof root.AQMetadataHealth.applyConservativeRepairs === 'function'){
+            var result = root.AQMetadataHealth.applyConservativeRepairs(ref);
+            if(result && result.ref){
+              Object.keys(result.ref).forEach(function(key){ ref[key] = result.ref[key]; });
+            }
+          }
+          if(typeof root.normalizeRefRecord === 'function') root.normalizeRefRecord(ref);
+          if(typeof root.save === 'function') root.save();
+          if(typeof root.rLib === 'function') root.rLib();
+          if(typeof root.rRefs === 'function') root.rRefs();
+          if(typeof root.updateRefSection === 'function') root.updateRefSection();
+          if(typeof root.__renderMetadataHealth === 'function') root.__renderMetadataHealth();
+          if(typeof root.setDst === 'function'){
+            root.setDst('Kayit normalize edildi.', 'ok');
+            setTimeout(function(){ try{ root.setDst('', ''); }catch(_e6){} }, 2500);
+          }
+        }catch(_e7){
+          if(typeof root.setDst === 'function') root.setDst('Normalize islemi basarisiz.', 'er');
+        }
+      }
+    }, true);
+  }
+
   function closeDropdown(){
     call('cdd');
   }
@@ -224,8 +326,79 @@
     on('btnItalic', 'click', function(){ callEditorCommandAndSync('italic'); });
     on('btnUnderline', 'click', function(){ callEditorCommandAndSync('underline'); });
     on('btnStrike', 'click', function(){ callEditorCommandAndSync('strikeThrough'); });
-    on('txtColor', 'change', function(event){ callEditorCommandAndSync('foreColor', event && event.target ? event.target.value : '#000000'); });
-    on('hlColor', 'change', function(event){ callEditorCommandAndSync('hiliteColor', event && event.target ? event.target.value : '#FFFF00'); });
+    // Custom colour swatch popover. Replaces the native <input type="color">
+    // (which steals focus + opens the OS picker, making palette selection
+    // tedious for short formatting actions). Each button shows a 10-swatch
+    // grid; clicking a swatch fires the original ec command.
+    var TEXT_PALETTE = [
+      '#000000','#1f2937','#dc2626','#ea580c','#16a34a',
+      '#2563eb','#7c3aed','#db2777','#0891b2','#ffffff'
+    ];
+    var HILITE_PALETTE = [
+      '#ffff00','#fde68a','#fed7aa','#fecaca','#bbf7d0',
+      '#bae6fd','#ddd6fe','#fbcfe8','#e5e7eb','transparent'
+    ];
+    function buildSwatchPopover(anchorBtn, palette, onPick){
+      var existing = document.getElementById('aq-swatch-popover');
+      if(existing) existing.remove();
+      var rect = anchorBtn.getBoundingClientRect();
+      var pop = document.createElement('div');
+      pop.id = 'aq-swatch-popover';
+      pop.style.cssText = 'position:fixed;z-index:99999;background:#fff;border:1px solid #ccc;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.15);padding:8px;line-height:0;';
+      pop.style.left = rect.left + 'px';
+      pop.style.top  = (rect.bottom + 4) + 'px';
+      palette.forEach(function(c, idx){
+        var sw = document.createElement('span');
+        sw.setAttribute('role', 'button');
+        sw.title = c;
+        sw.style.cssText =
+          'display:inline-block;vertical-align:top;width:22px;height:22px;' +
+          'margin:2px;border:1px solid #999;border-radius:3px;cursor:pointer;' +
+          'box-sizing:border-box;' +
+          (c === 'transparent'
+            ? 'background:repeating-linear-gradient(45deg,#fff 0 4px,#ddd 4px 8px);'
+            : 'background:' + c + ';');
+        // 5 swatches per row.
+        if(idx > 0 && idx % 5 === 0){
+          var br = document.createElement('br');
+          pop.appendChild(br);
+        }
+        sw.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+        sw.addEventListener('click', function(e){
+          e.preventDefault(); e.stopPropagation();
+          pop.remove();
+          onPick(c);
+        });
+        pop.appendChild(sw);
+      });
+      function onDocDown(ev){
+        if(pop.contains(ev.target)) return;
+        pop.remove();
+        document.removeEventListener('mousedown', onDocDown, true);
+      }
+      setTimeout(function(){
+        document.addEventListener('mousedown', onDocDown, true);
+      }, 0);
+      document.body.appendChild(pop);
+    }
+    on('txtColorBtn', 'mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    on('txtColorBtn', 'click', function(event){
+      var btn = event.currentTarget;
+      buildSwatchPopover(btn, TEXT_PALETTE, function(color){
+        callEditorCommandAndSync('foreColor', color);
+        var chip = btn.querySelector('[data-current]');
+        if(chip) chip.style.color = color === 'transparent' ? '#000' : color;
+      });
+    });
+    on('hlColorBtn', 'mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    on('hlColorBtn', 'click', function(event){
+      var btn = event.currentTarget;
+      buildSwatchPopover(btn, HILITE_PALETTE, function(color){
+        callEditorCommandAndSync('hiliteColor', color === 'transparent' ? null : color);
+        var chip = btn.querySelector('[data-current]');
+        if(chip) chip.style.background = color === 'transparent' ? 'transparent' : color;
+      });
+    });
     on('btnParagraph', 'click', function(){ callEditorCommandAndSync('formatBlock', 'p'); });
     on('btnH1', 'click', function(){ callEditorCommandAndSync('formatBlock', 'h1'); });
     on('btnH2', 'click', function(){ callEditorCommandAndSync('formatBlock', 'h2'); });
@@ -529,6 +702,7 @@
   }
 
   function bindUIEvents(){
+    bindMetadataHealthFallback();
     bindTopToolbarEvents();
     bindLibraryActionGroups();
 

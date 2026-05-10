@@ -135,6 +135,59 @@
     return segments;
   }
 
+  function isAQEngineEditor(editor){
+    return !!(editor && editor._aqEngine && editor._docModel && typeof editor._docModel.get === 'function');
+  }
+
+  function buildAQEngineSearchBuffer(editor){
+    var text = '';
+    var positions = [];
+    if(!isAQEngineEditor(editor)) return { text: text, positions: positions };
+    var model = editor._docModel.get() || {};
+    var blocks = Array.isArray(model.blocks) ? model.blocks : [];
+    var cursor = 0;
+    blocks.forEach(function(block, blockIndex){
+      var runs = Array.isArray(block && block.runs) ? block.runs : [];
+      runs.forEach(function(run){
+        var runText = String(run && run.text || '');
+        for(var i = 0; i < runText.length; i += 1){
+          text += runText.charAt(i);
+          positions.push(cursor);
+          cursor += 1;
+        }
+      });
+      if(blockIndex < blocks.length - 1){
+        text += '\n';
+        positions.push(null);
+        cursor += 1;
+      }
+    });
+    return { text: text, positions: positions };
+  }
+
+  function buildAQEngineSearchRanges(editor, query, useRegex, caseSensitive){
+    if(!isAQEngineEditor(editor) || !query) return [];
+    var buffer = buildAQEngineSearchBuffer(editor);
+    if(!buffer || !buffer.text) return [];
+    var re;
+    try{
+      re = buildSearchRegExp(query, useRegex, caseSensitive);
+    }catch(_e){
+      return [];
+    }
+    if(!re) return [];
+    return findMatchesInText(buffer.text, re).map(function(match){
+      var startIndex = match.start;
+      var endIndex = Math.max(match.start, match.end - 1);
+      var from = buffer.positions[startIndex];
+      var toBase = buffer.positions[endIndex];
+      if(from == null || toBase == null) return null;
+      var to = toBase + 1;
+      if(typeof from !== 'number' || typeof to !== 'number' || to < from) return null;
+      return { from: from, to: to };
+    }).filter(Boolean);
+  }
+
   function buildEditorSearchBuffer(editor){
     var text = '';
     var positions = [];
@@ -269,6 +322,38 @@
     if(!targetDoc || typeof targetDoc.getElementById !== 'function') return;
     var overlay = targetDoc.getElementById('aq-find-active-overlay');
     if(overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+  }
+
+  function findAQEngineLineForOffset(editor, offset){
+    var stage = editor && editor._stageEl;
+    if(!stage || typeof stage.querySelectorAll !== 'function') return null;
+    var lines = stage.querySelectorAll('.aq-engine-line');
+    for(var i = 0; i < lines.length; i += 1){
+      var line = lines[i]._aqLine || {};
+      if(offset >= Number(line.offsetStart || 0) && offset <= Number(line.offsetEnd || 0)){
+        return lines[i];
+      }
+    }
+    return null;
+  }
+
+  function applyAQEngineSelection(editor, range, options){
+    if(!isAQEngineEditor(editor) || !range) return false;
+    options = options || {};
+    try{
+      if(editor.commands && typeof editor.commands.setTextSelection === 'function'){
+        editor.commands.setTextSelection({ from: range.from, to: range.to });
+      }
+    }catch(_e){}
+    if(options.scrollIntoView !== false){
+      try{
+        var line = findAQEngineLineForOffset(editor, range.from);
+        if(line && typeof line.scrollIntoView === 'function'){
+          line.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }catch(_e2){}
+    }
+    return true;
   }
 
   function resolveDomPoint(view, pos, bias){
@@ -457,6 +542,13 @@
       }
     });
     var activeRange = Array.isArray(searchState.editorRanges) ? searchState.editorRanges[index] : null;
+    if(activeRange && isAQEngineEditor(editor)){
+      applyAQEngineSelection(editor, activeRange, {
+        scrollIntoView: shouldScroll
+      });
+      if(countEl) countEl.textContent = matches.length ? (index + 1) + '/' + matches.length : '--';
+      return matches.length > 0;
+    }
     if(activeRange && editor){
       applyEditorVisualHighlight(editor, activeRange);
       applyEditorVisualOverlay(editor, activeRange);
@@ -508,6 +600,25 @@
     }catch(e){
       if(countEl) countEl.textContent = 'Hata';
       return [];
+    }
+    if(isAQEngineEditor(editor)){
+      searchState.editorRanges = buildAQEngineSearchRanges(editor, query, useRegex, caseSensitive);
+      searchState.matches = searchState.editorRanges.map(function(range){
+        return { __aqEditorRange: range, textContent: query };
+      });
+      if(countEl) countEl.textContent = searchState.matches.length ? searchState.matches.length + ' sonuc' : 'Yok';
+      if(searchState.matches.length){
+        searchState.index = 0;
+        highlightActive({
+          state: searchState,
+          countEl: countEl,
+          editor: editor,
+          focusEditor: false,
+          scrollIntoView: true,
+          selectRange: true
+        });
+      }
+      return searchState.matches;
     }
     if(editor && editor.state && editor.state.doc && typeof editor.state.doc.descendants === 'function'){
       searchState.editorRanges = buildEditorSearchRanges(editor, query, useRegex, caseSensitive);
@@ -564,7 +675,7 @@
     var searchState = options.state || { matches:[], index:-1 };
     if(!searchState.matches || !searchState.matches.length) return false;
     searchState.index = (searchState.index + 1) % searchState.matches.length;
-    return highlightActive({ state: searchState, countEl: options.countEl || null });
+    return highlightActive({ state: searchState, countEl: options.countEl || null, editor: options.editor || searchState.editor || null });
   }
 
   function findPrev(options){
@@ -572,7 +683,7 @@
     var searchState = options.state || { matches:[], index:-1 };
     if(!searchState.matches || !searchState.matches.length) return false;
     searchState.index = (searchState.index - 1 + searchState.matches.length) % searchState.matches.length;
-    return highlightActive({ state: searchState, countEl: options.countEl || null });
+    return highlightActive({ state: searchState, countEl: options.countEl || null, editor: options.editor || searchState.editor || null });
   }
 
   function replaceCurrent(options){
@@ -664,6 +775,26 @@
     var host = options.host || null;
     var editor = options.editor || null;
     var editorRanges = Array.isArray(searchState.editorRanges) ? searchState.editorRanges : [];
+    if(isAQEngineEditor(editor)){
+      if((!editorRanges.length || !editorRanges[searchState.index]) && options.query){
+        editorRanges = buildAQEngineSearchRanges(editor, options.query, !!options.useRegex, !!options.caseSensitive);
+        searchState.editorRanges = editorRanges;
+      }
+      var aqRange = editorRanges[searchState.index] || null;
+      if(aqRange){
+        editor._docModel.deleteRange(aqRange.from, aqRange.to);
+        editor._docModel.insertText(aqRange.from, replacement);
+        if(typeof editor._reflow === 'function') editor._reflow();
+        if(editor.commands && typeof editor.commands.setTextSelection === 'function'){
+          editor.commands.setTextSelection({ from: aqRange.from, to: aqRange.from + replacement.length });
+        }
+        if(typeof editor.emit === 'function') editor.emit('update');
+        resetSearchState(searchState);
+        if(typeof options.onMutate === 'function') options.onMutate();
+        if(typeof options.onAfterReplace === 'function') options.onAfterReplace();
+        return true;
+      }
+    }
     if((!editorRanges.length || !editorRanges[searchState.index]) && editor && options.query){
       editorRanges = buildEditorSearchRanges(editor, options.query, !!options.useRegex, !!options.caseSensitive);
       searchState.editorRanges = editorRanges;
@@ -710,6 +841,30 @@
     var editor = options.editor || null;
     if(editor){
       var ranges = Array.isArray(searchState.editorRanges) ? searchState.editorRanges.slice() : [];
+      if(isAQEngineEditor(editor)){
+        if((!ranges.length) && options.query){
+          ranges = buildAQEngineSearchRanges(editor, options.query, !!options.useRegex, !!options.caseSensitive);
+          searchState.editorRanges = ranges.slice();
+        }
+        ranges = ranges.filter(Boolean).sort(function(a,b){ return b.from - a.from; });
+        if(ranges.length){
+          ranges.forEach(function(range){
+            editor._docModel.deleteRange(range.from, range.to);
+            editor._docModel.insertText(range.from, replacement);
+          });
+          if(typeof editor._reflow === 'function') editor._reflow();
+          if(editor.commands && typeof editor.commands.setTextSelection === 'function'){
+            editor.commands.setTextSelection({ from: ranges[ranges.length - 1].from, to: ranges[ranges.length - 1].from });
+          }
+          if(typeof editor.emit === 'function') editor.emit('update');
+          resetSearchState(searchState);
+          var aqCountEl = options.countEl || null;
+          if(aqCountEl) aqCountEl.textContent = count + ' degistirildi';
+          if(typeof options.onMutate === 'function') options.onMutate(count);
+          if(typeof options.onAfterReplace === 'function') options.onAfterReplace(count);
+          return count;
+        }
+      }
       if((!ranges.length) && options.query){
         ranges = buildEditorSearchRanges(editor, options.query, !!options.useRegex, !!options.caseSensitive);
         searchState.editorRanges = ranges.slice();

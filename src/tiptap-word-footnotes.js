@@ -83,7 +83,8 @@
         return {
           refType:  { default: 'heading', parseHTML: function(el){ return el.getAttribute('data-ref-type')||'heading'; } },
           refId:    { default: '', parseHTML: function(el){ return el.getAttribute('data-ref-id')||''; } },
-          refLabel: { default: '', parseHTML: function(el){ return el.getAttribute('data-ref-label')||''; } }
+          refLabel: { default: '', parseHTML: function(el){ return el.getAttribute('data-ref-label')||''; } },
+          display:  { default: 'context', parseHTML: function(el){ return el.getAttribute('data-ref-display')||'context'; } }
         };
       },
       parseHTML: function(){ return [{ tag: 'a.cross-ref' }]; },
@@ -94,6 +95,7 @@
           'data-ref-type':  attrs.refType,
           'data-ref-id':    attrs.refId,
           'data-ref-label': attrs.refLabel,
+          'data-ref-display': attrs.display || 'context',
           href: '#' + attrs.refId,
           title: 'Çapraz referans: ' + attrs.refLabel
         }, 0];
@@ -105,6 +107,7 @@
   // Footnote Store (in-memory, persisted via HTML hooks)
   // ─────────────────────────────────────────────────────────────
   var fnStore = {}; // { fnId: { text, type } }
+  var toolbarBound = false;
 
   function createFootnoteEntry(type){
     var id = uid('fn');
@@ -123,6 +126,81 @@
 
   function getFootnoteText(fnId){
     return fnStore[fnId] ? fnStore[fnId].text : '';
+  }
+
+  function getActiveEditor(){
+    if(typeof root.getActiveEditorInstance === 'function'){
+      try{ return root.getActiveEditorInstance() || root.editor || null; }catch(_e){}
+    }
+    return root.editor || null;
+  }
+
+  function isAQEngineEditor(editor){
+    return !!(editor && editor._aqEngine && editor._docModel);
+  }
+
+  function syncAQEngineFootnoteNumbers(editor){
+    if(!isAQEngineEditor(editor)) return false;
+    var docModel = editor._docModel;
+    var doc = docModel.get();
+    var blocks = (doc.blocks || []).map(function(block){
+      return Object.assign({}, block, {
+        runs: (block.runs || []).map(function(run){
+          return Object.assign({}, run, {
+            footnote: run.footnote ? Object.assign({}, run.footnote) : null,
+            citation: run.citation ? Object.assign({}, run.citation) : null,
+            font: run.font ? Object.assign({}, run.font) : null
+          });
+        }),
+        font: block.font ? Object.assign({}, block.font) : null
+      });
+    });
+    var fnN = 1, enN = 1, changed = false;
+    blocks.forEach(function(block){
+      (block.runs || []).forEach(function(run){
+        if(!run || !run.footnote) return;
+        var type = run.footnote.fnType === 'endnote' ? 'endnote' : 'footnote';
+        var next = String(type === 'endnote' ? enN++ : fnN++);
+        if(run.text !== next){
+          run.text = next;
+          changed = true;
+        }
+        run.baselineShift = 6;
+        run.fontScale = 0.75;
+      });
+    });
+    if(changed){
+      docModel.replace(blocks);
+      if(typeof editor._reflow === 'function') editor._reflow();
+    }
+    return true;
+  }
+
+  function insertAQEngineFootnote(editor, type){
+    var fnType = type === 'endnote' ? 'endnote' : 'footnote';
+    var fnId = createFootnoteEntry(fnType);
+    var docModel = editor._docModel;
+    var range = editor.state && editor.state.selection
+      ? editor.state.selection
+      : { from: docModel.length(), to: docModel.length() };
+    var from = Math.min(Number(range.from || 0), Number(range.to || range.from || 0));
+    var to = Math.max(Number(range.from || 0), Number(range.to || range.from || 0));
+    if(from !== to) docModel.deleteRange(from, to);
+    docModel.insertText(from, '1');
+    docModel.applyMark(from, from + 1, 'footnote', { fnId: fnId, fnType: fnType });
+    docModel.applyMark(from, from + 1, 'baselineShift', 6);
+    docModel.applyMark(from, from + 1, 'fontScale', 0.75);
+    docModel.applyMark(from, from + 1, 'color', '#1a4480');
+    syncAQEngineFootnoteNumbers(editor);
+    if(typeof editor._reflow === 'function') editor._reflow();
+    if(editor.commands && typeof editor.commands.focus === 'function') editor.commands.focus(from + 1);
+    if(typeof editor.emit === 'function') editor.emit('update');
+    scheduleSync();
+    setTimeout(function(){
+      var inp = document.querySelector('[data-fn-input="'+fnId+'"]');
+      if(inp){ inp.scrollIntoView({ behavior:'smooth', block:'center' }); inp.focus(); }
+    }, 200);
+    return true;
   }
 
   // Serialize store to hidden HTML block
@@ -178,6 +256,10 @@
   }
 
   function syncFootnoteNumbers(){
+    var activeEditor = getActiveEditor();
+    if(isAQEngineEditor(activeEditor)){
+      syncAQEngineFootnoteNumbers(activeEditor);
+    }
     // Numbers in editor are handled by CSS counters — just sync the panel
     renderFootnotePanel();
     if(root.AQAcademicObjects && typeof root.AQAcademicObjects.syncCrossRefLabels === 'function'){
@@ -193,8 +275,18 @@
   // Insert commands
   // ─────────────────────────────────────────────────────────────
   function insertFootnote(type){
-    var editor = root.editor;
-    if(!editor) return;
+    var editor = getActiveEditor();
+    if(!editor){
+      setTimeout(function(){
+        var retryEditor = getActiveEditor();
+        if(retryEditor) insertFootnote(type);
+      }, 80);
+      return;
+    }
+    if(isAQEngineEditor(editor)){
+      insertAQEngineFootnote(editor, type || 'footnote');
+      return;
+    }
     var fnId = createFootnoteEntry(type||'footnote');
     editor.chain().focus().insertContent({
       type: 'footnoteRef',
@@ -211,7 +303,7 @@
   // Cross-reference dialog
   // ─────────────────────────────────────────────────────────────
   function showCrossRefDialog(){
-    var editor = root.editor;
+    var editor = getActiveEditor();
     if(!editor) return;
     var targets = collectCrossRefTargets();
     if(!targets.length){
@@ -310,7 +402,89 @@
     return { heading:'Başlık', table:'Tablo', figure:'Şekil', footnote:'Dipnot', endnote:'Sonnot' }[type] || type;
   }
 
+  function runsText(runs){
+    return (runs || []).map(function(run){ return String(run && run.text || ''); }).join('').trim();
+  }
+
+  function slugRef(text){
+    return String(text || '')
+      .toLowerCase()
+      .replace(/[^\w\u00c0-\u024f\u0400-\u04ff]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 42) || 'ref';
+  }
+
+  function ensureAQEngineCrossRefIds(editor){
+    if(!isAQEngineEditor(editor)) return [];
+    var docModel = editor._docModel;
+    var doc = docModel.get();
+    var blocks = (doc.blocks || []).map(function(block){
+      return Object.assign({}, block, {
+        attrs: block.attrs ? Object.assign({}, block.attrs) : {},
+        runs: (block.runs || []).map(function(run){
+          return Object.assign({}, run, {
+            citation: run.citation ? Object.assign({}, run.citation) : null,
+            footnote: run.footnote ? Object.assign({}, run.footnote) : null,
+            crossRef: run.crossRef ? Object.assign({}, run.crossRef) : null,
+            font: run.font ? Object.assign({}, run.font) : null
+          });
+        })
+      });
+    });
+    var changed = false;
+    blocks.forEach(function(block, index){
+      var text = runsText(block.runs);
+      var prefix = block.type === 'table' ? 'tbl' : (block.type === 'image' ? 'fig' : 'hd');
+      if(block.type !== 'heading' && block.type !== 'table' && block.type !== 'image') return;
+      if(block._isBibHeading || block._isAppendixHeading) return;
+      var semantic = text.toLocaleLowerCase ? text.toLocaleLowerCase('tr-TR') : text.toLowerCase();
+      if(/^(kaynakça|içindekiler|ek-\d+)/i.test(semantic)) return;
+      if(!block.attrs.refId && !block._refId){
+        block.attrs.refId = prefix + '-' + (index + 1) + '-' + slugRef(text || prefix);
+        changed = true;
+      }
+    });
+    if(changed){
+      docModel.replace(blocks);
+      if(typeof editor._reflow === 'function') editor._reflow();
+    }
+    return docModel.get().blocks || [];
+  }
+
+  function collectAQEngineCrossRefTargets(editor){
+    if(!isAQEngineEditor(editor)) return [];
+    var blocks = ensureAQEngineCrossRefIds(editor);
+    var targets = [];
+    var tableN = 1, figureN = 1, fnN = 1, enN = 1;
+    blocks.forEach(function(block){
+      if(!block) return;
+      var text = runsText(block.runs);
+      if(block.type === 'heading' && !block._isBibHeading && !block._isAppendixHeading){
+        var semantic = text.toLocaleLowerCase ? text.toLocaleLowerCase('tr-TR') : text.toLowerCase();
+        if(text && !/^(kaynakça|içindekiler|ek-\d+)/i.test(semantic)){
+          var level = Math.max(1, Math.min(5, parseInt(block.level, 10) || 1));
+          targets.push({ type:'heading', id:(block.attrs && block.attrs.refId) || block._refId || uid('hd'), label:Array(level).join('  ') + text });
+        }
+      }else if(block.type === 'table'){
+        targets.push({ type:'table', id:(block.attrs && block.attrs.refId) || block._refId || uid('tbl'), label:'Tablo ' + tableN++ });
+      }else if(block.type === 'image'){
+        targets.push({ type:'figure', id:(block.attrs && block.attrs.refId) || block._refId || uid('fig'), label:'Şekil ' + figureN++ + (block.alt ? ': ' + block.alt : '') });
+      }
+      (block.runs || []).forEach(function(run){
+        if(!run || !run.footnote || !run.footnote.fnId) return;
+        var type = run.footnote.fnType === 'endnote' ? 'endnote' : 'footnote';
+        targets.push({ type:type, id:run.footnote.fnId, label:(type === 'endnote' ? 'Sonnot ' + enN++ : 'Dipnot ' + fnN++) });
+      });
+    });
+    return targets;
+  }
+
   function collectCrossRefTargets(){
+    var activeEditor = getActiveEditor();
+    if(isAQEngineEditor(activeEditor)){
+      var aqTargets = collectAQEngineCrossRefTargets(activeEditor);
+      if(aqTargets.length) return aqTargets;
+    }
     if(root.AQAcademicObjects && typeof root.AQAcademicObjects.collectTargets === 'function'){
       try{
         var academicTargets = root.AQAcademicObjects.collectTargets({
@@ -346,7 +520,7 @@
     });
     // Footnotes (numbered ones in DOM)
     var fnN2 = 1;
-    host.querySelectorAll('sup.fn-ref[data-fn-type="footnote"]').forEach(function(sup){
+    host.querySelectorAll('sup.fn-ref[data-fn-type="footnote"],.aq-fn-ref[data-fn-type="footnote"]').forEach(function(sup){
       var id = sup.getAttribute('data-fn-id');
       targets.push({ type:'footnote', id:id, label:'Dipnot '+fnN2++ });
     });
@@ -363,6 +537,29 @@
     var text = root.AQAcademicObjects && typeof root.AQAcademicObjects.buildCrossRefText === 'function'
       ? root.AQAcademicObjects.buildCrossRefText(target || label, { mode: mode || 'context' })
       : ((mode === 'label' ? label : ('bkz. ' + label)) || 'bkz.');
+    if(isAQEngineEditor(editor)){
+      var docModel = editor._docModel;
+      var range = editor.state && editor.state.selection
+        ? editor.state.selection
+        : { from: docModel.length(), to: docModel.length() };
+      var from = Math.min(Number(range.from || 0), Number(range.to || range.from || 0));
+      var to = Math.max(Number(range.from || 0), Number(range.to || range.from || 0));
+      if(from !== to) docModel.deleteRange(from, to);
+      docModel.insertText(from, text);
+      docModel.applyMark(from, from + text.length, 'crossRef', {
+        refType: target.type || 'heading',
+        refId: target.id || '',
+        refLabel: label,
+        display: mode || 'context'
+      });
+      docModel.applyMark(from, from + text.length, 'href', '#' + (target.id || ''));
+      docModel.applyMark(from, from + text.length, 'color', '#1a0dab');
+      if(typeof editor._reflow === 'function') editor._reflow();
+      if(editor.commands && typeof editor.commands.focus === 'function') editor.commands.focus(from + text.length);
+      if(typeof editor.emit === 'function') editor.emit('update');
+      scheduleSync();
+      return;
+    }
     // Use mark if available
     if(editor.chain && editor.schema && editor.schema.marks && editor.schema.marks.crossRef){
       editor.chain().focus()
@@ -445,15 +642,131 @@
     return item;
   }
 
+  function getAQEngineLayout(editor){
+    if(editor && editor._aqLayout) return editor._aqLayout;
+    return null;
+  }
+
+  function styleAQPageFootnotePanel(panel, layout, itemCount){
+    var linePx = 20;
+    var height = Math.max(42, Math.min(130, 18 + (itemCount || 1) * linePx));
+    var bottom = Math.max(18, (layout && layout.marginTopPx ? layout.marginTopPx : 96) * 0.35);
+    panel.className = 'aq-page-fn-panel';
+    panel.style.position = 'absolute';
+    panel.style.left = ((layout && layout.marginLeftPx) || 96) + 'px';
+    panel.style.width = ((layout && layout.contentWidthPx) || 600) + 'px';
+    panel.style.top = (((layout && layout.pageHeightPx) || 1123) - bottom - height) + 'px';
+    panel.style.minHeight = height + 'px';
+    panel.style.boxSizing = 'border-box';
+    panel.style.fontFamily = '"Times New Roman", Times, serif';
+    panel.style.fontSize = '10pt';
+    panel.style.lineHeight = '1.5';
+    panel.style.color = '#000';
+    panel.style.background = '#fff';
+    panel.style.zIndex = '18';
+  }
+
+  function styleAQPageFootnoteItem(item){
+    if(!item) return;
+    item.style.display = 'flex';
+    item.style.alignItems = 'baseline';
+    item.style.gap = '0';
+    item.style.marginBottom = '0';
+    item.style.lineHeight = '1.5';
+    var num = item.querySelector('.fn-num');
+    if(num){
+      num.style.fontSize = '10pt';
+      num.style.display = 'inline';
+      num.style.flexShrink = '0';
+    }
+    var ta = item.querySelector('.fn-inp');
+    if(ta){
+      ta.style.flex = '1';
+      ta.style.minHeight = '1.5em';
+      ta.style.resize = 'none';
+      ta.style.border = 'none';
+      ta.style.padding = '0';
+      ta.style.background = 'transparent';
+      ta.style.color = '#000';
+      ta.style.fontFamily = '"Times New Roman", Times, serif';
+      ta.style.fontSize = '10pt';
+      ta.style.lineHeight = '1.5';
+      ta.style.outline = 'none';
+      ta.style.overflow = 'hidden';
+    }
+    var del = item.querySelector('.fn-del-btn');
+    if(del){
+      del.style.background = 'none';
+      del.style.border = 'none';
+      del.style.color = 'rgba(120,120,120,.55)';
+      del.style.cursor = 'pointer';
+      del.style.fontSize = '11px';
+      del.style.padding = '0 4px';
+    }
+  }
+
+  function renderAQEngineFootnotePanels(editor){
+    if(!isAQEngineEditor(editor)) return false;
+    var stage = editor._stageEl || document.querySelector('.aq-engine-root');
+    if(!stage) return false;
+    stage.querySelectorAll('.aq-page-fn-panel').forEach(function(node){ node.remove(); });
+    var layout = getAQEngineLayout(editor) || {};
+    var pageMap = {};
+    stage.querySelectorAll('.aq-engine-page').forEach(function(pageEl){
+      var pageIndex = parseInt(pageEl.getAttribute('data-page-index') || pageEl.dataset.pageIndex || '0', 10) || 0;
+      pageEl.querySelectorAll('.aq-fn-ref').forEach(function(refEl){
+        var id = refEl.getAttribute('data-fn-id') || '';
+        if(!id) return;
+        var type = refEl.getAttribute('data-fn-type') || 'footnote';
+        if(type === 'endnote') return;
+        if(!pageMap[pageIndex]) pageMap[pageIndex] = { pageEl: pageEl, items: [] };
+        if(!pageMap[pageIndex].items.some(function(item){ return item.id === id; })){
+          pageMap[pageIndex].items.push({ id: id, type: type, n: parseInt(refEl.textContent || '0', 10) || (pageMap[pageIndex].items.length + 1) });
+        }
+      });
+    });
+    Object.keys(pageMap).forEach(function(key){
+      var group = pageMap[key];
+      var panel = document.createElement('div');
+      styleAQPageFootnotePanel(panel, layout, group.items.length);
+      var sep = document.createElement('hr');
+      sep.className = 'fn-sep';
+      sep.style.width = '2in';
+      sep.style.border = 'none';
+      sep.style.borderTop = '1px solid #000';
+      sep.style.margin = '0 0 2px 0';
+      panel.appendChild(sep);
+      var sec = document.createElement('div');
+      sec.className = 'fn-sec';
+      group.items.forEach(function(entry){
+        var item = buildFnItem(entry, false);
+        styleAQPageFootnoteItem(item);
+        sec.appendChild(item);
+      });
+      panel.appendChild(sec);
+      group.pageEl.appendChild(panel);
+      group.items.forEach(function(entry){
+        if(entry._ta) autoResizeTa(entry._ta);
+      });
+    });
+    return true;
+  }
+
   function renderFootnotePanel(){
     var panel = document.getElementById('fn-panel');
+    var activeEditor = getActiveEditor();
+    if(isAQEngineEditor(activeEditor)){
+      renderAQEngineFootnotePanels(activeEditor);
+      if(panel) panel.style.display = 'none';
+      return;
+    }
     if(!panel) return;
     var host = document.getElementById('apaed');
     if(!host){ panel.style.display='none'; return; }
 
     var fns=[], ens=[];
     var fnN=1, enN=1;
-    host.querySelectorAll('sup.fn-ref').forEach(function(sup){
+    host.querySelectorAll('sup.fn-ref,.aq-fn-ref').forEach(function(sup){
       var id = sup.getAttribute('data-fn-id');
       var type = sup.getAttribute('data-fn-type')||'footnote';
       if(type==='endnote') ens.push({ id:id, n:enN++ });
@@ -524,8 +837,36 @@
   }
 
   function removeFootnoteFromEditor(fnId){
-    var editor = root.editor;
+    var editor = getActiveEditor();
     if(!editor) return;
+    if(isAQEngineEditor(editor)){
+      var doc = editor._docModel.get();
+      var offset = 0;
+      var found = false;
+      (doc.blocks || []).some(function(block, blockIndex){
+        var runs = block.runs || [];
+        for(var i = 0; i < runs.length; i++){
+          var run = runs[i] || {};
+          var len = String(run.text || '').length;
+          if(run.footnote && run.footnote.fnId === fnId){
+            editor._docModel.deleteRange(offset, offset + Math.max(1, len));
+            found = true;
+            return true;
+          }
+          offset += len;
+        }
+        if(blockIndex < (doc.blocks || []).length - 1) offset += 1;
+        return false;
+      });
+      if(found){
+        removeFootnoteEntry(fnId);
+        syncAQEngineFootnoteNumbers(editor);
+        if(typeof editor._reflow === 'function') editor._reflow();
+        if(typeof editor.emit === 'function') editor.emit('update');
+        scheduleSync();
+      }
+      return;
+    }
     // Find and delete the node from ProseMirror doc
     var state = editor.state;
     var tr = state.tr;
@@ -557,7 +898,7 @@
   }
 
   function jumpToRef(fnId){
-    var sup = document.querySelector('sup.fn-ref[data-fn-id="'+fnId+'"]');
+    var sup = document.querySelector('sup.fn-ref[data-fn-id="'+fnId+'"],.aq-fn-ref[data-fn-id="'+fnId+'"]');
     if(sup) sup.scrollIntoView({ behavior:'smooth', block:'center' });
   }
 
@@ -583,13 +924,38 @@
   // ─────────────────────────────────────────────────────────────
   function bindEditorEvents(){
     var host = document.getElementById('apaed');
-    if(!host) return;
-    host.addEventListener('click', function(e){
-      var sup = e.target.closest('sup.fn-ref');
-      if(sup){ e.preventDefault(); jumpToFootnote(sup.getAttribute('data-fn-id')); return; }
-      var cr = e.target.closest('a.cross-ref');
-      if(cr){ e.preventDefault(); jumpToCrossRefTarget(cr.getAttribute('data-ref-id')); }
-    });
+    if(host && !host.__aqFootnoteEventsBound){
+      host.__aqFootnoteEventsBound = true;
+      host.addEventListener('click', function(e){
+        var sup = e.target.closest('sup.fn-ref,.aq-fn-ref');
+        if(sup){ e.preventDefault(); jumpToFootnote(sup.getAttribute('data-fn-id')); return; }
+        var cr = e.target.closest('a.cross-ref');
+        if(cr){ e.preventDefault(); jumpToCrossRefTarget(cr.getAttribute('data-ref-id')); }
+      });
+    }
+    bindToolbarEvents();
+  }
+
+  function bindToolbarEvents(){
+    if(toolbarBound || !document || !document.addEventListener) return;
+    toolbarBound = true;
+    document.addEventListener('click', function(e){
+      var target = e && e.target && e.target.closest ? e.target.closest('#btnFootnote,#btnEndnote,#btnCrossRef') : null;
+      if(!target) return;
+      if(target.id === 'btnFootnote'){
+        e.preventDefault();
+        e.stopPropagation();
+        insertFootnote('footnote');
+      }else if(target.id === 'btnEndnote'){
+        e.preventDefault();
+        e.stopPropagation();
+        insertFootnote('endnote');
+      }else if(target.id === 'btnCrossRef'){
+        e.preventDefault();
+        e.stopPropagation();
+        showCrossRefDialog();
+      }
+    }, true);
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -616,7 +982,7 @@
 
     var fns = [], ens = [];
     var fnN = 1, enN = 1;
-    host.querySelectorAll('sup.fn-ref').forEach(function(sup){
+    host.querySelectorAll('sup.fn-ref,.aq-fn-ref').forEach(function(sup){
       var id = sup.getAttribute('data-fn-id');
       var type = sup.getAttribute('data-fn-type') || 'footnote';
       var txt = getFootnoteText(id);

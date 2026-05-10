@@ -57,6 +57,42 @@
     return { width: m.width || 0, ascent: ascent, descent: descent };
   }
 
+  // ── Ordered list marker formatting ────────────────────────────────────────
+  function toAlpha(n){
+    // 1 → 'a', 26 → 'z', 27 → 'aa'
+    if(n < 1) return String(n);
+    var out = '';
+    while(n > 0){
+      var rem = (n - 1) % 26;
+      out = String.fromCharCode(97 + rem) + out;
+      n = Math.floor((n - 1) / 26);
+    }
+    return out;
+  }
+  function toRoman(n){
+    if(n < 1 || n > 3999) return String(n);
+    var pairs = [
+      [1000, 'm'], [900, 'cm'], [500, 'd'], [400, 'cd'],
+      [100, 'c'],  [90, 'xc'],  [50, 'l'],  [40, 'xl'],
+      [10, 'x'],   [9, 'ix'],   [5, 'v'],   [4, 'iv'],
+      [1, 'i']
+    ];
+    var out = '';
+    for(var i = 0; i < pairs.length; i++){
+      while(n >= pairs[i][0]){ out += pairs[i][1]; n -= pairs[i][0]; }
+    }
+    return out;
+  }
+  function formatOrderedMarker(n, style){
+    switch(style){
+      case 'lower-alpha': return toAlpha(n);
+      case 'upper-alpha': return toAlpha(n).toUpperCase();
+      case 'lower-roman': return toRoman(n);
+      case 'upper-roman': return toRoman(n).toUpperCase();
+      default:            return String(n);
+    }
+  }
+
   // ── Tokenization ───────────────────────────────────────────────────────────
   // Split text into atomic break candidates: non-space tokens (words) and
   // whitespace tokens (glue). Whitespace at line ends is discarded.
@@ -111,6 +147,9 @@
           fontScale: run.fontScale || 1,
           citation: run.citation || null,
           footnote: run.footnote || null,
+          crossRef: run.crossRef || null,
+          trackInsert: !!run.trackInsert,
+          trackDelete: !!run.trackDelete,
           offsetStart: localCursor + m.index,
           offsetEnd:   localCursor + m.index + seg.length
         });
@@ -159,6 +198,9 @@
         baselineShift: tok.baselineShift,
         citation: tok.citation,
         footnote: tok.footnote,
+        crossRef: tok.crossRef,
+        trackInsert: !!tok.trackInsert,
+        trackDelete: !!tok.trackDelete,
         offsetStart: tok.offsetStart,
         offsetEnd: tok.offsetEnd
       });
@@ -229,13 +271,33 @@
 
     function newPage(){ return { lines: [] }; }
 
-    var INDENT_PER_LEVEL_PX = 28;
-    var MARKER_GUTTER_PX    = 24;
+    function resolveBlockWidth(value, fallback){
+      if(value === null || value === undefined || value === '') return fallback;
+      if(typeof value === 'string' && /%$/.test(value.trim())){
+        var pct = parseFloat(value);
+        return Number.isFinite(pct) && pct > 0 ? fallback * Math.min(pct, 100) / 100 : fallback;
+      }
+      var n = parseFloat(value);
+      return Number.isFinite(n) && n > 0 ? n : fallback;
+    }
+
+    var INDENT_PER_LEVEL_PX = 18;
+    var MARKER_GUTTER_PX    = 2;
     var orderedCounters = {}; // per-level counters for ordered lists
     var prevListSig     = null;
 
     for(var b = 0; b < blocks.length; b++){
       var block = blocks[b];
+
+      // ── Explicit Page Break ──
+      if(block.pageBreak){
+        if(page.lines.length > 0){
+          pages.push(page);
+          page = newPage();
+          y = 0;
+        }
+      }
+
       var blockFont = Object.assign({}, opts.baseFont, block.font || {});
       var lineHeightPx = (blockFont.sizePt * PT_TO_PX) * (block.lineHeightFactor || opts.lineHeightFactor || 1);
       // ── Horizontal rule ──
@@ -258,7 +320,7 @@
       if(block.type === 'image'){
         block._offsetStart = docOffset;
         block._offsetEnd   = docOffset; // image has 0 text length
-        var imgW = Math.min(block.width || contentWidthPx, contentWidthPx);
+        var imgW = Math.min(resolveBlockWidth(block.width, contentWidthPx), contentWidthPx);
         var imgH = block.height ? (block.height * (imgW / (block.width || imgW))) : (imgW * 0.6);
         if(y + imgH > contentHeightPx){
           pages.push(page); page = newPage(); y = 0;
@@ -269,6 +331,7 @@
         page.lines.push({
           y: y, x: imgX, width: imgW, height: imgH,
           image: true, src: block.src, alt: block.alt || '',
+          refId: (block.attrs && block.attrs.refId) || block._refId || null,
           blockIndex: b, pageIndex: pages.length,
           offsetStart: docOffset, offsetEnd: docOffset
         });
@@ -314,6 +377,11 @@
             y: y, x: ml, width: contentWidthPx, height: rowHeight,
             table: true, rowIndex: tr, numCols: numCols, colWidth: colWidth,
             cellPad: cellPad, cellLines: cellLines, isHeader: (tr === 0 && block.headerRow),
+            isFirstRow: tr === 0,
+            isLastRow: tr === tableRows.length - 1,
+            tableBlockIndex: b,
+            tableRowIndex: tr,
+            refId: (block.attrs && block.attrs.refId) || block._refId || null,
             blockIndex: b, pageIndex: pages.length,
             offsetStart: tableOffsetStart, offsetEnd: docOffset
           });
@@ -339,10 +407,16 @@
       if(block.list){
         if(block.list.type === 'ordered'){
           // Reset numbering when leaving an ordered chain or its level changes
-          var sig = 'ordered@' + listLevel;
+          var sig = 'ordered@' + listLevel + '@' + (block.list.style || 'decimal');
           orderedCounters[listLevel] = (prevListSig === sig ? (orderedCounters[listLevel] || 0) : 0) + 1;
-          markerText = orderedCounters[listLevel] + '.';
-          // Reset deeper levels when this level advances
+          var n = orderedCounters[listLevel];
+          var style = block.list.style || (
+            // Default cascade — Word-style: 1, a, i for unset styles.
+            listLevel === 0 ? 'decimal' :
+            listLevel === 1 ? 'lower-alpha' :
+            'lower-roman'
+          );
+          markerText = formatOrderedMarker(n, style) + '.';
           for(var lv in orderedCounters) if(parseInt(lv,10) > listLevel) delete orderedCounters[lv];
           prevListSig = sig;
         }else{
@@ -386,6 +460,9 @@
           isLastLineOfBlock: isLastLineOfBlock,
           isFirstLineOfBlock: isFirstLineOfBlock,
           blockIndex: b,
+          isAppendixHeading: !!block._isAppendixHeading,
+          appendixId: block._appendixId || null,
+          refId: (block.attrs && block.attrs.refId) || block._refId || null,
           pageIndex: pages.length,
           offsetStart: lineOffsetStart,
           offsetEnd: lineOffsetEnd,
@@ -416,9 +493,15 @@
   // ── DOM render ─────────────────────────────────────────────────────────────
   function renderToDOM(layout, container, opts){
     container.innerHTML = '';
-    container.style.background = '#f6f1e7';
+    // Transparent so the host scroller's own background shows between pages —
+    // avoids the "bridge band" effect when stage gradient differs from #escroll.
+    container.style.background = 'transparent';
     container.style.padding = '32px 0';
     container.style.minHeight = '100vh';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.alignItems = 'center';
+    container.style.minWidth = layout.pageWidthPx + 'px';
 
     for(var p = 0; p < layout.pages.length; p++){
       var page = layout.pages[p];
@@ -431,7 +514,7 @@
       pageEl.style.height = layout.pageHeightPx + 'px';
       pageEl.style.background = opts.backgroundColor;
       pageEl.style.boxShadow = opts.pageShadow;
-      pageEl.style.margin = '0 auto ' + opts.pageGapPx + 'px';
+      pageEl.style.margin = '0 0 ' + opts.pageGapPx + 'px';
       pageEl.style.boxSizing = 'border-box';
       pageEl.style.fontFamily = opts.baseFont.family;
 
@@ -462,8 +545,12 @@
           imgEl.style.width  = line.width + 'px';
           imgEl.style.height = line.height + 'px';
           imgEl.style.objectFit = 'contain';
-          imgEl.style.pointerEvents = 'none';
+          imgEl.style.pointerEvents = 'auto';
+          imgEl.style.cursor = 'pointer';
           imgEl.draggable = false;
+          imgEl.className = 'aq-engine-image';
+          imgEl.dataset.blockIndex = line.blockIndex;
+          if(line.refId) imgEl.dataset.refId = line.refId;
           pageEl.appendChild(imgEl);
           continue;
         }
@@ -482,7 +569,8 @@
           continue;
         }
 
-        // Table row
+        // Table row — APA 7: only horizontal borders (top of header, bottom of
+        // header, bottom of table). No vertical lines, no inter-row borders.
         if(line.table){
           var rowEl = document.createElement('div');
           rowEl.className = 'aq-engine-table-row';
@@ -492,18 +580,32 @@
           rowEl.style.width = line.width + 'px';
           rowEl.style.height = line.height + 'px';
           rowEl.style.display = 'flex';
-          rowEl.style.borderBottom = '1px solid #bbb';
+          rowEl.style.borderTop = '';
+          rowEl.style.borderBottom = '';
+          rowEl.dataset.tableBlockIndex = line.tableBlockIndex;
+          rowEl.dataset.tableRowIndex   = line.tableRowIndex;
+          if(line.refId) rowEl.dataset.refId = line.refId;
+          if(line.isFirstRow){
+            rowEl.style.borderTop = '1.5px solid #000';
+          }
           if(line.isHeader){
             rowEl.style.fontWeight = '700';
-            rowEl.style.borderBottom = '2px solid #333';
+            rowEl.style.borderBottom = '1px solid #000';
+          }
+          if(line.isLastRow){
+            rowEl.style.borderBottom = '1.5px solid #000';
           }
           for(var ci = 0; ci < line.numCols; ci++){
             var cellEl = document.createElement('div');
             cellEl.style.width = line.colWidth + 'px';
             cellEl.style.padding = line.cellPad + 'px';
             cellEl.style.boxSizing = 'border-box';
-            cellEl.style.borderRight = (ci < line.numCols - 1) ? '1px solid #ccc' : 'none';
+            cellEl.style.borderRight = 'none';
             cellEl.style.overflow = 'hidden';
+            cellEl.className = 'aq-engine-table-cell';
+            cellEl.dataset.tableBlockIndex = line.tableBlockIndex;
+            cellEl.dataset.tableRowIndex   = line.tableRowIndex;
+            cellEl.dataset.tableColIndex   = ci;
             cellEl.style.fontSize = (opts.baseFont.sizePt * PT_TO_PX) + 'px';
             cellEl.style.lineHeight = (opts.baseFont.sizePt * PT_TO_PX * (opts.lineHeightFactor || 1)) + 'px';
             cellEl.style.fontFamily = opts.baseFont.family;
@@ -539,7 +641,13 @@
         lineEl.style.height = line.height + 'px';
         lineEl.style.lineHeight = line.height + 'px';
         lineEl.style.whiteSpace = 'pre';
+        lineEl.style.overflow = 'visible';
         lineEl.style.color = '#1d1b16';
+        if(line.isAppendixHeading && line.isFirstLineOfBlock){
+          lineEl.className += ' aq-appendix-heading-hit';
+          lineEl.dataset.appendixBlockIndex = line.blockIndex;
+          if(line.appendixId) lineEl.dataset.appendixId = line.appendixId;
+        }
 
         // Drop trailing whitespace from the line for measurement and render.
         var renderItems = line.items.slice();
@@ -578,8 +686,16 @@
         lineEl._aqExtraSpace = extraSpace;
         lineEl.dataset.lineOffsetStart = line.offsetStart;
         lineEl.dataset.lineOffsetEnd   = line.offsetEnd;
+        lineEl.dataset.blockIndex      = line.blockIndex;
+        if(line.refId) lineEl.dataset.refId = line.refId;
 
-        // List marker — drawn outside the line content area, non-interactive
+        // List marker — drawn outside the line content area, non-interactive.
+        // Mirror the layout of the surrounding lineEl exactly so the marker
+        // glyph rests on the same baseline as the line text. Using the same
+        // line-height/height + textAlign:right yields baseline parity for any
+        // character whose baseline is the natural typographic baseline; bullet
+        // glyphs ("•", "◦") sit a touch higher in their em-box than letters,
+        // so we offset them downward to compensate.
         if(line.markerText){
           var marker = document.createElement('div');
           marker.className = 'aq-list-marker';
@@ -594,6 +710,10 @@
           marker.style.textAlign = 'right';
           marker.style.userSelect = 'none';
           marker.style.pointerEvents = 'none';
+          // The marker box is line.height tall but the line text rests on the
+          // baseline (~80% from top). Push the marker down to land on that
+          // baseline.
+          marker.style.paddingTop = '6px';
           marker.textContent = line.markerText;
           pageEl.appendChild(marker);
         }
@@ -601,15 +721,36 @@
         for(var i = 0; i < renderItems.length; i++){
           var it = renderItems[i];
           var span = document.createElement('span');
+          span.style.display = 'inline-block';
+          span.style.whiteSpace = 'pre';
           span.style.font = fontShorthand(it.font);
           if(it.decoration) span.style.textDecoration = it.decoration;
           if(it.color) span.style.color = it.color;
           if(it.highlight) span.style.backgroundColor = it.highlight;
+          if(it.trackInsert){
+            span.className = (span.className ? span.className + ' ' : '') + 'aq-track-insert';
+            span.style.color = span.style.color || '#1f7a4d';
+            span.style.textDecoration = span.style.textDecoration || 'underline';
+            span.style.backgroundColor = span.style.backgroundColor || 'rgba(46,160,96,.10)';
+          }
+          if(it.trackDelete){
+            span.className = (span.className ? span.className + ' ' : '') + 'aq-track-delete';
+            span.style.color = '#a33a35';
+            span.style.textDecoration = 'line-through';
+            span.style.backgroundColor = span.style.backgroundColor || 'rgba(201,72,66,.10)';
+          }
           if(it.href){
             span.style.color = span.style.color || '#1a0dab';
             span.style.textDecoration = 'underline';
             span.style.cursor = 'pointer';
             span.dataset.href = it.href;
+          }
+          if(it.crossRef){
+            span.className = 'aq-cross-ref';
+            span.dataset.refType = it.crossRef.refType || 'heading';
+            span.dataset.refId = it.crossRef.refId || '';
+            span.dataset.refLabel = it.crossRef.refLabel || '';
+            span.dataset.refDisplay = it.crossRef.display || 'context';
           }
           if(it.baselineShift){
             span.style.position = 'relative';
@@ -621,12 +762,14 @@
             span.style.marginRight = extraSpace + 'px';
           }
           if(it.citation){
-            span.className = 'cit aq-cit';
-            span.style.cursor = 'pointer';
-            if(it.citation.ref)    span.dataset.ref    = it.citation.ref;
-            if(it.citation.id)     span.dataset.id     = it.citation.id;
-            if(it.citation.mode)   span.dataset.mode   = it.citation.mode;
-            if(it.citation.noteId) span.dataset.noteId = it.citation.noteId;
+            span.className = 'aq-cit';
+            span.style.color = 'inherit';
+            span.style.cursor = 'text';
+            span.style.pointerEvents = 'none';
+            if(it.citation.ref)    span.dataset.aqRef    = it.citation.ref;
+            if(it.citation.id)     span.dataset.aqId     = it.citation.id;
+            if(it.citation.mode)   span.dataset.aqMode   = it.citation.mode;
+            if(it.citation.noteId) span.dataset.aqNoteId = it.citation.noteId;
           }
           if(it.footnote){
             span.className = 'aq-fn-ref';
@@ -636,6 +779,113 @@
           }
           span.textContent = it.text;
           lineEl.appendChild(span);
+        }
+        if(line.isAppendixHeading && line.isFirstLineOfBlock){
+          var delBtn = document.createElement('button');
+          delBtn.type = 'button';
+          delBtn.className = 'aq-appendix-delete-btn';
+          delBtn.textContent = 'Eki sil';
+          delBtn.title = 'Eki sil';
+          delBtn.dataset.blockIndex = String(line.blockIndex);
+          if(line.appendixId) delBtn.dataset.appendixId = line.appendixId;
+          delBtn.style.position = 'absolute';
+          delBtn.style.right = '0';
+          delBtn.style.top = '1px';
+          delBtn.style.border = '1px solid rgba(178,88,88,.45)';
+          delBtn.style.background = 'rgba(255,255,255,.92)';
+          delBtn.style.color = '#8f2e2e';
+          delBtn.style.borderRadius = '999px';
+          delBtn.style.padding = '2px 9px';
+          delBtn.style.font = '10px/1.2 Arial, sans-serif';
+          delBtn.style.cursor = 'pointer';
+          delBtn.style.opacity = '0';
+          delBtn.style.pointerEvents = 'none';
+          delBtn.style.transition = 'opacity .16s ease';
+          lineEl.addEventListener('mouseenter', function(){ var btn = this.querySelector('.aq-appendix-delete-btn'); if(btn){ btn.style.opacity = '1'; btn.style.pointerEvents = 'auto'; } });
+          lineEl.addEventListener('mouseleave', function(){ var btn = this.querySelector('.aq-appendix-delete-btn'); if(btn){ btn.style.opacity = '0'; btn.style.pointerEvents = 'none'; } });
+          delBtn.addEventListener('click', function(ev){
+            ev.preventDefault();
+            ev.stopPropagation();
+            var detail = {
+              blockIndex: parseInt(this.dataset.blockIndex || '-1', 10),
+              appendixId: this.dataset.appendixId || ''
+            };
+            var handled = false;
+            try{
+              var activeEditor = typeof window.getActiveEditorInstance === 'function'
+                ? window.getActiveEditorInstance()
+                : (window.editor || null);
+              if(typeof window.deleteAQEngineAppendix === 'function'){
+                handled = !!window.deleteAQEngineAppendix(activeEditor, detail.appendixId, detail.blockIndex);
+              }
+              if(!handled && activeEditor && activeEditor._aqEngine && activeEditor._docModel && typeof activeEditor._docModel.get === 'function' && typeof activeEditor._docModel.replace === 'function'){
+                var model = activeEditor._docModel.get() || {};
+                var blocks = Array.isArray(model.blocks) ? model.blocks.slice() : [];
+                var start = -1;
+                for(var bi = 0; bi < blocks.length; bi++){
+                  if(blocks[bi] && blocks[bi]._isAppendixHeading && ((detail.appendixId && blocks[bi]._appendixId === detail.appendixId) || (!detail.appendixId && bi === detail.blockIndex))){
+                    start = bi;
+                    break;
+                  }
+                }
+                if(start < 0 && detail.blockIndex >= 0 && blocks[detail.blockIndex] && blocks[detail.blockIndex]._isAppendixHeading) start = detail.blockIndex;
+                if(start >= 0){
+                  var end = start + 1;
+                  while(end < blocks.length && !(blocks[end] && blocks[end]._isAppendixHeading)) end++;
+                  blocks.splice(start, end - start);
+                  var appendixIndex = 0;
+                  var currentAppendixId = '';
+                  for(var ri = 0; ri < blocks.length; ri++){
+                    var block = blocks[ri];
+                    if(!block) continue;
+                    if(block._isAppendixHeading){
+                      appendixIndex++;
+                      currentAppendixId = 'appendix-' + appendixIndex;
+                      block._appendixId = currentAppendixId;
+                      block.runs = [{ text: 'EK-' + appendixIndex, bold: true }];
+                    }else if(block._isAppendixEntry || block._appendixId){
+                      block._appendixId = currentAppendixId || block._appendixId || 'appendix-' + Math.max(1, appendixIndex || 1);
+                    }
+                  }
+                  activeEditor._docModel.replace(blocks);
+                  if(typeof activeEditor._reflow === 'function') activeEditor._reflow();
+                  if(typeof activeEditor.emit === 'function') activeEditor.emit('update');
+                  var state = window.S || {};
+                  var docs = Array.isArray(state.docs) ? state.docs : [];
+                  var doc = docs.find(function(item){ return item && item.id === state.curDoc; }) || docs[0] || null;
+                  if(doc && String(doc.appendicesHTML || '').trim()){
+                    try{
+                      var div = document.createElement('div');
+                      div.innerHTML = String(doc.appendicesHTML || '');
+                      var target = detail.appendixId ? div.querySelector('[data-appendix-id="' + String(detail.appendixId).replace(/"/g, '') + '"]') : null;
+                      if(!target){
+                        var appendixBlocks = div.querySelectorAll('.appendix-block');
+                        var n = parseInt(String(detail.appendixId || '').replace(/\D+/g, ''), 10);
+                        if(n && appendixBlocks[n - 1]) target = appendixBlocks[n - 1];
+                      }
+                      if(target && target.parentNode) target.parentNode.removeChild(target);
+                      var remaining = Array.prototype.slice.call(div.querySelectorAll('.appendix-block'));
+                      remaining.forEach(function(blockEl, idx){
+                        var next = idx + 1;
+                        blockEl.setAttribute('data-appendix-id', 'appendix-' + next);
+                        var heading = blockEl.querySelector('h1.appendix-title') || blockEl.querySelector('h1');
+                        if(heading) heading.textContent = 'EK-' + next;
+                      });
+                      doc.appendicesHTML = div.innerHTML;
+                    }catch(_htmlDeleteError){}
+                  }
+                  if(typeof window.save === 'function') window.save();
+                  handled = true;
+                }
+              }
+            }catch(_directDeleteError){}
+            if(handled) return;
+            try{
+              document.dispatchEvent(new CustomEvent('aq-delete-appendix', { bubbles: true, detail: detail }));
+              container.dispatchEvent(new CustomEvent('aq-delete-appendix', { bubbles: true, detail: detail }));
+            }catch(_e){}
+          });
+          lineEl.appendChild(delBtn);
         }
         pageEl.appendChild(lineEl);
       }

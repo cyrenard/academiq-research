@@ -88,6 +88,39 @@
     return state.schema.marks[name] || null;
   }
 
+  function isAQEngineEditor(editor){
+    return !!(editor && editor._aqEngine && editor._docModel && typeof editor._docModel.get === 'function');
+  }
+
+  function collectAQTrackRanges(editor, markName){
+    if(!isAQEngineEditor(editor)) return [];
+    var flag = markName === 'trackDelete' ? 'trackDelete' : 'trackInsert';
+    var model = editor._docModel.get() || {};
+    var blocks = Array.isArray(model.blocks) ? model.blocks : [];
+    var ranges = [];
+    var cursor = 0;
+    blocks.forEach(function(block, blockIndex){
+      var runs = Array.isArray(block && block.runs) ? block.runs : [];
+      runs.forEach(function(run){
+        var text = String(run && run.text || '');
+        var len = text.length;
+        if(run && run[flag] && len > 0){
+          var from = cursor;
+          var to = cursor + len;
+          var last = ranges[ranges.length - 1];
+          if(last && from <= last.to){
+            last.to = Math.max(last.to, to);
+          }else{
+            ranges.push({ from: from, to: to });
+          }
+        }
+        cursor += len;
+      });
+      if(blockIndex < blocks.length - 1) cursor += 1;
+    });
+    return ranges;
+  }
+
   function collectMarkRanges(state, markName){
     var markType = getTrackMarkType(state, markName);
     if(!markType || !state || !state.doc || typeof state.doc.nodesBetween !== 'function') return [];
@@ -118,6 +151,20 @@
   }
 
   function acceptTrackChanges(editor){
+    if(isAQEngineEditor(editor)){
+      var aqDeleteRanges = collectAQTrackRanges(editor, 'trackDelete');
+      var aqInsertRanges = collectAQTrackRanges(editor, 'trackInsert');
+      if(!aqDeleteRanges.length && !aqInsertRanges.length) return false;
+      aqDeleteRanges.slice().sort(function(a, b){ return b.from - a.from; }).forEach(function(range){
+        editor._docModel.deleteRange(range.from, range.to);
+      });
+      aqInsertRanges.forEach(function(range){
+        editor._docModel.applyMark(range.from, range.to, 'trackInsert', false);
+      });
+      if(typeof editor._reflow === 'function') editor._reflow();
+      if(typeof editor.emit === 'function') editor.emit('update');
+      return true;
+    }
     if(!editor || !editor.state || !editor.view || typeof editor.view.dispatch !== 'function') return false;
     var state = editor.state;
     var deleteMark = getTrackMarkType(state, 'trackDelete');
@@ -149,6 +196,20 @@
   }
 
   function rejectTrackChanges(editor){
+    if(isAQEngineEditor(editor)){
+      var aqInsertRanges = collectAQTrackRanges(editor, 'trackInsert');
+      var aqDeleteRanges = collectAQTrackRanges(editor, 'trackDelete');
+      if(!aqDeleteRanges.length && !aqInsertRanges.length) return false;
+      aqInsertRanges.slice().sort(function(a, b){ return b.from - a.from; }).forEach(function(range){
+        editor._docModel.deleteRange(range.from, range.to);
+      });
+      aqDeleteRanges.forEach(function(range){
+        editor._docModel.applyMark(range.from, range.to, 'trackDelete', false);
+      });
+      if(typeof editor._reflow === 'function') editor._reflow();
+      if(typeof editor.emit === 'function') editor.emit('update');
+      return true;
+    }
     if(!editor || !editor.state || !editor.view || typeof editor.view.dispatch !== 'function') return false;
     var state = editor.state;
     var deleteMark = getTrackMarkType(state, 'trackDelete');
@@ -181,7 +242,29 @@
 
   function summarizeTrackChanges(editor){
     if(!editor || !editor.state){
+      if(isAQEngineEditor(editor)){
+        var aqInserts = collectAQTrackRanges(editor, 'trackInsert');
+        var aqDeletes = collectAQTrackRanges(editor, 'trackDelete');
+        function aqSum(ranges){
+          return ranges.reduce(function(total, range){ return total + Math.max(0, range.to - range.from); }, 0);
+        }
+        return { insertCount:aqInserts.length, deleteCount:aqDeletes.length, total:aqInserts.length + aqDeletes.length, insertChars:aqSum(aqInserts), deleteChars:aqSum(aqDeletes) };
+      }
       return { insertCount:0, deleteCount:0, total:0, insertChars:0, deleteChars:0 };
+    }
+    if(isAQEngineEditor(editor)){
+      var aqInsertRanges = collectAQTrackRanges(editor, 'trackInsert');
+      var aqDeleteRanges = collectAQTrackRanges(editor, 'trackDelete');
+      function sumAQChars(ranges){
+        return ranges.reduce(function(total, range){ return total + Math.max(0, range.to - range.from); }, 0);
+      }
+      return {
+        insertCount: aqInsertRanges.length,
+        deleteCount: aqDeleteRanges.length,
+        total: aqInsertRanges.length + aqDeleteRanges.length,
+        insertChars: sumAQChars(aqInsertRanges),
+        deleteChars: sumAQChars(aqDeleteRanges)
+      };
     }
     var insertRanges = collectMarkRanges(editor.state, 'trackInsert');
     var deleteRanges = collectMarkRanges(editor.state, 'trackDelete');
@@ -204,12 +287,28 @@
   }
 
   function collectTrackChangeRanges(state){
+    if(state && state._aqEditor) return collectAQTrackChangeRanges(state._aqEditor);
     if(!state) return [];
     var ranges = [];
     collectMarkRanges(state, 'trackInsert').forEach(function(range){
       ranges.push({ from:range.from, to:range.to, kind:'insert' });
     });
     collectMarkRanges(state, 'trackDelete').forEach(function(range){
+      ranges.push({ from:range.from, to:range.to, kind:'delete' });
+    });
+    ranges.sort(function(a, b){
+      if(a.from === b.from) return a.to - b.to;
+      return a.from - b.from;
+    });
+    return ranges;
+  }
+
+  function collectAQTrackChangeRanges(editor){
+    var ranges = [];
+    collectAQTrackRanges(editor, 'trackInsert').forEach(function(range){
+      ranges.push({ from:range.from, to:range.to, kind:'insert' });
+    });
+    collectAQTrackRanges(editor, 'trackDelete').forEach(function(range){
       ranges.push({ from:range.from, to:range.to, kind:'delete' });
     });
     ranges.sort(function(a, b){
@@ -236,6 +335,17 @@
   }
 
   function focusTrackChange(editor, direction){
+    if(isAQEngineEditor(editor)){
+      var aqRanges = collectAQTrackChangeRanges(editor);
+      if(!aqRanges.length) return false;
+      var aqCursor = editor.state && editor.state.selection ? Number(editor.state.selection.from || 0) : 0;
+      var aqTarget = pickTrackRange(aqRanges, aqCursor, direction);
+      if(!aqTarget) return false;
+      if(editor.commands && typeof editor.commands.setTextSelection === 'function'){
+        editor.commands.setTextSelection({ from:aqTarget.from, to:aqTarget.to });
+      }
+      return true;
+    }
     if(!editor || !editor.state) return false;
     var ranges = collectTrackChangeRanges(editor.state);
     if(!ranges.length) return false;
@@ -261,6 +371,18 @@
   }
 
   function getSelectedTrackChange(editor){
+    if(isAQEngineEditor(editor)){
+      var aqSelection = editor.state && editor.state.selection ? editor.state.selection : { from:0, to:0 };
+      var aqFrom = Number(aqSelection.from || 0);
+      var aqTo = Number(aqSelection.to || aqFrom);
+      var aqRanges = collectAQTrackChangeRanges(editor);
+      for(var ai = 0; ai < aqRanges.length; ai++){
+        var aqRange = aqRanges[ai];
+        if(aqRange.from <= aqFrom && aqRange.to >= aqTo) return aqRange;
+        if(aqRange.from < aqTo && aqRange.to > aqFrom) return aqRange;
+      }
+      return null;
+    }
     if(!editor || !editor.state || !editor.state.selection) return null;
     var selection = editor.state.selection;
     var from = Number(selection.from || 0);
@@ -276,6 +398,25 @@
   }
 
   function applyTrackChangeDecision(editor, mode){
+    if(isAQEngineEditor(editor)){
+      var aqRange = getSelectedTrackChange(editor);
+      if(!aqRange) return false;
+      if(mode === 'accept'){
+        if(aqRange.kind === 'delete') editor._docModel.deleteRange(aqRange.from, aqRange.to);
+        else editor._docModel.applyMark(aqRange.from, aqRange.to, 'trackInsert', false);
+      }else if(mode === 'reject'){
+        if(aqRange.kind === 'insert') editor._docModel.deleteRange(aqRange.from, aqRange.to);
+        else editor._docModel.applyMark(aqRange.from, aqRange.to, 'trackDelete', false);
+      }else{
+        return false;
+      }
+      if(typeof editor._reflow === 'function') editor._reflow();
+      if(editor.commands && typeof editor.commands.setTextSelection === 'function'){
+        editor.commands.setTextSelection({ from:aqRange.from, to:aqRange.from });
+      }
+      if(typeof editor.emit === 'function') editor.emit('update');
+      return true;
+    }
     if(!editor || !editor.state || !editor.view || typeof editor.view.dispatch !== 'function') return false;
     var range = getSelectedTrackChange(editor);
     if(!range) return false;
@@ -835,6 +976,13 @@
   }
 
   function applyIndent(editor, outdent){
+    if(editor && editor._aqEngine && editor.commands){
+      var aqMethod = outdent ? 'outdent' : 'indent';
+      if(typeof editor.commands[aqMethod] === 'function'){
+        editor.commands[aqMethod]();
+        return true;
+      }
+    }
     if(isListActive(editor)){
       return runChain(editor, function(chain){
         var method = outdent ? 'liftListItem' : 'sinkListItem';
@@ -859,6 +1007,33 @@
     });
   }
 
+  function insertBibliographySection(editor){
+    if(editor && editor._aqEngine){
+      var api = (typeof window !== 'undefined') ? window.AQBibliographyState : null;
+      if(api && typeof api.ensureAQEngineBibliographySection === 'function'){
+        var handled = api.ensureAQEngineBibliographySection(editor);
+        if(handled){
+          if(editor.commands && typeof editor.commands.focus === 'function') editor.commands.focus('end');
+          if(typeof window !== 'undefined'){
+            setTimeout(function(){
+              if(typeof window.updateRefSection === 'function') window.updateRefSection(true);
+              else if(typeof window.scheduleRefSectionSync === 'function') window.scheduleRefSectionSync();
+            }, 0);
+          }
+          return true;
+        }
+      }
+    }
+    if(!editor || !editor.chain) return false;
+    var chain = editor.chain().focus();
+    // Move to end of document if possible, or just insert at current position
+    // For automatic bibliography, we usually want it at the end.
+    // However, Tiptap doesn't have a simple 'move to end' in chain that is cross-version stable,
+    // so we'll just insert it.
+    chain.insertContent('<h1 class="aq-bib-heading">Kaynakça</h1><p class="refe"><br></p>');
+    return !!chain.run();
+  }
+
   function applyCommand(editor, cmd, val){
     if(cmd === 'toggleTrackChanges'){
       setTrackChangesEnabled(val, { source:'editor-command' });
@@ -876,7 +1051,7 @@
         else if(val === 'h3') applyHeadingStyleAttrs(editor.chain().focus().toggleHeading({ level:3 }), 3).run();
         else if(val === 'h4') applyHeadingStyleAttrs(editor.chain().focus().toggleHeading({ level:4 }), 4).run();
         else if(val === 'h5') applyHeadingStyleAttrs(editor.chain().focus().toggleHeading({ level:5 }), 5).run();
-        else if(val === 'p') editor.chain().focus().setParagraph().run();
+        else if(val === 'p') return applyParagraphStyle(editor, 'normal');
         else return false;
         return true;
       case 'setParagraphStyle':
@@ -904,6 +1079,7 @@
       case 'outdent': return applyIndent(editor, true);
       case 'applyMultiLevelList': return applyMultiLevelListTemplate(editor, val);
       case 'insertPageBreak': return insertPageBreak(editor);
+      case 'insertBibliographySection': return insertBibliographySection(editor);
       case 'acceptTrackChanges': return acceptTrackChanges(editor);
       case 'rejectTrackChanges': return rejectTrackChanges(editor);
       case 'focusNextTrackChange': return focusTrackChange(editor, 1);
@@ -1268,6 +1444,7 @@
     execEditorCommand: execEditorCommand,
     runEditorCommand: runEditorCommand,
     applyCommand: applyCommand,
+    insertBibliographySection: insertBibliographySection,
     execFontSize: execFontSize,
     applyFontSize: applyFontSize,
     applyFontSizeDom: applyFontSizeDom,

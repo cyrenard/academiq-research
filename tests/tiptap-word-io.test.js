@@ -10,6 +10,7 @@ test('tiptap word io exports import and export helpers', () => {
   assert.equal(typeof io.normalizeWordHtml, 'function');
   assert.equal(typeof io.normalizeImportHTML, 'function');
   assert.equal(typeof io.applyImportedHTML, 'function');
+  assert.equal(typeof io.applyAQEngineImportedHTML, 'function');
   assert.equal(typeof io.buildPrintablePageClone, 'function');
   assert.equal(typeof io.buildPDFExportOptions, 'function');
 });
@@ -55,6 +56,52 @@ test('normalizeImportHTML strips dangerous tags from html input', () => {
   assert.equal(cleaned.includes('<script'), false);
   assert.equal(cleaned.includes('<iframe'), false);
   assert.match(cleaned, /<p>A<\/p>/);
+});
+
+test('normalizeWordHtml repairs missing spaces between adjacent Word inline runs', () => {
+  const html = io.normalizeWordHtml(
+    '<p><span>Teknolojinin gelisimiyle</span><span>birlikte dijitallesme</span>, ' +
+    '<span>platformlar araciligiyla</span><span>kullanilan bir unsur</span> olarak kalir.</p>'
+  );
+  const text = html.replace(/<[^>]+>/g, '');
+  assert.match(text, /gelisimiyle\s+birlikte/);
+  assert.match(text, /araciligiyla\s+kullanilan/);
+  assert.equal(/gelisimiylebirlikte|araciligiylakullanilan/.test(text), false);
+});
+
+test('normalizeWordHtml repairs Turkish academic prose joined by Word import', () => {
+  const html = io.normalizeWordHtml(
+    '<p>Teknolojinin gelişimiylebirlikte dijitalleşme, tüm alanlarda kendini gösteren önemli bir olgu halinegelmiştir. ' +
+    'Dijitalleşmenin yaygınlaşmasıyla birlikte, dijital teknolojilerinyalnızca cihaz veya platformlar aracılığıyla kullanılan bir unsur olmaktan çıkıp,öğrenme, iletişim ve bilgi üretimi gibi çeşitli alanlarda da aktif bir şekildekullanılmaya başladığı görülmektedir.</p>' +
+    '<p>Bu bağlamda dijitalleşmehayatımızın her alanına giren ve bireyler üzerinde bilişsel izler bırakan birkavram olarak ortaya konmaktadır. Bu durum insanbilişinin sadece içsel unsurlarla değil teknoloji gibi dışsal unsurlarla daetkileşim içerisine girdiğini göstermektedir.</p>'
+  );
+  const text = html.replace(/<[^>]+>/g, ' ');
+  assert.match(text, /gelişimiyle birlikte/);
+  assert.match(text, /haline gelmiştir/);
+  assert.match(text, /teknolojilerin yalnızca/);
+  assert.match(text, /çıkıp, öğrenme/);
+  assert.match(text, /şekilde kullanılmaya/);
+  assert.match(text, /dijitalleşme hayatımızın/);
+  assert.match(text, /bir kavram/);
+  assert.match(text, /insan bilişinin/);
+  assert.match(text, /da etkileşim/);
+});
+
+test('normalizeWordHtml repairs chained Turkish academic joins', () => {
+  const html = io.normalizeWordHtml(
+    '<p>Dijitalleşmenin dikkat bellek ve problem çözme üzerindeçeşitliilişkileribulunabilmektedir.</p>'
+  );
+  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  assert.match(text, /üzerinde çeşitli ilişkileri bulunabilmektedir/);
+});
+
+test('repairWordImportHTML repairs zero-width damaged Turkish joins from saved documents', () => {
+  const html = io.repairWordImportHTML(
+    '<p>Dijitalleşmenin dikkat, bellek ve problem çözme üzerinde çeşitli \u200b leri bulunabilmektedir.</p>'
+  );
+  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  assert.match(text, /üzerinde çeşitli ilişkileri bulunabilmektedir/);
+  assert.equal(/\u200b/.test(text), false);
 });
 
 test('normalizeWordHtml upgrades common Word heading classes', () => {
@@ -174,6 +221,74 @@ test('applyImportedHTML normalizes mammoth/native Word html before setting edito
   assert.equal(ok, true);
   assert.match(received, /Ana metin/);
   assert.equal(/Sekil kalintisi/i.test(received), false);
+});
+
+test('applyImportedHTML routes DOCX html into AQ Engine document blocks', async () => {
+  const previousCompat = globalThis.AQEngineCompat;
+  const blocks = [
+    { type: 'heading', level: 1, runs: [{ text: 'Giris' }] },
+    { type: 'paragraph', runs: [{ text: 'Ana metin' }] },
+    { type: 'heading', level: 1, runs: [{ text: 'Kaynakca' }], _isBibHeading: true },
+    { type: 'paragraph', runs: [{ text: 'Brown, A. L. (1987). Metacognition.' }], _isBibEntry: true }
+  ];
+  const calls = [];
+  globalThis.AQEngineCompat = {
+    htmlToBlocks(html) {
+      calls.push(html);
+      return blocks;
+    }
+  };
+  try {
+    let replaced = null;
+    let reflowed = false;
+    let emitted = '';
+    let focused = '';
+    let legacySetContent = false;
+    let afterImport = false;
+    const editor = {
+      _aqEngine: true,
+      _docModel: {
+        replace(nextBlocks) {
+          replaced = nextBlocks;
+        }
+      },
+      _reflow() {
+        reflowed = true;
+      },
+      emit(name) {
+        emitted = name;
+      },
+      commands: {
+        setContent() {
+          legacySetContent = true;
+        },
+        focus(where) {
+          focused = where;
+        }
+      }
+    };
+
+    const ok = io.applyImportedHTML({
+      editor,
+      html: '<p>Giris</p><p>Kaynakca</p><p>Brown, A. L. (1987). Metacognition.</p>',
+      cleanPastedHTML: html => html,
+      afterEditorImport() {
+        afterImport = true;
+      }
+    });
+
+    assert.equal(ok, true);
+    assert.equal(calls.length, 1);
+    assert.equal(replaced, blocks);
+    assert.equal(reflowed, true);
+    assert.equal(emitted, 'update');
+    assert.equal(focused, 'end');
+    assert.equal(legacySetContent, false);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(afterImport, true);
+  } finally {
+    globalThis.AQEngineCompat = previousCompat;
+  }
 });
 
 test('normalizeWordHtml removes Word CSS when it leaked as visible text', () => {

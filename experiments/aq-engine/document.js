@@ -21,11 +21,82 @@
   root.AQEngineDocument = factory();
 })(typeof window !== 'undefined' ? window : globalThis, function(){
 
+  function repairJoinedWordImportText(text){
+    var out = String(text || '')
+      .replace(/\u00ad/g, '')
+      .replace(/[\u200b-\u200d\ufeff]/g, ' ');
+    if(!out) return out;
+    var nextWords = [
+      'birlikte','gelmiştir','görülmektedir','gostermektedir','göstermektedir',
+      'yalnızca','yalnizca','öğrenme','ogrenme','iletişim','iletisim','bilgi',
+      'üretimi','uretimi','gibi','çeşitli','cesitli','alanlarda','aktif',
+      'şekilde','sekilde','kullanılmaya','kullanilmaya','başladığı','basladigi',
+      'hayatımızın','hayatimizin','alanına','alanina','giren','bireyler',
+      'üzerinde','uzerinde','bilişsel','bilissel','izler','bırakan','birakan',
+      'kavram','olarak','ortaya','konmaktadır','konmaktadir','durum','insan',
+      'bilişinin','bilisinin','sadece','içsel','icsel','unsurlarla','değil',
+      'degil','teknoloji','dışsal','dissal','etkileşim','etkilesim','içerisine',
+      'icerisine','girdiğini','girdigini','sayesinde','yoğun','yogun','akışı',
+      'akisi','yükünü','yukunu','artırabilmekte','artirabilmekte','düzenleme',
+      'duzenleme','yeniden','organize','etme','becerilerinin','önemini','onemini'
+    ];
+    nextWords.forEach(function(word){
+      var escaped = String(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var re = new RegExp('([0-9A-Za-zÇĞİÖŞÜçğıöşüÂâÎîÛûÄäËëÏïÖöÜüÀ-ÖØ-öø-ÿ])(' + escaped + ')(?=\\b)', 'g');
+      out = out.replace(re, function(match, prev, next, offset, source){
+        var before = source.slice(Math.max(0, offset - 18), offset + 1).toLowerCase();
+        if(/\s$/.test(prev)) return match;
+        if(/^(da|de|ve|ile|ki|mi|mı|mu|mü)$/i.test(next)) return match;
+        if(/(?:https?|doi|www)\.?$/i.test(before)) return match;
+        return prev + ' ' + next;
+      });
+    });
+    var letterClass = '0-9A-Za-z\\u00c0-\\u024f\\u1e00-\\u1effÇĞİÖŞÜçğıöşü';
+    var chainWords = nextWords.concat([
+      '\u00e7e\u015fitli','cesitli','ili\u015fkileri','iliskileri','ili\u015fkiler','iliskiler',
+      'bulunabilmektedir','bulunabilmekte','bulunabilir','dijitalle\u015fmenin','dijitallesmenin',
+      'yayg\u0131nla\u015fmas\u0131yla','yayginlasmasiyla','teknolojilerin','platformlar',
+      'arac\u0131l\u0131\u011f\u0131yla','araciligiyla','kullan\u0131lan','kullanilan',
+      'olmaktan','\u00e7\u0131k\u0131p','cikip','ba\u011flamda','baglamda',
+      'bireylerin','becerileri','art\u0131rmaktad\u0131r','artirmaktadir',
+      'd\u00fczenlenmesi','duzenlenmesi','ili\u015fkiler','iliskiler'
+    ]);
+    chainWords.sort(function(a,b){ return String(b).length - String(a).length; });
+    chainWords.forEach(function(word){
+      if(String(word).length < 5) return;
+      var escaped = String(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var re = new RegExp('([' + letterClass + '])(' + escaped + ')(?=[' + letterClass + '])', 'gi');
+      out = out.replace(re, function(match, prev, next, offset, source){
+        var before = source.slice(Math.max(0, offset - 18), offset + 1).toLowerCase();
+        if(/(?:https?|doi|www)\.?$/i.test(before)) return match;
+        return prev + ' ' + next;
+      });
+    });
+    chainWords.forEach(function(word){
+      if(String(word).length < 5) return;
+      var escaped = String(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var re = new RegExp('([' + letterClass + '])(' + escaped + ')(?=$|[^' + letterClass + '])', 'gi');
+      out = out.replace(re, function(match, prev, next, offset, source){
+        var before = source.slice(Math.max(0, offset - 18), offset + 1).toLowerCase();
+        if(/(?:https?|doi|www)\.?$/i.test(before)) return match;
+        return prev + ' ' + next;
+      });
+    });
+    out = out
+      .replace(/(^|\s)(\u00e7e\u015fitli|cesitli)\s+leri\s+(bulunabilmektedir|bulunabilmekte|bulunabilir)\b/gi, '$1$2 ili\u015fkileri $3');
+    return out
+      .replace(/,([A-Za-zÇĞİÖŞÜçğıöşüÂâÎîÛûÄäËëÏïÖöÜüÀ-ÖØ-öø-ÿ])/g, ', $1')
+      .replace(/;([A-Za-zÇĞİÖŞÜçğıöşüÂâÎîÛûÄäËëÏïÖöÜüÀ-ÖØ-öø-ÿ])/g, '; $1')
+      .replace(/\.([A-ZÇĞİÖŞÜ])/g, '. $1');
+  }
+
   function cloneRun(r){
     return Object.assign({}, r, {
+      text: repairJoinedWordImportText(r && r.text),
       // Deep-copy the only nested known objects
       citation: r.citation ? Object.assign({}, r.citation) : null,
       footnote: r.footnote ? Object.assign({}, r.footnote) : null,
+      crossRef: r.crossRef ? Object.assign({}, r.crossRef) : null,
       font:     r.font     ? Object.assign({}, r.font)     : null
     });
   }
@@ -89,10 +160,124 @@
     return n;
   }
 
+  function getPlainTextFromDoc(doc){
+    var out = '';
+    for(var i = 0; i < doc.blocks.length; i++){
+      var runs = (doc.blocks[i] && doc.blocks[i].runs) || [];
+      for(var j = 0; j < runs.length; j++) out += String(runs[j].text || '');
+      if(i < doc.blocks.length - 1) out += '\n';
+    }
+    return out;
+  }
+
+  function normalizeCitationLikeText(text){
+    return String(text || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function looksLikeCitationText(text){
+    var t = normalizeCitationLikeText(text);
+    return /^\([^)]+,\s*(?:\d{4}|t\.y\.)\)$/.test(t) || /^\([^)]+,\s*(?:\d{4}|t\.y\.)\)\s*$/.test(String(text || ''));
+  }
+
+  function isDuplicateCitationInsert(doc, off, text){
+    if(!looksLikeCitationText(text)) return false;
+    var normalizedInsert = normalizeCitationLikeText(text);
+    if(!normalizedInsert) return false;
+    var loc = locate(doc, off);
+    var block = doc.blocks[loc.blockIdx];
+    if(block){
+      var runLoc = locateRun(block, loc.intra);
+      var runs = block.runs || [];
+      var currentRun = runs[runLoc.runIdx];
+      if(currentRun && currentRun.citation && normalizeCitationLikeText(currentRun.text) === normalizedInsert){
+        return true;
+      }
+    }
+    var plain = getPlainTextFromDoc(doc);
+    var before = normalizeCitationLikeText(plain.slice(Math.max(0, off - normalizedInsert.length - 8), off));
+    return before.endsWith(normalizedInsert);
+  }
+
+  function collapseDuplicateCitationTextInRun(run){
+    var text = String((run && run.text) || '');
+    if(!text || text.indexOf(')') < 0) return run;
+    var nextText = text.replace(/(\([^)]+,\s*(?:\d{4}|t\.y\.)\))(?:\s*\1)+/g, '$1');
+    if(nextText === text) return run;
+    var out = cloneRun(run);
+    out.text = nextText;
+    return out;
+  }
+
+  function runCitationKey(run){
+    var key = normalizeCitationLikeText(run && run.text);
+    return looksLikeCitationText(key) ? key : '';
+  }
+
+  function appendRun(out, run){
+    if(!run) return;
+    if(!String(run.text || '').length) return;
+    out.push(run);
+  }
+
+  function collapseDuplicateCitationRuns(runs){
+    var out = [];
+    var lastCitationKey = '';
+    var pendingSpace = null;
+    for(var i = 0; i < runs.length; i++){
+      var cur = runs[i];
+      if(!cur) continue;
+      var text = String(cur.text || '');
+      var key = runCitationKey(cur);
+      var isSpace = !!text && /^\s+$/.test(text);
+      if(isSpace && lastCitationKey){
+        pendingSpace = cur;
+        continue;
+      }
+      if(key && lastCitationKey && key === lastCitationKey){
+        pendingSpace = null;
+        continue;
+      }
+      if(pendingSpace){
+        appendRun(out, pendingSpace);
+        pendingSpace = null;
+      }
+      appendRun(out, cur);
+      if(key) lastCitationKey = key;
+      else if(!isSpace) lastCitationKey = '';
+    }
+    if(pendingSpace) appendRun(out, pendingSpace);
+    return out;
+  }
+
+  function collapseDuplicateCitationText(doc){
+    var d = cloneDoc(doc);
+    for(var bi = 0; bi < d.blocks.length; bi++){
+      var runs = d.blocks[bi].runs || [];
+      for(var ri = 0; ri < runs.length; ri++){
+        runs[ri] = collapseDuplicateCitationTextInRun(runs[ri]);
+      }
+      var out = collapseDuplicateCitationRuns(runs);
+      d.blocks[bi].runs = mergeAdjacent(out.length ? out : [{ text:'' }]);
+    }
+    return d;
+  }
+
   // Insert plain text at offset. The new text inherits the format of the run
   // immediately preceding the insertion point (Word-like behaviour).
   function insertText(doc, off, text){
     if(!text) return doc;
+    try{
+      if(typeof console !== 'undefined' && (String(text).length > 1 || looksLikeCitationText(text))){
+        (typeof window!=='undefined'&&window.__aqCiteDiag)&&console.warn('[AQ-CITE-DIAG] ' + JSON.stringify({
+          t: Date.now(),
+          event: 'document.insertText',
+          off: off,
+          text: String(text),
+          citationLike: looksLikeCitationText(text)
+        }));
+      }
+    }catch(_diagErr){}
+    if(isDuplicateCitationInsert(doc, off, text)) return doc;
     var d = cloneDoc(doc);
     var loc = locate(d, off);
     var block = d.blocks[loc.blockIdx];
@@ -104,49 +289,81 @@
     }
     var run = runs[runLoc.runIdx];
     var t = String(run.text || '');
+    if(runLoc.intra === t.length && run && run.citation){
+      var next = runs[runLoc.runIdx + 1];
+      if(next && !next.citation){
+        next.text = text + String(next.text || '');
+      }else{
+        var plain = cloneRun(run);
+        plain.text = text;
+        delete plain.citation;
+        runs.splice(runLoc.runIdx + 1, 0, plain);
+      }
+      block.runs = mergeAdjacent(runs);
+      return d;
+    }
     run.text = t.slice(0, runLoc.intra) + text + t.slice(runLoc.intra);
     return d;
   }
 
+  // Block types that carry inline runs (paragraph, heading) can be merged
+  // with neighbors. Other types (image, table, hr) must stay as standalone
+  // blocks — merging their (empty) runs into a paragraph would silently
+  // drop the image/table.
+  function isInlineFlowBlock(b){
+    if(!b) return false;
+    if(!b.type || b.type === 'paragraph' || b.type === 'heading') return true;
+    return false;
+  }
+
   // Insert a list of blocks at offset. If offset is inside a block, that block
-  // is split and the new blocks are sandwiched in between.
+  // is split and the new blocks are sandwiched in between. Inline-flow blocks
+  // (paragraph/heading) merge their runs with the split block's halves; other
+  // blocks (image, table, hr) are inserted as standalone blocks.
   function insertBlocks(doc, off, newBlocks){
     if(!newBlocks || !newBlocks.length) return doc;
     var d = cloneDoc(doc);
     var loc = locate(d, off);
-    var block = d.blocks[loc.blockIdx];
-    
-    // Split current block at loc.intra
-    var leftRuns  = sliceRunsLeft(block.runs || [], loc.intra);
-    var rightRuns = sliceRunsRight(block.runs || [], loc.intra);
-    
-    var firstNew = cloneBlock(newBlocks[0]);
-    var lastNew  = cloneBlock(newBlocks[newBlocks.length - 1]);
-    
-    if(newBlocks.length === 1){
-      // Single block being inserted: merge its content into the current split block
-      block.runs = leftRuns.concat(firstNew.runs, rightRuns);
-      if(!block.runs.length) block.runs = [{ text: '' }];
-      return d;
+    var orig = d.blocks[loc.blockIdx];
+
+    var leftRuns  = sliceRunsLeft(orig.runs || [], loc.intra);
+    var rightRuns = sliceRunsRight(orig.runs || [], loc.intra);
+
+    var clones = newBlocks.map(cloneBlock);
+    var insertAt = loc.blockIdx + 1;
+
+    // Step 1: merge first new block into orig if it can flow inline.
+    var first = clones[0];
+    if(isInlineFlowBlock(first)){
+      orig.runs = leftRuns.concat(first.runs || []);
+      clones.shift();
+    } else {
+      // Standalone block — keep orig with leftRuns only.
+      orig.runs = leftRuns;
     }
-    
-    // Multiple blocks: 
-    // 1. First new block merges its content with the head of the split block
-    block.runs = leftRuns.concat(firstNew.runs);
-    if(!block.runs.length) block.runs = [{ text: '' }];
-    
-    // 2. Middle blocks (if any) are inserted as-is
-    var middle = newBlocks.slice(1, -1).map(cloneBlock);
-    
-    // 3. Last new block merges its content with the tail of the split block
-    lastNew.runs = lastNew.runs.concat(rightRuns);
-    if(!lastNew.runs.length) lastNew.runs = [{ text: '' }];
-    
-    var toInsert = middle.concat([lastNew]);
-    for(var i = 0; i < toInsert.length; i++){
-      d.blocks.splice(loc.blockIdx + 1 + i, 0, toInsert[i]);
+    if(!orig.runs.length) orig.runs = [{ text: '' }];
+
+    // Step 2: merge tail (rightRuns) into the right side.
+    if(clones.length === 0){
+      // First was merged; append rightRuns into orig directly.
+      orig.runs = orig.runs.concat(rightRuns);
+      if(!orig.runs.length) orig.runs = [{ text: '' }];
+    } else {
+      var last = clones[clones.length - 1];
+      if(isInlineFlowBlock(last)){
+        last.runs = (last.runs || []).concat(rightRuns);
+        if(!last.runs.length) last.runs = [{ text: '' }];
+      } else if(rightRuns.length){
+        // Standalone last block — push rightRuns as a fresh paragraph.
+        clones.push({ runs: rightRuns });
+      }
     }
-    
+
+    // Step 3: splice the remaining clones after orig.
+    for(var i = 0; i < clones.length; i++){
+      d.blocks.splice(insertAt + i, 0, clones[i]);
+    }
+
     return d;
   }
 
@@ -235,6 +452,9 @@
       newBlock.type = 'paragraph';
       newBlock.font = null;
       delete newBlock.level;
+      delete newBlock.runInHeading;
+      delete newBlock.firstLineIndentPx;
+      delete newBlock.align;
       newBlock.spaceAfterPx = 0;
     }
     d.blocks.splice(loc.blockIdx + 1, 0, newBlock);
@@ -296,11 +516,12 @@
     return out;
   }
   function runsHaveSameFormat(a, b){
-    var keys = ['bold','italic','underline','strike','color','highlight','baselineShift','fontScale','href'];
+    var keys = ['bold','italic','underline','strike','color','highlight','baselineShift','fontScale','href','trackInsert','trackDelete'];
     for(var i = 0; i < keys.length; i++) if(!!a[keys[i]] !== !!b[keys[i]] && a[keys[i]] !== b[keys[i]]) return false;
     return JSON.stringify(a.font || null) === JSON.stringify(b.font || null) &&
            JSON.stringify(a.citation || null) === JSON.stringify(b.citation || null) &&
-           JSON.stringify(a.footnote || null) === JSON.stringify(b.footnote || null);
+           JSON.stringify(a.footnote || null) === JSON.stringify(b.footnote || null) &&
+           JSON.stringify(a.crossRef || null) === JSON.stringify(b.crossRef || null);
   }
   // Apply a font property (sizePt, family) across a range. Works like
   // applyMark but sets run.font.{prop} instead of run.{mark}.
@@ -389,20 +610,43 @@
 
   // Block type — paragraph / heading. setBlockType derives font + spacing
   // from heading level so the engine doesn't need type-specific knowledge.
-  var HEADING_SIZES_PT = { 1: 18, 2: 16, 3: 14, 4: 13, 5: 12, 6: 12 };
+  function normalizeHeadingLevel(level){
+    var n = parseInt(level, 10) || 1;
+    return Math.max(1, Math.min(5, n));
+  }
+
+  function uppercaseAPAHeadingRuns(runs){
+    if(!Array.isArray(runs)) return;
+    runs.forEach(function(run){
+      if(!run || typeof run.text !== 'string') return;
+      try{ run.text = run.text.toLocaleUpperCase('tr-TR'); }
+      catch(_e){ run.text = run.text.toUpperCase(); }
+    });
+  }
+
+  function applyAPA7HeadingStyle(block, level){
+    level = normalizeHeadingLevel(level);
+    block.type = 'heading';
+    block.level = level;
+    if(level === 1) uppercaseAPAHeadingRuns(block.runs);
+    block.font = { sizePt: 12, weight: '700', style: (level === 3 || level === 5) ? 'italic' : 'normal' };
+    block.align = level === 1 ? 'center' : 'left';
+    block.firstLineIndentPx = (level === 4 || level === 5) ? 36 : 0;
+    block.spaceAfterPx = 0;
+    block.runInHeading = level === 4 || level === 5;
+    return block;
+  }
+
   function setBlockType(doc, blockIdx, type, attrs){
     if(blockIdx < 0 || blockIdx >= doc.blocks.length) return doc;
     var d = cloneDoc(doc);
     var b = d.blocks[blockIdx];
     if(type === 'heading'){
-      var level = Math.max(1, Math.min(6, (attrs && attrs.level) || 1));
-      b.type = 'heading';
-      b.level = level;
-      b.font = { sizePt: HEADING_SIZES_PT[level], weight: '700' };
-      b.spaceAfterPx = level <= 2 ? 12 : 8;
+      applyAPA7HeadingStyle(b, attrs && attrs.level);
     }else{
       b.type = 'paragraph';
       delete b.level;
+      delete b.runInHeading;
       b.font = null;
       b.spaceAfterPx = 0;
     }
@@ -428,7 +672,9 @@
     var d = cloneDoc(doc);
     var b = d.blocks[blockIdx];
     if(listType === 'bullet' || listType === 'ordered'){
+      var prevStyle = b.list && b.list.style;
       b.list = { type: listType, level: Math.max(0, parseInt(level || 0, 10)) };
+      if(prevStyle) b.list.style = prevStyle;
     }else{
       delete b.list;
     }
@@ -440,6 +686,18 @@
     for(var i = range.from; i <= range.to; i++) d = setListType(d, i, listType, level);
     return d;
   }
+  function setListStyleForRange(doc, from, to, style){
+    var range = blocksInRange(doc, from, to);
+    var d = cloneDoc(doc);
+    for(var i = range.from; i <= range.to; i++){
+      var b = d.blocks[i];
+      if(b && b.list){
+        if(style){ b.list.style = style; }
+        else { delete b.list.style; }
+      }
+    }
+    return d;
+  }
   function changeListLevel(doc, blockIdx, delta){
     if(blockIdx < 0 || blockIdx >= doc.blocks.length) return doc;
     var b = doc.blocks[blockIdx];
@@ -447,6 +705,23 @@
     var newLevel = Math.max(0, Math.min(5, b.list.level + delta));
     if(newLevel === b.list.level) return doc;
     return setListType(doc, blockIdx, b.list.type, newLevel);
+  }
+
+  function setLeftIndentForRange(doc, from, to, deltaPx){
+    var range = blocksInRange(doc, from, to);
+    var d = cloneDoc(doc);
+    for(var i = range.from; i <= range.to; i++){
+      var b = d.blocks[i];
+      if(!b || b.type === 'table' || b.type === 'image' || b.rule) continue;
+      var current = Number(b.leftIndentPx || 0);
+      var next = Math.max(0, Math.min(216, current + deltaPx));
+      if(next > 0) b.leftIndentPx = next;
+      else delete b.leftIndentPx;
+      if(!b.list && (!b.type || b.type === 'paragraph')){
+        b.firstLineIndentPx = next > 0 ? 0 : 36;
+      }
+    }
+    return d;
   }
 
   // ── Plain-text view & word boundaries ────────────────────────────────────
@@ -473,20 +748,26 @@
 
   // Public factory
   function createDocument(initialBlocks){
-    var doc = { blocks: (initialBlocks && initialBlocks.length) ? initialBlocks.map(cloneBlock) : [{ type:'paragraph', runs:[{ text:'' }] }] };
+    var doc = collapseDuplicateCitationText({
+      blocks: (initialBlocks && initialBlocks.length) ? initialBlocks.map(cloneBlock) : [{ type:'paragraph', runs:[{ text:'' }] }]
+    });
     var history = [cloneDoc(doc)];
     var future  = [];
 
     function commit(next){
-      doc = next;
-      history.push(cloneDoc(next));
+      var cleaned = collapseDuplicateCitationText(next);
+      doc = cleaned;
+      history.push(cloneDoc(cleaned));
       if(history.length > 200) history.shift();
       future.length = 0;
     }
     return {
       get: function(){ return doc; },
       length: function(){ return flatLength(doc); },
-      replace: function(blocks){ commit({ blocks: blocks.map(cloneBlock) }); },
+      replace: function(blocks){
+        var nextBlocks = (Array.isArray(blocks) && blocks.length) ? blocks : [{ type:'paragraph', runs:[{ text:'' }] }];
+        commit({ blocks: nextBlocks.map(cloneBlock) });
+      },
       insertText: function(off, text){ commit(insertText(doc, off, text)); },
       insertBlocks: function(off, blocks){ commit(insertBlocks(doc, off, blocks)); },
       deleteRange: function(from, to){ commit(deleteRange(doc, from, to)); },
@@ -511,6 +792,7 @@
       getPlainText: function(){ return getPlainText(doc); },
       setListType:         function(blockIdx, type, level){ commit(setListType(doc, blockIdx, type, level)); },
       setListTypeForRange: function(from, to, type, level){ commit(setListTypeForRange(doc, from, to, type, level)); },
+      setListStyleForRange: function(from, to, style){ commit(setListStyleForRange(doc, from, to, style)); },
       setAlign: function(blockIdx, align){
         if(blockIdx < 0 || blockIdx >= doc.blocks.length) return;
         var d = cloneDoc(doc);
@@ -524,6 +806,7 @@
         commit(d);
       },
       changeListLevel:     function(blockIdx, delta){ commit(changeListLevel(doc, blockIdx, delta)); },
+      setLeftIndentForRange: function(from, to, deltaPx){ commit(setLeftIndentForRange(doc, from, to, deltaPx)); },
       blockTextLength:     function(blockIdx){ return blockTextLength(doc.blocks[blockIdx] || { runs: [] }); },
       locate: function(off){ return locate(doc, off); },
       undo: function(){

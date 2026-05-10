@@ -470,25 +470,22 @@
               ? view.state.doc.textBetween(Math.max(0, from - 128), from, '', '')
               : '';
             var combined = String(before || '') + String(text || '');
-            var match = combined.match(/\/r(?:\s*([^\n\r]*))?$/i);
+            var match = combined.match(/\/([rt])(?:\s*([^\n\r]*))?$/i);
             if(!match) return false;
             var insertedLength = String(text || '').length;
             var end = from + insertedLength;
             var start = Math.max(0, end - match[0].length);
-            var query = String(match[1] || '').trim();
+            var query = String(match[2] || '').trim();
+            var mode = (match[1] || 'r').toLowerCase();
             setTimeout(function(){
               try{
-                window.editorTrigRange = { from:start, to:end };
-                if(window.AQCitationRuntime && typeof window.AQCitationRuntime.openFromSlash === 'function'){
-                  window.AQCitationRuntime.openFromSlash(query);
-                  return;
-                }
-                if(typeof window.openTrig === 'function'){
-                  window.openTrig(query);
+                if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
+                  window.AQCitationRuntime.refreshFromEditor();
                   return;
                 }
                 if(typeof window.checkTrig === 'function'){
                   window.checkTrig();
+                  return;
                 }
               }catch(_e){}
             }, 0);

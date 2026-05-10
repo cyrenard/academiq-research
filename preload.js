@@ -116,6 +116,7 @@ function pickDownloadOptions(options) {
   if (Array.isArray(src.expectedAuthors)) out.expectedAuthors = src.expectedAuthors.map(item => asString(item, 256)).filter(Boolean).slice(0, 8);
   if (src.expectedYear != null) out.expectedYear = asString(src.expectedYear, 32);
   if (src.requireDoiEvidence != null) out.requireDoiEvidence = !!src.requireDoiEvidence;
+  if (src.allowUnverifiedPdf != null) out.allowUnverifiedPdf = !!src.allowUnverifiedPdf;
   const wsCtx = pickWsContext(src.ws);
   if (wsCtx) out.ws = wsCtx;
   return out;

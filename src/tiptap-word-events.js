@@ -99,7 +99,6 @@
     var host = getHost();
     var page = getPage();
     var scroll = getScroll();
-    console.log('[bindFocusEvents] host:', host, 'page:', page, 'scroll:', scroll);
     function getElementTarget(target){
       if(!target) return null;
       return target.nodeType === 3 ? target.parentElement : target;
@@ -113,34 +112,27 @@
       return target.closest ? !!target.closest('.ProseMirror,#aq-tiptap-content,#apaed') : false;
     }
     function focusEditorSurface(){
-      console.log('[focusEditorSurface] attempting focus');
       if(window.__aqEditorArchitectureV1 && window.AQEditorCore && typeof window.AQEditorCore.focus === 'function'){
-        console.log('[focusEditorSurface] using AQEditorCore.focus');
         window.AQEditorCore.focus(false);
       }
       if(window.AQTipTapWordSurface && typeof window.AQTipTapWordSurface.focus === 'function'){
-        console.log('[focusEditorSurface] using AQTipTapWordSurface.focus');
         window.AQTipTapWordSurface.focus({ toEnd:false });
       }
       if(typeof window.editor !== 'undefined' && window.editor){
         try{
           if(window.editor.chain && typeof window.editor.chain === 'function'){
-            console.log('[focusEditorSurface] using editor.chain().focus()');
             window.editor.chain().focus().run();
           }else if(window.editor.commands && typeof window.editor.commands.focus === 'function'){
-            console.log('[focusEditorSurface] using editor.commands.focus()');
             window.editor.commands.focus();
           }else if(typeof window.editor.focus === 'function'){
-            console.log('[focusEditorSurface] using editor.focus()');
             window.editor.focus();
           }
-        }catch(e){ console.log('[focusEditorSurface] editor method error:', e); }
+        }catch(_e){}
         try{
           if(window.editor.view && window.editor.view.dom && typeof window.editor.view.dom.focus === 'function'){
-            console.log('[focusEditorSurface] using editor.view.dom.focus()');
             window.editor.view.dom.focus({ preventScroll:true });
           }
-        }catch(e){ console.log('[focusEditorSurface] editor.view error:', e); }
+        }catch(_e){}
       }
     }
     if(host){
@@ -149,7 +141,6 @@
       });
       ['pointerdown','mousedown'].forEach(function(type){
         host.addEventListener(type, function(e){
-          console.log('[event:' + type + '] target:', e.target, 'shouldFocus:', shouldFocusTarget(e.target));
           if(!shouldFocusTarget(e.target)) return;
           setTimeout(focusEditorSurface, 0);
         });
@@ -563,7 +554,6 @@
     if(state.initialized) return true;
     state.initialized = true;
     window.__aqTipTapWordEventsV1 = true;
-    console.log('[AQTipTapWordEvents.init] starting event binding setup');
     bindSelectionChange();
     bindTriggerEvents();
     bindFocusEvents();
@@ -571,7 +561,6 @@
     bindContextMenu();
     bindReferenceSync();
     watchSurface();
-    console.log('[AQTipTapWordEvents.init] completed event binding setup');
     return true;
   }
 

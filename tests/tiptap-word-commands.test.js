@@ -233,6 +233,52 @@ test('acceptCurrentTrackChange and rejectCurrentTrackChange apply decisions by m
   ]);
 });
 
+test('AQ Engine track changes summarize, navigate, accept and reject model marks', () => {
+  let blocks = [{ runs:[
+    { text:'new', trackInsert:true },
+    { text:' ' },
+    { text:'old', trackDelete:true }
+  ] }];
+  const calls = [];
+  const editor = {
+    _aqEngine: true,
+    _docModel: {
+      get(){ return { blocks }; },
+      deleteRange(from, to){
+        const text = blocks[0].runs.map(run => run.text).join('');
+        blocks = [{ runs:[{ text:text.slice(0, from) + text.slice(to) }] }];
+        calls.push(['delete', from, to]);
+      },
+      applyMark(from, to, mark, value){
+        calls.push(['mark', from, to, mark, value]);
+        blocks[0].runs.forEach(run => {
+          if(run.text === 'new' && mark === 'trackInsert') run.trackInsert = !!value;
+          if(run.text === 'old' && mark === 'trackDelete') run.trackDelete = !!value;
+        });
+      }
+    },
+    _reflow(){ calls.push(['reflow']); },
+    emit(event){ calls.push(['emit', event]); },
+    commands: {
+      setTextSelection(range){ calls.push(['select', range]); }
+    },
+    get state(){ return { selection:{ from:0, to:0 } }; }
+  };
+
+  assert.deepEqual(commands.summarizeTrackChanges(editor), {
+    insertCount:1,
+    deleteCount:1,
+    total:2,
+    insertChars:3,
+    deleteChars:3
+  });
+  assert.equal(commands.focusTrackChange(editor, 1), true);
+  assert.deepEqual(calls[calls.length - 1], ['select', { from:4, to:7 }]);
+  assert.equal(commands.acceptTrackChanges(editor), true);
+  assert.ok(calls.some(call => call[0] === 'delete' && call[1] === 4 && call[2] === 7));
+  assert.ok(calls.some(call => call[0] === 'mark' && call[3] === 'trackInsert' && call[4] === false));
+});
+
 test('applyParagraphStyle and getActiveParagraphStyle keep style-first flow stable', () => {
   const calls = [];
   const editor = {

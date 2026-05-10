@@ -3,23 +3,20 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-test('canonical editor runtime modules load after stale embedded copies', () => {
+test('canonical editor runtime modules load from src/ as the single source of truth', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
   [
-    ['AQTipTapWordDocument = factory', 'tiptap-word-document.js'],
-    ['AQTipTapWordPaste = factory', 'tiptap-word-paste.js'],
-    ['AQTipTapWordIO = factory', 'tiptap-word-io.js'],
-    ['AQTipTapWordLayout = factory', 'tiptap-word-layout.js'],
-    ['AQEditorRuntime = factory', 'editor-runtime.js']
-  ].forEach(([embeddedMarker, moduleName]) => {
-    const embeddedIndex = html.indexOf(embeddedMarker);
-    const overrideIndex = html.lastIndexOf(embeddedMarker);
-    assert.notEqual(embeddedIndex, -1, embeddedMarker + ' embedded marker missing');
-    assert.notEqual(overrideIndex, embeddedIndex, moduleName + ' override missing');
-    assert.ok(
-      overrideIndex > embeddedIndex,
-      moduleName + ' must load after the embedded copy so packaged builds use the current module'
-    );
+    'tiptap-word-document.js',
+    'tiptap-word-paste.js',
+    'tiptap-word-io.js',
+    'tiptap-word-layout.js',
+    'editor-runtime.js'
+  ].forEach((moduleName) => {
+    const tag = `<script src="./src/${moduleName}"></script>`;
+    const firstIdx = html.indexOf(tag);
+    const lastIdx = html.lastIndexOf(tag);
+    assert.notEqual(firstIdx, -1, moduleName + ' src/ script tag missing');
+    assert.equal(firstIdx, lastIdx, moduleName + ' must be loaded via a single script tag (no inline duplicate)');
   });
 });
 
@@ -34,4 +31,33 @@ test('startup retries TipTap init until canonical init module is available', () 
       'missing init module should only warn after retry budget is exhausted'
     );
   });
+});
+
+test('AQ Engine browser modules are loaded only once', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  [
+    'engine',
+    'document',
+    'selection',
+    'input',
+    'tiptap-adapter',
+    'compat-shim'
+  ].forEach((moduleName) => {
+    const pattern = new RegExp(`(?:\\.\\/)?experiments/aq-engine/${moduleName}\\.js`, 'g');
+    const matches = html.match(pattern) || [];
+    assert.equal(matches.length, 1, `${moduleName}.js should not be loaded more than once`);
+  });
+});
+
+test('embedded citation runtime does not keep stale popup item insertion handlers', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  const marker = 'window.AQCitationRuntime = runtime.publicApi;';
+  const markerIndex = html.indexOf(marker);
+  assert.notEqual(markerIndex, -1, 'embedded citation runtime marker missing');
+  const scriptStart = html.lastIndexOf('<script>', markerIndex);
+  const scriptEnd = html.indexOf('</script>', markerIndex);
+  const runtime = html.slice(scriptStart, scriptEnd);
+  assert.match(runtime, /window\.addEventListener\(type, stopCitationPopupPointerEvent, true\)/);
+  assert.doesNotMatch(runtime, /div\.addEventListener\('pointerdown'[\s\S]{0,260}runtime\.insertSelection\(ref\.id\)/);
+  assert.doesNotMatch(runtime, /div\.addEventListener\('click'[\s\S]{0,260}runtime\.insertSelection\(ref\.id\)/);
 });

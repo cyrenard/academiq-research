@@ -47,6 +47,27 @@
     return root.AQAcademicObjects || null;
   }
 
+  function getActiveEditor(options){
+    options = options || {};
+    if(options.editor) return options.editor;
+    try{
+      if(root && typeof root.getActiveEditorInstance === 'function'){
+        return root.getActiveEditorInstance();
+      }
+    }catch(_error){}
+    return root ? (root.editor || null) : null;
+  }
+
+  function isAQEngineEditor(editor){
+    return !!(editor && editor._aqEngine && editor._docModel);
+  }
+
+  function getAQBlocks(editor){
+    if(!isAQEngineEditor(editor) || !editor._docModel || typeof editor._docModel.get !== 'function') return [];
+    var doc = editor._docModel.get() || {};
+    return Array.isArray(doc.blocks) ? doc.blocks : [];
+  }
+
   function getScrollElement(options){
     options = options || {};
     if(options.scrollEl) return options.scrollEl;
@@ -90,6 +111,136 @@
     }
     node.id = 'aq-outline-heading-' + String(index + 1);
     return node.id;
+  }
+
+  function runsText(runs){
+    return normalizeText((Array.isArray(runs) ? runs : []).map(function(run){
+      return String(run && run.text || '');
+    }).join(''));
+  }
+
+  function makeAQOutlineId(prefix, index){
+    return 'aq-outline-' + prefix + '-' + String(index + 1);
+  }
+
+  function cloneAQBlock(block){
+    block = block || {};
+    var copy = Object.assign({}, block);
+    copy.attrs = Object.assign({}, block.attrs || {});
+    if(Array.isArray(block.runs)){
+      copy.runs = block.runs.map(function(run){ return Object.assign({}, run || {}); });
+    }
+    if(Array.isArray(block.rows)){
+      copy.rows = block.rows.map(function(row){
+        return Object.assign({}, row || {}, {
+          cells: Array.isArray(row && row.cells) ? row.cells.map(function(cell){
+            return Object.assign({}, cell || {}, {
+              runs: Array.isArray(cell && cell.runs) ? cell.runs.map(function(run){ return Object.assign({}, run || {}); }) : []
+            });
+          }) : []
+        });
+      });
+    }
+    return copy;
+  }
+
+  function blockNeedsAQOutlineId(block){
+    if(!block) return false;
+    if(block.type === 'image' || block.type === 'table') return true;
+    if(block.headingLevel){
+      var text = runsText(block.runs || [{ text: block.text || '' }]);
+      if(shouldSkipHeading(text) || block._isBibHeading || block._isAppendixHeading) return false;
+      return true;
+    }
+    return false;
+  }
+
+  function ensureAQOutlineIds(editor){
+    var blocks = getAQBlocks(editor);
+    if(!blocks.length) return blocks;
+    var changed = false;
+    var nextBlocks = blocks.map(function(block, index){
+      if(!blockNeedsAQOutlineId(block)) return block;
+      var attrs = block.attrs || {};
+      if(normalizeText(attrs.refId || block._refId || '')) return block;
+      var copy = cloneAQBlock(block);
+      var prefix = copy.type === 'image' ? 'figure' : (copy.type === 'table' ? 'table' : 'heading');
+      copy.attrs.refId = makeAQOutlineId(prefix, index);
+      changed = true;
+      return copy;
+    });
+    if(changed && editor._docModel && typeof editor._docModel.replace === 'function'){
+      editor._docModel.replace(nextBlocks);
+      if(typeof editor._reflow === 'function') editor._reflow();
+      return getAQBlocks(editor);
+    }
+    return blocks;
+  }
+
+  function collectAQPageByBlock(editor){
+    var pageByBlock = {};
+    var layout = editor && editor._aqLayout;
+    var pages = layout && Array.isArray(layout.pages) ? layout.pages : [];
+    pages.forEach(function(page, pageIndex){
+      (Array.isArray(page && page.lines) ? page.lines : []).forEach(function(line){
+        if(!line || line.blockIndex == null) return;
+        if(pageByBlock[line.blockIndex] == null) pageByBlock[line.blockIndex] = pageIndex + 1;
+      });
+    });
+    return pageByBlock;
+  }
+
+  function collectAQEngineEntries(editor){
+    if(!isAQEngineEditor(editor)) return null;
+    var blocks = ensureAQOutlineIds(editor);
+    var pageByBlock = collectAQPageByBlock(editor);
+    var entries = [];
+    blocks.forEach(function(block, index){
+      if(!block) return;
+      var attrs = block.attrs || {};
+      var id = normalizeText(attrs.refId || block._refId || '');
+      if(block.headingLevel){
+        var text = runsText(block.runs || [{ text: block.text || '' }]);
+        if(shouldSkipHeading(text) || block._isBibHeading || block._isAppendixHeading) return;
+        entries.push({
+          id: id || makeAQOutlineId('heading', index),
+          type: 'heading',
+          level: Math.max(1, Math.min(5, parseInt(block.headingLevel, 10) || 1)),
+          label: text,
+          title: text,
+          blockIndex: index,
+          page: pageByBlock[index] || 1
+        });
+        return;
+      }
+      if(block.type === 'table'){
+        entries.push({
+          id: id || makeAQOutlineId('table', index),
+          type: 'table',
+          level: 0,
+          label: normalizeText(attrs.label || block.captionLabel || 'Tablo'),
+          title: normalizeText(attrs.title || block.caption || ''),
+          blockIndex: index,
+          page: pageByBlock[index] || 1
+        });
+        return;
+      }
+      if(block.type === 'image'){
+        entries.push({
+          id: id || makeAQOutlineId('figure', index),
+          type: 'figure',
+          level: 0,
+          label: normalizeText(attrs.label || block.captionLabel || 'Sekil'),
+          title: normalizeText(attrs.title || block.caption || block.alt || ''),
+          blockIndex: index,
+          page: pageByBlock[index] || 1
+        });
+      }
+    });
+    return entries.map(function(entry, index){
+      entry.index = index;
+      return entry;
+    });
   }
 
   function collectHeadingEntries(rootNode, academicApi){
@@ -197,6 +348,8 @@
 
   function collectEntries(options){
     options = options || {};
+    var aqEntries = collectAQEngineEntries(getActiveEditor(options));
+    if(Array.isArray(aqEntries)) return aqEntries;
     var rootNode = getRoot(options);
     if(!rootNode) return [];
     var academicApi = getAcademicApi(options);
@@ -249,6 +402,20 @@
     options = options || {};
     var id = normalizeText(options.id || '');
     if(!id) return null;
+    var editor = getActiveEditor(options);
+    if(isAQEngineEditor(editor)){
+      var aqDoc = getDocument(options);
+      var stage = (editor._stageEl && typeof editor._stageEl.querySelector === 'function')
+        ? editor._stageEl
+        : (aqDoc && typeof aqDoc.querySelector === 'function' ? aqDoc.querySelector('.aq-engine-stage, .aq-engine-root') : null);
+      if(stage && typeof stage.querySelector === 'function'){
+        try{
+          var attrId = id.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          var byRef = stage.querySelector('[data-ref-id="' + attrId + '"]');
+          if(byRef) return byRef;
+        }catch(_error){}
+      }
+    }
     var rootNode = getRoot(options);
     var doc = getDocument(options);
     if(doc && typeof doc.getElementById === 'function'){
@@ -306,6 +473,7 @@
     entries.forEach(function(entry){
       var node = findTargetNode({
         root: options.root,
+        editor: options.editor,
         document: doc,
         id: entry && entry.id
       });

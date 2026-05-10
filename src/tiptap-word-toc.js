@@ -18,6 +18,26 @@
     return String(html || '').trim() || '<p></p>';
   }
 
+  function normalizeTitle(text){
+    var compact = String(text || '').replace(/\s+/g, ' ').trim();
+    try{ return compact.toLocaleLowerCase('tr-TR'); }
+    catch(_e){ return compact.toLowerCase(); }
+  }
+
+  function isSkippedHeadingText(text){
+    var normalized = normalizeTitle(text)
+      .replace(/\u00e7/g, 'c')
+      .replace(/\u0131/g, 'i')
+      .replace(/\u0130/g, 'i');
+    return !normalized
+      || normalized === 'icindekiler'
+      || normalized === 'içindekiler'
+      || normalized === 'kaynakca'
+      || normalized === 'kaynakça'
+      || /^ek(?:ler)?(?:[-\s]+\w+)?$/.test(normalized)
+      || /^appendix(?:[-\s]+\w+)?$/.test(normalized);
+  }
+
   function replaceTOCString(fullHTML, tocHTML){
     var html = String(fullHTML || '');
     if(TOC_PATTERN.test(html)){
@@ -42,10 +62,10 @@
     Array.from(headings || []).forEach(function(heading){
       var level = parseInt(String(heading.tagName || '').charAt(1), 10);
       var text = String(heading.textContent || '').trim();
-      if(!text || text === 'İçindekiler' || text === 'Kaynakça') return;
+      if(isSkippedHeadingText(text)) return;
       if(!heading.id) heading.id = idFactory(realIdx);
       var indent = (level - 1) * 24;
-      var pageNum = Math.max(1, Math.floor((heading.offsetTop || 0) / pageContentHeight) + 1);
+      var pageNum = heading.pageNumber ? Math.max(1, parseInt(heading.pageNumber, 10) || 1) : Math.max(1, Math.floor((heading.offsetTop || 0) / pageContentHeight) + 1);
       html += '<p class="ni toc-entry" style="position:relative;word-break:normal;text-indent:0;padding-left:' + indent + 'px;cursor:pointer;margin:0;color:#000;background:transparent;border:none;box-shadow:none;font-family:&quot;Times New Roman&quot;,Times,serif;font-size:12pt;line-height:2;text-decoration:none;display:block;" data-toc-idx="' + realIdx + '" data-target-id="' + heading.id + '"><span class="toc-text-wrap" style="display:block;word-break:normal;overflow-wrap:break-word;padding-right:32px;"><span class="toc-text" style="display:inline;">' + text + '</span></span><span class="toc-dots" style="position:absolute;bottom:0;left:0;right:28px;overflow:hidden;white-space:nowrap;display:none;" aria-hidden="true"></span><span class="toc-page" style="position:absolute;right:0;bottom:0;background:#fff;padding-left:4px;white-space:nowrap;">' + pageNum + '</span></p>';
       realIdx++;
     });
@@ -71,6 +91,49 @@
       div.insertAdjacentHTML('afterbegin', tocHTML);
     }
     return normalizeHTML(div.innerHTML);
+  }
+
+  function runsText(runs){
+    return (Array.isArray(runs) ? runs : []).map(function(run){ return run && run.text ? String(run.text) : ''; }).join('').trim();
+  }
+
+  function collectAQEngineHeadings(editor, deps){
+    deps = deps || {};
+    if(!editor || !editor._docModel || typeof editor._docModel.get !== 'function') return [];
+    var model = editor._docModel.get() || {};
+    var blocks = Array.isArray(model.blocks) ? model.blocks : [];
+    var layout = editor._aqLayout || null;
+    var pageByBlock = {};
+    if(layout && Array.isArray(layout.pages)){
+      layout.pages.forEach(function(page, pageIdx){
+        (page.lines || []).forEach(function(line){
+          var blockIndex = Number(line && line.blockIndex);
+          if(!Number.isFinite(blockIndex)) return;
+          if(!pageByBlock[blockIndex]) pageByBlock[blockIndex] = pageIdx + 1;
+        });
+      });
+    }
+    return blocks.map(function(block, index){
+      if(!block || block.type !== 'heading') return null;
+      if(block._isBibHeading || block._isAppendixHeading) return null;
+      var text = runsText(block.runs);
+      if(isSkippedHeadingText(text)) return null;
+      var level = Math.max(1, Math.min(5, parseInt(block.level, 10) || 1));
+      return {
+        tagName: 'H' + level,
+        textContent: text,
+        id: block._tocId || ('aq-hdg-' + index),
+        pageNumber: pageByBlock[index] || 1,
+        offsetTop: ((pageByBlock[index] || 1) - 1) * (deps.pageTotalHeight || deps.pageContentHeight || 864),
+        blockIndex: index
+      };
+    }).filter(Boolean);
+  }
+
+  function buildAQEngineTOCHTML(editor, deps){
+    var headings = collectAQEngineHeadings(editor, deps || {});
+    if(!headings.length) return '';
+    return buildTOCHTML(null, headings, deps || {});
   }
 
   function removeTOCFromHTML(fullHTML){
@@ -173,6 +236,8 @@
 
   return {
     buildTOCHTML: buildTOCHTML,
+    collectAQEngineHeadings: collectAQEngineHeadings,
+    buildAQEngineTOCHTML: buildAQEngineTOCHTML,
     replaceTOCInHTML: replaceTOCInHTML,
     removeTOCFromHTML: removeTOCFromHTML,
     scrollToHeading: scrollToHeading,

@@ -511,6 +511,9 @@
 
   function prepareLoadedHTML(html, blankHTML){
     var cleaned = sanitizeLoadedEditorLayout(stripLegacyEditorArtifacts(html));
+    if(hostRoot && hostRoot.AQTipTapWordIO && typeof hostRoot.AQTipTapWordIO.repairWordImportHTML === 'function'){
+      try{ cleaned = hostRoot.AQTipTapWordIO.repairWordImportHTML(cleaned); }catch(_e){}
+    }
     cleaned = String(cleaned || '').trim();
     return cleaned || String(blankHTML || '<p></p>');
   }

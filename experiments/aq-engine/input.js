@@ -43,12 +43,10 @@
     ta.setAttribute('spellcheck',     'false');
     ta.setAttribute('aria-hidden',    'true');
     ta.style.cssText = [
-      // Fixed positioning + body parent so engine's container.innerHTML='' on
-      // re-render doesn't blow our capture target away.
       'position:fixed',
       'top:0', 'left:0',
       'width:1px', 'height:1px',
-      'opacity:0',
+      'opacity:0.01',
       'pointer-events:none',
       'border:0',
       'padding:0',
@@ -56,7 +54,7 @@
       'outline:0',
       'resize:none',
       'overflow:hidden',
-      'z-index:1000',
+      'z-index:10000',
       'transform:translateZ(0)'
     ].join(';');
     document.body.appendChild(ta);
@@ -70,6 +68,23 @@
     function clearPending(){ pendingMarks = {}; reflectPending(); }
     function setPending(mark, value){ pendingMarks[mark] = !!value; reflectPending(); }
     function hasPending(){ for(var k in pendingMarks) if(pendingMarks[k] !== undefined) return true; return false; }
+    function isTrackChangesEnabled(){
+      try{
+        var root = (typeof window !== 'undefined') ? window : (typeof globalThis !== 'undefined' ? globalThis : null);
+        if(root && root.AQTipTapWordCommands && typeof root.AQTipTapWordCommands.isTrackChangesEnabled === 'function'){
+          return !!root.AQTipTapWordCommands.isTrackChangesEnabled();
+        }
+        return !!(root && root.__aqTrackChangesState && root.__aqTrackChangesState.enabled);
+      }catch(_e){}
+      return false;
+    }
+    function markTrackedDeletion(from, to){
+      from = Math.max(0, Number(from || 0));
+      to = Math.max(from, Number(to || from));
+      if(to <= from) return false;
+      doc.applyMark(from, to, 'trackDelete', true);
+      return true;
+    }
     function reflectPending(){
       // Surface pending state via a CSS class on the body so demo can style
       // toolbar buttons with the pending hint.
@@ -81,13 +96,66 @@
     // ── Edit operations ────────────────────────────────────────────────────
     function r(){ return getSel().getRange(); }
 
+    function citationRunBoundsAtOffset(off){
+      var d = doc.get();
+      var cursor = 0;
+      for(var bi = 0; bi < d.blocks.length; bi++){
+        var block = d.blocks[bi] || {};
+        var runs = block.runs || [];
+        var intra = 0;
+        for(var ri = 0; ri < runs.length; ri++){
+          var run = runs[ri] || {};
+          var text = String(run.text || '');
+          var start = cursor + intra;
+          var end = start + text.length;
+          if(run.citation && off >= start && off <= end){
+            return { from: start, to: end };
+          }
+          intra += text.length;
+        }
+        cursor += intra + 1;
+      }
+      return null;
+    }
+
     function doInsertText(text){
       if(!text) return;
+      try{
+        (typeof window!=='undefined'&&window.__aqCiteDiag)&&console.warn('[AQ-CITE-DIAG] ' + JSON.stringify({
+          t: Date.now(),
+          event: 'input.doInsertText',
+          text: String(text),
+          inputLength: String(text).length,
+          range: r()
+        }));
+      }catch(_diagErr){}
+      if(isCitationTransactionBlocked() && String(text).length > 1){
+        try{ (typeof window!=='undefined'&&window.__aqCiteDiag)&&console.warn('[AQ-CITE-DIAG] ' + JSON.stringify({ t: Date.now(), event: 'input.blockedByCitationTransaction', text: String(text) })); }catch(_e){}
+        ta.value = '';
+        return;
+      }
+      if(shouldSuppressPostCitationInput(text)){
+        try{ (typeof window!=='undefined'&&window.__aqCiteDiag)&&console.warn('[AQ-CITE-DIAG] ' + JSON.stringify({ t: Date.now(), event: 'input.suppressedPostCitation', text: String(text) })); }catch(_e2){}
+        ta.value = '';
+        return;
+      }
       var range = r();
-      if(range.from !== range.to) doc.deleteRange(range.from, range.to);
+      var tracking = isTrackChangesEnabled();
+      if(range.from !== range.to){
+        if(tracking) markTrackedDeletion(range.from, range.to);
+        else doc.deleteRange(range.from, range.to);
+      }
       var at = Math.min(range.from, range.to);
+      if(range.from === range.to){
+        var citationBounds = citationRunBoundsAtOffset(at);
+        if(citationBounds && at < citationBounds.to){
+          at = citationBounds.to;
+        }
+      }
       doc.insertText(at, text);
       var newOff = at + text.length;
+      doc.applyMark(at, newOff, 'citation', false);
+      if(tracking) doc.applyMark(at, newOff, 'trackInsert', true);
       // Apply pending marks to just the inserted range so Ctrl+B → typing
       // produces bold characters without changing surrounding text.
       if(hasPending()){
@@ -99,6 +167,73 @@
       }
       onChanged();
       getSel().setRange(newOff, newOff);
+
+      scheduleTrigRefresh();
+    }
+
+    function normalizeSuppressedInput(text){
+      return String(text || '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('tr');
+    }
+
+    function shouldSuppressPostCitationInput(text){
+      if(typeof window === 'undefined') return false;
+      var normalized = normalizeSuppressedInput(text);
+      if(!normalized) return false;
+      var lastCitation = normalizeSuppressedInput(window.__aqLastCitationText || '');
+      if(normalized.length > 1 && lastCitation && (normalized === lastCitation || normalized.indexOf(lastCitation) >= 0 || lastCitation.indexOf(normalized) >= 0)){
+        window.__aqSuppressNextInputUntil = Date.now() + 250;
+        return true;
+      }
+      var persistentItems = Array.isArray(window.__aqLastCitationSuppressTexts) ? window.__aqLastCitationSuppressTexts : [];
+      var matchesPersistentCitationPayload = persistentItems.some(function(item){
+        item = normalizeSuppressedInput(item);
+        return item && normalized.length > 1 && (normalized === item || normalized.indexOf(item) >= 0 || item.indexOf(normalized) >= 0);
+      });
+      if(matchesPersistentCitationPayload){
+        window.__aqSuppressNextInputUntil = Date.now() + 250;
+        return true;
+      }
+      if(Date.now() > (window.__aqSuppressNextInputUntil || 0)) return false;
+      var items = Array.isArray(window.__aqSuppressNextInputTexts) ? window.__aqSuppressNextInputTexts : [];
+      var looksLikeCapturedAutocomplete = normalized.length > 1;
+      var matchesCitationPayload = items.some(function(item){
+        item = normalizeSuppressedInput(item);
+        return item && normalized.length > 1 && (normalized === item || item.indexOf(normalized) >= 0 || normalized.indexOf(item) >= 0);
+      });
+      if(!looksLikeCapturedAutocomplete && !matchesCitationPayload) return false;
+      window.__aqSuppressNextInputUntil = Date.now() + 250;
+      return true;
+    }
+
+    function isCitationTransactionBlocked(){
+      if(typeof window === 'undefined') return false;
+      return !!window.__aqCitationTransactionActive || Date.now() < (window.__aqCitationInputBlockedUntil || 0);
+    }
+
+    function isSinglePrintableKey(e){
+      return !!(e && typeof e.key === 'string' && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey);
+    }
+
+    function shouldBlockInputEvent(e){
+      if(!isCitationTransactionBlocked()) return false;
+      var data = e && typeof e.data === 'string' ? e.data : '';
+      var value = String(ta.value || '');
+      var payload = data || value;
+      return String(payload || '').length > 1;
+    }
+
+    function scheduleTrigRefresh(){
+      if(isCitationTransactionBlocked()) return;
+      setTimeout(function(){
+        if(isCitationTransactionBlocked()) return;
+        try {
+          if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
+            window.AQCitationRuntime.refreshFromEditor();
+          } else if(typeof window.checkTrig === 'function'){
+            window.checkTrig();
+          }
+        } catch(_e){}
+      }, 0);
     }
 
     function doSplitBlock(){
@@ -114,12 +249,14 @@
         doc.setListType(loc.blockIdx, null);
         onChanged();
         getSel().setRange(at, at);
+        scheduleTrigRefresh();
         return;
       }
       doc.splitBlock(at);
       var newOff = at + 1;
       onChanged();
       getSel().setRange(newOff, newOff);
+      scheduleTrigRefresh();
     }
 
     function doDeleteBackward(){
@@ -127,9 +264,11 @@
       var range = r();
       if(range.from !== range.to){
         var lo = Math.min(range.from, range.to);
-        doc.deleteRange(range.from, range.to);
+        if(isTrackChangesEnabled()) markTrackedDeletion(range.from, range.to);
+        else doc.deleteRange(range.from, range.to);
         onChanged();
         getSel().setRange(lo, lo);
+        scheduleTrigRefresh();
         return;
       }
       if(range.from <= 0) return;
@@ -140,12 +279,15 @@
         var newOff = doc.mergeWithPrevious(loc.blockIdx);
         onChanged();
         if(newOff >= 0) getSel().setRange(newOff, newOff);
+        scheduleTrigRefresh();
         return;
       }
       // Otherwise just delete one char back
-      doc.deleteRange(range.from - 1, range.from);
+      if(isTrackChangesEnabled()) markTrackedDeletion(range.from - 1, range.from);
+      else doc.deleteRange(range.from - 1, range.from);
       onChanged();
       getSel().setRange(range.from - 1, range.from - 1);
+      scheduleTrigRefresh();
     }
 
     function doDeleteForward(){
@@ -153,9 +295,11 @@
       var range = r();
       if(range.from !== range.to){
         var lo = Math.min(range.from, range.to);
-        doc.deleteRange(range.from, range.to);
+        if(isTrackChangesEnabled()) markTrackedDeletion(range.from, range.to);
+        else doc.deleteRange(range.from, range.to);
         onChanged();
         getSel().setRange(lo, lo);
+        scheduleTrigRefresh();
         return;
       }
       var docLen = doc.length();
@@ -168,16 +312,25 @@
         var newOff = doc.mergeWithPrevious(loc.blockIdx + 1);
         onChanged();
         if(newOff >= 0) getSel().setRange(newOff, newOff);
+        scheduleTrigRefresh();
         return;
       }
-      doc.deleteRange(range.from, range.from + 1);
+      if(isTrackChangesEnabled()) markTrackedDeletion(range.from, range.from + 1);
+      else doc.deleteRange(range.from, range.from + 1);
       onChanged();
       getSel().setRange(range.from, range.from);
+      scheduleTrigRefresh();
     }
 
     // ── Event wiring ───────────────────────────────────────────────────────
     function focusCapture(){
+      if(!ta) return;
       try { ta.focus({ preventScroll: true }); } catch(_e){ ta.focus(); }
+    }
+
+    function scheduleFocusCapture(){
+      clearPending();
+      setTimeout(focusCapture, 0);
     }
 
     // Toggle superscript/subscript. These use two marks together:
@@ -220,17 +373,20 @@
       getSel().setRange(range.anchor, range.focus);
     }
 
-    // Focus the textarea on any pointer interaction with the stage
-    container.addEventListener('mousedown', function(){
-      clearPending();
-      // Defer so selection's own mousedown runs first and updates range
-      setTimeout(focusCapture, 0);
-    });
+    // Focus the textarea on any pointer interaction with the stage.
+    // Defer so selection's own pointer/mouse handlers can update the range first.
+    container.addEventListener('pointerdown', scheduleFocusCapture, true);
+    container.addEventListener('mousedown', scheduleFocusCapture);
+    container.addEventListener('click', scheduleFocusCapture, true);
 
     // (No auto-refocus on focusin: would steal focus from intentionally
     // focused UI like paste dialogs / formatting popovers.)
 
     ta.addEventListener('compositionstart', function(){
+      if(isCitationTransactionBlocked()){
+        ta.value = '';
+        return;
+      }
       composing = true;
       compositionStartOffset = r().from;
       ta.value = '';
@@ -238,6 +394,10 @@
 
     ta.addEventListener('compositionend', function(e){
       composing = false;
+      if(isCitationTransactionBlocked()){
+        ta.value = '';
+        return;
+      }
       var text = e.data || ta.value;
       ta.value = '';
       if(text) doInsertText(text);
@@ -246,14 +406,66 @@
     // For non-IME plain key inputs, the textarea fires 'input' with the typed
     // chars. We also handle the case where some IMEs deliver via 'input'
     // without compositionend (rare).
-    ta.addEventListener('input', function(){
+    ta.addEventListener('input', function(e){
+      try{
+        (typeof window!=='undefined'&&window.__aqCiteDiag)&&console.warn('[AQ-CITE-DIAG] ' + JSON.stringify({
+          t: Date.now(),
+          event: 'textarea.input',
+          data: e && e.data,
+          inputType: e && e.inputType,
+          value: ta.value,
+          composing: composing,
+          range: r()
+        }));
+      }catch(_diagErr){}
       if(composing) return; // wait for compositionend to commit
-      var text = ta.value;
+      if(shouldBlockInputEvent(e)){
+        ta.value = '';
+        if(e && typeof e.preventDefault === 'function') e.preventDefault();
+        return;
+      }
+      var text = '';
+      if(e && typeof e.data === 'string' && e.data.length){
+        text = e.data;
+        if(/^insert/i.test(String(e.inputType || '')) && text.length > 1 && shouldSuppressPostCitationInput(text)){
+          ta.value = '';
+          if(e && typeof e.preventDefault === 'function') e.preventDefault();
+          return;
+        }
+        if(/^insertText$/i.test(String(e.inputType || '')) && text.length > 1){
+          text = text.slice(-1);
+        }
+      }else{
+        text = ta.value;
+        if(e && /^insert/i.test(String(e.inputType || '')) && text.length > 1){
+          text = text.slice(-1);
+        }
+      }
       ta.value = '';
       if(text) doInsertText(text);
     });
 
     ta.addEventListener('keydown', function(e){
+      try{
+        if(e && (e.key === ' ' || e.key === 'Enter' || e.key === 'Backspace' || e.key === '/' || String(e.key || '').toLowerCase() === 'r')){
+          (typeof window!=='undefined'&&window.__aqCiteDiag)&&console.warn('[AQ-CITE-DIAG] ' + JSON.stringify({
+            t: Date.now(),
+            event: 'textarea.keydown',
+            key: e.key,
+            code: e.code,
+            value: ta.value,
+            range: r(),
+            blocked: isCitationTransactionBlocked()
+          }));
+        }
+      }catch(_diagErr){}
+      if(isCitationTransactionBlocked() && !isSinglePrintableKey(e)){
+        ta.value = '';
+        if(e && typeof e.preventDefault === 'function') e.preventDefault();
+        if(e && typeof e.stopPropagation === 'function') e.stopPropagation();
+        if(e && typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+        return;
+      }
       if(composing) return;
       var key = e.key;
       var ctrl = e.ctrlKey || e.metaKey;
@@ -422,7 +634,8 @@
       e.preventDefault();
       e.clipboardData.setData('text/plain', t);
       var range = r();
-      doc.deleteRange(range.from, range.to);
+      if(isTrackChangesEnabled()) markTrackedDeletion(range.from, range.to);
+      else doc.deleteRange(range.from, range.to);
       onChanged();
       getSel().setRange(range.from, range.from);
     });
@@ -449,6 +662,13 @@
       ta.style.top  = caretRect.top  + 'px';
     }
 
+    function clearCapture(){
+      composing = false;
+      compositionStartOffset = -1;
+      ta.value = '';
+      clearPending();
+    }
+
     // ── Public API for programmatic editing (toolbar, citation dialog, etc.) ──
     function insertAtCaret(text, marks){
       var range = r();
@@ -456,6 +676,7 @@
       var at = Math.min(range.from, range.to);
       doc.insertText(at, text);
       var end = at + text.length;
+      doc.applyMark(at, end, 'citation', false);
       if(marks){
         for(var k in marks){
           if(marks[k] !== undefined) doc.applyMark(at, end, k, marks[k]);
@@ -480,9 +701,14 @@
       onChanged();
       getSel().setRange(range.anchor, range.focus);
     }
+    
+    // Initial focus
+    setTimeout(focusCapture, 100);
 
     return {
       focus: focusCapture,
+      attach: function(){ focusCapture(); },
+      clearCapture: clearCapture,
       syncCapturePosition: syncCapturePosition,
       insertAtCaret: insertAtCaret,
       applyMarkToSelection: applyMarkToSelection,

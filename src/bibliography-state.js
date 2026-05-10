@@ -10,7 +10,36 @@
     return getCurrentDocument(state && state.docs, currentDocId);
   }
 
-  function getCitationOccurrences(root){
+  function getCitationOccurrences(root, options){
+    options = options || {};
+    var editor = options.editor || null;
+    if(editor && editor._aqEngine && editor._docModel){
+      // AQ Engine path: scan the custom document model instead of DOM
+      var model = editor._docModel.get();
+      var seenBySignature = {};
+      var rows = [];
+      (model.blocks || []).forEach(function(block){
+        (block.runs || []).forEach(function(run){
+          if(run && run.citation){
+            var refIds = String(run.citation.ref || run.citation.id || '').split(',').map(function(id){
+              return String(id || '').trim();
+            }).filter(Boolean);
+            if(!refIds.length) return;
+            var signature = refIds.join(',');
+            var ordinal = (seenBySignature[signature] || 0) + 1;
+            seenBySignature[signature] = ordinal;
+            rows.push({
+              refIds: refIds,
+              signature: signature,
+              ordinal: ordinal,
+              key: 'ref:' + signature + '#' + ordinal,
+              text: String(run.text || '').trim()
+            });
+          }
+        });
+      });
+      return rows;
+    }
     if(!root || typeof root.querySelectorAll !== 'function') return [];
     var seenBySignature = {};
     var rows = [];
@@ -35,10 +64,193 @@
     return rows;
   }
 
-  function findCitationOccurrence(root, citationKey){
+  function normalizeBibliographyTitle(text){
+    return String(text || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\u00e7/g, 'c')
+      .replace(/\u0131/g, 'i')
+      .replace(/\u015f/g, 's')
+      .replace(/\u011f/g, 'g')
+      .replace(/\u00fc/g, 'u')
+      .replace(/\u00f6/g, 'o');
+  }
+
+  function isBibliographyTitle(text){
+    var t = normalizeBibliographyTitle(text);
+    return t === 'kaynakca' || t === 'references' || t === 'bibliography' || t === 'kaynaklar';
+  }
+
+  function isAQEngineAppendixTitle(text){
+    var t = normalizeBibliographyTitle(text);
+    return /^ek(?:ler)?(?:[-\s]+[a-z0-9]+)?$/.test(t) || /^appendix(?:[-\s]+[a-z0-9]+)?$/.test(t);
+  }
+
+  function blockText(block){
+    return (block && block.runs || []).map(function(run){
+      return String(run && run.text || '');
+    }).join('');
+  }
+
+  function findAQEngineAppendixRange(blocks){
+    blocks = Array.isArray(blocks) ? blocks : [];
+    var start = -1;
+    for(var i = 0; i < blocks.length; i++){
+      var block = blocks[i];
+      if(block && (block._isAppendixHeading || (block.type === 'heading' && isAQEngineAppendixTitle(blockText(block))))){
+        start = i;
+        break;
+      }
+    }
+    if(start < 0) return { start: -1, end: -1 };
+    return { start: start, end: blocks.length };
+  }
+
+  function findAQEngineBibliographyRange(blocks){
+    blocks = Array.isArray(blocks) ? blocks : [];
+    var headingIndex = -1;
+    for(var i = 0; i < blocks.length; i++){
+      var block = blocks[i];
+      if(block && (block._isBibHeading || (block.type === 'heading' && isBibliographyTitle(blockText(block))))){
+        headingIndex = i;
+        break;
+      }
+    }
+    if(headingIndex < 0) return { headingIndex: -1, start: -1, end: -1 };
+    var end = headingIndex + 1;
+    while(end < blocks.length){
+      var next = blocks[end];
+      if(!next) break;
+      if(next._isBibEntry || (next.attrs && next.attrs.refId)){
+        end += 1;
+        continue;
+      }
+      if(!blockText(next).trim() && end === headingIndex + 1){
+        end += 1;
+        continue;
+      }
+      break;
+    }
+    return { headingIndex: headingIndex, start: headingIndex + 1, end: end };
+  }
+
+  function buildAQEngineBibliographyHeading(){
+    return {
+      type: 'heading',
+      level: 1,
+      pageBreak: true,
+      align: 'center',
+      runs: [{ text: 'KAYNAK\u00c7A', bold: true }],
+      font: { sizePt: 12, weight: '700', style: 'normal' },
+      firstLineIndentPx: 0,
+      spaceAfterPx: 0,
+      _isBibHeading: true
+    };
+  }
+
+  function buildAQEngineEmptyBibliographyEntry(){
+    return {
+      type: 'paragraph',
+      runs: [{ text: '' }],
+      _isBibEntry: true,
+      leftIndentPx: 48,
+      firstLineIndentPx: -48,
+      spaceAfterPx: 0,
+      lineHeightFactor: 2.0,
+      font: { sizePt: 12, weight: '400', style: 'normal' }
+    };
+  }
+
+  function applyAQEngineBibliographyEntryStyle(block){
+    block.type = block.type || 'paragraph';
+    block._isBibEntry = true;
+    block.leftIndentPx = 48;
+    block.firstLineIndentPx = -48;
+    block.spaceAfterPx = 0;
+    block.lineHeightFactor = 2.0;
+    block.font = { sizePt: 12, weight: '400', style: 'normal' };
+    return block;
+  }
+
+  function resolveActiveEditor(options){
+    options = options || {};
+    if(options.editor) return options.editor;
+    if(typeof window === 'undefined') return null;
+    var core = window.AQEditorCore || null;
+    if(core && typeof core.getEditor === 'function'){
+      try{
+        var coreEditor = core.getEditor();
+        if(coreEditor) return coreEditor;
+      }catch(_e){}
+    }
+    var lifecycle = window.AQEditorLifecycle || null;
+    if(lifecycle && typeof lifecycle.getEditor === 'function'){
+      try{
+        var lifecycleEditor = lifecycle.getEditor();
+        if(lifecycleEditor) return lifecycleEditor;
+      }catch(_e2){}
+    }
+    return window.editor || null;
+  }
+
+  function collectReferenceIdsFromHTML(html){
+    var ids = [];
+    if(!html) return ids;
+    if(typeof document !== 'undefined' && document.createElement){
+      var div = document.createElement('div');
+      div.innerHTML = String(html || '');
+      Array.prototype.forEach.call(div.querySelectorAll('.cit[data-ref],[data-ref]'), function(node){
+        String(node.getAttribute('data-ref') || '').split(',').forEach(function(id){
+          id = String(id || '').trim();
+          if(id) ids.push(id);
+        });
+      });
+      return ids;
+    }
+    var re = /data-ref=["']([^"']+)["']/gi;
+    var match;
+    while((match = re.exec(String(html || '')))){
+      String(match[1] || '').split(',').forEach(function(id){
+        id = String(id || '').trim();
+        if(id) ids.push(id);
+      });
+    }
+    return ids;
+  }
+
+  function collectAQEngineUsedReferences(editor, options){
+    options = options || {};
+    if(!editor || !editor._aqEngine || !editor._docModel) return [];
+    var findReference = options.findReference || function(){ return null; };
+    var refs = [];
+    var model = editor._docModel.get();
+    (model.blocks || []).forEach(function(block){
+      if(block && (block._isBibHeading || block._isBibEntry)) return;
+      (block.runs || []).forEach(function(run){
+        if(!run || !run.citation) return;
+        String(run.citation.ref || run.citation.id || '').split(',').forEach(function(id){
+          id = String(id || '').trim();
+          if(!id) return;
+          var ref = findReference(id);
+          if(ref) refs.push(ref);
+        });
+      });
+    });
+    if(!refs.length && typeof editor.getHTML === 'function'){
+      collectReferenceIdsFromHTML(editor.getHTML()).forEach(function(id){
+        var ref = findReference(id);
+        if(ref) refs.push(ref);
+      });
+    }
+    if(typeof options.dedupeReferences === 'function') refs = options.dedupeReferences(refs);
+    if(typeof options.sortReferences === 'function') refs = options.sortReferences(refs);
+    return Array.isArray(refs) ? refs : [];
+  }
+
+  function findCitationOccurrence(root, citationKey, options){
     citationKey = String(citationKey || '').trim();
     if(!citationKey) return null;
-    var occurrences = getCitationOccurrences(root);
+    var occurrences = getCitationOccurrences(root, options);
     if(citationKey.indexOf('ref:') === 0){
       var raw = citationKey.slice(4);
       var parts = raw.split('#');
@@ -52,12 +264,12 @@
     return null;
   }
 
-  function findCitationForReference(root, refId, citationKey){
+  function findCitationForReference(root, refId, citationKey, options){
     refId = String(refId || '').trim();
     if(!refId) return null;
-    var occurrences = getCitationOccurrences(root);
+    var occurrences = getCitationOccurrences(root, options);
     if(citationKey){
-      var linked = findCitationOccurrence(root, citationKey);
+      var linked = findCitationOccurrence(root, citationKey, options);
       if(linked && linked.refIds.indexOf(refId) >= 0) return linked;
     }
     return occurrences.find(function(row){
@@ -102,16 +314,29 @@
       attempts += 1;
       var pageEl = options.pageEl || (typeof document !== 'undefined' ? document.getElementById('bibpage') : null);
       var bodyEl = options.bodyEl || (typeof document !== 'undefined' ? document.getElementById('bibbody') : null);
-      if(pageEl && pageEl.style && pageEl.style.display === 'none' && openFn){
+      
+      var editor = options.editor || (typeof window !== 'undefined' ? window.editor : null);
+      var isAQEngine = !!(editor && editor._aqEngine);
+      
+      if(pageEl && pageEl.style && pageEl.style.display === 'none' && openFn && !isAQEngine){
         try{ openFn(); }catch(_openErr){}
-      }else if(!pageEl && typeof insRefs === 'function'){
+      }else if(!pageEl && typeof insRefs === 'function' && !isAQEngine){
         try{ insRefs(); }catch(_renderErr){}
       }
-      bodyEl = options.bodyEl || (typeof document !== 'undefined' ? document.getElementById('bibbody') : null);
-      var entry = bodyEl && typeof bodyEl.querySelector === 'function'
-        ? bodyEl.querySelector('.refe[data-ref-id="' + refId.replace(/"/g, '&quot;') + '"]')
-        : null;
-      if(entry && (attempts > 1 || !openFn)){
+      
+      var entry = null;
+      if(isAQEngine && editor._stageEl){
+        entry = editor._stageEl.querySelector('.aq-engine-line[data-ref-id="' + refId.replace(/"/g, '&quot;') + '"]');
+      }
+      
+      if(!entry){
+        bodyEl = options.bodyEl || (typeof document !== 'undefined' ? document.getElementById('bibbody') : null);
+        entry = bodyEl && typeof bodyEl.querySelector === 'function'
+          ? bodyEl.querySelector('.refe[data-ref-id="' + refId.replace(/"/g, '&quot;') + '"]')
+          : null;
+      }
+
+      if(entry && (attempts > 1 || !openFn || isAQEngine)){
         return jumpToNode(entry, options);
       }
       if(attempts < 12){
@@ -127,9 +352,10 @@
     refId = String(refId || '').trim();
     if(!refId) return false;
     var root = options.editorRoot || options.root || (typeof document !== 'undefined' ? document.getElementById('apaed') : null);
-    var occurrence = findCitationForReference(root, refId, '');
+    var occurrence = findCitationForReference(root, refId, '', options);
     if(!occurrence) return false;
-    return jumpToNode(occurrence.node, options);
+    if(occurrence.node) return jumpToNode(occurrence.node, options);
+    return false;
   }
 
   function syncBibliographyHTML(fullHTML, refs, options){
@@ -151,9 +377,9 @@
     if(!refs.length){
       if(heading) removeReferenceNodesAfter(heading);
     }else{
-      var refHTML = refs.map(function(ref){
+      var refHTML = refs.map(function(ref, idx){
         var refId = String(ref && ref.id || '').trim();
-        return '<p class="refe" data-ref-id="' + refId.replace(/"/g, '&quot;') + '" tabindex="0" role="button">' + formatRef(ref) + '</p>';
+        return '<p class="refe" data-ref-id="' + refId.replace(/"/g, '&quot;') + '" tabindex="0" role="button">' + formatRef(ref, { index: idx + 1 }) + '</p>';
       }).join('');
       if(!heading){
         div.insertAdjacentHTML('beforeend', '<h1>' + bibliographyTitle + '</h1>' + refHTML);
@@ -236,6 +462,37 @@
     var bodyEl = options.bodyEl || null;
     var doc = options.doc || null;
     var formatRef = options.formatRef || function(ref){ return String(ref || ''); };
+
+    var editor = resolveActiveEditor(options);
+    if(editor && editor._aqEngine && editor._docModel){
+      updateAQEngineBibliography(editor, refs, options);
+      if(bodyEl) bodyEl.innerHTML = '';
+      if(pageEl && pageEl.style) pageEl.style.display = 'none';
+      if(doc){
+        doc.bibliographyHTML = '';
+        doc.bibliographyManual = false;
+      }
+      if(typeof options.onAfterUpdate === 'function'){
+        options.onAfterUpdate({
+          refs: refs,
+          doc: doc,
+          generatedHTML: '',
+          persistedHTML: '',
+          manualHTML: ''
+        });
+      }
+      if(typeof options.syncPageLayout === 'function'){
+        try{ options.syncPageLayout({ pageEl: pageEl, bodyEl: bodyEl, refs: refs, doc: doc }); }catch(_e){}
+      }
+      return true;
+    } else if(editor && editor.state && editor.view){
+      if(updateTiptapBibliography(editor, refs, options)){
+        // If we successfully updated an internal bibliography section, 
+        // we can hide the external bibliography page to avoid duplication.
+        if(pageEl && pageEl.style) pageEl.style.display = 'none';
+      }
+    }
+
     var hasExternalBibliographyRefs = !!(doc && Array.isArray(doc.bibliographyExtraRefIds) && doc.bibliographyExtraRefIds.length);
     var forceAuto = !!options.forceAuto || hasExternalBibliographyRefs;
     var ownerDoc = bodyEl && bodyEl.ownerDocument ? bodyEl.ownerDocument : (typeof document !== 'undefined' ? document : null);
@@ -249,9 +506,9 @@
     if(!pageEl || !bodyEl) return false;
     if(typeof options.bindSurface === 'function') options.bindSurface();
 
-    var generatedHTML = '<h1>Kaynakça</h1>' + refs.map(function(ref){
+    var generatedHTML = '<h1>KAYNAKÇA</h1>' + refs.map(function(ref, idx){
       var refId = String(ref && ref.id || '').trim();
-      return '<p class="refe" data-ref-id="' + refId.replace(/"/g, '&quot;') + '" tabindex="0" role="button">' + formatRef(ref) + '</p>';
+      return '<p class="refe" data-ref-id="' + refId.replace(/"/g, '&quot;') + '" tabindex="0" role="button">' + formatRef(ref, { index: idx + 1 }) + '</p>';
     }).join('');
     var persistedHTML = doc ? String(doc.bibliographyHTML || '').trim() : '';
     var manualHTML = doc && doc.bibliographyManual && !forceAuto ? String(doc.bibliographyHTML || '').trim() : '';
@@ -306,6 +563,277 @@
     return true;
   }
 
+  function updateTiptapBibliography(editor, refs, options){
+    if(!editor || !editor.state || !editor.view) return false;
+
+    var state = editor.state;
+    var doc = state.doc;
+    
+    // Find "Kaynakça" heading
+    var bibHeadingPos = -1;
+    var titleMatcher = options.titleMatcher || function(text){
+      var t = String(text || '').trim().toLowerCase();
+      return t === 'kaynakça' || t === 'references' || t === 'bibliography' || t === 'kaynaklar';
+    };
+
+    doc.descendants(function(node, pos){
+      if(bibHeadingPos !== -1) return false;
+      if(node.type.name === 'heading'){
+        var text = node.textContent.trim();
+        if(titleMatcher(text)){
+          bibHeadingPos = pos;
+          return false;
+        }
+      }
+    });
+
+    if(bibHeadingPos === -1) return false;
+
+    var bibHeadingNode = doc.nodeAt(bibHeadingPos);
+    var startReplacePos = bibHeadingPos + bibHeadingNode.nodeSize;
+    var currentPos = startReplacePos;
+    
+    // Find consecutive paragraphs with 'refe' class or that follow the heading
+    while(currentPos < doc.content.size){
+      var node = doc.nodeAt(currentPos);
+      if(!node) break;
+      if(node.type.name === 'heading') break;
+      if(node.type.name === 'paragraph'){
+         var cls = node.attrs && node.attrs.class ? String(node.attrs.class) : '';
+         // If it's not a reference entry and has content, we assume bibliography section ends
+         if(cls.indexOf('refe') === -1 && node.textContent.trim().length > 0){
+             break;
+         }
+      } else if (node.type.name === 'bulletList' || node.type.name === 'orderedList') {
+          break;
+      }
+      currentPos += node.nodeSize;
+    }
+    var endReplacePos = currentPos;
+
+    // Generate new content
+    var formatRef = options.formatRef || function(ref){ return String(ref && ref.id || ''); };
+    var refHTML = refs.map(function(ref, idx){
+      var refId = String(ref && ref.id || '').trim();
+      return '<p class="refe" data-ref-id="' + refId.replace(/"/g, '&quot;') + '">' + formatRef(ref, { index: idx + 1 }) + '</p>';
+    }).join('');
+
+    // Optimization: check if content actually changed
+    var oldContent = '';
+    try {
+        oldContent = editor.state.doc.textBetween(startReplacePos, endReplacePos, '\n');
+    } catch(e) {}
+    
+    var newContentText = refs.map(function(ref, idx){ return formatRef(ref, { index: idx + 1 }); }).join('\n').replace(/<[^>]+>/g, '');
+    if(oldContent.trim() === newContentText.trim() && (startReplacePos !== endReplacePos || refs.length === 0)){
+        return true;
+    }
+
+    // Replace content
+    editor.commands.insertContentAt({ from: startReplacePos, to: endReplacePos }, refHTML);
+    return true;
+  }
+
+  function updateAQEngineBibliography(editor, refs, options){
+    options = options || {};
+    var docModel = editor._docModel;
+    if(!docModel) return;
+
+    var model = docModel.get();
+    var blocks = (model && Array.isArray(model.blocks)) ? model.blocks : [];
+    var range = findAQEngineBibliographyRange(blocks);
+    var bibIdx = range.headingIndex;
+
+    if(!refs.length){
+      if(bibIdx !== -1 && options.keepEmptySection){
+        docModel.replace(blocks.slice(0, range.start).concat([buildAQEngineEmptyBibliographyEntry()]).concat(blocks.slice(range.end)));
+        if(typeof editor._reflow === 'function') editor._reflow();
+      }
+      return;
+    }
+
+    var formatRef = options.formatRef || function(ref){ return String(ref && ref.id || ''); };
+    var generatedHTML = refs.map(function(ref, idx){
+      var refId = String(ref && ref.id || '').trim();
+      return '<p class="refe" data-ref-id="' + refId.replace(/"/g, '&quot;') + '">' + formatRef(ref, { index: idx + 1 }) + '</p>';
+    }).join('');
+
+    var newBlocks = [];
+    if(typeof window !== 'undefined' && window.AQEngineCompat && typeof window.AQEngineCompat.htmlToBlocks === 'function'){
+      newBlocks = window.AQEngineCompat.htmlToBlocks(generatedHTML);
+    } else {
+      newBlocks = refs.map(function(ref, idx){
+        return {
+          type: 'paragraph',
+          attrs: { refId: String(ref && ref.id || '').trim() },
+          _refId: String(ref && ref.id || '').trim(),
+          runs: [{ text: formatRef(ref, { index: idx + 1 }).replace(/<[^>]+>/g, '') }]
+        };
+      });
+    }
+
+    newBlocks.forEach(function(b){
+      if(!b.type || b.type === 'paragraph'){
+        var refId = b._refId || (b.attrs && b.attrs.refId) || '';
+        if(refId) b.attrs = Object.assign({}, b.attrs || {}, { refId: refId });
+        if(refId) b._refId = refId;
+        applyAQEngineBibliographyEntryStyle(b);
+      }
+    });
+
+    var currentBibBlocks = [];
+    if(bibIdx !== -1){
+      currentBibBlocks = blocks.slice(range.start, range.end).filter(function(block){
+        return block && block._isBibEntry;
+      });
+    }
+
+    var bibChanged = currentBibBlocks.length !== newBlocks.length;
+    if(!bibChanged){
+      for(var j = 0; j < newBlocks.length; j++){
+        var oldB = currentBibBlocks[j];
+        var newB = newBlocks[j];
+        var oldText = (oldB.runs || []).map(function(r){ return r.text || ''; }).join('');
+        var newText = (newB.runs || []).map(function(r){ return r.text || ''; }).join('');
+        var oldRef = oldB._refId || (oldB.attrs && oldB.attrs.refId) || '';
+        var newRef = newB._refId || (newB.attrs && newB.attrs.refId) || '';
+        if(oldText !== newText || oldRef !== newRef){ bibChanged = true; break; }
+      }
+    }
+
+    if(!bibChanged) return;
+
+    if(bibIdx === -1){
+      var appendixRange = findAQEngineAppendixRange(blocks);
+      var insertAt = appendixRange.start >= 0 ? appendixRange.start : blocks.length;
+      docModel.replace(
+        blocks.slice(0, insertAt)
+          .concat([buildAQEngineBibliographyHeading()])
+          .concat(newBlocks)
+          .concat(blocks.slice(insertAt))
+      );
+    } else {
+      var heading = Object.assign({}, blocks[bibIdx] || buildAQEngineBibliographyHeading(), {
+        type: 'heading',
+        level: 1,
+        pageBreak: true,
+        align: 'center',
+        runs: [{ text: 'KAYNAK\u00c7A', bold: true }],
+        font: { sizePt: 12, weight: '700', style: 'normal' },
+        firstLineIndentPx: 0,
+        spaceAfterPx: 0,
+        _isBibHeading: true
+      });
+      var head = blocks.slice(0, bibIdx).concat([heading]);
+      var tail = blocks.slice(range.end);
+      docModel.replace(head.concat(newBlocks).concat(tail));
+    }
+
+    if(typeof editor._reflow === 'function') editor._reflow();
+  }
+
+  function ensureAQEngineBibliographySection(editor, options){
+    options = options || {};
+    if(!editor || !editor._aqEngine || !editor._docModel) return false;
+    var docModel = editor._docModel;
+    var blocks = docModel.get().blocks || [];
+    var range = findAQEngineBibliographyRange(blocks);
+    if(range.headingIndex < 0){
+      var appendixRange = findAQEngineAppendixRange(blocks);
+      var insertAt = appendixRange.start >= 0 ? appendixRange.start : blocks.length;
+      docModel.replace(
+        blocks.slice(0, insertAt)
+          .concat([buildAQEngineBibliographyHeading(), buildAQEngineEmptyBibliographyEntry()])
+          .concat(blocks.slice(insertAt))
+      );
+    }else if(range.start === range.end){
+      docModel.replace(blocks.slice(0, range.start).concat([buildAQEngineEmptyBibliographyEntry()]).concat(blocks.slice(range.end)));
+    }
+    if(typeof editor._reflow === 'function') editor._reflow();
+    if(typeof editor.emit === 'function') editor.emit('update');
+    return true;
+  }
+
+  function getAQEngineCitationStyle(options){
+    options = options || {};
+    if(options.style) return options.style;
+    if(options.styleId) return options.styleId;
+    if(root && typeof root.getCurrentCitationStyle === 'function'){
+      try{ return root.getCurrentCitationStyle(); }catch(_e){}
+    }
+    return 'apa7';
+  }
+
+  function canonicalAQEngineCitationText(refs, options){
+    options = options || {};
+    refs = Array.isArray(refs) ? refs.filter(Boolean) : [];
+    if(!refs.length) return '';
+    var styles = options.citationStyles || (root && root.AQCitationStyles) || null;
+    var style = getAQEngineCitationStyle(options);
+    if(styles && typeof styles.visibleCitationText === 'function'){
+      try{
+        var canonical = styles.visibleCitationText(refs, { style: style });
+        if(canonical) return canonical;
+      }catch(_e){}
+    }
+    if(styles && typeof styles.formatInlineCitation === 'function' && refs.length === 1){
+      try{
+        var single = styles.formatInlineCitation(refs[0], { style: style });
+        if(single) return single;
+      }catch(_e2){}
+    }
+    if(typeof options.visibleCitationText === 'function'){
+      try{ return options.visibleCitationText(refs); }catch(_e3){}
+    }
+    return '';
+  }
+
+  function normalizeAQEngineCitations(editor, options){
+    var docModel = editor._docModel;
+    if(!docModel) return false;
+
+    var findReference = options.findReference;
+    var getVisibleText = options.visibleCitationText;
+    
+    if(!findReference && typeof window !== 'undefined' && typeof window.findRef === 'function'){
+      findReference = function(id){ return window.findRef(id, (window.S && window.S.cur)); };
+    }
+    if(!getVisibleText && typeof window !== 'undefined'){
+      if(window.AQTipTapWordCitation && typeof window.AQTipTapWordCitation.visibleCitationText === 'function'){
+        getVisibleText = window.AQTipTapWordCitation.visibleCitationText;
+      } else if(typeof window.visibleCitationText === 'function'){
+        getVisibleText = window.visibleCitationText;
+      }
+    }
+
+    if(!findReference || !getVisibleText) return false;
+
+    var model = docModel.get();
+    var changed = false;
+
+    (model.blocks || []).forEach(function(block){
+      (block.runs || []).forEach(function(run){
+        if(run && run.citation && run.citation.mode !== 'textual'){
+          var rid = String(run.citation.ref || run.citation.id || '').trim();
+          if(!rid) return;
+
+          var refIds = rid.split(',').map(function(id){ return id.trim(); }).filter(Boolean);
+          var refs = refIds.map(findReference).filter(Boolean);
+          if(!refs.length) return;
+
+          var newText = canonicalAQEngineCitationText(refs, options) || (getVisibleText ? getVisibleText(refs) : '');
+          if(newText && run.text !== newText){
+            run.text = newText;
+            changed = true;
+          }
+        }
+      });
+    });
+
+    if(changed && typeof editor._reflow === 'function') editor._reflow();
+    return changed;
+  }
+
   function mergeBibliographyReferences(refs, options){
     options = options || {};
     var list = Array.isArray(refs) ? refs.slice() : [];
@@ -332,9 +860,26 @@
     var citationApi = options.citationApi || null;
     var refs = Array.isArray(options.refs) ? options.refs : null;
     var listEl = options.listEl || null;
+    var activeEditor = resolveActiveEditor(options);
+
+    if(activeEditor && activeEditor._aqEngine && activeEditor._docModel){
+      refs = collectAQEngineUsedReferences(activeEditor, options);
+      if(citationApi && typeof citationApi.renderReferenceList === 'function'){
+        citationApi.renderReferenceList(listEl, refs, {
+          getInlineCitationText: options.getInlineCitationText,
+          formatReference: options.formatReference,
+          escapeJS: options.escapeJS,
+          dedupeReferences: options.dedupeReferences,
+          sortReferences: options.sortReferences,
+          onReferenceClick: options.onReferenceClick
+        });
+      }
+      return refs;
+    }
 
     if(citationApi && typeof citationApi.renderUsedReferenceList === 'function' && options.editorRoot){
       refs = citationApi.renderUsedReferenceList(options.editorRoot, listEl, {
+        editor: options.editor || null,
         findReference: options.findReference,
         getInlineCitationText: options.getInlineCitationText,
         formatReference: options.formatReference,
@@ -368,6 +913,7 @@
     refs = mergeBibliographyReferences(refs, options);
     updateBibliographySection({
       refs: refs,
+      editor: options.editor || null,
       pageEl: options.pageEl || null,
       bodyEl: options.bodyEl || null,
       doc: options.doc || null,
@@ -384,10 +930,17 @@
     options = options || {};
     var panelRefs = renderReferencePanel(options);
     var refs = panelRefs;
-    if((options.pageEl || options.bodyEl) && !options.skipBibliography){
+    var activeEditor = resolveActiveEditor(options);
+    if(activeEditor && !options.editor) options.editor = activeEditor;
+    var isAQEngine = !!(activeEditor && activeEditor._aqEngine);
+    if(isAQEngine && !options.skipCitations){
+      normalizeAQEngineCitations(activeEditor, options);
+    }
+    if(((options.pageEl || options.bodyEl) || isAQEngine) && !options.skipBibliography){
       refs = mergeBibliographyReferences(panelRefs, options);
       updateBibliographySection({
         refs: refs,
+        editor: activeEditor || null,
         pageEl: options.pageEl || null,
         bodyEl: options.bodyEl || null,
         doc: options.doc || null,
@@ -435,8 +988,11 @@
     if(!resolved.doc){
       resolved.doc = getCurrentDocumentFromState(options.state || null, options.currentDocId);
     }
+    if(!resolved.editor){
+      resolved.editor = resolveActiveEditor(options);
+    }
     if(!resolved.editorRoot){
-      resolved.editorRoot = resolveEditorRoot(options);
+      resolved.editorRoot = resolveEditorRoot(resolved);
     }
     return resolved;
   }
@@ -548,13 +1104,19 @@
     syncReferenceViews: syncReferenceViews,
     syncReferenceViewsForState: syncReferenceViewsForState,
     updateBibliographySection: updateBibliographySection,
+    updateAQEngineBibliography: updateAQEngineBibliography,
+    ensureAQEngineBibliographySection: ensureAQEngineBibliographySection,
+    collectAQEngineUsedReferences: collectAQEngineUsedReferences,
+    resolveActiveEditor: resolveActiveEditor,
     resetManualBibliography: resetManualBibliography,
     resetManualBibliographyForState: resetManualBibliographyForState,
     refreshManualBibliography: refreshManualBibliography,
     refreshManualBibliographyForState: refreshManualBibliographyForState,
     openBibliographySection: openBibliographySection,
     openBibliographySectionForState: openBibliographySectionForState,
-    jumpToCitationFromBibliography: jumpToCitationFromBibliography
+    jumpToCitationFromBibliography: jumpToCitationFromBibliography,
+    normalizeAQEngineCitations: normalizeAQEngineCitations,
+    updateTiptapBibliography: updateTiptapBibliography
   };
 
   if(typeof module !== 'undefined' && module.exports){

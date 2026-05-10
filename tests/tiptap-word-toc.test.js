@@ -17,6 +17,42 @@ test('buildTOCHTML builds toc rows with page numbers and target ids', function()
   assert.match(html, /<span class="toc-page"[^>]*>2<\/span>/);
 });
 
+test('buildTOCHTML can use AQ Engine page numbers directly', function(){
+  const html = toc.buildTOCHTML({}, [
+    { tagName:'H1', textContent:'Giriş', pageNumber:4, id:'h1' },
+    { tagName:'H1', textContent:'KAYNAKÇA', pageNumber:9, id:'bib' },
+    { tagName:'H1', textContent:'EK-1', pageNumber:10, id:'ek' }
+  ]);
+  assert.match(html, /<span class="toc-page"[^>]*>4<\/span>/);
+  assert.doesNotMatch(html, /KAYNAKÇA/);
+  assert.doesNotMatch(html, /EK-1/);
+});
+
+test('collectAQEngineHeadings reads headings and page numbers from AQ layout', function(){
+  const editor = {
+    _aqEngine: true,
+    _docModel: {
+      get(){
+        return { blocks:[
+          { type:'heading', level:1, runs:[{ text:'GİRİŞ' }] },
+          { type:'paragraph', runs:[{ text:'Metin' }] },
+          { type:'heading', level:2, runs:[{ text:'Yöntem' }] },
+          { type:'heading', level:1, _isBibHeading:true, runs:[{ text:'KAYNAKÇA' }] }
+        ] };
+      }
+    },
+    _aqLayout: {
+      pages: [
+        { lines:[{ blockIndex:0 }] },
+        { lines:[{ blockIndex:2 }, { blockIndex:3 }] }
+      ]
+    }
+  };
+  const headings = toc.collectAQEngineHeadings(editor);
+  assert.deepEqual(headings.map(h => [h.textContent, h.pageNumber]), [['GİRİŞ', 1], ['Yöntem', 2]]);
+  assert.match(toc.buildAQEngineTOCHTML(editor), /Yöntem/);
+});
+
 test('scrollToHeading finds target and triggers highlight flow', function(){
   let scrolled = false;
   const target = {

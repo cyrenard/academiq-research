@@ -195,8 +195,8 @@ test('updateBibliographySection applies generated bibliography and updates docum
   assert.equal(updated, true);
   assert.equal(bound, true);
   assert.equal(pageEl.style.display, 'block');
-  assert.equal(bodyEl.innerHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="" tabindex="0" role="button">A</p><p class="refe" data-ref-id="" tabindex="0" role="button">B</p>');
-  assert.equal(doc.bibliographyHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="" tabindex="0" role="button">A</p><p class="refe" data-ref-id="" tabindex="0" role="button">B</p>');
+  assert.equal(bodyEl.innerHTML, '<h1>KAYNAKÇA</h1><p class="refe" data-ref-id="" tabindex="0" role="button">A</p><p class="refe" data-ref-id="" tabindex="0" role="button">B</p>');
+  assert.equal(doc.bibliographyHTML, '<h1>KAYNAKÇA</h1><p class="refe" data-ref-id="" tabindex="0" role="button">A</p><p class="refe" data-ref-id="" tabindex="0" role="button">B</p>');
   assert.equal(doc.bibliographyManual, false);
 });
 
@@ -248,6 +248,194 @@ test('renderReferencePanel delegates used-reference rendering to citation api', 
   assert.deepEqual(calls, [[{ id: 'editor-root' }, listEl, 'function', 'function']]);
 });
 
+test('AQ Engine bibliography sync collects citations and writes bibliography blocks', () => {
+  let blocks = [
+    {
+      type: 'paragraph',
+      runs: [
+        { text: 'Body ' },
+        { text: '(Alpha, 2024)', citation: { ref: 'r2,r1' } }
+      ]
+    }
+  ];
+  let reflowed = false;
+  const editor = {
+    _aqEngine: true,
+    _docModel: {
+      get() { return { blocks }; },
+      replace(next) { blocks = next; }
+    },
+    _reflow() { reflowed = true; }
+  };
+  const refs = bibliographyState.syncReferenceViews({
+    editor,
+    findReference(id) { return { id, title: id.toUpperCase() }; },
+    dedupeReferences(items) {
+      return items.filter((item, index, list) => list.findIndex(other => other.id === item.id) === index);
+    },
+    sortReferences(items) {
+      return items.slice().sort((a, b) => a.id.localeCompare(b.id));
+    },
+    formatRef(ref) { return ref.title; }
+  });
+
+  assert.deepEqual(refs.map(ref => ref.id), ['r1', 'r2']);
+  assert.equal(reflowed, true);
+  assert.equal(blocks[1]._isBibHeading, true);
+  assert.equal(blocks[1].pageBreak, true);
+  assert.deepEqual(blocks.slice(2).map(block => block._refId || block.attrs.refId), ['r1', 'r2']);
+  assert.deepEqual(blocks.slice(2).map(block => block._isBibEntry), [true, true]);
+});
+
+test('AQ Engine bibliography sync falls back to rendered citation HTML', () => {
+  let blocks = [{ type: 'paragraph', runs: [{ text: 'Body (Alpha, 2024)' }] }];
+  const editor = {
+    _aqEngine: true,
+    _docModel: {
+      get() { return { blocks }; },
+      replace(next) { blocks = next; }
+    },
+    getHTML() {
+      return '<p>Body <span class="cit" data-ref="r1">(Alpha, 2024)</span></p>';
+    },
+    _reflow() {}
+  };
+
+  const refs = bibliographyState.syncReferenceViews({
+    editor,
+    findReference(id) { return { id, title: 'Alpha' }; },
+    formatRef(ref) { return ref.title; }
+  });
+
+  assert.deepEqual(refs.map(ref => ref.id), ['r1']);
+  assert.equal(blocks[1]._isBibHeading, true);
+  assert.equal(blocks[2]._isBibEntry, true);
+  assert.equal(blocks[2]._refId, 'r1');
+});
+
+test('AQ Engine bibliography sync inserts references before an existing appendix', () => {
+  let blocks = [
+    {
+      type: 'paragraph',
+      runs: [
+        { text: 'Body ' },
+        { text: '(Alpha, 2024)', citation: { ref: 'r1' } }
+      ]
+    },
+    {
+      type: 'heading',
+      level: 1,
+      runs: [{ text: 'Ek', bold: true }],
+      _isAppendixHeading: true
+    },
+    {
+      type: 'paragraph',
+      runs: [{ text: 'Ek icerigi' }],
+      _isAppendixEntry: true
+    }
+  ];
+  const editor = {
+    _aqEngine: true,
+    _docModel: {
+      get() { return { blocks }; },
+      replace(next) { blocks = next; }
+    },
+    _reflow() {}
+  };
+
+  bibliographyState.syncReferenceViews({
+    editor,
+    findReference(id) { return { id, title: 'Alpha' }; },
+    formatRef(ref) { return ref.title; }
+  });
+
+  assert.equal(blocks[1]._isBibHeading, true);
+  assert.equal(blocks[2]._isBibEntry, true);
+  assert.equal(blocks[3]._isAppendixHeading, true);
+  assert.equal(blocks[4]._isAppendixEntry, true);
+});
+
+test('syncReferenceViewsForState resolves AQ Engine editor from editor core', () => {
+  let blocks = [
+    {
+      type: 'paragraph',
+      runs: [{ text: '(Alpha, 2024)', citation: { ref: 'r1' } }]
+    }
+  ];
+  const editor = {
+    _aqEngine: true,
+    _docModel: {
+      get() { return { blocks }; },
+      replace(next) { blocks = next; }
+    },
+    _reflow() {}
+  };
+  const priorWindow = global.window;
+  global.window = {
+    AQEditorCore: {
+      getEditor() { return editor; }
+    }
+  };
+
+  try {
+    const refs = bibliographyState.syncReferenceViewsForState({
+      state: { docs: [{ id: 'doc-1' }] },
+      currentDocId: 'doc-1',
+      findReference(id) { return { id, title: 'Alpha' }; },
+      formatRef(ref) { return ref.title; }
+    });
+
+    assert.deepEqual(refs.map(ref => ref.id), ['r1']);
+    assert.equal(blocks[1]._isBibHeading, true);
+    assert.equal(blocks[2]._isBibEntry, true);
+  } finally {
+    global.window = priorWindow;
+  }
+});
+
+test('ensureAQEngineBibliographySection appends a new bibliography page when missing', () => {
+  let blocks = [{ type: 'paragraph', runs: [{ text: 'Body' }] }];
+  let emitted = false;
+  const editor = {
+    _aqEngine: true,
+    _docModel: {
+      get() { return { blocks }; },
+      replace(next) { blocks = next; }
+    },
+    _reflow() {},
+    emit(name) { if(name === 'update') emitted = true; }
+  };
+
+  assert.equal(bibliographyState.ensureAQEngineBibliographySection(editor), true);
+  assert.equal(blocks.length, 3);
+  assert.equal(blocks[1]._isBibHeading, true);
+  assert.equal(blocks[1].pageBreak, true);
+  assert.equal(blocks[2]._isBibEntry, true);
+  assert.equal(emitted, true);
+});
+
+test('ensureAQEngineBibliographySection inserts before an existing appendix', () => {
+  let blocks = [
+    { type: 'paragraph', runs: [{ text: 'Body' }] },
+    { type: 'heading', level: 1, runs: [{ text: 'Ek' }], _isAppendixHeading: true },
+    { type: 'paragraph', runs: [{ text: 'Ek icerigi' }], _isAppendixEntry: true }
+  ];
+  const editor = {
+    _aqEngine: true,
+    _docModel: {
+      get() { return { blocks }; },
+      replace(next) { blocks = next; }
+    },
+    _reflow() {},
+    emit() {}
+  };
+
+  assert.equal(bibliographyState.ensureAQEngineBibliographySection(editor), true);
+  assert.equal(blocks[1]._isBibHeading, true);
+  assert.equal(blocks[2]._isBibEntry, true);
+  assert.equal(blocks[3]._isAppendixHeading, true);
+});
+
 test('syncBibliographyUI renders references and updates bibliography in one pass', () => {
   const pageEl = { style: { display: 'none' } };
   const bodyEl = { innerHTML: '' };
@@ -280,7 +468,7 @@ test('syncBibliographyUI renders references and updates bibliography in one pass
   assert.deepEqual(refs.map(ref => ref.id), ['a', 'b']);
   assert.equal(listEl.innerHTML, 'refs-rendered');
   assert.equal(pageEl.style.display, 'block');
-  assert.equal(bodyEl.innerHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="a" tabindex="0" role="button">A</p><p class="refe" data-ref-id="b" tabindex="0" role="button">B</p>');
+  assert.equal(bodyEl.innerHTML, '<h1>KAYNAKÇA</h1><p class="refe" data-ref-id="a" tabindex="0" role="button">A</p><p class="refe" data-ref-id="b" tabindex="0" role="button">B</p>');
 });
 
 test('syncReferenceViews can render panel only without touching bibliography body', () => {
@@ -337,7 +525,7 @@ test('syncReferenceViews can render panel and bibliography together', () => {
   assert.deepEqual(refs.map(ref => ref.id), ['a', 'b']);
   assert.equal(listEl.innerHTML, 'views-rendered');
   assert.equal(pageEl.style.display, 'block');
-  assert.equal(bodyEl.innerHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="a" tabindex="0" role="button">A</p><p class="refe" data-ref-id="b" tabindex="0" role="button">B</p>');
+  assert.equal(bodyEl.innerHTML, '<h1>KAYNAKÇA</h1><p class="refe" data-ref-id="a" tabindex="0" role="button">A</p><p class="refe" data-ref-id="b" tabindex="0" role="button">B</p>');
 });
 
 test('syncReferenceViews keeps external bibliography refs on generated page', () => {
@@ -380,7 +568,7 @@ test('syncReferenceViews keeps external bibliography refs on generated page', ()
   assert.deepEqual(refs.map(ref => ref.id), ['b', 'c']);
   assert.equal(listEl.innerHTML, 'views-rendered');
   assert.equal(pageEl.style.display, 'block');
-  assert.equal(bodyEl.innerHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="b" tabindex="0" role="button">B</p><p class="refe" data-ref-id="c" tabindex="0" role="button">C</p>');
+  assert.equal(bodyEl.innerHTML, '<h1>KAYNAKÇA</h1><p class="refe" data-ref-id="b" tabindex="0" role="button">B</p><p class="refe" data-ref-id="c" tabindex="0" role="button">C</p>');
   assert.equal(doc.bibliographyManual, false);
 });
 
@@ -419,8 +607,8 @@ test('syncReferenceViews creates bibliography page from external refs without in
   assert.deepEqual(refs.map(ref => ref.id), ['c']);
   assert.equal(listEl.innerHTML, 'no inline citations');
   assert.equal(pageEl.style.display, 'block');
-  assert.equal(bodyEl.innerHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="c" tabindex="0" role="button">Ciudad-Fernandez</p>');
-  assert.equal(doc.bibliographyHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="c" tabindex="0" role="button">Ciudad-Fernandez</p>');
+  assert.equal(bodyEl.innerHTML, '<h1>KAYNAKÇA</h1><p class="refe" data-ref-id="c" tabindex="0" role="button">Ciudad-Fernandez</p>');
+  assert.equal(doc.bibliographyHTML, '<h1>KAYNAKÇA</h1><p class="refe" data-ref-id="c" tabindex="0" role="button">Ciudad-Fernandez</p>');
 });
 
 test('syncReferenceViews re-sorts external bibliography refs when new citations are added', () => {
@@ -465,8 +653,8 @@ test('syncReferenceViews re-sorts external bibliography refs when new citations 
   });
 
   assert.deepEqual(refs.map(ref => ref.id), ['a', 'c']);
-  assert.equal(bodyEl.innerHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="a" tabindex="0" role="button">Barros</p><p class="refe" data-ref-id="c" tabindex="0" role="button">Ciudad</p>');
-  assert.equal(doc.bibliographyHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="a" tabindex="0" role="button">Barros</p><p class="refe" data-ref-id="c" tabindex="0" role="button">Ciudad</p>');
+  assert.equal(bodyEl.innerHTML, '<h1>KAYNAKÇA</h1><p class="refe" data-ref-id="a" tabindex="0" role="button">Barros</p><p class="refe" data-ref-id="c" tabindex="0" role="button">Ciudad</p>');
+  assert.equal(doc.bibliographyHTML, '<h1>KAYNAKÇA</h1><p class="refe" data-ref-id="a" tabindex="0" role="button">Barros</p><p class="refe" data-ref-id="c" tabindex="0" role="button">Ciudad</p>');
   assert.equal(doc.bibliographyManual, false);
 });
 
@@ -590,7 +778,7 @@ test('syncReferenceViewsForState resolves current document before syncing', () =
   });
 
   assert.deepEqual(refs, [{ id: 'r1' }]);
-  assert.equal(state.docs[0].bibliographyHTML, '<h1>Kaynakça</h1><p class="refe" data-ref-id="r1" tabindex="0" role="button">r1</p>');
+  assert.equal(state.docs[0].bibliographyHTML, '<h1>KAYNAKÇA</h1><p class="refe" data-ref-id="r1" tabindex="0" role="button">r1</p>');
 });
 
 test('refreshManualBibliographyForState resolves active document automatically', () => {

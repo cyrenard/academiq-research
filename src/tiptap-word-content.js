@@ -648,6 +648,25 @@
   function insertImage(options){
     options = options || {};
     var editor = options.editor || null;
+    if(editor && editor._aqEngine){
+      return insertHTML({
+        editor: editor,
+        html: options.html,
+        host: options.host,
+        savedRangeRef: options.savedRangeRef,
+        afterEditorInsert: function(){
+          runMutationEffects({
+            target: editor && editor.view ? editor.view.dom : null,
+            layout: true,
+            syncChrome: true,
+            normalize: false,
+            syncTOC: false,
+            syncRefs: false,
+            refreshTrigger: false
+          });
+        }
+      });
+    }
     if(editor && editor.chain && typeof editor.chain().focus === 'function'){
       var imageAttrs = {
         src:options.src,

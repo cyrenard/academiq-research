@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, net: electronNet } = require('electron');
 const { session } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -69,6 +69,7 @@ const localOcr = createLocalOcr({ appDir: APP_DIR });
 const BROWSER_CAPTURE_SOURCE_DIR = path.join(__dirname, 'browser-capture-extension');
 const APP_VERSION = require('./package.json').version;
 const APP_USER_MODEL_ID = 'com.academiq.research';
+const RENDERER_DEV_SERVER_URL = process.env.ACADEMIQ_RENDERER_URL || process.env.VITE_DEV_SERVER_URL || '';
 const CAPTURE_AGENT_ARG = '--capture-agent';
 const CAPTURE_AGENT_AUTOSTART_ARG = '--capture-agent-autostart';
 const IS_CAPTURE_AGENT_MODE = process.argv.includes(CAPTURE_AGENT_ARG);
@@ -1842,6 +1843,7 @@ function sanitizeDownloadOptions(input) {
   if (Array.isArray(src.expectedAuthors)) out.expectedAuthors = src.expectedAuthors.map(v => String(v || '').slice(0, 256)).filter(Boolean).slice(0, 8);
   if (src.expectedYear != null) out.expectedYear = String(src.expectedYear || '').slice(0, 32);
   if (src.requireDoiEvidence != null) out.requireDoiEvidence = !!src.requireDoiEvidence;
+  if (src.allowUnverifiedPdf != null) out.allowUnverifiedPdf = !!src.allowUnverifiedPdf;
   if (src.ws && typeof src.ws === 'object') {
     const wsId = String(src.ws.id || '').trim();
     if (wsId) out.ws = { id: wsId.slice(0, 128), name: String(src.ws.name || '').slice(0, 256) };
@@ -2003,22 +2005,29 @@ function createWindow() {
   });
 
   mainWindow.setMenuBarVisibility(false);
-  // In development (npm start / unpackaged), always use bundled files directly.
+  // In development the React shell can be served by Vite. Production keeps
+  // loading bundled files from disk and preserves the existing preload model.
   // Packaged builds archive stale overrides from userData but also load the
   // bundled file to keep the runtime deterministic across updates.
-  const bundledHtml = path.join(__dirname, 'academiq-research.html');
+  const bundledRendererHtml = path.join(__dirname, 'dist', 'renderer', 'index.html');
+  const bundledHtml = fs.existsSync(bundledRendererHtml)
+    ? bundledRendererHtml
+    : path.join(__dirname, 'academiq-research.html');
   if (app.isPackaged) {
     try { archiveLegacyRuntimeOverrides(storage.appDir); } catch (_e) {}
     try { archiveUnexpectedAppRuntimeFiles(storage.appDir); } catch (_e) {}
     const expectedRuntimeSignature = computeRendererRuntimeSignature(__dirname);
     try { archiveStaleRuntimeOverrides(storage.appDir, APP_VERSION, expectedRuntimeSignature); } catch (_e) {}
   }
-  if (!fs.existsSync(bundledHtml)) {
+  if (!app.isPackaged && RENDERER_DEV_SERVER_URL) {
+    mainWindow.loadURL(RENDERER_DEV_SERVER_URL);
+  } else if (!fs.existsSync(bundledHtml)) {
     console.error('[startup] bundled renderer HTML missing:', bundledHtml);
     app.quit();
     return;
+  } else {
+    mainWindow.loadFile(bundledHtml);
   }
-  mainWindow.loadFile(bundledHtml);
   mainWindow.webContents.on('did-finish-load', () => {
     browserCaptureRuntime.ready = true;
     processCaptureQueueFromApp('did-finish-load').catch(() => {});
@@ -2431,6 +2440,7 @@ async function downloadPDFfromURLMain(url, refId, options = {}) {
   const expectedAuthors = Array.isArray(safeOptions.expectedAuthors) ? safeOptions.expectedAuthors.slice() : [];
   const expectedYear = String(safeOptions.expectedYear || '').trim();
   const requireDoiEvidence = expectedDoi ? (safeOptions.requireDoiEvidence !== false) : false;
+  const allowUnverifiedPdf = !!safeOptions.allowUnverifiedPdf;
   function extractPdfCandidatesFromHTML(html, baseUrl) {
     const out = [];
     const seen = new Set();
@@ -2479,6 +2489,38 @@ async function downloadPDFfromURLMain(url, refId, options = {}) {
       if (isLowSignalDiscoveryURL(candidateUrl)) score -= 10;
       return score;
     }
+    async function fetchWithElectronNet(targetUrl) {
+      if (!electronNet || typeof electronNet.fetch !== 'function') {
+        throw new Error('Electron net fetch unavailable');
+      }
+      if (!isSafeHttpURL(targetUrl)) throw new Error('Blocked URL candidate');
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+      try {
+        const response = await electronNet.fetch(targetUrl, {
+          method: 'GET',
+          redirect: 'follow',
+          signal: controller ? controller.signal : undefined,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept': 'application/pdf,text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9,tr;q=0.8'
+          }
+        });
+        if (!response || !response.ok) throw new Error('HTTP ' + (response ? response.status : 0));
+        const finalUrl = String(response.url || targetUrl);
+        if (!isSafeHttpURL(finalUrl)) throw new Error('Blocked final URL');
+        const length = Number(response.headers && response.headers.get ? response.headers.get('content-length') : 0);
+        if (length && length > maxBytes) throw new Error('Response exceeds maximum size');
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer || new ArrayBuffer(0));
+        if (buffer.length > maxBytes) throw new Error('Response exceeds maximum size');
+        return { buffer, finalUrl, statusCode: response.status, headers: Object.fromEntries(response.headers.entries()) };
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    }
+
     async function tryUrl(targetUrl, depth) {
       if (!targetUrl || visited.has(targetUrl) || depth > 2) return { ok: false, error: 'No PDF candidate succeeded' };
       if (!isSafeHttpURL(targetUrl)) return { ok: false, error: 'Blocked URL candidate' };
@@ -2486,12 +2528,24 @@ async function downloadPDFfromURLMain(url, refId, options = {}) {
         return { ok: false, error: 'Low-signal discovery URL skipped' };
       }
       visited.add(targetUrl);
-      const meta = await followRedirects(targetUrl, 8, {
-        timeout: timeoutMs,
-        returnMeta: true,
-        maxBytes,
-        blockPrivate: true
-      });
+      let meta;
+      try {
+        meta = await followRedirects(targetUrl, 8, {
+          timeout: timeoutMs,
+          returnMeta: true,
+          maxBytes,
+          blockPrivate: true,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept': 'application/pdf,text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9,tr;q=0.8'
+          }
+        });
+      } catch (firstError) {
+        const message = firstError && firstError.message ? firstError.message : String(firstError || '');
+        if (!/(HTTP 401|HTTP 403|HTTP 429|socket hang up|ECONNRESET|Timeout|Too many redirects)/i.test(message)) throw firstError;
+        meta = await fetchWithElectronNet(targetUrl);
+      }
       const buf = meta && meta.buffer ? meta.buffer : meta;
       if (!buf || !Buffer.isBuffer(buf)) return { ok: false, error: 'Invalid response buffer' };
       if (buf.length < 100) return { ok: false, error: 'Too small: ' + buf.length + ' bytes' };
@@ -2521,18 +2575,18 @@ async function downloadPDFfromURLMain(url, refId, options = {}) {
             doiInBody = bufferLikelyMatchesExpectedDoi(pdfBuffer, expectedDoi);
             doiCandidates = extractDoiCandidates(sample);
             hasDifferentDoi = doiCandidates.length > 0 && !doiCandidates.includes(expectedDoi);
-            if (hasDifferentDoi) {
+            if (hasDifferentDoi && !allowUnverifiedPdf) {
               return { ok: false, error: 'PDF DOI mismatch (different DOI found)' };
             }
             if (!doiInBody && !doiInUrl) {
-              if (requireDoiEvidence && !metadataLikely) {
+              if (requireDoiEvidence && !metadataLikely && !allowUnverifiedPdf) {
                 return { ok: false, error: 'PDF DOI kanýtý yok' };
               }
-              if (!metadataLikely && !(expectedTitle && bufferLikelyMatchesExpectedTitle(pdfBuffer, expectedTitle))) {
+              if (!metadataLikely && !(expectedTitle && bufferLikelyMatchesExpectedTitle(pdfBuffer, expectedTitle)) && !allowUnverifiedPdf) {
                 return { ok: false, error: 'PDF DOI mismatch' };
               }
             }
-          } else if (expectedTitle && !bufferLikelyMatchesExpectedTitle(pdfBuffer, expectedTitle)) {
+          } else if (expectedTitle && !bufferLikelyMatchesExpectedTitle(pdfBuffer, expectedTitle) && !allowUnverifiedPdf) {
             return { ok: false, error: 'PDF title mismatch' };
           }
           const verification = buildVerificationReport({
@@ -2550,7 +2604,7 @@ async function downloadPDFfromURLMain(url, refId, options = {}) {
             differentDoiFound: hasDifferentDoi,
             doiCandidates
           });
-          if (verification.status === 'suspicious') {
+          if (verification.status === 'suspicious' && !allowUnverifiedPdf) {
             return { ok: false, error: verification.summary || 'PDF güven skoru düþük', verification };
           }
           return { ok: true, buffer: pdfBuffer, finalUrl, verification };
@@ -2563,15 +2617,15 @@ async function downloadPDFfromURLMain(url, refId, options = {}) {
       }
       const html = buf.slice(0, Math.min(buf.length, 300000)).toString('utf8');
       if (expectedDoi) {
-        if (!textHasExpectedDoi(html, expectedDoi) && !urlLikelyMatchesExpectedDoi(finalUrl, expectedDoi)) {
+        if (!textHasExpectedDoi(html, expectedDoi) && !urlLikelyMatchesExpectedDoi(finalUrl, expectedDoi) && !allowUnverifiedPdf) {
           return { ok: false, error: 'Landing page DOI mismatch' };
         }
       }
       const candidates = extractPdfCandidatesFromHTML(html, finalUrl)
         .filter(candidate => isSafeHttpURL(candidate))
         .filter(candidate => !isLowSignalDiscoveryURL(candidate))
-        .filter(candidate => !(expectedDoi && urlContainsDifferentDoi(candidate, expectedDoi)))
-        .filter(candidate => !(expectedDoi && !urlLikelyMatchesExpectedDoi(candidate, expectedDoi) && !/\/pdf(\/|$|[?#])|\.pdf($|[?#])/i.test(candidate)))
+        .filter(candidate => allowUnverifiedPdf || !(expectedDoi && urlContainsDifferentDoi(candidate, expectedDoi)))
+        .filter(candidate => allowUnverifiedPdf || !(expectedDoi && !urlLikelyMatchesExpectedDoi(candidate, expectedDoi) && !/\/pdf(\/|$|[?#])|\.pdf($|[?#])/i.test(candidate)))
         .sort((a, b) => scoreCandidate(b) - scoreCandidate(a))
         .slice(0, 10);
       for (const cand of candidates) {
@@ -2665,7 +2719,7 @@ ipcMain.handle('net:fetch-json', async (_ev, url, options = {}) => {
     const requestOptions = {
       timeout,
       blockPrivate: true,
-      allowedHosts: NET_ALLOWED_HOSTS,
+      allowedHosts: safeOptions.allowAnyHost ? null : NET_ALLOWED_HOSTS,
       preferGlobalFetch: !!safeOptions.preferGlobalFetch || /^openlibrary\.org$/i.test(requestHost),
       headers: {
         'User-Agent': 'AcademiQ Research/1.1.8 (local metadata lookup)',

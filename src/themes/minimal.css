@@ -817,18 +817,30 @@
 /* ==========================================================================
    Scrollbars — thin
    ========================================================================== */
-:root[data-aq-skin="minimal"] ::-webkit-scrollbar { width: 8px; height: 8px; }
-:root[data-aq-skin="minimal"] ::-webkit-scrollbar-track { background: transparent; }
+:root[data-aq-skin="minimal"],
+:root[data-aq-skin="minimal"] * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(14, 19, 32, 0.24) transparent;
+}
+:root[data-aq-skin="minimal"] ::-webkit-scrollbar { width: 7px; height: 7px; }
+:root[data-aq-skin="minimal"] ::-webkit-scrollbar-track,
+:root[data-aq-skin="minimal"] ::-webkit-scrollbar-corner { background: transparent; }
 :root[data-aq-skin="minimal"] ::-webkit-scrollbar-thumb {
-  background: rgba(14, 19, 32, 0.16);
+  min-height: 36px;
+  background: rgba(14, 19, 32, 0.24);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 :root[data-aq-skin="minimal"] ::-webkit-scrollbar-thumb:hover {
-  background: rgba(14, 19, 32, 0.32);
+  background: rgba(14, 19, 32, 0.38);
   background-clip: padding-box;
   border: 2px solid transparent;
+}
+:root[data-aq-skin="minimal"] ::-webkit-scrollbar-button {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 /* ==========================================================================

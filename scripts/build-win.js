@@ -24,6 +24,20 @@ function runNodeScript(scriptName) {
   run(process.execPath, [path.join(__dirname, scriptName)], 'node ' + scriptName);
 }
 
+function runNpmScript(scriptName) {
+  if (process.env.npm_execpath && fs.existsSync(process.env.npm_execpath)) {
+    run(process.execPath, [process.env.npm_execpath, 'run', scriptName], 'npm run ' + scriptName);
+    return;
+  }
+  const npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  if (fs.existsSync(npmCli)) {
+    run(process.execPath, [npmCli, 'run', scriptName], 'npm run ' + scriptName);
+    return;
+  }
+  const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  run(npm, ['run', scriptName], 'npm run ' + scriptName);
+}
+
 function runBuilder(dirMode) {
   const args = ['--win', '--x64'];
   if (dirMode) args.push('--dir');
@@ -41,6 +55,7 @@ let inlined = false;
 let buildError = null;
 
 try {
+  runNpmScript('build:renderer');
   runNodeScript('inline-src.js');
   inlined = true;
   runBuilder(dirMode);

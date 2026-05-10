@@ -117,6 +117,182 @@
     return null;
   }
 
+  function getActiveEditor(options){
+    options = options || {};
+    if(options.editor) return options.editor;
+    try{
+      if(root && typeof root.getActiveEditorInstance === 'function') return root.getActiveEditorInstance();
+    }catch(_e){}
+    return root ? (root.editor || null) : null;
+  }
+
+  function isAQEngineEditor(editor){
+    return !!(editor && editor._aqEngine && editor._docModel);
+  }
+
+  function runsText(runs){
+    return normalizeText((runs || []).map(function(run){ return String(run && run.text || ''); }).join(''));
+  }
+
+  function cloneAQBlocks(editor){
+    var doc = editor && editor._docModel ? editor._docModel.get() : { blocks: [] };
+    return (doc.blocks || []).map(function(block){
+      return Object.assign({}, block, {
+        attrs: block.attrs ? Object.assign({}, block.attrs) : {},
+        runs: (block.runs || []).map(function(run){
+          return Object.assign({}, run, {
+            citation: run.citation ? Object.assign({}, run.citation) : null,
+            footnote: run.footnote ? Object.assign({}, run.footnote) : null,
+            crossRef: run.crossRef ? Object.assign({}, run.crossRef) : null,
+            font: run.font ? Object.assign({}, run.font) : null
+          });
+        })
+      });
+    });
+  }
+
+  function commitAQBlocks(editor, blocks){
+    editor._docModel.replace(blocks);
+    if(typeof editor._reflow === 'function') editor._reflow();
+    if(typeof editor.emit === 'function') editor.emit('update');
+  }
+
+  function ensureAQObjectIds(editor){
+    if(!isAQEngineEditor(editor)) return [];
+    var blocks = cloneAQBlocks(editor);
+    var changed = false;
+    var tableN = 1, figureN = 1;
+    blocks.forEach(function(block, index){
+      if(!block || (block.type !== 'table' && block.type !== 'image')) return;
+      var prefix = block.type === 'table' ? 'table' : 'figure';
+      var label = block.type === 'table' ? ('Tablo ' + tableN++) : ('Şekil ' + figureN++);
+      if(!block.attrs.refId && !block._refId){
+        block.attrs.refId = 'aq-' + prefix + '-' + (index + 1) + '-' + slugify(label + '-' + (block.alt || ''));
+        changed = true;
+      }
+    });
+    if(changed) commitAQBlocks(editor, blocks);
+    return isAQEngineEditor(editor) ? cloneAQBlocks(editor) : blocks;
+  }
+
+  function previousAQContentBlock(blocks, index){
+    for(var i = index - 1; i >= 0; i--){
+      if(runsText(blocks[i] && blocks[i].runs)) return { block: blocks[i], index: i };
+    }
+    return null;
+  }
+
+  function nextAQContentBlock(blocks, index){
+    for(var i = index + 1; i < blocks.length; i++){
+      if(runsText(blocks[i] && blocks[i].runs)) return { block: blocks[i], index: i };
+    }
+    return null;
+  }
+
+  function collectAQCaptionManagerEntries(options){
+    var editor = getActiveEditor(options);
+    if(!isAQEngineEditor(editor)) return null;
+    var blocks = ensureAQObjectIds(editor);
+    var entries = [];
+    var tableN = 1, figureN = 1;
+    blocks.forEach(function(block, index){
+      if(!block) return;
+      if(block.type === 'table'){
+        var prev = previousAQContentBlock(blocks, index);
+        var prevText = prev ? runsText(prev.block.runs) : '';
+        var label = 'Tablo ' + tableN++;
+        var title = '';
+        if(prev && matchesTableLabel(prevText)){
+          label = normalizeText(prevText);
+        }else if(prev){
+          title = prevText;
+          var labelPrev = previousAQContentBlock(blocks, prev.index);
+          if(labelPrev && matchesTableLabel(runsText(labelPrev.block.runs))) label = runsText(labelPrev.block.runs);
+        }
+        var next = nextAQContentBlock(blocks, index);
+        var note = next && matchesNoteText(runsText(next.block.runs)) ? runsText(next.block.runs).replace(/^not\.\s*/i, '') : '';
+        entries.push({ id:(block.attrs && block.attrs.refId) || block._refId, type:'table', label:label, title:title, note:note });
+      }else if(block.type === 'image'){
+        entries.push({ id:(block.attrs && block.attrs.refId) || block._refId, type:'figure', label:'Şekil ' + figureN++, title:normalizeText(block.alt || ''), note:'' });
+      }else{
+        var text = runsText(block.runs);
+        if(matchesFigurePlaceholder(text) || matchesFigureLabel(text)){
+          entries.push({ id:(block.attrs && block.attrs.refId) || ('aq-figure-text-' + (index + 1)), type:'figure', label:'Şekil ' + figureN++, title:parseFigureTitle(text), note:'' });
+        }
+      }
+    });
+    return entries;
+  }
+
+  function makeAQParagraph(text, options){
+    options = options || {};
+    return {
+      runs: [{ text: String(text || ''), bold: !!options.bold, italic: !!options.italic }],
+      align: options.align || 'left',
+      firstLineIndentPx: 0,
+      spaceAfterPx: 0,
+      attrs: options.refId ? { refId: options.refId } : {}
+    };
+  }
+
+  function updateAQCaption(options){
+    var editor = getActiveEditor(options);
+    if(!isAQEngineEditor(editor)) return null;
+    var objectId = normalizeText(options.id || '');
+    var objectType = normalizeTextLower(options.type || '');
+    if(!objectId || !objectType) return false;
+    var blocks = ensureAQObjectIds(editor);
+    var idx = -1;
+    blocks.forEach(function(block, index){
+      var id = normalizeText((block && block.attrs && block.attrs.refId) || block._refId || '');
+      if(id === objectId) idx = index;
+    });
+    if(idx < 0) return false;
+    var title = normalizeText(options.title || '');
+    var note = normalizeText(options.note || '');
+    if(objectType === 'table'){
+      var prev = previousAQContentBlock(blocks, idx);
+      var titleIndex = prev && !matchesTableLabel(runsText(prev.block.runs)) ? prev.index : -1;
+      if(title){
+        var titleBlock = makeAQParagraph(title, { italic:true });
+        if(titleIndex >= 0) blocks[titleIndex] = Object.assign({}, blocks[titleIndex], titleBlock);
+        else { blocks.splice(idx, 0, titleBlock); idx += 1; }
+      }else if(titleIndex >= 0){
+        blocks.splice(titleIndex, 1);
+        idx -= 1;
+      }
+      var next = nextAQContentBlock(blocks, idx);
+      var noteIndex = next && matchesNoteText(runsText(next.block.runs)) ? next.index : -1;
+      if(note){
+        var noteBlock = makeAQParagraph('Not. ' + note);
+        noteBlock.runs = [{ text:'Not. ', italic:true }, { text:note }];
+        if(noteIndex >= 0) blocks[noteIndex] = Object.assign({}, blocks[noteIndex], noteBlock);
+        else blocks.splice(idx + 1, 0, noteBlock);
+      }else if(noteIndex >= 0){
+        blocks.splice(noteIndex, 1);
+      }
+      commitAQBlocks(editor, blocks);
+      return true;
+    }
+    if(objectType === 'figure'){
+      if(blocks[idx].type === 'image'){
+        blocks[idx].alt = title || blocks[idx].alt || '';
+        var capText = title ? ('Şekil - ' + title) : 'Şekil';
+        var after = nextAQContentBlock(blocks, idx);
+        if(after && matchesFigureLabel(runsText(after.block.runs))){
+          blocks[after.index] = makeAQParagraph(capText, { italic:true, align:'center' });
+        }else if(title){
+          blocks.splice(idx + 1, 0, makeAQParagraph(capText, { italic:true, align:'center' }));
+        }
+      }else{
+        blocks[idx] = makeAQParagraph(title ? ('Şekil - ' + title) : 'Şekil', { italic:true, align:'center', refId:objectId });
+      }
+      commitAQBlocks(editor, blocks);
+      return true;
+    }
+    return false;
+  }
+
   function getObjectLabelNode(node){
     if(!node) return null;
     if(node.getAttribute && node.getAttribute('data-academic-label-node') === 'true') return node;
@@ -464,6 +640,8 @@
   }
 
   function getCaptionManagerEntries(options){
+    var aqEntries = collectAQCaptionManagerEntries(options);
+    if(Array.isArray(aqEntries)) return aqEntries;
     var rootNode = getRoot(options);
     if(!rootNode) return [];
     var targets = collectTargets({ root: rootNode }).filter(function(target){
@@ -489,6 +667,8 @@
 
   function updateCaption(options){
     options = options || {};
+    var aqUpdated = updateAQCaption(options);
+    if(aqUpdated !== null) return !!aqUpdated;
     var rootNode = getRoot(options);
     if(!rootNode) return false;
     var objectId = normalizeText(options.id || '');
@@ -635,6 +815,11 @@
   }
 
   function getNextNumber(type, options){
+    var aqEntries = collectAQCaptionManagerEntries(options);
+    if(Array.isArray(aqEntries)){
+      var targetType = String(type || '');
+      return aqEntries.filter(function(entry){ return entry && entry.type === targetType; }).length + 1;
+    }
     var rootNode = getRoot(options);
     if(!rootNode) return 1;
     if(String(type || '') === 'figure'){

@@ -52,8 +52,24 @@
   }
 
   function focus(options){
-    var editorDom = getEditorDom();
     var toEnd = !!(options && options.toEnd);
+    
+    // AQ Engine path: priority focus on hidden capture textarea
+    if(typeof window !== 'undefined' && window.__aqEngineActive && window.editor && window.editor._aqEngine){
+      var ta = document.querySelector('.aq-input-capture');
+      if(ta && typeof ta.focus === 'function'){
+        try {
+          if(toEnd && window.editor.commands && typeof window.editor.commands.focus === 'function'){
+            window.editor.commands.focus('end');
+          } else {
+            ta.focus({ preventScroll: true });
+          }
+          return true;
+        } catch(_e){}
+      }
+    }
+
+    var editorDom = getEditorDom();
     if(typeof window !== 'undefined' && window.editor && window.editor.chain){
       try{
         var chain = window.editor.chain().focus();

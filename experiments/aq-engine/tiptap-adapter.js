@@ -17,7 +17,186 @@
   root.AQEngineTipTapAdapter = factory();
 })(typeof window !== 'undefined' ? window : globalThis, function(){
 
-  var HEADING_SIZES_PT = { 1: 18, 2: 16, 3: 14, 4: 13, 5: 12, 6: 12 };
+  function normalizeHeadingLevel(level){
+    var n = parseInt(level, 10) || 1;
+    return Math.max(1, Math.min(5, n));
+  }
+
+  function uppercaseAPAHeadingRuns(runs){
+    if(!Array.isArray(runs)) return;
+    runs.forEach(function(run){
+      if(!run || typeof run.text !== 'string') return;
+      try{ run.text = run.text.toLocaleUpperCase('tr-TR'); }
+      catch(_e){ run.text = run.text.toUpperCase(); }
+    });
+  }
+
+  function applyAPA7HeadingStyle(block, level){
+    level = normalizeHeadingLevel(level);
+    block.level = level;
+    if(level === 1) uppercaseAPAHeadingRuns(block.runs);
+    block.font = { sizePt: 12, weight: '700', style: (level === 3 || level === 5) ? 'italic' : 'normal' };
+    block.align = level === 1 ? 'center' : 'left';
+    block.firstLineIndentPx = (level === 4 || level === 5) ? 36 : 0;
+    block.spaceAfterPx = 0;
+    block.runInHeading = level === 4 || level === 5;
+    return block;
+  }
+
+  function applyAPA7BibliographyEntryStyle(block){
+    block.type = block.type || 'paragraph';
+    block._isBibEntry = true;
+    block.leftIndentPx = 48;
+    block.firstLineIndentPx = -48;
+    block.spaceAfterPx = 0;
+    block.lineHeightFactor = 2.0;
+    block.font = { sizePt: 12, weight: '400', style: 'normal' };
+    return block;
+  }
+
+  function addClass(attrs, className){
+    if(!attrs || !className) return attrs;
+    var current = String(attrs.class || '').trim();
+    var parts = current ? current.split(/\s+/) : [];
+    String(className).split(/\s+/).forEach(function(part){
+      if(part && parts.indexOf(part) < 0) parts.push(part);
+    });
+    attrs.class = parts.join(' ');
+    return attrs;
+  }
+
+  function normalizeSemanticTitle(text){
+    return String(text || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\u00e7/g, 'c')
+      .replace(/\u0131/g, 'i')
+      .replace(/\u015f/g, 's')
+      .replace(/\u011f/g, 'g')
+      .replace(/\u00fc/g, 'u')
+      .replace(/\u00f6/g, 'o');
+  }
+
+  function runsText(runs){
+    return (runs || []).map(function(run){ return String(run && run.text || ''); }).join('');
+  }
+
+  function repairWordImportTextBoundaries(text){
+    var out = String(text || '')
+      .replace(/\u00ad/g, '')
+      .replace(/[\u200b-\u200d\ufeff]/g, ' ');
+    if(!out) return out;
+    var nextWords = [
+      'birlikte','gelmiştir','görülmektedir','gostermektedir','göstermektedir',
+      'yalnızca','yalnizca','öğrenme','ogrenme','iletişim','iletisim','bilgi',
+      'üretimi','uretimi','gibi','çeşitli','cesitli','alanlarda','aktif',
+      'şekilde','sekilde','kullanılmaya','kullanilmaya','başladığı','basladigi',
+      'hayatımızın','hayatimizin','alanına','alanina','giren','bireyler',
+      'üzerinde','uzerinde','bilişsel','bilissel','izler','bırakan','birakan',
+      'kavram','olarak','ortaya','konmaktadır','konmaktadir','durum','insan',
+      'bilişinin','bilisinin','sadece','içsel','icsel','unsurlarla','değil',
+      'degil','teknoloji','dışsal','dissal','etkileşim','etkilesim','içerisine',
+      'icerisine','girdiğini','girdigini','sayesinde','yoğun','yogun','akışı',
+      'akisi','yükünü','yukunu','artırabilmekte','artirabilmekte','düzenleme',
+      'duzenleme','yeniden','organize','etme','becerilerinin','önemini','onemini'
+    ];
+    nextWords.forEach(function(word){
+      var escaped = String(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var re = new RegExp('([0-9A-Za-zÇĞİÖŞÜçğıöşüÂâÎîÛûÄäËëÏïÖöÜüÀ-ÖØ-öø-ÿ])(' + escaped + ')(?=\\b)', 'g');
+      out = out.replace(re, function(match, prev, next, offset, source){
+        var before = source.slice(Math.max(0, offset - 18), offset + 1).toLowerCase();
+        if(/\s$/.test(prev)) return match;
+        if(/^(da|de|ve|ile|ki|mi|mı|mu|mü)$/i.test(next)) return match;
+        if(/(?:https?|doi|www)\.?$/i.test(before)) return match;
+        return prev + ' ' + next;
+      });
+    });
+    var letterClass = '0-9A-Za-z\\u00c0-\\u024f\\u1e00-\\u1effÇĞİÖŞÜçğıöşü';
+    var chainWords = nextWords.concat([
+      '\u00e7e\u015fitli','cesitli','ili\u015fkileri','iliskileri','ili\u015fkiler','iliskiler',
+      'bulunabilmektedir','bulunabilmekte','bulunabilir','dijitalle\u015fmenin','dijitallesmenin',
+      'yayg\u0131nla\u015fmas\u0131yla','yayginlasmasiyla','teknolojilerin','platformlar',
+      'arac\u0131l\u0131\u011f\u0131yla','araciligiyla','kullan\u0131lan','kullanilan',
+      'olmaktan','\u00e7\u0131k\u0131p','cikip','ba\u011flamda','baglamda',
+      'bireylerin','becerileri','art\u0131rmaktad\u0131r','artirmaktadir',
+      'd\u00fczenlenmesi','duzenlenmesi','ili\u015fkiler','iliskiler'
+    ]);
+    chainWords.sort(function(a,b){ return String(b).length - String(a).length; });
+    chainWords.forEach(function(word){
+      if(String(word).length < 5) return;
+      var escaped = String(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var re = new RegExp('([' + letterClass + '])(' + escaped + ')(?=[' + letterClass + '])', 'gi');
+      out = out.replace(re, function(match, prev, next, offset, source){
+        var before = source.slice(Math.max(0, offset - 18), offset + 1).toLowerCase();
+        if(/(?:https?|doi|www)\.?$/i.test(before)) return match;
+        return prev + ' ' + next;
+      });
+    });
+    chainWords.forEach(function(word){
+      if(String(word).length < 5) return;
+      var escaped = String(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var re = new RegExp('([' + letterClass + '])(' + escaped + ')(?=$|[^' + letterClass + '])', 'gi');
+      out = out.replace(re, function(match, prev, next, offset, source){
+        var before = source.slice(Math.max(0, offset - 18), offset + 1).toLowerCase();
+        if(/(?:https?|doi|www)\.?$/i.test(before)) return match;
+        return prev + ' ' + next;
+      });
+    });
+    out = out
+      .replace(/(^|\s)(\u00e7e\u015fitli|cesitli)\s+leri\s+(bulunabilmektedir|bulunabilmekte|bulunabilir)\b/gi, '$1$2 ili\u015fkileri $3');
+    return out
+      .replace(/,([A-Za-zÇĞİÖŞÜçğıöşüÂâÎîÛûÄäËëÏïÖöÜüÀ-ÖØ-öø-ÿ])/g, ', $1')
+      .replace(/;([A-Za-zÇĞİÖŞÜçğıöşüÂâÎîÛûÄäËëÏïÖöÜüÀ-ÖØ-öø-ÿ])/g, '; $1')
+      .replace(/\.([A-ZÇĞİÖŞÜ])/g, '. $1');
+  }
+
+  function parseImageWidth(value){
+    if(value === null || value === undefined || value === '') return null;
+    var raw = String(value).trim();
+    if(/%$/.test(raw)) return raw;
+    var n = parseFloat(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  function findCitationRef(id){
+    var refId = String(id || '').trim();
+    if(!refId) return null;
+    try{
+      if(root.AQReferenceManager && typeof root.AQReferenceManager.findReference === 'function'){
+        var managed = root.AQReferenceManager.findReference(refId, root.S && root.S.cur);
+        if(managed) return managed;
+      }
+    }catch(_e){}
+    try{
+      if(typeof root.findRef === 'function') return root.findRef(refId, root.S && root.S.cur);
+    }catch(_e2){}
+    return null;
+  }
+
+  function canonicalCitationText(attrs, fallbackText){
+    var refIds = String((attrs && (attrs['data-ref'] || attrs.ref)) || '').split(',').map(function(id){
+      return String(id || '').trim();
+    }).filter(Boolean);
+    if(!refIds.length || !root.AQCitationStyles) return fallbackText;
+    var refs = refIds.map(findCitationRef).filter(Boolean);
+    if(!refs.length) return fallbackText;
+    var styleId = 'apa7';
+    try{
+      if(typeof root.getCurrentCitationStyle === 'function') styleId = root.getCurrentCitationStyle() || 'apa7';
+    }catch(_styleErr){}
+    try{
+      if(attrs && attrs['data-mode'] === 'textual' && typeof root.AQCitationStyles.formatInlineCitation === 'function'){
+        return root.AQCitationStyles.formatInlineCitation(refs[0], { style: styleId, mode: 'textual' }) || fallbackText;
+      }
+      if(typeof root.AQCitationStyles.visibleCitationText === 'function'){
+        return root.AQCitationStyles.visibleCitationText(refs, { style: styleId }) || fallbackText;
+      }
+      if(typeof root.AQCitationStyles.formatInlineCitation === 'function'){
+        return root.AQCitationStyles.formatInlineCitation(refs[0], { style: styleId }) || fallbackText;
+      }
+    }catch(_formatErr){}
+    return fallbackText;
+  }
 
   function flattenInlineToRuns(nodes){
     var runs = [];
@@ -27,7 +206,7 @@
       if(!n) continue;
       if(n.type === 'text'){
         var marks = n.marks || [];
-        var run = { text: String(n.text || '') };
+        var run = { text: repairWordImportTextBoundaries(n.text || '') };
         var fontOverride = null;
         for(var m = 0; m < marks.length; m++){
           var mk = marks[m];
@@ -37,6 +216,8 @@
           else if(t === 'italic' || t === 'em') run.italic = true;
           else if(t === 'underline') run.underline = true;
           else if(t === 'strike') run.strike = true;
+          else if(t === 'trackInsert') run.trackInsert = true;
+          else if(t === 'trackDelete') run.trackDelete = true;
           else if(t === 'subscript'){ run.baselineShift = -4; run.fontScale = 0.75; }
           else if(t === 'superscript'){ run.baselineShift = 6; run.fontScale = 0.75; }
           else if(t === 'citation'){
@@ -49,8 +230,20 @@
               mode:   attrs['data-mode']  || null,
               noteId: attrs['data-note-id'] || null
             };
-            // Visual styling — AcademiQ citations are a distinct accent colour.
-            if(!run.color) run.color = '#1a4480';
+            run.text = canonicalCitationText(attrs, run.text);
+          }
+          else if(t === 'crossRef'){
+            run.crossRef = {
+              refType: attrs.refType || attrs['data-ref-type'] || 'heading',
+              refId: attrs.refId || attrs['data-ref-id'] || '',
+              refLabel: attrs.refLabel || attrs['data-ref-label'] || '',
+              display: attrs.display || attrs['data-ref-display'] || 'context'
+            };
+            run.href = '#' + run.crossRef.refId;
+            if(!run.color) run.color = '#1a0dab';
+          }
+          else if(t === 'link'){
+            run.href = attrs.href || '';
           }
           else if(t === 'textStyle'){
             fontOverride = fontOverride || {};
@@ -68,16 +261,18 @@
         if(fontOverride) run.font = fontOverride;
         runs.push(run);
       }else if(n.type === 'hardBreak'){
-        // Render as a forced line break: a token with isBreak flag will be
-        // honored by the engine. For now we emit a newline character that
-        // the engine treats as a regular space; full break support is TODO.
-        runs.push({ text: '\n' });
+        // <br> would map to a forced line break; full break support is TODO.
+        // Emitting '\n' here corrupts later typing — the engine's tokenizer
+        // splits on '\n' so any space typed near it appears to wrap to the
+        // next line. Skip the hardBreak run entirely; trailing <p><br></p>
+        // boilerplate (eg. table insert) becomes a clean empty paragraph.
+        // (No-op.)
       }else if(n.type === 'footnoteRef'){
         // AcademiQ inline atom — display as superscript number.
         var attrs = n.attrs || {};
         var fnId = attrs.fnId || attrs['data-fn-id'] || '?';
         runs.push({
-          text: String(fnId),
+          text: '1',
           baselineShift: 6,
           fontScale: 0.75,
           color: '#1a4480',
@@ -109,26 +304,59 @@
     if(type === 'paragraph'){
       var runs = flattenInlineToRuns(node.content || []);
       if(!runs.length) runs = [{ text: '' }];
-      return {
+      var block = {
         runs: runs,
         spaceAfterPx: 0,
         align: attrs.textAlign || 'left'
       };
+      if(attrs.refId){
+        block.attrs = Object.assign({}, block.attrs || {}, { refId: attrs.refId });
+        block._refId = attrs.refId;
+        applyAPA7BibliographyEntryStyle(block);
+      }
+      if(attrs.class && String(attrs.class).indexOf('refe') >= 0){
+        applyAPA7BibliographyEntryStyle(block);
+      }
+      return block;
     }
 
     if(type === 'heading'){
-      var level = parseInt(attrs.level, 10) || 1;
-      var sizePt = HEADING_SIZES_PT[level] || 14;
+      var level = normalizeHeadingLevel(attrs.level);
       var runs = flattenInlineToRuns(node.content || []);
       if(!runs.length) runs = [{ text: '' }];
-      // APA-ish: headings are bold, no paragraph indent, with vertical spacing.
-      return {
+      var text = normalizeSemanticTitle(runsText(runs));
+      var className = String(attrs.class || '');
+      var block = {
         type: 'heading',
         level: level,
         runs: runs,
-        font: { sizePt: sizePt, weight: '700' },
-        spaceAfterPx: level <= 2 ? 12 : 8,
-        align: attrs.textAlign || 'left'
+        align: attrs.textAlign || null
+      };
+      applyAPA7HeadingStyle(block, level);
+      if(attrs.textAlign) block.align = attrs.textAlign;
+      if(className.indexOf('bib-title') >= 0 || text === 'kaynakca' || text === 'references' || text === 'bibliography'){
+        block._isBibHeading = true;
+        block.pageBreak = true;
+        block.align = 'center';
+        block.runs = [{ text: 'KAYNAK\u00c7A', bold: true }];
+      }
+      if(className.indexOf('appendix-title') >= 0 || /^ek(?:ler)?(?:[-\s]+[a-z0-9]+)?$/.test(text) || /^appendix(?:[-\s]+[a-z0-9]+)?$/.test(text)){
+        block._isAppendixHeading = true;
+        block._appendixId = attrs.appendixId || '';
+        block.pageBreak = true;
+        block.align = 'center';
+      }
+      return block;
+    }
+
+    if(type === 'image'){
+      return {
+        type: 'image',
+        src: attrs.src || '',
+        alt: attrs.alt || '',
+        width: parseImageWidth(attrs.width || attrs['data-width']),
+        align: attrs.align || attrs['data-align'] || 'center',
+        attrs: attrs.refId ? { refId: attrs.refId } : {}
       };
     }
 
@@ -200,7 +428,7 @@
         }
         rows.push({ cells: cells });
       }
-      return { type: 'table', rows: rows, headerRow: true };
+      return { type: 'table', rows: rows, headerRow: true, attrs: attrs.refId ? { refId: attrs.refId } : {} };
     }
 
     if(type === 'horizontalRule'){
@@ -246,6 +474,8 @@
       if(run.italic) marks.push({ type: 'italic' });
       if(run.underline) marks.push({ type: 'underline' });
       if(run.strike) marks.push({ type: 'strike' });
+      if(run.trackInsert) marks.push({ type: 'trackInsert' });
+      if(run.trackDelete) marks.push({ type: 'trackDelete' });
       if(run.baselineShift && run.baselineShift > 0) marks.push({ type: 'superscript' });
       if(run.baselineShift && run.baselineShift < 0) marks.push({ type: 'subscript' });
       if(run.citation){
@@ -256,7 +486,14 @@
         if(run.citation.noteId) cAttrs['data-note-id'] = run.citation.noteId;
         marks.push({ type: 'citation', attrs: cAttrs });
       }
-      if(run.href) marks.push({ type: 'link', attrs: { href: run.href } });
+      if(run.crossRef){
+        marks.push({ type: 'crossRef', attrs: {
+          refType: run.crossRef.refType || 'heading',
+          refId: run.crossRef.refId || '',
+          refLabel: run.crossRef.refLabel || '',
+          display: run.crossRef.display || 'context'
+        } });
+      } else if(run.href) marks.push({ type: 'link', attrs: { href: run.href } });
 
       // textStyle for color, fontFamily, fontSize
       var tsAttrs = {};
@@ -280,9 +517,12 @@
 
     // Image block
     if(block.type === 'image'){
+      var imageAttrs = { src: block.src || '', alt: block.alt || '', width: block.width || null };
+      if(block.align) imageAttrs.align = block.align;
+      if(block._refId || (block.attrs && block.attrs.refId)) imageAttrs.refId = block._refId || block.attrs.refId;
       return {
         type: 'image',
-        attrs: { src: block.src || '', alt: block.alt || '', width: block.width || null }
+        attrs: imageAttrs
       };
     }
 
@@ -299,7 +539,9 @@
         }
         tableContent.push({ type: 'tableRow', content: rowContent });
       }
-      return { type: 'table', content: tableContent };
+      var tableNode = { type: 'table', content: tableContent };
+      if(block._refId || (block.attrs && block.attrs.refId)) tableNode.attrs = { refId: block._refId || block.attrs.refId };
+      return tableNode;
     }
 
     var content = runsToTipTapContent(block.runs || []);
@@ -307,10 +549,17 @@
 
     var attrs = {};
     if(block.align && block.align !== 'left') attrs.textAlign = block.align;
+    if(block._refId || (block.attrs && block.attrs.refId)) attrs.refId = block._refId || block.attrs.refId;
+    if(block._isBibEntry) addClass(attrs, 'refe aq-ref-entry');
+    if(block._isBibHeading) addClass(attrs, 'bib-title aq-export-page-break-before');
+    if(block._isAppendixHeading){
+      addClass(attrs, 'appendix-title aq-export-page-break-before');
+      if(block._appendixId) attrs.appendixId = block._appendixId;
+    }
 
     // Heading
     if(block.type === 'heading'){
-      attrs.level = block.level || 1;
+      attrs.level = normalizeHeadingLevel(block.level);
       return { type: 'heading', attrs: attrs, content: content };
     }
 

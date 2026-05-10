@@ -575,6 +575,196 @@ function isWordListParagraph(node){
     return p;
   }
 
+  function getBoundaryText(node, edge){
+    if(!node) return '';
+    if(node.nodeType === 3) return String(node.nodeValue || '');
+    if(node.nodeType !== 1) return '';
+    var tag = String(node.tagName || '').toLowerCase();
+    if(/^(br|img|table|ul|ol|blockquote|hr)$/i.test(tag)) return '';
+    var text = String(node.textContent || '');
+    if(!text) return '';
+    return edge === 'start' ? text : text;
+  }
+
+  function boundaryLastChar(text){
+    var value = String(text || '').replace(/\s+$/g, '');
+    return value ? value.charAt(value.length - 1) : '';
+  }
+
+  function boundaryFirstChar(text){
+    var value = String(text || '').replace(/^\s+/g, '');
+    return value ? value.charAt(0) : '';
+  }
+
+  function isWordChar(ch){
+    return /[0-9A-Za-zÇĞİÖŞÜçğıöşüÂâÎîÛûÄäËëÏïÖöÜüÀ-ÖØ-öø-ÿ]/.test(String(ch || ''));
+  }
+
+  function needsInlineBoundarySpace(leftText, rightText){
+    var leftRaw = String(leftText || '');
+    var rightRaw = String(rightText || '');
+    if(!leftRaw || !rightRaw) return false;
+    if(/\s$/.test(leftRaw) || /^\s/.test(rightRaw)) return false;
+    var left = boundaryLastChar(leftRaw);
+    var right = boundaryFirstChar(rightRaw);
+    if(!left || !right) return false;
+    if(!isWordChar(left) || !isWordChar(right)) return false;
+    if(/[0-9]/.test(left) && /[0-9]/.test(right)) return false;
+    if(/[-\/\\([{"'‘“]$/.test(leftRaw)) return false;
+    if(/^[.,;:!?%)\]}”’]/.test(rightRaw)) return false;
+    return true;
+  }
+
+  function isInlineBoundaryNode(node){
+    if(!node) return false;
+    if(node.nodeType === 3) return true;
+    if(node.nodeType !== 1) return false;
+    var tag = String(node.tagName || '').toLowerCase();
+    return !/^(p|div|h[1-6]|ul|ol|li|table|thead|tbody|tfoot|tr|td|th|blockquote|section|article|figure|figcaption|hr|br|img)$/i.test(tag);
+  }
+
+  function repairInlineBoundarySpacingInDOM(rootNode){
+    if(!rootNode || !rootNode.querySelectorAll) return;
+    var containers = Array.from(rootNode.querySelectorAll('p,h1,h2,h3,h4,h5,h6,li,td,th,blockquote'));
+    containers.forEach(function(container){
+      function walk(parent){
+        if(!parent || !parent.childNodes) return;
+        var children = Array.from(parent.childNodes);
+        for(var i = 0; i < children.length - 1; i++){
+          var left = children[i];
+          var right = children[i + 1];
+          if(isInlineBoundaryNode(left) && isInlineBoundaryNode(right)){
+            var leftText = getBoundaryText(left, 'end');
+            var rightText = getBoundaryText(right, 'start');
+            if(needsInlineBoundarySpace(leftText, rightText)){
+              parent.insertBefore((parent.ownerDocument || document).createTextNode(' '), right);
+              children.splice(i + 1, 0, parent.childNodes[i + 1]);
+              i++;
+            }
+          }
+          if(left && left.nodeType === 1 && isInlineBoundaryNode(left)) walk(left);
+        }
+        var last = children[children.length - 1];
+        if(last && last.nodeType === 1 && isInlineBoundaryNode(last)) walk(last);
+      }
+      walk(container);
+    });
+  }
+
+  function repairInlineBoundarySpacingInHTML(html){
+    var inlineTags = '(?:span|font|b|strong|i|em|u|s|strike|a)';
+    var wordChar = '0-9A-Za-zÇĞİÖŞÜçğıöşüÂâÎîÛûÄäËëÏïÖöÜüÀ-ÖØ-öø-ÿ';
+    var closeOpen = new RegExp('([' + wordChar + '])(<\\/' + inlineTags + '\\s*>\\s*<' + inlineTags + '\\b[^>]*>)([' + wordChar + '])', 'g');
+    var out = String(html || '');
+    var previous = '';
+    var guard = 0;
+    while(out !== previous && guard < 4){
+      previous = out;
+      out = out.replace(closeOpen, function(_match, left, tags, right){
+        return needsInlineBoundarySpace(left, right) ? (left + ' ' + tags + right) : _match;
+      });
+      guard++;
+    }
+    out = out.replace(/\s{2,}/g, ' ');
+    return out;
+  }
+
+  function repairWordImportTextBoundaries(text){
+    var out = String(text || '')
+      .replace(/\u00ad/g, '')
+      .replace(/[\u200b-\u200d\ufeff]/g, ' ');
+    if(!out) return out;
+    var nextWords = [
+      'birlikte','gelmiştir','görülmektedir','gostermektedir','göstermektedir',
+      'yalnızca','yalnizca','öğrenme','ogrenme','iletişim','iletisim','bilgi',
+      'üretimi','uretimi','gibi','çeşitli','cesitli','alanlarda','aktif',
+      'şekilde','sekilde','kullanılmaya','kullanilmaya','başladığı','basladigi',
+      'hayatımızın','hayatimizin','alanına','alanina','giren','bireyler',
+      'üzerinde','uzerinde','bilişsel','bilissel','izler','bırakan','birakan',
+      'kavram','olarak','ortaya','konmaktadır','konmaktadir','durum','insan',
+      'bilişinin','bilisinin','sadece','içsel','icsel','unsurlarla','değil',
+      'degil','teknoloji','dışsal','dissal','etkileşim','etkilesim','içerisine',
+      'icerisine','girdiğini','girdigini','sayesinde','yoğun','yogun','akışı',
+      'akisi','yükünü','yukunu','artırabilmekte','artirabilmekte','düzenleme',
+      'duzenleme','yeniden','organize','etme','becerilerinin','önemini','onemini'
+    ];
+    nextWords.forEach(function(word){
+      var escaped = String(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var re = new RegExp('([0-9A-Za-zÇĞİÖŞÜçğıöşüÂâÎîÛûÄäËëÏïÖöÜüÀ-ÖØ-öø-ÿ])(' + escaped + ')(?=\\b)', 'g');
+      out = out.replace(re, function(match, prev, next, offset, source){
+        var before = source.slice(Math.max(0, offset - 18), offset + 1).toLowerCase();
+        if(/\s$/.test(prev)) return match;
+        if(/^(da|de|ve|ile|ki|mi|mı|mu|mü)$/i.test(next)) return match;
+        if(/(?:https?|doi|www)\.?$/i.test(before)) return match;
+        return prev + ' ' + next;
+      });
+    });
+    var letterClass = '0-9A-Za-z\\u00c0-\\u024f\\u1e00-\\u1effÇĞİÖŞÜçğıöşü';
+    var chainWords = nextWords.concat([
+      '\u00e7e\u015fitli','cesitli','ili\u015fkileri','iliskileri','ili\u015fkiler','iliskiler',
+      'bulunabilmektedir','bulunabilmekte','bulunabilir','dijitalle\u015fmenin','dijitallesmenin',
+      'yayg\u0131nla\u015fmas\u0131yla','yayginlasmasiyla','teknolojilerin','platformlar',
+      'arac\u0131l\u0131\u011f\u0131yla','araciligiyla','kullan\u0131lan','kullanilan',
+      'olmaktan','\u00e7\u0131k\u0131p','cikip','ba\u011flamda','baglamda',
+      'bireylerin','becerileri','art\u0131rmaktad\u0131r','artirmaktadir',
+      'd\u00fczenlenmesi','duzenlenmesi','ili\u015fkiler','iliskiler'
+    ]);
+    chainWords.sort(function(a,b){ return String(b).length - String(a).length; });
+    chainWords.forEach(function(word){
+      if(String(word).length < 5) return;
+      var escaped = String(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var re = new RegExp('([' + letterClass + '])(' + escaped + ')(?=[' + letterClass + '])', 'gi');
+      out = out.replace(re, function(match, prev, next, offset, source){
+        var before = source.slice(Math.max(0, offset - 18), offset + 1).toLowerCase();
+        if(/(?:https?|doi|www)\.?$/i.test(before)) return match;
+        return prev + ' ' + next;
+      });
+    });
+    chainWords.forEach(function(word){
+      if(String(word).length < 5) return;
+      var escaped = String(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var re = new RegExp('([' + letterClass + '])(' + escaped + ')(?=$|[^' + letterClass + '])', 'gi');
+      out = out.replace(re, function(match, prev, next, offset, source){
+        var before = source.slice(Math.max(0, offset - 18), offset + 1).toLowerCase();
+        if(/(?:https?|doi|www)\.?$/i.test(before)) return match;
+        return prev + ' ' + next;
+      });
+    });
+    out = out
+      .replace(/(^|\s)(\u00e7e\u015fitli|cesitli)\s+leri\s+(bulunabilmektedir|bulunabilmekte|bulunabilir)\b/gi, '$1$2 ili\u015fkileri $3')
+      .replace(/,([A-Za-zÇĞİÖŞÜçğıöşüÂâÎîÛûÄäËëÏïÖöÜüÀ-ÖØ-öø-ÿ])/g, ', $1')
+      .replace(/;([A-Za-zÇĞİÖŞÜçğıöşüÂâÎîÛûÄäËëÏïÖöÜüÀ-ÖØ-öø-ÿ])/g, '; $1')
+      .replace(/\.([A-ZÇĞİÖŞÜ])/g, '. $1');
+    out = out.replace(/\s{2,}/g, ' ');
+    return out;
+  }
+
+  function repairWordImportTextBoundariesInDOM(rootNode){
+    if(!rootNode || !rootNode.querySelectorAll || typeof document === 'undefined') return;
+    var walker = document.createTreeWalker(rootNode, NodeFilter.SHOW_TEXT, null);
+    var textNodes = [];
+    while(walker.nextNode()) textNodes.push(walker.currentNode);
+    textNodes.forEach(function(node){
+      var current = String(node.nodeValue || '');
+      var next = repairWordImportTextBoundaries(current);
+      if(next !== current) node.nodeValue = next;
+    });
+  }
+
+  function repairWordImportHTML(html){
+    var source = String(html || '');
+    if(!source) return source;
+    if(typeof document !== 'undefined' && document.createElement){
+      var wrapper = document.createElement('div');
+      wrapper.innerHTML = source;
+      repairWordImportTextBoundariesInDOM(wrapper);
+      return wrapper.innerHTML;
+    }
+    return source.replace(/>([^<>]+)</g, function(_match, text){
+      return '>' + repairWordImportTextBoundaries(text) + '<';
+    });
+  }
+
   function normalizeWordHtmlWithDOM(html){
     if(typeof document === 'undefined' || !document.createElement) return String(html || '');
     var rawHtml = stripDangerousTags(html);
@@ -607,6 +797,8 @@ function isWordListParagraph(node){
     removeOfficeArtifactElements(wrapper);
     normalizeWordNoteReferencesWithDOM(wrapper);
     removeWordTextArtifacts(wrapper);
+    repairInlineBoundarySpacingInDOM(wrapper);
+    repairWordImportTextBoundariesInDOM(wrapper);
     wrapper.querySelectorAll('[style],[class]').forEach(function(node){
       var tag = String(node.tagName || '').toLowerCase();
       if(tag === 'p' || tag === 'div'){
@@ -901,7 +1093,7 @@ function isWordListParagraph(node){
   }
 
   function normalizeWordHtmlFallback(html){
-    var out = stripOfficeConditionalMarkup(stripDangerousTags(html));
+    var out = repairInlineBoundarySpacingInHTML(stripOfficeConditionalMarkup(stripDangerousTags(html)));
     out = out
       .replace(/<head\b[\s\S]*?<\/head\s*>/gi, '')
       .replace(/<\/?(?:html|body)\b[^>]*>/gi, '')
@@ -968,6 +1160,9 @@ function isWordListParagraph(node){
     });
     out = markFallbackReferenceEntries(out);
     out = markFallbackReferenceEntriesFlexible(out);
+    out = out.replace(/>([^<]+)</g, function(match, text){
+      return '>' + repairWordImportTextBoundaries(text) + '<';
+    });
     return stripSinglePlainFlowDiv(out);
   }
 
@@ -1122,15 +1317,59 @@ function isWordListParagraph(node){
     }, 0);
   }
 
+  function getRuntimeRoot(){
+    if(typeof window !== 'undefined') return window;
+    if(typeof globalThis !== 'undefined') return globalThis;
+    return {};
+  }
+
+  function finishAQEngineImport(editor, options){
+    if(typeof options.afterEditorImport === 'function') options.afterEditorImport();
+    try{
+      var root = getRuntimeRoot();
+      if(root && typeof root.save === 'function') root.save();
+    }catch(_e){}
+    restoreEditorFocusAfterImport(editor);
+  }
+
+  function applyAQEngineImportedHTML(editor, html, options){
+    options = options || {};
+    if(!editor || !editor._aqEngine || !editor._docModel) return false;
+    var root = getRuntimeRoot();
+    var blocks = null;
+    if(root.AQEngineCompat && typeof root.AQEngineCompat.htmlToBlocks === 'function'){
+      blocks = root.AQEngineCompat.htmlToBlocks(html || '<p></p>');
+    }
+    if(Array.isArray(blocks) && blocks.length && typeof editor._docModel.replace === 'function'){
+      editor._docModel.replace(blocks);
+      if(typeof editor._reflow === 'function') editor._reflow();
+      if(typeof editor.emit === 'function') editor.emit('update');
+      if(editor.commands && typeof editor.commands.focus === 'function') editor.commands.focus('end');
+      setTimeout(function(){ finishAQEngineImport(editor, options); }, 0);
+      return true;
+    }
+    if(editor.commands && typeof editor.commands.setContent === 'function'){
+      editor.commands.setContent(html || '<p></p>', false);
+      if(editor.commands && typeof editor.commands.focus === 'function') editor.commands.focus('end');
+      setTimeout(function(){ finishAQEngineImport(editor, options); }, 0);
+      return true;
+    }
+    return false;
+  }
+
   function applyImportedHTML(options){
     options = options || {};
-    var editor = options.editor || null;
+    var root = getRuntimeRoot();
+    var editor = options.editor || root.editor || null;
     var html = String(options.html || '');
     if(looksLikeHTML(html)){
       html = normalizeWordHtml(html);
     }
     if(typeof options.cleanPastedHTML === 'function'){
       html = options.cleanPastedHTML(html || '');
+    }
+    if(applyAQEngineImportedHTML(editor, html, options)){
+      return true;
     }
     if(editor && editor.commands && typeof editor.commands.setContent === 'function'){
       editor.commands.setContent(html || '<p></p>', false);
@@ -1210,7 +1449,9 @@ function isWordListParagraph(node){
     looksLikeHTML: looksLikeHTML,
     normalizeWordHtml: normalizeWordHtml,
     normalizeImportHTML: normalizeImportHTML,
+    repairWordImportHTML: repairWordImportHTML,
     stripRtfControlCodes: stripRtfControlCodes,
+    applyAQEngineImportedHTML: applyAQEngineImportedHTML,
     applyImportedHTML: applyImportedHTML,
     buildPrintablePageClone: buildPrintablePageClone,
     buildPDFExportOptions: buildPDFExportOptions

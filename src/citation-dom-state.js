@@ -46,6 +46,16 @@
   }
 
   function normalizeCitationSpans(root, deps){
+    // AQ Engine path: if we have an active engine editor, update the model directly.
+    // This is critical because DOM updates in the engine's stage are lost on next reflow.
+    var editor = (deps && deps.editor) || (typeof window !== 'undefined' ? window.editor : null);
+    if(editor && editor._aqEngine && editor._docModel){
+      if(typeof window !== 'undefined' && window.AQBibliographyState && typeof window.AQBibliographyState.normalizeAQEngineCitations === 'function'){
+        window.AQBibliographyState.normalizeAQEngineCitations(editor, deps || {});
+        return;
+      }
+    }
+
     if(!root || typeof root.querySelectorAll !== 'function') return;
     var findReference = deps && typeof deps.findReference === 'function' ? deps.findReference : function(){ return null; };
     var dedupeReferences = deps && typeof deps.dedupeReferences === 'function' ? deps.dedupeReferences : function(refs){ return Array.isArray(refs) ? refs : []; };

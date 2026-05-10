@@ -1,0 +1,28 @@
+@media print {
+  body {
+    background: #fff;
+  }
+
+  header,
+  aside,
+  footer {
+    display: none !important;
+  }
+
+  .aq-editor-scroll {
+    display: block;
+    overflow: visible;
+    padding: 0;
+    background: #fff;
+  }
+
+  .aq-legacy-page {
+    width: auto;
+    min-height: auto;
+    box-shadow: none;
+  }
+
+  #apaed {
+    padding: 0;
+  }
+}

@@ -27,6 +27,7 @@
   var _renderTimer = null;
   var _initialized = false;
   var _pendingType = DEFAULT_TYPE;
+  var _documentAqClickBound = false;
 
   // ── ID helpers ──────────────────────────────────────────────────────────────
   function uid(){
@@ -35,26 +36,41 @@
   function blockUid(){
     return 'mb' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
+  function getActiveEditor(){
+    if(root.editor && root.editor !== _editor) _editor = root.editor;
+    return _editor || root.editor || null;
+  }
 
   // ── Block-id assignment ─────────────────────────────────────────────────────
   // Finds the ProseMirror node for a DOM element and sets data-mn-block-id
   function getOrAssignBlockId(el){
-    if(!_editor) return null;
+    var activeEditor = getActiveEditor();
+    if(!activeEditor) return null;
     // Return existing id if already set in DOM
     var existing = el.getAttribute('data-mn-block-id');
     if(existing) return existing;
+    if(activeEditor._aqEngine){
+      var aqLine = el.classList && el.classList.contains('aq-engine-line') ? el : (el.closest ? el.closest('.aq-engine-line') : null);
+      var aqBlockIndex = aqLine && aqLine.dataset ? parseInt(aqLine.dataset.blockIndex, 10) : NaN;
+      if(isFinite(aqBlockIndex) && aqBlockIndex >= 0){
+        var aqId = 'aqb-' + aqBlockIndex;
+        aqLine.setAttribute('data-mn-block-id', aqId);
+        return aqId;
+      }
+      return null;
+    }
     var id = blockUid();
     try{
-      var view = _editor.view;
+      var view = activeEditor.view;
       var pos = view.posAtDOM(el, 0);
       // posAtDOM gives position inside the node; node position is one before
       var nodePos = pos - 1;
       if(nodePos < 0) nodePos = 0;
-      var $pos = _editor.state.doc.resolve(nodePos);
-      var node = $pos.nodeAfter || _editor.state.doc.nodeAt(nodePos);
+      var $pos = activeEditor.state.doc.resolve(nodePos);
+      var node = $pos.nodeAfter || activeEditor.state.doc.nodeAt(nodePos);
       if(!node) return null;
       var newAttrs = Object.assign({}, node.attrs, { 'data-mn-block-id': id });
-      var tr = _editor.state.tr.setNodeMarkup(nodePos, null, newAttrs);
+      var tr = activeEditor.state.tr.setNodeMarkup(nodePos, null, newAttrs);
       tr.setMeta('addToHistory', false);
       view.dispatch(tr);
     } catch(e){
@@ -66,8 +82,14 @@
 
   // Find the DOM element for a given blockId
   function findBlockEl(blockId){
-    if(!_editor) return null;
-    var dom = _editor.view.dom;
+    var activeEditor = getActiveEditor();
+    if(!activeEditor) return null;
+    if(String(blockId || '').indexOf('aqb-') === 0){
+      var blockIndex = String(blockId).slice(4);
+      return document.querySelector('.aq-engine-line[data-block-index="' + blockIndex + '"], .aq-engine-image[data-block-index="' + blockIndex + '"], .aq-engine-table-row[data-table-block-index="' + blockIndex + '"]') || null;
+    }
+    var dom = activeEditor.view && activeEditor.view.dom;
+    if(!dom) return null;
     return dom.querySelector('[data-mn-block-id="' + blockId + '"]') || null;
   }
 
@@ -80,6 +102,29 @@
     _notes[id] = { id:id, blockId:blockId, type:type, text:'', createdAt:Date.now() };
     scheduleRender();
     scheduleAutosave();
+    return id;
+  }
+
+  function createNoteAtCurrentSelection(type){
+    var activeEditor = getActiveEditor();
+    if(!activeEditor || !activeEditor._aqEngine || !activeEditor._docModel) return null;
+    var range = null;
+    if(typeof activeEditor._captureSelection === 'function'){
+      try{ range = activeEditor._captureSelection(); }catch(_e){}
+    }
+    var at = range && typeof range.from === 'number' ? range.from : 0;
+    var blockIndex = activeEditor._docModel && typeof activeEditor._docModel.blockIndexAt === 'function'
+      ? activeEditor._docModel.blockIndexAt(at)
+      : -1;
+    if(blockIndex < 0) blockIndex = 0;
+    var line = document.querySelector('.aq-engine-line[data-block-index="' + blockIndex + '"]');
+    if(!line) line = document.querySelector('.aq-engine-line');
+    if(!line) return null;
+    var id = createNote(line, type || _pendingType);
+    if(id){
+      setMnVisible(true);
+      scheduleRender();
+    }
     return id;
   }
 
@@ -115,7 +160,8 @@
   }
 
   function renderAllNotes(){
-    if(!_layer || !_editor) return;
+    if(!_layer || !getActiveEditor()) return;
+    applyLayerColumn();
 
     // Collect all notes grouped by blockId
     var byBlock = {};
@@ -328,6 +374,13 @@
   // ── Editor click handler ────────────────────────────────────────────────────
   function handleEditorClick(e){
     if(!_modeActive) return;
+    var aqLine = e.target && e.target.closest ? e.target.closest('.aq-engine-line') : null;
+    if(aqLine){
+      e.preventDefault();
+      e.stopPropagation();
+      createNote(aqLine, _pendingType);
+      return;
+    }
     // Walk up to find a block element (p or h1-h5)
     var el = e.target;
     while(el && el !== document.body){
@@ -340,6 +393,15 @@
       }
       el = el.parentElement;
     }
+  }
+
+  function handleDocumentAQClick(e){
+    if(!_modeActive) return;
+    var aqLine = e.target && e.target.closest ? e.target.closest('.aq-engine-line') : null;
+    if(!aqLine) return;
+    e.preventDefault();
+    e.stopPropagation();
+    createNote(aqLine, _pendingType);
   }
 
   // ── Window resize / scroll → re-render ─────────────────────────────────────
@@ -404,14 +466,45 @@
   }
 
   // ── Layer positioning helper ─────────────────────────────────────────────────
-  // The layer is position:fixed and covers the viewport.
-  // Cards are positioned via getBoundingClientRect() coordinates.
-  // We compute the right-side margin column: right of #apapage + gap.
+  // The layer is position:fixed and cards use viewport coordinates.
+  // In the React shell #apapage can span the whole editor lane, so anchor
+  // margin notes to the rendered paper surface instead of the container edge.
+  function getVisibleRect(selector){
+    var nodes = Array.prototype.slice.call(document.querySelectorAll(selector));
+    if(!nodes.length) return null;
+    for(var i = 0; i < nodes.length; i++){
+      var rect = nodes[i].getBoundingClientRect();
+      if(rect.width > 80 && rect.height > 80 && rect.bottom > 0 && rect.top < window.innerHeight){
+        return rect;
+      }
+    }
+    return nodes[0].getBoundingClientRect();
+  }
+
+  function getEditorPaperRect(){
+    return getVisibleRect('.aq-engine-page')
+      || getVisibleRect('.aq-page-sheet')
+      || getVisibleRect('.page')
+      || (document.getElementById('apapage') ? document.getElementById('apapage').getBoundingClientRect() : null);
+  }
+
+  function getRightPanelLeft(){
+    var panel = document.getElementById('sbr')
+      || document.querySelector('[data-right-panel]')
+      || document.querySelector('.right-panel');
+    if(!panel) return null;
+    var rect = panel.getBoundingClientRect();
+    return rect.width > 40 ? rect.left : null;
+  }
+
   function getMarginLeft(){
-    var page = document.getElementById('apapage');
-    if(!page) return window.innerWidth - CARD_W - 20;
-    var rect = page.getBoundingClientRect();
-    return rect.right + 12;
+    var rect = getEditorPaperRect();
+    var left = rect ? rect.right + 12 : window.innerWidth - CARD_W - 20;
+    var panelLeft = getRightPanelLeft();
+    if(panelLeft !== null){
+      left = Math.min(left, panelLeft - CARD_W - 12);
+    }
+    return Math.max(8, left);
   }
 
   function applyLayerColumn(){
@@ -426,7 +519,7 @@
     if(_initialized) return;
     _initialized = true;
 
-    _editor = window.editor || null;
+    _editor = root.editor || null;
     _layer  = document.getElementById('mn-layer');
     _hint   = document.getElementById('mn-mode-hint');
 
@@ -457,6 +550,14 @@
     if(apaed){
       apaed.addEventListener('click', handleEditorClick, true);
     }
+    var aqStage = document.getElementById('aq-engine-stage');
+    if(aqStage){
+      aqStage.addEventListener('click', handleEditorClick, true);
+    }
+    if(!_documentAqClickBound){
+      _documentAqClickBound = true;
+      document.addEventListener('click', handleDocumentAQClick, true);
+    }
 
     // Esc key exits annotation mode
     document.addEventListener('keydown', function(e){
@@ -464,7 +565,7 @@
     });
 
     // Editor mutation → re-render (handles block reflow after typing)
-    if(_editor){
+    if(_editor && typeof _editor.on === 'function'){
       _editor.on('update', function(){
         scheduleRender();
       });
@@ -475,8 +576,6 @@
 
     // Render whatever was loaded
     scheduleRender();
-
-    console.log('AQMarginNotes initialized');
   }
 
   // ── Public API ──────────────────────────────────────────────────────────────
@@ -491,6 +590,7 @@
     stripForExport: stripForExport,
     renderAllNotes: renderAllNotes,
     scheduleRender: scheduleRender,
+    createNoteAtCurrentSelection: createNoteAtCurrentSelection,
     // Exposed for tests
     _notes:         _notes,
     _createNote:    createNote,

@@ -98,7 +98,7 @@
         + (note.q ? '<div class="ncq" style="border-left-color:' + escHTML(borderColor) + ';' + quoteStyle + '">' + escHTML(note.q) + '</div>' : '')
         + '<div class="ncacts">'
         + (note.rid ? '<button class="ncb" style="' + btnStyle + '" data-note-action="copy-cite" data-note-id="' + noteId + '">At&#305;f&#305; Kopyala</button>' : '')
-        + (note.rid ? '<button class="ncb" style="' + btnStyle + '" data-note-action="insert-cite" data-note-id="' + noteId + '">Metne Ekle</button>' : '')
+        + '<button class="ncb" style="' + btnStyle + '" data-note-action="insert-cite" data-note-id="' + noteId + '">Metne Ekle</button>'
         + (note.rid ? '<button class="ncb" style="' + btnStyle + '" data-note-action="send-matrix" data-note-id="' + noteId + '">Matrise G&#246;nder</button>' : '')
         + (isHL && note.rid ? '<button class="ncb" style="' + btnStyle + '" data-note-action="open-source" data-note-id="' + noteId + '">Kayna&#287;a Git</button>' : '')
         + '</div>'

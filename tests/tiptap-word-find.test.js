@@ -214,6 +214,85 @@ test('executeSearchWithState skips cross-block false joins and keeps later block
   assert.deepEqual(nextState.editorRanges, [{ from:10, to:14 }]);
 });
 
+test('executeSearchWithState uses AQ Engine document offsets directly', () => {
+  const countEl = { textContent:'' };
+  const state = { matches:[], index:-1 };
+  const selected = [];
+  const editor = {
+    _aqEngine: true,
+    _stageEl: { querySelectorAll(){ return []; } },
+    _docModel: {
+      get(){
+        return {
+          blocks: [
+            { runs:[{ text:'Alpha' }] },
+            { runs:[{ text:'Beta Gamma' }] }
+          ]
+        };
+      }
+    },
+    commands: {
+      setTextSelection(range){ selected.push(range); }
+    }
+  };
+
+  const matches = find.executeSearchWithState({
+    doc: { getElementById(){ return countEl; } },
+    state,
+    editor,
+    query:'Beta',
+    useRegex:false,
+    caseSensitive:true,
+    countEl
+  });
+
+  assert.equal(matches.length, 1);
+  assert.deepEqual(state.editorRanges, [{ from:6, to:10 }]);
+  assert.deepEqual(selected, [{ from:6, to:10 }]);
+  assert.equal(countEl.textContent, '1/1');
+});
+
+test('replaceSearchWithState replaces AQ Engine ranges through doc model', () => {
+  let blocks = [{ runs:[{ text:'Alpha Beta Alpha' }] }];
+  const calls = [];
+  const editor = {
+    _aqEngine: true,
+    _stageEl: { querySelectorAll(){ return []; } },
+    _docModel: {
+      get(){ return { blocks }; },
+      deleteRange(from, to){
+        const text = blocks[0].runs[0].text;
+        blocks = [{ runs:[{ text:text.slice(0, from) + text.slice(to) }] }];
+        calls.push(['delete', from, to]);
+      },
+      insertText(from, value){
+        const text = blocks[0].runs[0].text;
+        blocks = [{ runs:[{ text:text.slice(0, from) + value + text.slice(from) }] }];
+        calls.push(['insert', from, value]);
+      }
+    },
+    _reflow(){ calls.push(['reflow']); },
+    emit(event){ calls.push(['emit', event]); },
+    commands: {
+      setTextSelection(range){ calls.push(['select', range]); }
+    }
+  };
+  const state = { matches:[{ __aqEditorRange:{ from:6, to:10 } }], editorRanges:[{ from:6, to:10 }], index:0 };
+
+  const ok = find.replaceSearchWithState({
+    doc: { getElementById(){ return null; } },
+    state,
+    editor,
+    replacement:'Delta'
+  });
+
+  assert.equal(ok, true);
+  assert.equal(blocks[0].runs[0].text, 'Alpha Delta Alpha');
+  assert.deepEqual(state, { matches:[], index:-1, editorRanges:[] });
+  assert.ok(calls.some(call => call[0] === 'reflow'));
+  assert.ok(calls.some(call => call[0] === 'emit' && call[1] === 'update'));
+});
+
 test('replaceSearchWithState succeeds with editor-backed replacement path', () => {
   const calls = [];
   const firstText = { textContent:'Alpha', ownerDocument:null };

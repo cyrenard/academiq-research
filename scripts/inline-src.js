@@ -10,6 +10,24 @@ const root = path.join(__dirname, '..');
 const htmlPath = path.join(root, 'academiq-research.html');
 const backupPath = htmlPath + '.original';
 
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function writeFileWithRetry(filePath, content) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    try {
+      fs.writeFileSync(filePath, content, 'utf8');
+      return;
+    } catch (error) {
+      lastError = error;
+      sleep(150 + attempt * 100);
+    }
+  }
+  throw lastError;
+}
+
 const html = fs.readFileSync(htmlPath, 'utf8');
 
 let count = 0;
@@ -30,7 +48,7 @@ if (count === 0) {
 }
 
 // Backup original
-fs.writeFileSync(backupPath, html, 'utf8');
+writeFileWithRetry(backupPath, html);
 // Write inlined version
-fs.writeFileSync(htmlPath, inlined, 'utf8');
+writeFileWithRetry(htmlPath, inlined);
 console.log('[inline-src] Inlined ' + count + ' src/ scripts into academiq-research.html');

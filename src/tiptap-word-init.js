@@ -91,11 +91,12 @@
       clearTimeout(window._refTimer);
       window._refTimer = setTimeout(function(){
         var edDom = ctx.editor.view.dom;
-        var refH1 = Array.from(edDom.querySelectorAll('h1')).find(function(h){
+        var isAQEngine = !!(ctx.editor && ctx.editor._aqEngine);
+        var refH1 = isAQEngine ? true : Array.from(edDom.querySelectorAll('h1')).find(function(h){
           return h.textContent.trim() === 'Kaynakça';
         });
         if(refH1 && typeof window.scheduleRefSectionSync === 'function') window.scheduleRefSectionSync();
-      }, 2000);
+      }, isAQEngine ? 500 : 2000);
     };
     var _onSelectionUpdate = function(){
       if(window.AQEditorRuntime && typeof window.AQEditorRuntime.onSelectionUpdate === 'function'){
@@ -110,16 +111,45 @@
 
     try{
       // ── AQ Engine path — use custom engine if available ────────────────
+      // Mount in a dedicated host inside #escroll, completely bypassing the
+      // legacy #apapage shell (its pagination/mask/observer layers conflict
+      // with the engine's own pagination).
       if(window.AQEngineCompat && window.AQEngine && window.AQEngineDocument){
+        var scrollEl = document.getElementById('escroll');
+        if(!scrollEl) throw new Error('escroll missing');
+        // Hide every legacy page wrapper so it cannot intercept clicks or
+        // run its observers against engine output.
+        ['coverpage','tocpage','apapage','bibpage','appendixpage'].forEach(function(id){
+          var legacyEl = document.getElementById(id);
+          if(legacyEl) legacyEl.style.display = 'none';
+        });
+        // Stop legacy pagination calls dead.
+        window.__aqEngineActive = true;
+        // The engine page is fixed-width (A4 = 794px); when the scroll area is
+        // narrower than that (eg. side panels open) we still need the page to
+        // be centered horizontally and overflow visible/scrollable rather than
+        // clipped to one side.
+        scrollEl.style.alignItems = 'center';
+        scrollEl.style.overflowX = 'auto';
+        // Build/locate the engine host.
+        var engineHost = document.getElementById('aq-engine-host');
+        if(!engineHost){
+          engineHost = document.createElement('div');
+          engineHost.id = 'aq-engine-host';
+          engineHost.style.cssText = 'position:relative;width:100%;display:flex;flex-direction:column;align-items:center;';
+          scrollEl.appendChild(engineHost);
+        } else {
+          engineHost.style.display = '';
+          engineHost.style.cssText = 'position:relative;width:100%;display:flex;flex-direction:column;align-items:center;';
+          engineHost.innerHTML = '';
+        }
         edEl.removeAttribute('contenteditable');
-        mountEl.innerHTML = '';
         window.editor = window.AQEngineCompat.createEditor({
-          element: mountEl,
+          element: engineHost,
           content: existingHTML || '<p></p>',
           onUpdate: _onUpdate,
           onSelectionUpdate: _onSelectionUpdate
         });
-        console.log('AQ Engine initialized (custom layout engine)');
       }
       // ── TipTap path — original ────────────────────────────────────────
       else {
@@ -172,10 +202,8 @@
         }
       }catch(e){}
       if(window.AQTipTapWordEvents && typeof window.AQTipTapWordEvents.init === 'function'){
-        console.log('[tiptap-word-init] calling AQTipTapWordEvents.init()');
         window.AQTipTapWordEvents.init();
       }else{
-        console.log('[tiptap-word-init] AQTipTapWordEvents.init() not available:', window.AQTipTapWordEvents ? 'module exists' : 'module missing');
       }
       if(window.AQTipTapWordEvents && typeof window.AQTipTapWordEvents.applySurfaceAttributes === 'function'){
         window.AQTipTapWordEvents.applySurfaceAttributes(edEl);
@@ -195,7 +223,6 @@
           }).observe(window.editor.view.dom);
         }catch(e){}
       }
-      console.log('TipTap editor initialized successfully');
       return window.editor;
     }catch(e){
       console.error('TipTap init failed:', e);

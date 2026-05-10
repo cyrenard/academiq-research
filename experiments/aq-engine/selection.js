@@ -17,6 +17,7 @@
 
   // Inject CSS for highlight + caret once.
   var STYLE_ID = 'aq-engine-selection-style';
+  var CARET_HEIGHT_PX = 16; // 12pt at 96dpi.
   function ensureStyle(doc){
     if(doc.getElementById(STYLE_ID)) return;
     var s = doc.createElement('style');
@@ -104,15 +105,16 @@
   // Find page element at clientY (Iterates container's page children)
   function pageElAtPoint(container, clientY){
     var pages = container.querySelectorAll('.aq-engine-page');
+    if(!pages.length) return null;
     for(var i = 0; i < pages.length; i++){
       var r = pages[i].getBoundingClientRect();
       if(clientY >= r.top && clientY <= r.bottom) return pages[i];
     }
-    // Fallback: nearest by y
+    // Fallback: nearest page by vertical distance
     var best = null, bestDist = Infinity;
     for(var j = 0; j < pages.length; j++){
       var rr = pages[j].getBoundingClientRect();
-      var d = clientY < rr.top ? rr.top - clientY : clientY - rr.bottom;
+      var d = clientY < rr.top ? rr.top - clientY : (clientY > rr.bottom ? clientY - rr.bottom : 0);
       if(d < bestDist){ best = pages[j]; bestDist = d; }
     }
     return best;
@@ -192,10 +194,13 @@
           if(collapsed && focus >= lStart && focus <= lEnd){
             var caretX = offsetToLineX(lineEl, focus);
             var caret = doc.createElement('div');
+            var lineTop = parseFloat(lineEl.style.top) || 0;
+            var lineHeight = parseFloat(lineEl.style.height) || CARET_HEIGHT_PX;
+            var caretTop = lineTop + Math.max(0, (lineHeight - CARET_HEIGHT_PX) / 2);
             caret.className = 'aq-sel-caret';
             caret.style.left = (lineEl._aqRenderedX + caretX) + 'px';
-            caret.style.top  = (parseFloat(lineEl.style.top) || 0) + 'px';
-            caret.style.height = lineEl.style.height;
+            caret.style.top  = caretTop + 'px';
+            caret.style.height = CARET_HEIGHT_PX + 'px';
             overlay.appendChild(caret);
           }
           // Highlight rect
@@ -248,15 +253,17 @@
     var lastClickTime = 0, clickCount = 0, lastClickPos = 0;
     function onMouseDown(e){
       if(e.button !== 0) return;
+      
+      // Force focus on the input capture textarea if it exists
+      var ta = doc.querySelector('textarea.aq-input-capture');
+      if(ta && typeof ta.focus === 'function'){
+        try { ta.focus({ preventScroll: true }); } catch(_e){ ta.focus(); }
+      }
+
       var hit = pointToOffset(container, e.clientX, e.clientY);
       if(!hit) return;
       e.preventDefault();
-      // Focus the container only when no input layer is in charge of focus.
-      // The input layer (if attached) focuses its hidden textarea via its own
-      // mousedown listener; container.focus here would compete with it.
-      if(!doc.querySelector('textarea.aq-input-capture')){
-        try { container.focus({ preventScroll: true }); } catch(_e){ container.focus(); }
-      }
+      
       var now = Date.now();
       var samePos = Math.abs(hit.offset - lastClickPos) <= 2;
       if(samePos && (now - lastClickTime) < 380) clickCount++;
