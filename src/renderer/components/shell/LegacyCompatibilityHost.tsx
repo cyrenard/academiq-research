@@ -19,6 +19,14 @@ type MetadataHealthSummary = {
   issueText: string;
 };
 
+type MetadataLookupCandidate = {
+  ref: any;
+  fetched: Record<string, any>;
+  score: number;
+  source: string;
+  evidence: string[];
+};
+
 function syncReactFromLegacy() {
   const win = window as any;
   if (typeof win.__aqReactSyncFromLegacy === 'function') {
@@ -79,6 +87,184 @@ function saveLegacyState() {
   }, 80);
   scheduleReactSyncFromLegacy();
   window.setTimeout(() => scheduleReactSyncFromLegacy(0), 450);
+}
+
+function normalizeDoiForMetadata(value: unknown) {
+  const api = (window as any).AQReferenceParse;
+  if (api && typeof api.normalizeDoi === 'function') {
+    try {
+      const doi = String(api.normalizeDoi(value) || '').trim().toLowerCase();
+      if (doi) return doi;
+    } catch (_error) {}
+  }
+  const raw = String(value || '').trim();
+  const match = raw.match(/10\.\d{4,9}\/[^\s"'<>]+/i);
+  return (match ? match[0] : raw)
+    .replace(/^doi:\s*/i, '')
+    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '')
+    .replace(/[),.;:\]]+$/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeLookupText(value: unknown) {
+  return String(value || '')
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function lookupTokens(value: unknown) {
+  const stop = new Set(['the', 'and', 'for', 'with', 'from', 'into', 'bir', 've', 'ile', 'icin', 'olan', 'olarak']);
+  return normalizeLookupText(value)
+    .split(' ')
+    .filter((token) => token.length > 2 && !stop.has(token));
+}
+
+function titleSimilarity(a: unknown, b: unknown) {
+  const aTokens = new Set(lookupTokens(a));
+  const bTokens = new Set(lookupTokens(b));
+  if (!aTokens.size || !bTokens.size) return 0;
+  let hits = 0;
+  aTokens.forEach((token) => { if (bTokens.has(token)) hits += 1; });
+  return hits / Math.max(aTokens.size, bTokens.size);
+}
+
+function authorLastNames(authors: unknown) {
+  const list = Array.isArray(authors) ? authors : String(authors || '').split(/[;,]/);
+  return list
+    .map((author) => {
+      const text = normalizeLookupText(author);
+      if (!text) return '';
+      return text.includes(',') ? text.split(',')[0].trim() : text.split(' ').filter(Boolean).slice(-1)[0];
+    })
+    .filter(Boolean);
+}
+
+function authorOverlapScore(a: unknown, b: unknown) {
+  const aNames = new Set(authorLastNames(a));
+  const bNames = new Set(authorLastNames(b));
+  if (!aNames.size || !bNames.size) return 0;
+  let hits = 0;
+  aNames.forEach((name) => { if (bNames.has(name)) hits += 1; });
+  return hits / Math.max(aNames.size, bNames.size);
+}
+
+function yearFromCrossrefDate(value: any) {
+  const parts = value?.['date-parts'];
+  const year = Array.isArray(parts) && Array.isArray(parts[0]) ? parts[0][0] : '';
+  return year ? String(year) : '';
+}
+
+function mapCrossrefWork(work: any) {
+  const doi = normalizeDoiForMetadata(work?.DOI || work?.doi || work?.URL || '');
+  const authors = Array.isArray(work?.author)
+    ? work.author.map((author: any) => author?.family && author?.given ? `${author.family}, ${author.given}` : String(author?.family || author?.name || '')).filter(Boolean)
+    : [];
+  const published = work?.['published-print'] || work?.['published-online'] || work?.published || work?.created;
+  const pages = String(work?.page || '');
+  const pageParts = pages.includes('-') ? pages.split('-') : [pages, ''];
+  return {
+    title: String(Array.isArray(work?.title) ? work.title[0] : work?.title || ''),
+    authors,
+    year: yearFromCrossrefDate(published),
+    journal: String(Array.isArray(work?.['container-title']) ? work['container-title'][0] : work?.['container-title'] || ''),
+    volume: String(work?.volume || ''),
+    issue: String(work?.issue || ''),
+    fp: String(pageParts[0] || ''),
+    lp: String(pageParts.slice(1).join('-') || ''),
+    doi,
+    url: String(work?.URL || (doi ? `https://doi.org/${doi}` : '')),
+    referenceType: 'article'
+  };
+}
+
+function mapOpenAlexWork(work: any) {
+  const doi = normalizeDoiForMetadata(work?.doi || work?.ids?.doi || '');
+  const authors = Array.isArray(work?.authorships)
+    ? work.authorships.map((item: any) => String(item?.author?.display_name || '')).filter(Boolean)
+    : [];
+  return {
+    title: String(work?.title || work?.display_name || ''),
+    authors,
+    year: String(work?.publication_year || ''),
+    journal: String(work?.primary_location?.source?.display_name || work?.host_venue?.display_name || ''),
+    doi,
+    url: String(work?.primary_location?.landing_page_url || work?.doi || (doi ? `https://doi.org/${doi}` : '')),
+    pdfUrl: String(work?.primary_location?.pdf_url || ''),
+    referenceType: 'article'
+  };
+}
+
+function scoreMetadataCandidate(seed: any, candidate: any) {
+  const titleScore = titleSimilarity(seed?.title, candidate?.title);
+  const authorScore = authorOverlapScore(seed?.authors, candidate?.authors);
+  const seedYear = String(seed?.year || '').trim();
+  const candidateYear = String(candidate?.year || '').trim();
+  const yearScore = seedYear && candidateYear && seedYear === candidateYear ? 1 : 0;
+  const score = Math.min(1, (titleScore * 0.62) + (authorScore * 0.25) + (yearScore * 0.13));
+  const evidence: string[] = [];
+  if (titleScore >= 0.55) evidence.push('başlık benzer');
+  if (authorScore > 0) evidence.push('yazar eşleşmesi');
+  if (yearScore) evidence.push('yıl eşleşmesi');
+  if (candidate?.doi) evidence.push('DOI bulundu');
+  return { score, evidence };
+}
+
+async function fetchCrossrefMetadataByDoi(doi: string) {
+  const response = await window.electronAPI?.netFetchJSON?.(
+    `https://api.crossref.org/works/${encodeURIComponent(doi)}?mailto=academiq@example.com`,
+    { timeoutMs: 12000 }
+  ) as any;
+  if (!response?.ok) return null;
+  const mapped = mapCrossrefWork(response.data?.message || {});
+  return mapped.doi ? mapped : { ...mapped, doi };
+}
+
+async function searchMetadataByTitle(seed: any): Promise<MetadataLookupCandidate | null> {
+  const title = String(seed?.title || '').trim();
+  if (!title || title.length < 6) return null;
+  const authors = authorLastNames(seed?.authors).slice(0, 2).join(' ');
+  const year = String(seed?.year || '').trim();
+  const query = [title, authors, year].filter(Boolean).join(' ');
+  const candidates: Array<{ source: string; fetched: Record<string, any> }> = [];
+
+  try {
+    const crossref = await window.electronAPI?.netFetchJSON?.(
+      `https://api.crossref.org/works?query.bibliographic=${encodeURIComponent(query)}&rows=8&mailto=academiq@example.com`,
+      { timeoutMs: 12000 }
+    ) as any;
+    const items = Array.isArray(crossref?.data?.message?.items) ? crossref.data.message.items : [];
+    items.forEach((item: any) => candidates.push({ source: 'Crossref', fetched: mapCrossrefWork(item) }));
+  } catch (_error) {}
+
+  try {
+    const openAlex = await window.electronAPI?.netFetchJSON?.(
+      `https://api.openalex.org/works?search=${encodeURIComponent(title)}&per-page=8&mailto=academiq@example.com`,
+      { timeoutMs: 12000 }
+    ) as any;
+    const items = Array.isArray(openAlex?.data?.results) ? openAlex.data.results : [];
+    items.forEach((item: any) => candidates.push({ source: 'OpenAlex', fetched: mapOpenAlexWork(item) }));
+  } catch (_error) {}
+
+  let best: MetadataLookupCandidate | null = null;
+  candidates.forEach((candidate) => {
+    if (!candidate.fetched?.doi && !candidate.fetched?.title) return;
+    const scored = scoreMetadataCandidate(seed, candidate.fetched);
+    if (scored.score < 0.48) return;
+    const next = { ref: seed, fetched: candidate.fetched, score: scored.score, source: candidate.source, evidence: scored.evidence };
+    if (!best || next.score > best.score) best = next;
+  });
+
+  const selected = best as MetadataLookupCandidate | null;
+  if (selected?.fetched?.doi) {
+    const enriched = await fetchCrossrefMetadataByDoi(String(selected.fetched.doi));
+    if (enriched) selected.fetched = { ...selected.fetched, ...enriched };
+  }
+  return selected;
 }
 
 function dismissedDuplicateMap() {
@@ -1012,6 +1198,8 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     issueText: ''
   });
   const [metadataFilter, setMetadataFilter] = useState('all');
+  const [metadataLookupCandidate, setMetadataLookupCandidate] = useState<MetadataLookupCandidate | null>(null);
+  const [metadataLookupBusyId, setMetadataLookupBusyId] = useState('');
 
   useEffect(() => {
     return () => {
@@ -1053,7 +1241,37 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     refreshMetadataHealth();
   };
 
-  const handleMetadataAction = (action: string, ref: any) => {
+  const applyMetadataCandidate = (mode: 'merge' | 'doi-only') => {
+    const win = window as any;
+    const candidate = metadataLookupCandidate;
+    if (!candidate?.ref || !candidate.fetched) return;
+    try {
+      if (mode === 'doi-only') {
+        const doi = normalizeDoiForMetadata(candidate.fetched.doi);
+        if (doi) {
+          candidate.ref.doi = doi;
+          if (!candidate.ref.url) candidate.ref.url = `https://doi.org/${doi}`;
+        }
+      } else if (typeof win.mergeRefFields === 'function') {
+        win.mergeRefFields(candidate.ref, candidate.fetched);
+      } else {
+        Object.entries(candidate.fetched).forEach(([key, value]) => {
+          if (key === 'id' || value == null || value === '') return;
+          if (!candidate.ref[key] || key === 'doi' || key === 'url' || key === 'pdfUrl') candidate.ref[key] = value;
+        });
+      }
+      if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(candidate.ref);
+      saveLegacyState();
+      refreshMetadataHealth();
+      setMetadataLookupCandidate(null);
+      onStatus(mode === 'doi-only' ? 'DOI kayda eklendi' : 'Metadata kayda işlendi');
+    } catch (error) {
+      console.error('[metadata-candidate-apply]', error);
+      onStatus('Bulunan metadata kayda işlenemedi');
+    }
+  };
+
+  const handleMetadataAction = async (action: string, ref: any) => {
     const win = window as any;
     if (!ref) {
       onStatus('Kaynak bulunamadı');
@@ -1068,21 +1286,38 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         return;
       }
       if (action === 'refetch') {
-        if (!ref.doi || typeof win.fetchCR !== 'function') {
-          onStatus('DOI olmayan kaynakta yeniden çekme yapılamaz');
-          return;
-        }
-        onStatus('Metadata DOI ?zerinden güncelleniyor...');
-        win.fetchCR(ref.doi, (err: unknown, fetched: unknown) => {
-          if (err || !fetched) {
-            onStatus('DOI metadata alınamadı');
+        const doi = normalizeDoiForMetadata(ref.doi || ref.url || '');
+        setMetadataLookupBusyId(String(ref.id || ref.title || 'ref'));
+        setMetadataLookupCandidate(null);
+        try {
+          if (doi) {
+            onStatus('Metadata DOI üzerinden güncelleniyor...');
+            const fetched = await fetchCrossrefMetadataByDoi(doi);
+            if (!fetched) {
+              onStatus('DOI metadata alınamadı');
+              return;
+            }
+            if (typeof win.mergeRefFields === 'function') win.mergeRefFields(ref, fetched);
+            else Object.entries(fetched).forEach(([key, value]) => {
+              if (key !== 'id' && value != null && value !== '' && (!ref[key] || key === 'doi' || key === 'url' || key === 'pdfUrl')) ref[key] = value;
+            });
+            if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(ref);
+            saveLegacyState();
+            refreshMetadataHealth();
+            onStatus('Metadata güncellendi');
             return;
           }
-          if (typeof win.mergeRefFields === 'function') win.mergeRefFields(ref, fetched);
-          saveLegacyState();
-          refreshMetadataHealth();
-          onStatus('Metadata güncellendi');
-        });
+          onStatus('DOI aranıyor: başlık, yazar ve yıl kontrol ediliyor...');
+          const candidate = await searchMetadataByTitle(ref);
+          if (!candidate) {
+            onStatus('Bu kaynak için güvenilir DOI adayı bulunamadı');
+            return;
+          }
+          setMetadataLookupCandidate(candidate);
+          onStatus(`DOI adayı bulundu: ${candidate.fetched.doi || candidate.fetched.title}`);
+        } finally {
+          setMetadataLookupBusyId('');
+        }
         return;
       }
       if (action === 'normalize') {
@@ -3165,6 +3400,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
               const ref = row.ref || {};
               const report = row.report || { status: 'complete', issues: [] };
               const status = String(report.status || 'complete');
+              const busy = metadataLookupBusyId && metadataLookupBusyId === String(ref.id || ref.title || 'ref');
               const statusLabel = status === 'complete' ? 'Tam' : (status === 'incomplete' ? 'Eksik' : 'Şüpheli');
               const authors = (Array.isArray(ref.authors) ? ref.authors : []).slice(0, 2).join('; ');
               const issues = Array.isArray(report.issues) ? report.issues : [];
@@ -3189,6 +3425,36 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
               );
             }) : <div className="aq-empty-note">Kaynak bulunamadı.</div>}
           </div>
+          {metadataLookupCandidate ? (
+            <div className="mh-card mh-candidate-card">
+              <div className="mh-card-head">
+                <span className="mh-status mh-complete">{Math.round(metadataLookupCandidate.score * 100)}%</span>
+                <span className="mh-title">Metadata eşleşmesi bulundu</span>
+              </div>
+              <div className="mh-meta">
+                {metadataLookupCandidate.source} · {metadataLookupCandidate.evidence.join(' · ') || 'web araması'}
+              </div>
+              <div className="mh-compare-grid">
+                <div>
+                  <div className="mh-compare-label">Mevcut</div>
+                  <b>{metadataLookupCandidate.ref.title || 'Başlıksız'}</b>
+                  <span>{(Array.isArray(metadataLookupCandidate.ref.authors) ? metadataLookupCandidate.ref.authors : []).slice(0, 3).join('; ') || 'Yazar yok'}</span>
+                  <span>{metadataLookupCandidate.ref.year || 'Yıl yok'} · {metadataLookupCandidate.ref.doi || 'DOI yok'}</span>
+                </div>
+                <div>
+                  <div className="mh-compare-label">Bulunan</div>
+                  <b>{metadataLookupCandidate.fetched.title || 'Başlıksız'}</b>
+                  <span>{(Array.isArray(metadataLookupCandidate.fetched.authors) ? metadataLookupCandidate.fetched.authors : []).slice(0, 3).join('; ') || 'Yazar yok'}</span>
+                  <span>{metadataLookupCandidate.fetched.year || 'Yıl yok'} · {metadataLookupCandidate.fetched.doi || 'DOI yok'}</span>
+                </div>
+              </div>
+              <div className="mb">
+                <button className="mbtn p" type="button" onClick={() => applyMetadataCandidate('merge')}>Birleştir</button>
+                <button className="mbtn s" type="button" disabled={!metadataLookupCandidate.fetched.doi} onClick={() => applyMetadataCandidate('doi-only')}>Sadece DOI Ekle</button>
+                <button className="mbtn s" type="button" onClick={() => setMetadataLookupCandidate(null)}>Yoksay</button>
+              </div>
+            </div>
+          ) : null}
           <div className="mb">
             <button className="mbtn s" id="metaHealthRefreshBtn" type="button" onClick={() => openReactMetadataHealth()}>Yenile</button>
             <button className="mbtn s" id="metaHealthCloseBtn" type="button" onClick={() => hideLegacyModal('metaHealthModal')}>Kapat</button>
