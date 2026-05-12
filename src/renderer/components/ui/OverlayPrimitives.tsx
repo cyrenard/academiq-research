@@ -6,7 +6,7 @@ export function ConfirmDialog({ open, title, detail, onCancel, onConfirm }: { op
     <Modal open={open} title={title} onClose={onCancel}>
       {detail ? <p className="mb-4 text-sm text-aq-muted">{detail}</p> : null}
       <div className="flex justify-end gap-2">
-        <button className="rounded-md border border-aq-line px-3 py-2 text-sm font-semibold" onClick={onCancel}>Vazge?</button>
+        <button className="rounded-md border border-aq-line px-3 py-2 text-sm font-semibold" onClick={onCancel}>Vazgeç</button>
         <button className="rounded-md bg-red-700 px-3 py-2 text-sm font-semibold text-white" onClick={onConfirm}>Onayla</button>
       </div>
     </Modal>

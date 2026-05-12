@@ -288,9 +288,10 @@
     if(matrixFullscreen) setMatrixFullscreen(false);
     // Ensure PDF panel is open
     var pdfPanel = document.getElementById('pdfpanel');
-    if(pdfPanel && pdfPanel.style.display === 'none'){
-      var pdfBtn = document.getElementById('togglePdfBtn');
-      if(pdfBtn) pdfBtn.click();
+    if(pdfPanel){
+      pdfPanel.classList.add('open');
+      pdfPanel.classList.remove('fullscreen');
+      pdfPanel.style.zIndex = '980';
     }
     var activeRefId = text(window.curRef && window.curRef.id);
     var readyNow = Number(window.pdfTotal || 0) > 0;
@@ -307,6 +308,18 @@
         if(!canOpenPdf){
           status('Bu kaynakta acilabilir PDF bulunamadi.', 'er');
           return;
+        }
+        if(typeof window.__aqOpenPdfBuffer === 'function' && ref.pdfData){
+          try{
+            window.__aqOpenPdfBuffer({
+              refId: ref.id,
+              title: String(ref.title || ref.doi || 'PDF'),
+              pdfData: ref.pdfData,
+              workspaceId: wsId
+            });
+          }catch(_e){}
+        }else if(typeof window.openRef === 'function'){
+          try{ await Promise.resolve(window.openRef(ref.id)); }catch(_e){}
         }
       }
     }
@@ -620,6 +633,7 @@
         + '  <input id="matrixSearchInp" type="text" placeholder="Kaynak veya hücre içinde ara..."/>'
         + '  <button id="matrixAddCurrentRefBtn" data-matrix-action="add-current-ref" type="button">Seçili Kaynağı Ekle</button>'
         + '  <button id="matrixFullscreenBtn" data-matrix-action="toggle-fullscreen" type="button">Tam Ekran</button>'
+        + '  <button id="matrixCloseBtn" data-matrix-action="close" type="button">Kapat</button>'
         + '</div>'
         + '<div id="matrixTableWrap">'
         + '  <table id="matrixTable"></table>'
@@ -660,6 +674,9 @@
   function applyMatrixFullscreenState(){
     var on = !!(matrixFullscreen && currentView === 'matrix');
     var body = document.body || null;
+    if(body){
+      body.classList.toggle('aq-matrix-open', currentView === 'matrix');
+    }
     if(body){
       body.classList.toggle('aq-matrix-fullscreen', on);
     }
@@ -1049,7 +1066,7 @@
     var matrixBtn = getTopMatrixButton();
     var writing = next === 'writing';
 
-    if(escroll) escroll.style.display = writing ? '' : 'none';
+    if(escroll) escroll.style.display = '';
     if(matrixView) matrixView.style.display = writing ? 'none' : 'flex';
     if(zoomBar) zoomBar.style.display = writing ? '' : 'none';
     if(findbar && !writing) findbar.style.display = 'none';
@@ -1060,6 +1077,7 @@
     applyMatrixFullscreenState();
 
     if(!writing){
+      if(matrixView) matrixView.classList.add('open');
       renderMatrix();
       var selected = getSelectedCellFromState();
       if(selected && selected.rowId && selected.columnKey){
@@ -1067,6 +1085,9 @@
       }else{
         syncRightPanelWithLinkedNotes([]);
       }
+    }else if(matrixView){
+      matrixView.classList.remove('open');
+      if(document.body) document.body.classList.remove('aq-matrix-open');
     }
   }
 
@@ -1086,7 +1107,17 @@
 
     var fullscreenBtn = target.closest('[data-matrix-action="toggle-fullscreen"]');
     if(fullscreenBtn){
+      event.preventDefault();
+      event.stopPropagation();
       toggleMatrixFullscreen();
+      return;
+    }
+
+    var closeBtn = target.closest('[data-matrix-action="close"]');
+    if(closeBtn){
+      event.preventDefault();
+      event.stopPropagation();
+      setView('writing');
       return;
     }
 
@@ -1124,6 +1155,8 @@
 
     var showInPdfBtn = target.closest('[data-matrix-action="show-in-pdf"]');
     if(showInPdfBtn){
+      event.preventDefault();
+      event.stopPropagation();
       var rowIdForPdf = text(showInPdfBtn.getAttribute('data-row-id'));
       var colIdForPdf = text(showInPdfBtn.getAttribute('data-col-id'));
       var apiForPdf = getMatrixApi();
@@ -1262,14 +1295,23 @@
     ensureMatrixFullscreenButton();
     var matrixView = document.getElementById('matrixView');
     var search = document.getElementById('matrixSearchInp');
+    var searchTimer = null;
 
     if(matrixView){
-      matrixView.addEventListener('click', onMatrixClick);
       matrixView.addEventListener('input', onMatrixInput);
       matrixView.addEventListener('focusin', onMatrixFocusIn);
     }
+    document.addEventListener('click', function(event){
+      var target = event && event.target ? event.target : null;
+      if(target && target.closest && target.closest('#matrixView')){
+        onMatrixClick(event);
+      }
+    }, true);
     if(search){
-      search.addEventListener('input', function(){ renderMatrix(); });
+      search.addEventListener('input', function(){
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(renderMatrix, 180);
+      });
     }
   }
 

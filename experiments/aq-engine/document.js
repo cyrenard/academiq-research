@@ -90,9 +90,9 @@
       .replace(/\.([A-ZÇĞİÖŞÜ])/g, '. $1');
   }
 
-  function cloneRun(r){
+  function cloneRun(r, repairText){
     return Object.assign({}, r, {
-      text: repairJoinedWordImportText(r && r.text),
+      text: repairText ? repairJoinedWordImportText(r && r.text) : String((r && r.text) || ''),
       // Deep-copy the only nested known objects
       citation: r.citation ? Object.assign({}, r.citation) : null,
       footnote: r.footnote ? Object.assign({}, r.footnote) : null,
@@ -100,7 +100,7 @@
       font:     r.font     ? Object.assign({}, r.font)     : null
     });
   }
-  function cloneBlock(b){
+  function cloneBlock(b, repairText){
     // Normalize text-only blocks into runs[] form. The doc model treats
     // runs[] as the source of truth; engine's text-fallback was masking
     // length=0 blocks which sent every locate() to the document's tail.
@@ -108,7 +108,7 @@
       ? b.runs
       : (b && typeof b.text === 'string' ? [{ text: b.text }] : []);
     var out = Object.assign({}, b, {
-      runs: sourceRuns.map(cloneRun),
+      runs: sourceRuns.map(function(run){ return cloneRun(run, repairText); }),
       font: b.font ? Object.assign({}, b.font) : null
     });
     // Drop the legacy `text` property to prevent drift between text + runs.
@@ -117,6 +117,9 @@
   }
   function cloneDoc(d){
     return { blocks: (d.blocks || []).map(cloneBlock) };
+  }
+  function cloneDocForImport(d){
+    return { blocks: (d.blocks || []).map(function(block){ return cloneBlock(block, true); }) };
   }
 
   function blockTextLength(b){
@@ -304,6 +307,41 @@
     }
     run.text = t.slice(0, runLoc.intra) + text + t.slice(runLoc.intra);
     return d;
+  }
+
+  function insertTextInPlace(doc, off, text){
+    if(!text) return doc;
+    if(isDuplicateCitationInsert(doc, off, text)) return doc;
+    var loc = locate(doc, off);
+    var block = doc.blocks[loc.blockIdx];
+    if(!block) return doc;
+    var runs = block.runs || (block.runs = []);
+    if(!runs.length){
+      runs.push({ text: text });
+      return doc;
+    }
+    var runLoc = locateRun(block, loc.intra);
+    var run = runs[runLoc.runIdx];
+    if(!run){
+      runs.push({ text: text });
+      return doc;
+    }
+    var t = String(run.text || '');
+    if(runLoc.intra === t.length && run.citation){
+      var next = runs[runLoc.runIdx + 1];
+      if(next && !next.citation){
+        next.text = text + String(next.text || '');
+      }else{
+        var plain = cloneRun(run);
+        plain.text = text;
+        delete plain.citation;
+        runs.splice(runLoc.runIdx + 1, 0, plain);
+      }
+      block.runs = mergeAdjacent(runs);
+      return doc;
+    }
+    run.text = t.slice(0, runLoc.intra) + text + t.slice(runLoc.intra);
+    return doc;
   }
 
   // Block types that carry inline runs (paragraph, heading) can be merged
@@ -749,26 +787,55 @@
   // Public factory
   function createDocument(initialBlocks){
     var doc = collapseDuplicateCitationText({
-      blocks: (initialBlocks && initialBlocks.length) ? initialBlocks.map(cloneBlock) : [{ type:'paragraph', runs:[{ text:'' }] }]
+      blocks: (initialBlocks && initialBlocks.length)
+        ? cloneDocForImport({ blocks: initialBlocks }).blocks
+        : [{ type:'paragraph', runs:[{ text:'' }] }]
     });
     var history = [cloneDoc(doc)];
     var future  = [];
+    var typingTimer = 0;
+    var typingDirty = false;
 
     function commit(next){
+      flushTypingHistory();
       var cleaned = collapseDuplicateCitationText(next);
       doc = cleaned;
       history.push(cloneDoc(cleaned));
       if(history.length > 200) history.shift();
       future.length = 0;
     }
+    function flushTypingHistory(){
+      if(typingTimer) clearTimeout(typingTimer);
+      typingTimer = 0;
+      if(!typingDirty) return;
+      var cleaned = collapseDuplicateCitationText(doc);
+      doc = cleaned;
+      history.push(cloneDoc(cleaned));
+      if(history.length > 200) history.shift();
+      future.length = 0;
+      typingDirty = false;
+    }
+    function commitTypingInsert(off, text){
+      insertTextInPlace(doc, off, text);
+      typingDirty = true;
+      future.length = 0;
+      if(typingTimer) clearTimeout(typingTimer);
+      typingTimer = setTimeout(flushTypingHistory, 900);
+    }
     return {
       get: function(){ return doc; },
       length: function(){ return flatLength(doc); },
       replace: function(blocks){
         var nextBlocks = (Array.isArray(blocks) && blocks.length) ? blocks : [{ type:'paragraph', runs:[{ text:'' }] }];
-        commit({ blocks: nextBlocks.map(cloneBlock) });
+        commit({ blocks: cloneDocForImport({ blocks: nextBlocks }).blocks });
       },
-      insertText: function(off, text){ commit(insertText(doc, off, text)); },
+      insertText: function(off, text){
+        if(typeof text === 'string' && text.length === 1 && !looksLikeCitationText(text)){
+          commitTypingInsert(off, text);
+        } else {
+          commit(insertText(doc, off, text));
+        }
+      },
       insertBlocks: function(off, blocks){ commit(insertBlocks(doc, off, blocks)); },
       deleteRange: function(from, to){ commit(deleteRange(doc, from, to)); },
       splitBlock: function(off){ commit(splitBlock(doc, off)); },
@@ -810,12 +877,14 @@
       blockTextLength:     function(blockIdx){ return blockTextLength(doc.blocks[blockIdx] || { runs: [] }); },
       locate: function(off){ return locate(doc, off); },
       undo: function(){
+        flushTypingHistory();
         if(history.length <= 1) return false;
         future.push(history.pop());
         doc = cloneDoc(history[history.length - 1]);
         return true;
       },
       redo: function(){
+        flushTypingHistory();
         if(!future.length) return false;
         var next = future.pop();
         history.push(next);

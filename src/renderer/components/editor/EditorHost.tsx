@@ -29,7 +29,7 @@ function EditorHostComponent({ docId, editorRef, initialState, onEditorChange }:
     if (!rootRef.current) return;
     if (import.meta.env.DEV) console.info('[AcademiQ] EditorHost mount', { docId });
 
-    const saveDraft = debounce((state: AcademiqEditorState) => onEditorChangeRef.current(state), 800);
+    const saveDraft = debounce((state: AcademiqEditorState) => onEditorChangeRef.current(state), 1600);
 
     editorRef.current = createAcademiqEditor({
       mount: rootRef.current,

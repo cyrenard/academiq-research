@@ -1,6 +1,17 @@
 window.__aqLegacyRuntimePhase='start';
 if(typeof pdfjsLib!=='undefined'&&pdfjsLib&&pdfjsLib.GlobalWorkerOptions){
-  pdfjsLib.GlobalWorkerOptions.workerSrc='./vendor/pdf.worker.min.js';
+  (function(){
+    var workerSrc='./vendor/pdf.worker.min.js';
+    try{
+      var scriptSrc=(document.currentScript&&document.currentScript.src)||'';
+      if(scriptSrc){
+        workerSrc=new URL('../vendor/pdf.worker.min.js',scriptSrc).toString();
+      }else if(location&&location.href&&/\/dist\/renderer\//.test(location.href.replace(/\\/g,'/'))){
+        workerSrc=new URL('../../vendor/pdf.worker.min.js',location.href).toString();
+      }
+    }catch(_e){}
+    pdfjsLib.GlobalWorkerOptions.workerSrc=workerSrc;
+  })();
 }
 
 // ¦¦ TIPTAP EDITOR ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦

@@ -14,8 +14,8 @@ export function callLegacy(name: string, ...args: unknown[]) {
   const target = (window as any)[name];
   if (typeof target !== 'function') return false;
   try {
-    target(...args);
-    return true;
+    const result = target(...args);
+    return result !== false;
   } catch (error) {
     console.error('[legacy-feature]', name, error);
     return false;
@@ -92,7 +92,7 @@ export const legacyFeatures: LegacyFeature[] = [
   { id: 'citation-style-chicago', group: 'Atıf', label: 'Chicago stilini seç', fn: 'setCitationStyle', args: ['chicago'] },
   { id: 'citation-style-vancouver', group: 'Atıf', label: 'Vancouver stilini seç', fn: 'setCitationStyle', args: ['vancouver'] },
   { id: 'bibliography-insert', group: 'Kaynakça', label: 'Kaynakça ekle/güncelle', fn: 'insRefs' },
-  { id: 'bibliography-refresh', group: 'Kaynakça', label: 'Kaynakçay? yenile', fn: 'refreshBibliographyManual' },
+  { id: 'bibliography-refresh', group: 'Kaynakça', label: 'Kaynakçayı yenile', fn: 'refreshBibliographyManual' },
   { id: 'bibliography-reset', group: 'Kaynakça', label: 'Kaynakça elle düzenlemeyi sıfırla', fn: 'resetBibliographyManual' },
   { id: 'bibliography-export-bib', group: 'Dışa Aktar', label: 'Bibliography BIB export', fn: 'expBIB' },
   { id: 'bibliography-export-ris', group: 'Dışa Aktar', label: 'Bibliography RIS export', fn: 'expRIS' },
@@ -100,9 +100,9 @@ export const legacyFeatures: LegacyFeature[] = [
   { id: 'bibliography-export-apa', group: 'Dışa Aktar', label: 'APA kaynakça metni export', fn: 'expBibliographyAPA' },
   { id: 'bibliography-export-chicago', group: 'Dışa Aktar', label: 'Chicago kaynakça metni export', fn: 'expBibliographyChicago' },
   { id: 'bibliography-export-vancouver', group: 'Dışa Aktar', label: 'Vancouver kaynakça metni export', fn: 'expBibliographyVancouver' },
-  { id: 'notes-export', group: 'Dışa Aktar', label: 'Notlar? export et', fn: 'expNotes' },
+  { id: 'notes-export', group: 'Dışa Aktar', label: 'Notları dışa aktar', fn: 'expNotes' },
   { id: 'library-export', group: 'Dışa Aktar', label: 'Kütüphane export et', fn: 'expLib' },
-  { id: 'export-preview', group: 'Dışa Aktar', label: 'Export preview a?', fn: 'openExportPreview' },
+  { id: 'export-preview', group: 'Dışa Aktar', label: 'Dışa aktarma önizlemesini aç', fn: 'openExportPreview' },
 
   { id: 'paragraph', group: 'Editor', label: 'Paragraf yap', kind: 'editorCommand', fn: 'formatBlock', args: ['p'] },
   { id: 'heading-1', group: 'Editor', label: 'Başlık 1', kind: 'editorCommand', fn: 'formatBlock', args: ['h1'] },
@@ -126,9 +126,9 @@ export const legacyFeatures: LegacyFeature[] = [
   { id: 'page-break', group: 'Editor', label: 'Sayfa sonu ekle', kind: 'editorCommand', fn: 'insertPageBreak' },
   { id: 'superscript', group: 'Editor', label: 'Ust simge', kind: 'editorCommand', fn: 'superscript' },
   { id: 'subscript', group: 'Editor', label: 'Alt simge', kind: 'editorCommand', fn: 'subscript' },
-  { id: 'line-spacing-1', group: 'Editor', label: 'Satir araligi 1.0', kind: 'editorAction', fn: 'setLineSpacing', args: ['1'] },
-  { id: 'line-spacing-15', group: 'Editor', label: 'Satir araligi 1.5', kind: 'editorAction', fn: 'setLineSpacing', args: ['1.5'] },
-  { id: 'line-spacing-2', group: 'Editor', label: 'Satir araligi 2.0', kind: 'editorAction', fn: 'setLineSpacing', args: ['2'] },
+  { id: 'line-spacing-1', group: 'Editor', label: 'Satır aralığı 1.0', kind: 'editorAction', fn: 'setLineSpacing', args: ['1'] },
+  { id: 'line-spacing-15', group: 'Editor', label: 'Satır aralığı 1.5', kind: 'editorAction', fn: 'setLineSpacing', args: ['1.5'] },
+  { id: 'line-spacing-2', group: 'Editor', label: 'Satır aralığı 2.0', kind: 'editorAction', fn: 'setLineSpacing', args: ['2'] },
   { id: 'page-size-a4', group: 'Editor', label: 'Sayfa A4', kind: 'editorCommand', fn: 'setPageSize', args: ['A4'] },
   { id: 'page-size-letter', group: 'Editor', label: 'Sayfa Letter', kind: 'editorCommand', fn: 'setPageSize', args: ['Letter'] },
   { id: 'find-open', group: 'Editor', label: 'Bul', fn: 'toggleFindBar' },
@@ -142,7 +142,7 @@ export const legacyFeatures: LegacyFeature[] = [
   { id: 'insert-image', group: 'Ekle', label: 'Gorsel ekle', fn: 'insImage' },
   { id: 'insert-blockquote', group: 'Ekle', label: 'Blok alinti ekle', fn: 'insBlkQ' },
   { id: 'insert-cover', group: 'Ekle', label: 'Kapak sayfasi ekle', fn: 'insCover' },
-  { id: 'insert-abstract', group: 'Ekle', label: 'Abstract/Ozet ekle', fn: 'insAbstract' },
+  { id: 'insert-abstract', group: 'Ekle', label: 'Abstract/Özet ekle', fn: 'insAbstract' },
   { id: 'insert-appendix', group: 'Ekle', label: 'Appendix ekle', fn: 'insAppendix' },
   { id: 'template-thesis', group: 'Şablon', label: 'Tez Şablonu uygula', fn: 'applyTemplate', args: ['tez'] },
   { id: 'template-article', group: 'Şablon', label: 'Makale Şablonu uygula', fn: 'applyTemplate', args: ['makale'] },
@@ -150,8 +150,8 @@ export const legacyFeatures: LegacyFeature[] = [
   { id: 'template-literature', group: 'Şablon', label: 'Literatür Şablonu uygula', fn: 'applyTemplate', args: ['literatur'] },
   { id: 'toc-insert', group: 'Belge', label: 'Icindekiler ekle/güncelle', fn: 'insertTOC' },
   { id: 'toc-remove', group: 'Belge', label: 'Icindekileri kaldir', fn: 'removeTOC' },
-  { id: 'outline-open', group: 'Belge', label: 'Belge outline a?', fn: 'openDocumentOutline' },
-  { id: 'caption-manager', group: 'Belge', label: 'Caption manager a?', fn: 'openCaptionManager' },
+  { id: 'outline-open', group: 'Belge', label: 'Belge anahatını aç', fn: 'openDocumentOutline' },
+  { id: 'caption-manager', group: 'Belge', label: 'Başlık yöneticisini aç', fn: 'openCaptionManager' },
   { id: 'footnote', group: 'Belge', label: 'Dipnot ekle', kind: 'module', module: 'AQFootnotes', method: 'insertFootnote', args: ['footnote'] },
   { id: 'endnote', group: 'Belge', label: 'Sonnot ekle', kind: 'module', module: 'AQFootnotes', method: 'insertFootnote', args: ['endnote'] },
   { id: 'cross-ref', group: 'Belge', label: 'Cross-reference dialog', kind: 'module', module: 'AQFootnotes', method: 'showCrossRefDialog' },
@@ -165,9 +165,9 @@ export const legacyFeatures: LegacyFeature[] = [
   { id: 'track-accept-all', group: 'Değişiklik İzleme', label: 'Tüm değişiklikleri kabul et', fn: 'acceptTrackedChanges' },
   { id: 'track-reject-all', group: 'Değişiklik İzleme', label: 'Tüm değişiklikleri reddet', fn: 'rejectTrackedChanges' },
 
-  { id: 'pdf-toggle', group: 'PDF', label: 'PDF panelini a?/kapat', fn: 'togglePDF' },
-  { id: 'pdf-upload', group: 'PDF', label: 'PDF yukle', kind: 'input', inputId: 'lfinp' },
-  { id: 'pdf-prev', group: 'PDF', label: 'PDF onceki sayfa', fn: 'pPrev' },
+  { id: 'pdf-toggle', group: 'PDF', label: 'PDF panelini aç/kapat', fn: 'togglePDF' },
+  { id: 'pdf-upload', group: 'PDF', label: 'PDF yükle', kind: 'input', inputId: 'lfinp' },
+  { id: 'pdf-prev', group: 'PDF', label: 'PDF önceki sayfa', fn: 'pPrev' },
   { id: 'pdf-next', group: 'PDF', label: 'PDF sonraki sayfa', fn: 'pNext' },
   { id: 'pdf-zoom-in', group: 'PDF', label: 'PDF zoom arttir', fn: 'pZI' },
   { id: 'pdf-zoom-out', group: 'PDF', label: 'PDF zoom azalt', fn: 'pZO' },
@@ -179,29 +179,29 @@ export const legacyFeatures: LegacyFeature[] = [
   { id: 'pdf-related', group: 'PDF', label: 'PDF related papers', fn: 'togglePdfRelated' },
   { id: 'pdf-annot-mode', group: 'PDF', label: 'PDF annotation modu', fn: 'toggleAnnotMode' },
   { id: 'pdf-draw-mode', group: 'PDF', label: 'PDF cizim modu', fn: 'toggleDrawMode' },
-  { id: 'pdf-region', group: 'PDF', label: 'PDF bolge yakalama', fn: 'togglePdfRegionCaptureMode' },
-  { id: 'pdf-draw-clear', group: 'PDF', label: 'PDF sayfa ?izimini temizle', fn: 'clearPdfDrawingPage' },
+  { id: 'pdf-region', group: 'PDF', label: 'PDF bölge yakalama', fn: 'togglePdfRegionCaptureMode' },
+  { id: 'pdf-draw-clear', group: 'PDF', label: 'PDF sayfa çizimini temizle', fn: 'clearPdfDrawingPage' },
   { id: 'pdf-fullscreen', group: 'PDF', label: 'PDF tam ekran', fn: 'togglePdfFullscreen' },
   { id: 'pdf-ocr-scan', group: 'PDF OCR', label: 'OCR tarama gerekli mi', fn: 'runPdfOcrNeedScan' },
   { id: 'pdf-ocr-run', group: 'PDF OCR', label: 'OCR çalıştır', fn: 'runPdfOcrExtractionNow' },
-  { id: 'pdf-ocr-retry', group: 'PDF OCR', label: 'OCR hatali sayfalari tekrar dene', fn: 'runPdfOcrRetryFailedNow' },
+  { id: 'pdf-ocr-retry', group: 'PDF OCR', label: 'OCR hatalı sayfaları tekrar dene', fn: 'runPdfOcrRetryFailedNow' },
   { id: 'pdf-ocr-cancel', group: 'PDF OCR', label: 'OCR işlemini iptal et', fn: 'cancelPdfOcrRun' },
   { id: 'pdf-ocr-status', group: 'PDF OCR', label: 'OCR durumunu göster', fn: 'showPdfOcrStatus' },
 
   { id: 'reference-import-bib', group: 'Kaynak', label: 'BibTeX/RIS içe aktar', kind: 'input', inputId: 'bibinp' },
   { id: 'reference-import-zotero', group: 'Kaynak', label: 'Zotero içe aktar', kind: 'input', inputId: 'zoteroinp' },
   { id: 'reference-import-external', group: 'Kaynak', label: 'Harici kaynak içe aktar modal', fn: 'openExternalReferenceImportModal' },
-  { id: 'reference-duplicates', group: 'Kaynak', label: 'Duplicate review a?', fn: 'openDuplicateReview' },
-  { id: 'reference-metadata-health', group: 'Kaynak', label: 'Metadata health center a?', fn: 'openMetadataHealthCenter' },
+  { id: 'reference-duplicates', group: 'Kaynak', label: 'Duplicate review aç', fn: 'openDuplicateReview' },
+  { id: 'reference-metadata-health', group: 'Kaynak', label: 'Metadata health center aç', fn: 'openMetadataHealthCenter' },
   { id: 'reference-collections', group: 'Kaynak', label: 'Koleksiyon yonetimi', fn: 'openCollectionManager' },
   { id: 'reference-labels', group: 'Kaynak', label: 'Label filtre paneli', fn: 'toggleLabelFilterPanel' },
   { id: 'reference-related', group: 'Kaynak', label: 'Related papers paneli', fn: 'toggleRelatedPanel' },
   { id: 'reference-batch-oa', group: 'Kaynak', label: 'Batch open access PDF indir', fn: 'batchDownloadOA' },
   { id: 'reference-batch-cites', group: 'Kaynak', label: 'Batch citation metadata cek', fn: 'batchFetchCitations' },
-  { id: 'matrix-open', group: 'Literatür Matrisi', label: 'Literatür matrisini a?', fn: 'openLiteratureMatrix' },
-  { id: 'matrix-toggle', group: 'Literatür Matrisi', label: 'Literatür matrisini a?/kapat', fn: 'toggleLiteratureMatrix' },
-  { id: 'theme-toggle', group: 'Gorunum', label: 'Tema degistir', fn: 'toggleTheme' },
-  { id: 'zen-toggle', group: 'Gorunum', label: 'Odak/Zen modu', fn: 'toggleZenMode' },
+  { id: 'matrix-open', group: 'Literatür Matrisi', label: 'Literatür matrisini aç', fn: 'openLiteratureMatrix' },
+  { id: 'matrix-toggle', group: 'Literatür Matrisi', label: 'Literatür matrisini aç/kapat', fn: 'toggleLiteratureMatrix' },
+  { id: 'theme-toggle', group: 'Görünüm', label: 'Tema değiştir', fn: 'toggleTheme' },
+  { id: 'zen-toggle', group: 'Görünüm', label: 'Odak/Zen modu', fn: 'toggleZenMode' },
   { id: 'sync-settings', group: 'Ayarlar', label: 'Sync ayarlari', fn: 'showSyncSettings' }
 ];
 

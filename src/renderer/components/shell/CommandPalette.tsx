@@ -46,7 +46,7 @@ export function CommandPalette({ open, commands, onClose }: CommandPaletteProps)
             <span className="text-[10px] uppercase tracking-[0.16em] text-aq-muted">{command.group}</span>
           </button>
         ))}
-        {!filtered.length ? <div className="p-6 text-center text-sm text-aq-muted">Komut bulunamad?.</div> : null}
+        {!filtered.length ? <div className="p-6 text-center text-sm text-aq-muted">Komut bulunamadı.</div> : null}
       </div>
     </Modal>
   );

@@ -27,6 +27,9 @@ type LegacyWindow = Window & {
   S?: { docs?: Array<{ id: string; content?: string }>; curDoc?: string; doc?: string; cm?: string; cur?: string; wss?: any[]; notes?: any[] };
   editor?: any;
   AQTipTapWordInit?: { init: () => any };
+  AQTipTapWordIO?: {
+    repairWordImportHTML?: (html: string) => string;
+  };
   AQEditorCore?: {
     focus?: (toEnd?: boolean) => boolean;
     getContent?: () => string;
@@ -110,6 +113,16 @@ function normalizeHTML(value: unknown) {
   return html || '<p></p>';
 }
 
+function repairPersistedWordHTML(win: LegacyWindow, value: unknown) {
+  const html = normalizeHTML(value);
+  if (win.AQTipTapWordIO && typeof win.AQTipTapWordIO.repairWordImportHTML === 'function') {
+    try {
+      return normalizeHTML(win.AQTipTapWordIO.repairWordImportHTML(html));
+    } catch (_error) {}
+  }
+  return html;
+}
+
 function readPersistedDoc(docId: string, raw: unknown) {
   const data = raw && typeof raw === 'object' ? raw as any : {};
   const docs = Array.isArray(data.docs) ? data.docs : [];
@@ -131,11 +144,46 @@ function buildEditorSurface(mount: HTMLElement) {
   ].join('');
 }
 
+function setAuxiliaryPage(pageId: string, bodyId: string, html: unknown) {
+  const content = String(html || '').trim();
+  const page = document.getElementById(pageId);
+  const body = document.getElementById(bodyId);
+  if (body) body.innerHTML = content;
+  if (page) page.style.display = content ? 'block' : 'none';
+}
+
+function hydrateAuxiliaryPages(win: LegacyWindow, doc: any) {
+  if (!doc) return;
+  setAuxiliaryPage('coverpage', 'coverbody', doc.coverHTML);
+  setAuxiliaryPage('tocpage', 'tocbody', doc.tocHTML);
+  setAuxiliaryPage('appendixpage', 'appendixbody', doc.appendicesHTML);
+  const tocBody = document.getElementById('tocbody');
+  try {
+    if (tocBody && doc.tocHTML && typeof (win as any).fixTOCDots === 'function') {
+      window.setTimeout(() => (win as any).fixTOCDots(tocBody), 0);
+    }
+  } catch (_error) {}
+  try {
+    if (doc.appendicesHTML && activeEditor?._aqEngine && typeof (win as any).updateAQEngineAppendices === 'function') {
+      (win as any).updateAQEngineAppendices(activeEditor, String(doc.appendicesHTML || ''));
+      setAuxiliaryPage('appendixpage', 'appendixbody', '');
+    }
+  } catch (_error) {}
+  try { if (typeof (win as any).syncAuxiliaryPages === 'function') (win as any).syncAuxiliaryPages(); } catch (_error) {}
+}
+
 function installLegacySaveBridge(win: LegacyWindow, docId: string, onChange?: CreateAcademiqEditorOptions['onChange']) {
   const legacySave = typeof win.save === 'function' ? win.save.bind(win) : null;
+  let saveTimer: number | null = null;
   const notify = () => {
     if (!onChange) return;
     onChange({ docId, html: getEditorHTML(win), snapshot: exportEditorSnapshot(win) });
+  };
+  const runSave = () => {
+    saveTimer = null;
+    if (legacySave) legacySave();
+    if (typeof win.__aqReactSyncFromLegacy === 'function') win.__aqReactSyncFromLegacy(win.S || {});
+    notify();
   };
   activeNotify = notify;
   win.uSt = win.uSt || (() => {});
@@ -144,9 +192,18 @@ function installLegacySaveBridge(win: LegacyWindow, docId: string, onChange?: Cr
   win.autoUpdateTOC = win.autoUpdateTOC || (() => {});
   win.checkTrig = win.checkTrig || (() => {});
   win.save = () => {
-    if (legacySave) legacySave();
-    if (typeof win.__aqReactSyncFromLegacy === 'function') win.__aqReactSyncFromLegacy(win.S || {});
-    notify();
+    const editor = activeEditor || win.editor;
+    if (editor && editor._aqEngine) {
+      if (saveTimer != null) window.clearTimeout(saveTimer);
+      saveTimer = window.setTimeout(runSave, 1800);
+      return;
+    }
+    runSave();
+  };
+  (win as any).__aqFlushSaveBridge = () => {
+    if (saveTimer == null) return;
+    window.clearTimeout(saveTimer);
+    runSave();
   };
 }
 
@@ -504,6 +561,7 @@ function installReferenceBridge(win: LegacyWindow) {
 }
 
 function destroyLegacyEditor(win: LegacyWindow) {
+  try { if (typeof (win as any).__aqFlushSaveBridge === 'function') (win as any).__aqFlushSaveBridge(); } catch (_error) {}
   const editor = activeEditor || win.editor;
   if (editor && typeof editor.destroy === 'function') {
     try { editor.destroy(); } catch (_error) {}
@@ -517,14 +575,17 @@ function destroyLegacyEditor(win: LegacyWindow) {
 
 function hydrateInitialDocument(win: LegacyWindow, docId: string, initialState: unknown) {
   const source = initialState && typeof initialState === 'object' ? initialState as any : {};
-  const html = readPersistedDoc(docId, source);
+  const rawHTML = readPersistedDoc(docId, source);
+  const html = repairPersistedWordHTML(win, rawHTML);
+  const sourceDocs = Array.isArray(source.docs) && source.docs.length ? source.docs : [{ id: docId, content: html }];
+  const docs = sourceDocs.map((doc: any) => doc && doc.id === docId ? { ...doc, content: html } : doc);
   win.S = Object.assign({}, win.S || {}, source, {
     cur: source.cur || win.S?.cur || '',
     wss: Array.isArray(source.wss) ? source.wss : win.S?.wss,
     notes: Array.isArray(source.notes) ? source.notes : win.S?.notes,
     curDoc: docId,
     doc: html,
-    docs: Array.isArray(source.docs) && source.docs.length ? source.docs : [{ id: docId, content: html }]
+    docs
   });
   win.cLib = (workspaceId?: string) => {
     const state = win.S || {};
@@ -547,6 +608,12 @@ function hydrateInitialDocument(win: LegacyWindow, docId: string, initialState: 
   };
   installReferenceBridge(win);
   setEditorHTML(win, html);
+  hydrateAuxiliaryPages(win, docs.find((doc: any) => doc && doc.id === docId) || docs[0]);
+  if (html !== rawHTML) {
+    window.setTimeout(() => {
+      try { if (typeof win.save === 'function') win.save(); } catch (_error) {}
+    }, 0);
+  }
 }
 
 export function createAcademiqEditor(options: CreateAcademiqEditorOptions): AcademiqEditorApi {

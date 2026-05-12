@@ -24,6 +24,8 @@
     if(state.refTimer){ clearTimeout(state.refTimer); state.refTimer = null; }
     if(state.academicTimer){ clearTimeout(state.academicTimer); state.academicTimer = null; }
     if(state.tocTimer){ clearTimeout(state.tocTimer); state.tocTimer = null; }
+    if(_saveTimer){ clearTimeout(_saveTimer); _saveTimer = null; }
+    if(_selectionTriggerTimer){ clearTimeout(_selectionTriggerTimer); _selectionTriggerTimer = null; }
     state.layoutTimers.forEach(function(timer){ clearTimeout(timer); });
     state.layoutTimers = [];
   }
@@ -379,13 +381,23 @@ function syncReferenceSectionDeferred(delay){
   // queue dozens of overlapping timeouts.
   var _updateToken = 0;
   var _rafPending = false;
+  var _saveTimer = null;
+  var _selectionTriggerTimer = null;
 
   function onEditorUpdate(ctx){
     if(root.__aqDocSwitching) return;
     var editor = ctx && ctx.editor ? ctx.editor : null;
     ensureEditorWritableState(editor);
     // Synchronous – must stay immediate for save indicator & dirty state
-    syncEditorChrome();
+    if(typeof root.uSt === 'function'){
+      safeCall(root.uSt);
+    }
+    clearTimeout(_saveTimer);
+    _saveTimer = setTimeout(function(){
+      if(typeof root.save === 'function'){
+        safeCall(root.save);
+      }
+    }, editor && editor._aqEngine ? 900 : 250);
     // Everything else is deferred into a single batch
     _updateToken++;
     if(_rafPending) return;
@@ -413,7 +425,8 @@ function syncReferenceSectionDeferred(delay){
     if(typeof root.updateFmtState === 'function'){
       safeCall(root.updateFmtState);
     }
-    setTimeout(refreshCitationTrigger, 0);
+    clearTimeout(_selectionTriggerTimer);
+    _selectionTriggerTimer = setTimeout(refreshCitationTrigger, 120);
     setTimeout(function(){
       var handled = false;
       if(root.AQNotes && typeof root.AQNotes.syncLinkedNoteFromEditorSelection === 'function'){

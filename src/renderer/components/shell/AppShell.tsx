@@ -138,9 +138,24 @@ export function AppShell({
     </button>
   );
 
+  const windowButton = (label: string, title: string, action: () => void, danger = false) => (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      onClick={action}
+      className={[
+        'aq-window-control flex h-8 w-9 items-center justify-center rounded-md text-[14px] leading-none transition active:translate-y-px',
+        danger ? 'hover:bg-red-500 hover:text-white' : 'hover:bg-aq-panel hover:text-aq-ink'
+      ].join(' ')}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <div className="aq-soft-shell grid h-screen grid-rows-[38px_38px_1fr_22px] overflow-hidden bg-[#fbfaf7] text-aq-ink">
-      <header className="flex items-center justify-between border-b border-aq-line bg-white px-5">
+      <header className="aq-titlebar flex items-center justify-between border-b border-aq-line bg-white pl-5 pr-2">
         <div className="flex items-center gap-2">
           <div className="flex h-6 w-6 items-center justify-center rounded-md bg-aq-navy text-[12px] font-semibold text-white">A</div>
           <div className="text-[16px] font-semibold leading-none">AcademiQ</div>
@@ -166,7 +181,7 @@ export function AppShell({
                 <button type="button" className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel" onClick={() => runExportAction(onExportRIS)}>Kaynakça RIS aktar</button>
                 <button type="button" className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel" onClick={() => runExportAction(onExportCSL)}>Kaynakça CSL JSON aktar</button>
                 <div className="my-1 border-t border-aq-line" />
-                <button type="button" className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel" onClick={() => runExportAction(onExportNotes)}>Notlar? aktar</button>
+                <button type="button" className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel" onClick={() => runExportAction(onExportNotes)}>Notları aktar</button>
                 <button type="button" className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel" onClick={() => runExportAction(onExportLibrary)}>Kütüphaneyi aktar</button>
               </div>
             ) : null}
@@ -176,6 +191,11 @@ export function AppShell({
           {navButton('pdf', 'PDF')}
           {navButton('library', 'Kütüphane', true)}
           {navButton('notes', 'Not & Refs', true)}
+          <div className="ml-1 flex h-full items-center gap-0.5 border-l border-aq-line pl-1 text-aq-muted">
+            {windowButton('−', 'Küçült', () => window.electronAPI?.minimizeWindow?.())}
+            {windowButton('□', 'Büyüt / geri al', () => window.electronAPI?.toggleMaximizeWindow?.())}
+            {windowButton('×', 'Kapat', () => window.electronAPI?.closeWindow?.(), true)}
+          </div>
         </div>
       </header>
       <div className="min-w-0 border-b border-aq-line bg-white">

@@ -48,6 +48,9 @@ declare global {
       downloadUpdate: (url: string) => IpcResult<unknown>;
       setUpdateUrl: (url: string) => IpcResult<unknown>;
       restartApp: () => IpcResult<unknown>;
+      minimizeWindow: () => IpcResult<unknown>;
+      toggleMaximizeWindow: () => IpcResult<unknown>;
+      closeWindow: () => IpcResult<unknown>;
     };
     ocrAPI: {
       recognize: (payload: unknown) => IpcResult<unknown>;

@@ -46,7 +46,7 @@ export function StatusBar({
   wordCount = '1824',
   apaLabel = 'APA 7 ok',
   apaTone = 'ok',
-  issuesLabel = '0 uyar?',
+  issuesLabel = '0 uyarı',
   issuesTone = 'ok',
   saveLabel,
   saveTone = 'ok',
@@ -56,7 +56,7 @@ export function StatusBar({
   onOpenSave
 }: StatusBarProps) {
   return (
-    <footer className="flex h-6 items-center justify-between border-t border-aq-line bg-white px-4 text-[11px] text-aq-muted">
+    <footer className="aq-status-bar flex h-6 items-center justify-between border-t border-aq-line bg-white px-4 text-[11px] text-aq-muted">
       <div className="flex min-w-0 items-center gap-2">
         {pdfProgressLabel ? (
           <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-blue-700">

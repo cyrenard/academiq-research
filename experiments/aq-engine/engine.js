@@ -57,6 +57,17 @@
     return { width: m.width || 0, ascent: ascent, descent: descent };
   }
 
+  var _textMeasureCache = new Map();
+  function measureTextCached(text, fontSpec){
+    var key = fontShorthand(fontSpec) + '\u0001' + String(text || '');
+    var hit = _textMeasureCache.get(key);
+    if(hit) return hit;
+    var measured = measureText(text, fontSpec);
+    if(_textMeasureCache.size > 8000) _textMeasureCache.clear();
+    _textMeasureCache.set(key, measured);
+    return measured;
+  }
+
   // ── Ordered list marker formatting ────────────────────────────────────────
   function toAlpha(n){
     // 1 → 'a', 26 → 'z', 27 → 'aa'
@@ -101,7 +112,7 @@
     var re = /\S+|\s+/g;
     var m;
     while((m = re.exec(text)) !== null){
-      tokens.push({ text: m[0], space: /^\s/.test(m[0]) });
+      tokens.push({ text: /^\s/.test(m[0]) ? ' ' : m[0], space: /^\s/.test(m[0]) });
     }
     return tokens;
   }
@@ -135,9 +146,10 @@
       var localCursor = cursor;
       while((m = re.exec(text)) !== null){
         var seg = m[0];
+        var isSpace = /^\s/.test(seg);
         out.push({
-          text: seg,
-          space: /^\s/.test(seg),
+          text: isSpace ? ' ' : seg,
+          space: isSpace,
           font: font,
           decoration: run.underline ? 'underline' : (run.strike ? 'line-through' : null),
           color: run.color || null,
@@ -181,7 +193,7 @@
       if(tok.fontScale && tok.fontScale !== 1){
         f = Object.assign({}, f, { sizePt: f.sizePt * tok.fontScale });
       }
-      var m = measureText(tok.text, f);
+      var m = measureTextCached(tok.text, f);
       return { width: m.width, ascent: m.ascent, descent: m.descent, font: f };
     }
 
@@ -249,6 +261,52 @@
     return lines;
   }
 
+  function blockLayoutCacheKey(block, blockFont, width, docOffset){
+    var runs = Array.isArray(block.runs) && block.runs.length ? block.runs : [{ text: block.text || '' }];
+    var runKey = runs.map(function(run){
+      run = run || {};
+      return [
+        run.text || '',
+        run.bold ? 1 : 0,
+        run.italic ? 1 : 0,
+        run.underline ? 1 : 0,
+        run.strike ? 1 : 0,
+        run.color || '',
+        run.highlight || '',
+        run.href || '',
+        run.baselineShift || 0,
+        run.fontScale || 1,
+        run.trackInsert ? 1 : 0,
+        run.trackDelete ? 1 : 0,
+        run.citation ? (run.citation.ref || run.citation.id || JSON.stringify(run.citation)) : '',
+        run.footnote ? (run.footnote.fnId || JSON.stringify(run.footnote)) : '',
+        run.crossRef ? (run.crossRef.refId || JSON.stringify(run.crossRef)) : '',
+        run.font ? JSON.stringify(run.font) : ''
+      ].join('\u0002');
+    }).join('\u0003');
+    return [
+      width,
+      docOffset,
+      block.type || 'paragraph',
+      block.level || '',
+      block.align || '',
+      block.list ? JSON.stringify(block.list) : '',
+      block.firstLineIndentPx || 0,
+      block.leftIndentPx || 0,
+      block.lineHeightFactor || '',
+      JSON.stringify(blockFont || {}),
+      runKey
+    ].join('\u0004');
+  }
+
+  function cloneLines(lines){
+    return (lines || []).map(function(line){
+      var out = Object.assign({}, line);
+      out.items = (line.items || []).map(function(item){ return Object.assign({}, item, { font: item.font ? Object.assign({}, item.font) : item.font }); });
+      return out;
+    });
+  }
+
   // ── Pagination ─────────────────────────────────────────────────────────────
   // Walk lines top-to-bottom; when y + lineHeight would exceed the page's
   // bottom margin, close the current page and start a new one. Per APA, lines
@@ -268,6 +326,7 @@
     var page = newPage();
     var y = 0;
     var docOffset = 0;        // running absolute offset across all blocks
+    var lineCache = opts._lineCache || (opts._lineCache = new Map());
 
     function newPage(){ return { lines: [] }; }
 
@@ -429,7 +488,13 @@
       }
       block._markerText = markerText;
       block._leftIndentPx = leftIndentPx;
-      var lines = breakParagraphIntoLines(block, blockContentWidth, blockFont, docOffset);
+      var cacheKey = blockLayoutCacheKey(block, blockFont, blockContentWidth, docOffset);
+      var cachedLines = lineCache.get(cacheKey);
+      var lines = cachedLines ? cloneLines(cachedLines) : breakParagraphIntoLines(block, blockContentWidth, blockFont, docOffset);
+      if(!cachedLines){
+        if(lineCache.size > 2000) lineCache.clear();
+        lineCache.set(cacheKey, cloneLines(lines));
+      }
 
       // Widow/orphan: if only 1 line of a multi-line paragraph fits on the
       // current page, push the whole paragraph to next page.
@@ -492,6 +557,12 @@
 
   // ── DOM render ─────────────────────────────────────────────────────────────
   function renderToDOM(layout, container, opts){
+    opts = opts || {};
+    var pageRange = opts.renderPageRange || null;
+    function shouldRenderPage(pageIndex){
+      if(!pageRange) return true;
+      return pageIndex >= pageRange.from && pageIndex <= pageRange.to;
+    }
     container.innerHTML = '';
     // Transparent so the host scroller's own background shows between pages —
     // avoids the "bridge band" effect when stage gradient differs from #escroll.
@@ -517,6 +588,11 @@
       pageEl.style.margin = '0 0 ' + opts.pageGapPx + 'px';
       pageEl.style.boxSizing = 'border-box';
       pageEl.style.fontFamily = opts.baseFont.family;
+      if(!shouldRenderPage(p)){
+        pageEl.dataset.virtualized = 'true';
+        container.appendChild(pageEl);
+        continue;
+      }
 
       // Margin guides (debug)
       if(opts.showMarginGuides){

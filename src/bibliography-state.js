@@ -121,7 +121,8 @@
     while(end < blocks.length){
       var next = blocks[end];
       if(!next) break;
-      if(next._isBibEntry || (next.attrs && next.attrs.refId)){
+      var cls = String(next.attrs && next.attrs.class || '');
+      if(next._isBibEntry || (next.attrs && next.attrs.refId) || /\b(refe|aq-ref-entry)\b/.test(cls)){
         end += 1;
         continue;
       }
@@ -132,6 +133,38 @@
       break;
     }
     return { headingIndex: headingIndex, start: headingIndex + 1, end: end };
+  }
+
+  function aqEngineBlockStartOffset(blocks, blockIdx){
+    blocks = Array.isArray(blocks) ? blocks : [];
+    var off = 0;
+    for(var i = 0; i < blockIdx && i < blocks.length; i++){
+      off += blockText(blocks[i]).length + 1;
+    }
+    return off;
+  }
+
+  function aqEngineSelectionInsideRange(editor, range, blocks){
+    if(!editor || typeof editor._captureSelection !== 'function' || !range || range.headingIndex < 0) return false;
+    try{
+      var sel = editor._captureSelection();
+      if(!sel || typeof sel.from !== 'number') return false;
+      var start = aqEngineBlockStartOffset(blocks, range.headingIndex);
+      var end = range.end >= 0 ? aqEngineBlockStartOffset(blocks, range.end) : aqEngineBlockStartOffset(blocks, blocks.length);
+      return sel.from >= start && sel.from <= end;
+    }catch(_e){
+      return false;
+    }
+  }
+
+  function moveAQEngineSelectionBeforeBibliography(editor, blocks, headingIndex){
+    if(!editor || typeof editor._restoreSelection !== 'function' || headingIndex < 0) return false;
+    var at = aqEngineBlockStartOffset(blocks, headingIndex);
+    try{
+      return !!editor._restoreSelection({ from: at, to: at, anchor: at, focus: at });
+    }catch(_e){
+      return false;
+    }
   }
 
   function buildAQEngineBibliographyHeading(){
@@ -170,6 +203,85 @@
     block.lineHeightFactor = 2.0;
     block.font = { sizePt: 12, weight: '400', style: 'normal' };
     return block;
+  }
+
+  function escapeHTML(value){
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function aqEngineBlockToBibliographyHTML(block){
+    block = block || {};
+    var text = (block.runs || []).map(function(run){
+      var out = escapeHTML(run && run.text || '');
+      if(run && run.bold) out = '<strong>' + out + '</strong>';
+      if(run && run.italic) out = '<em>' + out + '</em>';
+      if(run && run.underline) out = '<u>' + out + '</u>';
+      return out;
+    }).join('');
+    if(block._isBibHeading || (block.type === 'heading' && isBibliographyTitle(blockText(block)))){
+      return '<h1>KAYNAK\u00c7A</h1>';
+    }
+    var refId = String(block._refId || (block.attrs && block.attrs.refId) || '').trim();
+    return '<p class="refe"' + (refId ? ' data-ref-id="' + escapeHTML(refId) + '"' : '') + '>' + text + '</p>';
+  }
+
+  function captureAQEngineBibliographyHTML(editor, doc){
+    if(!editor || !editor._aqEngine || !editor._docModel || !doc) return false;
+    var model = editor._docModel.get();
+    var blocks = (model && Array.isArray(model.blocks)) ? model.blocks : [];
+    var range = findAQEngineBibliographyRange(blocks);
+    if(range.headingIndex < 0) return false;
+    var end = range.end > range.headingIndex ? range.end : blocks.length;
+    var html = blocks.slice(range.headingIndex, end).map(aqEngineBlockToBibliographyHTML).join('');
+    if(!String(html || '').trim()) return false;
+    doc.bibliographyHTML = html;
+    doc.bibliographyManual = true;
+    return true;
+  }
+
+  function replaceAQEngineBibliographyFromHTML(editor, html){
+    if(!editor || !editor._aqEngine || !editor._docModel) return false;
+    html = String(html || '').trim();
+    if(!html) return false;
+    var docModel = editor._docModel;
+    var model = docModel.get();
+    var blocks = (model && Array.isArray(model.blocks)) ? model.blocks : [];
+    var parsed = [];
+    if(typeof window !== 'undefined' && window.AQEngineCompat && typeof window.AQEngineCompat.htmlToBlocks === 'function'){
+      parsed = window.AQEngineCompat.htmlToBlocks(html);
+    }
+    if(!Array.isArray(parsed) || !parsed.length) return false;
+    var hasHeading = parsed.some(function(block){
+      return block && (block._isBibHeading || (block.type === 'heading' && isBibliographyTitle(blockText(block))));
+    });
+    if(!hasHeading) parsed.unshift(buildAQEngineBibliographyHeading());
+    var seenHeading = false;
+    parsed = parsed.map(function(block){
+      block = Object.assign({}, block || {});
+      if(!seenHeading && (block._isBibHeading || block.type === 'heading' || isBibliographyTitle(blockText(block)))){
+        seenHeading = true;
+        return Object.assign(buildAQEngineBibliographyHeading(), block, {
+          type: 'heading',
+          level: 1,
+          pageBreak: true,
+          align: 'center',
+          runs: [{ text: 'KAYNAK\u00c7A', bold: true }],
+          _isBibHeading: true
+        });
+      }
+      return applyAQEngineBibliographyEntryStyle(block);
+    });
+    var range = findAQEngineBibliographyRange(blocks);
+    var appendixRange = findAQEngineAppendixRange(blocks);
+    var insertAt = range.headingIndex >= 0 ? range.headingIndex : (appendixRange.start >= 0 ? appendixRange.start : blocks.length);
+    var replaceEnd = range.headingIndex >= 0 ? range.end : insertAt;
+    docModel.replace(blocks.slice(0, insertAt).concat(parsed).concat(blocks.slice(replaceEnd)));
+    if(typeof editor._reflow === 'function') editor._reflow();
+    return true;
   }
 
   function resolveActiveEditor(options){
@@ -427,7 +539,9 @@
         if(!doc) return;
         doc.bibliographyHTML = bodyEl.innerHTML;
         doc.bibliographyManual = !!String(bodyEl.textContent || '').trim();
-        if(typeof options.onChange === 'function') options.onChange(doc, bodyEl);
+        if(typeof options.onChange === 'function'){
+          options.onChange(doc, bodyEl);
+        }
       });
       bodyEl.addEventListener('click', function(event){
         var target = event && event.target ? (event.target.nodeType === 3 ? event.target.parentElement : event.target) : null;
@@ -465,13 +579,27 @@
 
     var editor = resolveActiveEditor(options);
     if(editor && editor._aqEngine && editor._docModel){
+      if(doc && doc.bibliographyManual && !options.forceAuto && String(doc.bibliographyHTML || '').trim()){
+        replaceAQEngineBibliographyFromHTML(editor, doc.bibliographyHTML);
+        if(bodyEl) bodyEl.innerHTML = '';
+        if(pageEl && pageEl.style) pageEl.style.display = 'none';
+        if(typeof options.onAfterUpdate === 'function'){
+          options.onAfterUpdate({
+            refs: refs,
+            doc: doc,
+            generatedHTML: '',
+            persistedHTML: String(doc.bibliographyHTML || ''),
+            manualHTML: String(doc.bibliographyHTML || '')
+          });
+        }
+        if(typeof options.syncPageLayout === 'function'){
+          try{ options.syncPageLayout({ pageEl: pageEl, bodyEl: bodyEl, refs: refs, doc: doc }); }catch(_e){}
+        }
+        return true;
+      }
       updateAQEngineBibliography(editor, refs, options);
       if(bodyEl) bodyEl.innerHTML = '';
       if(pageEl && pageEl.style) pageEl.style.display = 'none';
-      if(doc){
-        doc.bibliographyHTML = '';
-        doc.bibliographyManual = false;
-      }
       if(typeof options.onAfterUpdate === 'function'){
         options.onAfterUpdate({
           refs: refs,
@@ -643,11 +771,13 @@
     var blocks = (model && Array.isArray(model.blocks)) ? model.blocks : [];
     var range = findAQEngineBibliographyRange(blocks);
     var bibIdx = range.headingIndex;
+    var selectionWasInBibliography = aqEngineSelectionInsideRange(editor, range, blocks);
 
     if(!refs.length){
       if(bibIdx !== -1 && options.keepEmptySection){
         docModel.replace(blocks.slice(0, range.start).concat([buildAQEngineEmptyBibliographyEntry()]).concat(blocks.slice(range.end)));
         if(typeof editor._reflow === 'function') editor._reflow();
+        if(selectionWasInBibliography) moveAQEngineSelectionBeforeBibliography(editor, docModel.get().blocks || [], bibIdx);
       }
       return;
     }
@@ -701,11 +831,16 @@
       }
     }
 
-    if(!bibChanged) return;
+    if(!bibChanged) {
+      if(selectionWasInBibliography) moveAQEngineSelectionBeforeBibliography(editor, blocks, bibIdx);
+      return;
+    }
 
     if(bibIdx === -1){
       var appendixRange = findAQEngineAppendixRange(blocks);
       var insertAt = appendixRange.start >= 0 ? appendixRange.start : blocks.length;
+      var selection = typeof editor._captureSelection === 'function' ? editor._captureSelection() : null;
+      selectionWasInBibliography = !!(selection && typeof selection.from === 'number' && selection.from >= aqEngineBlockStartOffset(blocks, insertAt));
       docModel.replace(
         blocks.slice(0, insertAt)
           .concat([buildAQEngineBibliographyHeading()])
@@ -730,6 +865,11 @@
     }
 
     if(typeof editor._reflow === 'function') editor._reflow();
+    if(selectionWasInBibliography){
+      var nextBlocks = docModel.get().blocks || [];
+      var nextRange = findAQEngineBibliographyRange(nextBlocks);
+      moveAQEngineSelectionBeforeBibliography(editor, nextBlocks, nextRange.headingIndex);
+    }
   }
 
   function ensureAQEngineBibliographySection(editor, options){
@@ -741,13 +881,23 @@
     if(range.headingIndex < 0){
       var appendixRange = findAQEngineAppendixRange(blocks);
       var insertAt = appendixRange.start >= 0 ? appendixRange.start : blocks.length;
+      var selection = typeof editor._captureSelection === 'function' ? editor._captureSelection() : null;
+      var shouldMoveSelection = !!(selection && typeof selection.from === 'number' && selection.from >= aqEngineBlockStartOffset(blocks, insertAt));
       docModel.replace(
         blocks.slice(0, insertAt)
           .concat([buildAQEngineBibliographyHeading(), buildAQEngineEmptyBibliographyEntry()])
           .concat(blocks.slice(insertAt))
       );
+      if(shouldMoveSelection) {
+        var nextBlocks = docModel.get().blocks || [];
+        var nextRange = findAQEngineBibliographyRange(nextBlocks);
+        moveAQEngineSelectionBeforeBibliography(editor, nextBlocks, nextRange.headingIndex);
+      }
     }else if(range.start === range.end){
       docModel.replace(blocks.slice(0, range.start).concat([buildAQEngineEmptyBibliographyEntry()]).concat(blocks.slice(range.end)));
+      if(aqEngineSelectionInsideRange(editor, range, blocks)) {
+        moveAQEngineSelectionBeforeBibliography(editor, docModel.get().blocks || [], range.headingIndex);
+      }
     }
     if(typeof editor._reflow === 'function') editor._reflow();
     if(typeof editor.emit === 'function') editor.emit('update');
@@ -1105,6 +1255,8 @@
     syncReferenceViewsForState: syncReferenceViewsForState,
     updateBibliographySection: updateBibliographySection,
     updateAQEngineBibliography: updateAQEngineBibliography,
+    captureAQEngineBibliographyHTML: captureAQEngineBibliographyHTML,
+    replaceAQEngineBibliographyFromHTML: replaceAQEngineBibliographyFromHTML,
     ensureAQEngineBibliographySection: ensureAQEngineBibliographySection,
     collectAQEngineUsedReferences: collectAQEngineUsedReferences,
     resolveActiveEditor: resolveActiveEditor,

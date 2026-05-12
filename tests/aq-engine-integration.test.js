@@ -240,6 +240,12 @@ test('AQ Engine owns line wrapping in the renderer', () => {
   assert.match(source, /span\.style\.whiteSpace = 'pre'/);
 });
 
+test('AQ Engine renders imported soft line breaks as spaces', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'engine.js'), 'utf8');
+  assert.match(source, /text: isSpace \? ' ' : seg/);
+  assert.match(source, /tokens\.push\(\{ text: \/\^\\s\/\.test\(m\[0\]\) \? ' ' : m\[0\]/);
+});
+
 test('AQ Engine HTML export preserves bibliography paragraph attrs', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'compat-shim.js'), 'utf8');
   assert.match(source, /attrs\.class = className/);
@@ -380,6 +386,17 @@ test('AQ Engine document model repairs zero-width damaged Turkish Word joins', (
   const text = doc.getPlainText();
   assert.match(text, /üzerinde çeşitli ilişkileri bulunabilmektedir/);
   assert.equal(/\u200b/.test(text), false);
+});
+
+test('React editor hydrate repairs persisted Word import HTML before mounting AQ Engine', () => {
+  const adapter = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'lib', 'editor-adapter.ts'), 'utf8');
+  const appState = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'lib', 'app-state.ts'), 'utf8');
+
+  assert.match(adapter, /repairPersistedWordHTML/);
+  assert.match(adapter, /AQTipTapWordIO[\s\S]{0,120}repairWordImportHTML/);
+  assert.match(adapter, /docs = sourceDocs\.map/);
+  assert.match(appState, /function repairImportedWordHTML/);
+  assert.match(appState, /repairWordImportText/);
 });
 
 test('AQ Engine footnotes use the engine document model', () => {
@@ -547,6 +564,22 @@ test('React AQ Engine adapter binds slash citations to bibliography sync', () =>
   assert.match(host, /id="tgs"/);
   assert.match(host, /id="tgl"/);
   assert.ok(reactHtml.includes('<script src="/src/citation-runtime.js"></script>'), 'React shell must load the legacy citation runtime');
+  assert.ok(reactHtml.includes('<script src="/src/literature-matrix-view.js"></script>'), 'React shell must load the literature matrix view runtime');
+  assert.ok(reactHtml.includes('<script src="/src/legacy-runtime.js"></script>'), 'React shell must load legacy runtime for callLegacy bridges');
+});
+
+test('React shell keeps PDF region capture controls behind a guarded legacy bridge', () => {
+  const reactHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const host = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'components', 'shell', 'LegacyCompatibilityHost.tsx'), 'utf8');
+  const adapter = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'lib', 'legacy-feature-adapter.ts'), 'utf8');
+  const shell = fs.readFileSync(path.join(__dirname, '..', 'src', 'lean-ui-shell.js'), 'utf8');
+
+  assert.ok(reactHtml.includes('<script src="/src/legacy-runtime.js"></script>'));
+  assert.match(host, /pdfRegionBtn/);
+  assert.match(host, /togglePdfRegionCaptureMode/);
+  assert.match(host, /PDF bölge seçimi için eski runtime fonksiyonu bulunamadı/);
+  assert.match(adapter, /pdf-region/);
+  assert.match(shell, /capture-pdf-region/);
 });
 
 test('AQ Engine typing after a citation does not extend the citation mark', () => {
@@ -659,6 +692,21 @@ test('React Word import persists imported document through legacy storage', () =
   assert.match(source, /electronAPI\?\.saveData/);
   assert.match(source, /scheduleImportedWordPersist\(onStatus\)/);
   assert.match(source, /const source = normalized \|\| html/);
+});
+
+test('React shell scopes notes by workspace and hydrates auxiliary document pages', () => {
+  const appState = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'lib', 'app-state.ts'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'App.tsx'), 'utf8');
+  const adapter = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'lib', 'editor-adapter.ts'), 'utf8');
+
+  assert.match(appState, /wsId\?: string/);
+  assert.match(appState, /inferNoteWorkspaceId/);
+  assert.match(appState, /wsId: state\.cur/);
+  assert.match(app, /activeWorkspaceNotes/);
+  assert.match(app, /notes=\{activeWorkspaceNotes\}/);
+  assert.match(adapter, /function hydrateAuxiliaryPages/);
+  assert.match(adapter, /setAuxiliaryPage\('tocpage', 'tocbody', doc\.tocHTML\)/);
+  assert.match(adapter, /setAuxiliaryPage\('appendixpage', 'appendixbody', doc\.appendicesHTML\)/);
 });
 
 test('Legacy Word import persists imported document through saveData', () => {

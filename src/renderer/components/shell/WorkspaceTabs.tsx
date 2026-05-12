@@ -93,7 +93,7 @@ export function WorkspaceTabs({
       <button type="button" onClick={() => onDeleteWorkspace()} className="sr-only">Workspace sil</button>
       {menu ? (
         <div
-          className="fixed z-[2300] w-48 rounded-lg border border-aq-line bg-white/95 p-1.5 text-xs shadow-2xl backdrop-blur"
+          className="fixed z-[2300] w-48 rounded-[13px] border border-aq-line/90 bg-white/95 p-1.5 text-xs shadow-[0_24px_64px_rgba(22,27,34,0.20)] backdrop-blur-xl"
           style={{
             left: Math.min(menu.x, window.innerWidth - 204),
             top: Math.min(menu.y, window.innerHeight - 112)

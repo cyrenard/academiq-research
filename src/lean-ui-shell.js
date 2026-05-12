@@ -10,11 +10,11 @@
   var DEFAULT_TABS = [
     {id:'outline', label:'Anahat', icon:'O'},
     {id:'linter', label:'APA', icon:'A'},
-    {id:'citegraph', label:'Atif', icon:'C'},
-    {id:'suggest', label:'Oneri', icon:'S'},
+    {id:'citegraph', label:'At?f', icon:'C'},
+    {id:'suggest', label:'oneri', icon:'S'},
     {id:'pdfnotes', label:'PDF Notlari', icon:'P'},
     {id:'track', label:'Inceleme', icon:'T'},
-    {id:'history', label:'Gecmis', icon:'H'}
+    {id:'history', label:'Ge?mi?', icon:'H'}
   ];
   var PANEL_WIDTH_KEY = 'academiq.leanUi.sidePanelWidth';
   var PANEL_TAB_KEY = 'academiq.leanUi.sidePanelTab';
@@ -301,10 +301,10 @@
       : null;
     var issues = [];
     if(citationCount > 0 && refs.length === 0){
-      issues.push({severity:'error', code:'citations_without_library', message:'Metinde atif var ama aktif workspace library bos gorunuyor.'});
+      issues.push({severity:'error', code:'citations_without_library', message:'Metinde atif var ama aktif workspace library bos g?r?n?yor.'});
     }
     if(citationCount > 0 && !bibliographyText){
-      issues.push({severity:'warning', code:'missing_bibliography_page', message:'Kaynak var; kaynakca sayfasi bos veya henuz olusturulmamis.'});
+      issues.push({severity:'warning', code:'missing_bibliography_page', message:'Kaynak var; kaynak?a sayfasi bos veya hen?z olu?turulmam??.'});
     }
     if(health.incomplete > 0){
       issues.push({severity:'error', code:'incomplete_references', message:health.incomplete + ' kaynakta zorunlu kunye alani eksik.'});
@@ -313,10 +313,10 @@
       issues.push({severity:'warning', code:'suspicious_references', message:health.suspicious + ' kaynakta DOI/URL/sayfa veya PDF dogrulama riski var.'});
     }
     if((health.issueCounts && Number(health.issueCounts.missing_doi || 0) > 0)){
-      issues.push({severity:'warning', code:'missing_doi', message:health.issueCounts.missing_doi + ' makale kaynaginda DOI eksik gorunuyor.'});
+      issues.push({severity:'warning', code:'missing_doi', message:health.issueCounts.missing_doi + ' makale kaynaginda DOI eksik g?r?n?yor.'});
     }
     if(input.lineSpacing && Number(input.lineSpacing) < 1.9){
-      issues.push({severity:'warning', code:'line_spacing', message:'Satir araligi APA 7 cift aralik beklentisinin altinda gorunuyor.'});
+      issues.push({severity:'warning', code:'line_spacing', message:'Satir araligi APA 7 cift aralik beklentisinin altinda g?r?n?yor.'});
     }
     var readability = input.readability || null;
     if(readability && readability.tone === 'warning'){
@@ -332,7 +332,7 @@
     var outlineSummary = input.outlineSummary || null;
     var wordCount = Number(input.wordCount || 0) || 0;
     if(outlineSummary && wordCount > 500 && Number(outlineSummary.headings || 0) === 0){
-      issues.push({severity:'warning', code:'missing_heading_structure', message:'Belge uzun gorunuyor ama H1-H5 baslik yapisi yok. Basliklar outline, export ve APA okuma akisini guclendirir.'});
+      issues.push({severity:'warning', code:'missing_heading_structure', message:'Belge uzun g?r?n?yor ama H1-H5 ba?l?k yapisi yok. Ba?l?klar outline, export ve APA okuma akisini guclendirir.'});
     }
     consistency.issues.forEach(function(issue){ issues.push(issue); });
     var grammarSummary = grammar ? {
@@ -421,7 +421,7 @@
   function getIssueAction(issue){
     var code = String(issue && issue.code || '');
     if(code === 'missing_bibliography_page' || code === 'bibliography_entry_count_low'){
-      return {action:'refreshBibliography', label:'Kaynakcayi Guncelle'};
+      return {action:'refreshBibliography', label:'Kaynak?ayi Guncelle'};
     }
     if(code === 'manual_bibliography'){
       return {action:'resetBibliography', label:'Otomatige Al'};
@@ -458,7 +458,7 @@
         severity: 'ok',
         code: 'clean',
         title: 'Simdilik temiz',
-        message: 'Temel kaynakca ve metadata kontrolunde kritik bir sorun gorunmuyor.',
+        message: 'Temel kaynak?a ve metadata kontrolunde kritik bir sorun g?r?nm?yor.',
         action: '',
         actionLabel: ''
       }];
@@ -481,7 +481,7 @@
     var raw = String(text || '').trim();
     var normalized = normalizeText(raw);
     if(!normalized) return {tone:'ok', label:'kaydedildi'};
-    if(/hata|error|basarisiz|kaydedilemedi|failed/.test(normalized)){
+    if(/hata|error|ba?ar?s?z|kaydedilemedi|failed/.test(normalized)){
       return {tone:'error', label:raw};
     }
     if(/kaydediliyor|yaziliyor|degisiklik|bekliyor|sync|senkron|saving|pending/.test(normalized)){
@@ -562,15 +562,15 @@
 
   function buildShortcutHelpModel(){
     return [
-      {keys:'Ctrl+K', title:'Komut paleti', body:'Buton aramadan belge, kaynakca, PDF ve kalite komutlarini calistir.'},
-      {keys:'Ctrl+G', title:'Sayfaya git', body:'Editor sayfalari arasinda hedef sayfaya hizli gecis yapar.'},
-      {keys:'F9', title:'Sag panel', body:'Outline, APA kontrolu, atif grafigi, oneriler ve gecmis panelini ac/kapat.'},
-      {keys:'Ctrl+Shift+E', title:'Inceleme modu', body:'Track changes modunu ac/kapat ve onerili duzenleme akisina gec.'},
+      {keys:'Ctrl+K', title:'Komut paleti', body:'Buton aramadan belge, kaynak?a, PDF ve kalite komutlarini ?al??t?r.'},
+      {keys:'Ctrl+G', title:'Sayfaya git', body:'Editor sayfalar? arasinda hedef sayfaya hizli gecis yapar.'},
+      {keys:'F9', title:'Sa? panel', body:'Outline, APA kontrolu, atif grafigi, oneriler ve gecmis panelini a?/kapat.'},
+      {keys:'Ctrl+Shift+E', title:'Inceleme modu', body:'Track changes modunu a?/kapat ve onerili duzenleme akisina gec.'},
       {keys:'Ctrl+F', title:'Belgde bul', body:'Editor toolbarindaki bul kutusuna odaklanir.'},
       {keys:'Ctrl+Enter', title:'Sayfa sonu', body:'Editor icinde guvenli page break ekler.'},
-      {keys:'/r', title:'Parantez ici atif', body:'APA 7 parantez ici atif secicisini acar.'},
-      {keys:'/t', title:'Narrative atif', body:'Yazar (Yil) formatinda metin ici atif secicisini acar.'},
-      {keys:'?', title:'Bu yardim', body:'Editor veya input disindayken kisa klavye yardimini acar.'}
+      {keys:'/r', title:'Parantez ici atif', body:'APA 7 parantez ici atif se?icisini a?ar.'},
+      {keys:'/t', title:'Narrative atif', body:'Yazar (Y?l) formatinda metin ici atif se?icisini a?ar.'},
+      {keys:'?', title:'Bu yardim', body:'Editor veya input disindayken kisa klavye yardimini a?ar.'}
     ];
   }
 
@@ -659,21 +659,21 @@
       issues.push({
         severity: 'warning',
         code: 'bibliography_entry_count_low',
-        message: 'Kaynakca sayfasindaki girdi sayisi metindeki benzersiz atif sayisindan az gorunuyor.'
+        message: 'Kaynak?a sayfasindaki girdi sayisi metindeki benzersiz atif sayisindan az g?r?n?yor.'
       });
     }
     if(shouldWarnUncited){
       issues.push({
         severity: 'warning',
         code: 'uncited_references',
-        message: uncitedRefIds.length + ' kaynak library/kaynakca tarafinda var ama metinde henuz atiflanmamis gorunuyor.'
+        message: uncitedRefIds.length + ' kaynak library/kaynak?a tarafinda var ama metinde hen?z atiflanmamis g?r?n?yor.'
       });
     }
     if(input.bibliographyManual && citationIds.length){
       issues.push({
         severity: 'warning',
         code: 'manual_bibliography',
-        message: 'Kaynakca manuel modda; yeni atiflardan sonra otomatik alfabetik siralama durabilir.'
+        message: 'Kaynak?a manuel modda; yeni atiflardan sonra otomatik alfabetik s?ralama durabilir.'
       });
     }
 
@@ -824,7 +824,7 @@
         + '<text class="aq-cite-node-label" x="' + node.labelX + '" y="' + node.labelY + '" text-anchor="' + node.labelAnchor + '" title="' + escapeHTML(node.fullLabel || node.label || '') + '">' + escapeHTML(node.label || '') + '</text>'
         + '</g>';
     }).join('');
-    return '<svg class="aq-cite-svg" viewBox="0 0 ' + model.width + ' ' + model.height + '" role="img" aria-label="Atif iliski grafigi">'
+    return '<svg class="aq-cite-svg" viewBox="0 0 ' + model.width + ' ' + model.height + '" role="img" aria-label="At?f iliski grafigi">'
       + lines
       + '<circle class="aq-cite-center" cx="' + model.centerX + '" cy="' + model.centerY + '" r="' + model.centerRadius + '"></circle>'
       + '<text class="aq-cite-center-label" x="' + model.centerX + '" y="' + (model.centerY + 4) + '" text-anchor="middle">' + escapeHTML(model.centerLabel || 'Belge') + '</text>'
@@ -845,18 +845,18 @@
       suggestions.push({
         id: 'refresh-bibliography',
         severity: 'warning',
-        title: 'Kaynakca sayfasini guncelle',
-        body: 'Metinde kaynak sinyali var ama kaynakca sayfasi bos veya eksik gorunuyor.',
+        title: 'Kaynak?a sayfas?n? guncelle',
+        body: 'Metinde kaynak sinyali var ama kaynak?a sayfasi bos veya eksik g?r?n?yor.',
         action: 'refreshBibliography',
-        actionLabel: 'Kaynakcayi Guncelle'
+        actionLabel: 'Kaynak?ayi Guncelle'
       });
     }
     if(report.issues && report.issues.some(function(issue){ return issue.code === 'manual_bibliography'; })){
       suggestions.push({
         id: 'reset-manual-bibliography',
         severity: 'warning',
-        title: 'Kaynakcayi otomatik moda al',
-        body: 'Manuel kaynakca yeni atiflarla alfabetik sirayi bozabilir.',
+        title: 'Kaynak?ayi otomatik moda al',
+        body: 'Manuel kaynak?a yeni atiflarla alfabetik sirayi bozabilir.',
         action: 'resetBibliography',
         actionLabel: 'Otomatige Don'
       });
@@ -868,7 +868,7 @@
         title: 'Kirik atif baglantilarini kontrol et',
         body: graph.missingCount + ' atif aktif libraryde kaynak kaydina baglanamiyor.',
         action: 'openLinter',
-        actionLabel: 'APA Panelini Ac'
+        actionLabel: 'APA Panelini A?'
       });
     }
     if(report.health && report.health.incomplete > 0){
@@ -876,7 +876,7 @@
         id: 'repair-metadata',
         severity: 'error',
         title: 'Eksik kunye alanlarini tamamla',
-        body: report.health.incomplete + ' kaynakta baslik, yazar veya yil gibi zorunlu alanlar eksik.',
+        body: report.health.incomplete + ' kaynakta ba?l?k, yazar veya yil gibi zorunlu alanlar eksik.',
         action: 'metadataHealth',
         actionLabel: 'Metadata Health'
       });
@@ -886,7 +886,7 @@
         id: 'review-readability',
         severity: 'warning',
         title: 'Uzun cumleleri gozden gecir',
-        body: 'Okunabilirlik sinyali metindeki bazi cumlelerin akademik akisi agirlastirdigini gosteriyor.',
+        body: 'Okunabilirlik sinyali metindeki bazi cumlelerin akademik akisi agirlastirdigini g?steriyor.',
         action: 'openLinter',
         actionLabel: 'Okunabilirlik'
       });
@@ -906,17 +906,17 @@
         id: 'review-unused-sources',
         severity: 'info',
         title: 'Kullanilmayan kaynaklari gozden gecir',
-        body: graph.uncitedCount + ' library kaynagi metinde kullanilmamis gorunuyor.',
+        body: graph.uncitedCount + ' library kaynagi metinde kullanilmamis g?r?n?yor.',
         action: 'openCitationGraph',
-        actionLabel: 'Atif Grafi'
+        actionLabel: 'At?f Grafi'
       });
     }
     if(!outlineSummary.headings && Number(input.wordCount || 0) > 500){
       suggestions.push({
         id: 'add-outline',
         severity: 'info',
-        title: 'Belgeye baslik yapisi ekle',
-        body: 'Uzun belgede H1-H5 basliklar outline, export ve okuma deneyimini guclendirir.',
+        title: 'Belgeye ba?l?k yapisi ekle',
+        body: 'Uzun belgede H1-H5 ba?l?klar outline, export ve okuma deneyimini guclendirir.',
         action: 'openOutline',
         actionLabel: 'Anahati Ac'
       });
@@ -925,10 +925,10 @@
       suggestions.push({
         id: 'prepare-pdf-digest',
         severity: 'info',
-        title: 'PDF not ozetini hazirla',
-        body: pdfDigest.count + ' PDF notu/highlight belgeye aktarilabilecek bir digest icin hazir.',
+        title: 'PDF not ozetini haz?rla',
+        body: pdfDigest.count + ' PDF notu/highlight belgeye aktarilabilecek bir digest icin haz?r.',
         action: 'openPdfDigest',
-        actionLabel: 'PDF Ozetini Ac'
+        actionLabel: 'PDF Ozetini A?'
       });
     }
     if(Number(track.total || 0) > 0){
@@ -938,15 +938,15 @@
         title: 'Inceleme onerilerini sonlandir',
         body: track.total + ' track changes onerisi bekliyor. Kapanis oncesi kabul/geri al kontrolu onerilir.',
         action: 'openTrackReview',
-        actionLabel: 'Incelemeyi Ac'
+        actionLabel: 'Incelemeyi A?'
       });
     }
     if(!suggestions.length){
       suggestions.push({
         id: 'clean',
         severity: 'ok',
-        title: 'Simdilik iyi gorunuyor',
-        body: 'Temel kalite ve referans sinyallerinde acil bir aksiyon gorunmuyor.',
+        title: 'Simdilik iyi g?r?n?yor',
+        body: 'Temel kalite ve referans sinyallerinde a?il bir aksiyon g?r?nm?yor.',
         action: '',
         actionLabel: ''
       });
@@ -1096,20 +1096,20 @@
     if(draft.exists && draft.valid && draft.recoverableAfterUncleanShutdown){
       cards.push({
         severity: 'warning',
-        title: 'Kurtarilabilir editor drafti var',
-        body: 'Onceki kapanis temiz degil ve draft son kayittan yeni gorunuyor. Uygulama acilista bunu recovery icin kullanabilir.'
+        title: 'Kurtarilabilir editor draft? var',
+        body: '?nceki kapan?? temiz degil ve draft son kay?ttan yeni g?r?n?yor. Uygulama a?ilista bunu recovery icin kullanabilir.'
       });
     }else if(draft.exists && draft.valid && draft.isNewerThanLastSave){
       cards.push({
         severity: 'info',
         title: 'Autosave draft aktif',
-        body: 'Editor drafti son ana kayittan yeni. Yazma guvenligi icin arka planda korunuyor.'
+        body: 'Editor draft? son ana kay?ttan yeni. Yazma g?venli?i icin arka planda korunuyor.'
       });
     }else if(draft.exists && !draft.valid){
       cards.push({
         severity: 'warning',
         title: 'Draft dosyasi okunamadi',
-        body: draft.invalidReason || 'Draft gecersiz gorunuyor; ana veri ve document history ayri korunur.'
+        body: draft.invalidReason || 'Draft gecersiz g?r?n?yor; ana veri ve document history ayri korunur.'
       });
     }else{
       cards.push({
@@ -1122,14 +1122,14 @@
     if(session.previousCleanExit === false){
       cards.push({
         severity: 'warning',
-        title: 'Onceki oturum temiz kapanmamis',
+        title: '?nceki oturum temiz kapanmamis',
         body: 'Bir onceki calisma aniden kapanmis olabilir. Storage recovery ve draft kontrolleri devrede.'
       });
     }else if(session.previousCleanExit === true){
       cards.push({
         severity: 'ok',
-        title: 'Onceki oturum temiz kapanmis',
-        body: 'Son kapatma kaydi normal gorunuyor.'
+        title: '?nceki oturum temiz kapanmis',
+        body: 'Son kapatma kaydi normal g?r?n?yor.'
       });
     }
 
@@ -1173,7 +1173,7 @@
     lines.push(label + ' oncesi kalite kontrolu');
     lines.push('');
     if(getExportRiskLevel(report) === 'clean'){
-      lines.push('Kritik bir sorun gorunmuyor.');
+      lines.push('Kritik bir sorun g?r?nm?yor.');
       return lines.join('\n');
     }
     lines.push(report.errors + ' hata, ' + report.warnings + ' uyari bulundu.');
@@ -1580,7 +1580,17 @@
       bg.addEventListener('mousedown', function(event){ if(event.target === bg) closePalette(); });
       var input = byId('aqCmdPaletteInput');
       if(input){
-        input.addEventListener('input', function(){ state.selectedIndex = 0; renderPalette(); });
+        var paletteTimer = null;
+        input.addEventListener('input', function(){
+          state.selectedIndex = 0;
+          var raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function(fn){ return setTimeout(fn, 16); };
+          var caf = typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame : clearTimeout;
+          if(paletteTimer) caf(paletteTimer);
+          paletteTimer = raf(function(){
+            paletteTimer = null;
+            renderPalette();
+          });
+        });
         input.addEventListener('keydown', function(event){
           var visible = getVisibleCommands();
           if(event.key === 'Escape'){ event.preventDefault(); closePalette(); return; }
@@ -1902,7 +1912,7 @@
         var active = style.id === current ? ' *' : '';
         return (index + 1) + '. ' + style.label + ' (' + style.id + ')' + active;
       }).join('\n');
-      var input = w.prompt('Atif stilini sec:\n' + listText + '\n\nStil kodu veya sira numarasi gir.', String(current));
+      var input = w.prompt('At?f stilini se?:\n' + listText + '\n\nStil kodu veya sira numarasi gir.', String(current));
       if(input == null) return false;
       var raw = String(input || '').trim();
       if(!raw) return false;
@@ -1919,10 +1929,10 @@
         var safeId = String(style.id).replace(/[^a-z0-9_-]+/gi, '-').toLowerCase();
         registerCommand({
           id: 'citation-style-' + safeId,
-          title: 'Atif stili: ' + style.label,
+          title: 'At?f stili: ' + style.label,
           section: 'Belge',
           icon: 'CS',
-          description: style.label + ' stiline gec ve atif/kaynakca gorunumunu guncelle.',
+          description: style.label + ' stiline gec ve atif/kaynak?a gorunumunu guncelle.',
           keywords: ['citation', 'style', 'csl', 'apa', 'mla', 'ieee', 'harvard', style.id, style.label],
           run: function(){ applyCitationStyle(style.id); }
         });
@@ -1931,58 +1941,58 @@
 
     function ensureDefaultCommands(){
       [
-        {id:'open-command-palette', title:'Komut paletini ac', section:'Gorunum', icon:'K', shortcut:'Ctrl+K', description:'Uygulama komutlarini tek yerden calistir.', keywords:['ara','komut'], run:openPalette},
-        {id:'keyboard-help', title:'Klavye kisayollarini goster', section:'Gorunum', icon:'?', shortcut:'?', description:'Temel hizli akis kisayollarini goster.', keywords:['kisayol','yardim','shortcut','help'], run:openShortcutHelp},
-        {id:'open-outline-panel', title:'Baslik haritasini ac', section:'Belge', icon:'O', shortcut:'F9', description:'Sag panelde belge anahatini ac.', keywords:['outline','anahat','baslik'], run:function(){ openSidePanel('outline'); }},
-        {id:'open-apa-linter', title:'APA kontrol panelini ac', section:'Kalite', icon:'A', description:'Atif, kaynakca ve bicim uyarilarini denetle.', keywords:['linter','uyari','kontrol'], run:function(){ openSidePanel('linter'); }},
-        {id:'citation-style-picker', title:'Atif stilini degistir', section:'Belge', icon:'CS', description:'APA 7, MLA, Chicago, IEEE veya Harvard stiline gec.', keywords:['citation','style','csl','apa','mla','ieee','harvard'], run:openCitationStylePicker},
-        {id:'citation-style-next', title:'Atif stilini siradaki stile gecir', section:'Belge', icon:'CS+', description:'Mevcut atif stilini bir sonraki desteklenen stile cevirir.', keywords:['citation','style','next','degistir'], run:cycleCitationStyle},
-        {id:'open-citation-graph', title:'Atif grafigini ac', section:'Referans', icon:'C', description:'Metindeki atiflarla library kayitlarini karsilastir.', keywords:['citation','atif','graph'], run:function(){ openSidePanel('citegraph'); }},
-        {id:'open-suggestions', title:'Oneriler panelini ac', section:'Veri', icon:'S', description:'Belge icin dusuk kalabalikli sonraki adimlari goster.', keywords:['oneri','kaynak'], run:function(){ openSidePanel('suggest'); }},
-        {id:'open-track-review', title:'Inceleme panelini ac', section:'Yazim', icon:'TR', description:'Track changes onerilerini tek panelde kabul/geri al.', keywords:['track changes','inceleme','review','suggestion'], run:function(){ openSidePanel('track'); }},
-        {id:'open-history', title:'Gecmis ve recovery panelini ac', section:'Yazim', icon:'H', description:'Autosave, recovery ve son snapshot durumunu goster.', keywords:['autosave','recovery','gecmis'], run:function(){ openSidePanel('history'); }},
-        {id:'toggle-track-changes', title:'Inceleme modunu ac/kapat', section:'Yazim', icon:'TR', shortcut:'Ctrl+Shift+E', description:'Word benzeri onerili degisiklik modunu acar/kapatir.', keywords:['track changes','suggestion','inceleme','revizyon'], run:function(){ var w = win(); if(w && typeof w.toggleTrackChangesMode === 'function') w.toggleTrackChangesMode(); else if(w && w.AQTipTapWordCommands && typeof w.AQTipTapWordCommands.setTrackChangesEnabled === 'function'){ w.AQTipTapWordCommands.setTrackChangesEnabled(null, { source:'palette' }); } }},
-        {id:'focus-prev-track-change', title:'Onceki oneriye git', section:'Yazim', icon:'T←', description:'Inceleme modundaki onceki degisiklik onerisine gider.', keywords:['track changes','previous','onceki','oneri'], run:function(){ var w = win(); if(w && typeof w.focusPrevTrackedChange === 'function') w.focusPrevTrackedChange(); else if(w && typeof w.ec === 'function') w.ec('focusPrevTrackChange'); }},
+        {id:'open-command-palette', title:'Komut paletini a?', section:'G?r?n?m', icon:'K', shortcut:'Ctrl+K', description:'Uygulama komutlarini tek yerden ?al??t?r.', keywords:['ara','komut'], run:openPalette},
+        {id:'keyboard-help', title:'Klavye kisayollarini g?ster', section:'G?r?n?m', icon:'?', shortcut:'?', description:'Temel hizli akis kisayollarini g?ster.', keywords:['kisayol','yardim','shortcut','help'], run:openShortcutHelp},
+        {id:'open-outline-panel', title:'Ba?l?k haritasini a?', section:'Belge', icon:'O', shortcut:'F9', description:'Sa? panelde belge anahatini a?.', keywords:['outline','anahat','ba?l?k'], run:function(){ openSidePanel('outline'); }},
+        {id:'open-apa-linter', title:'APA kontrol panelini a?', section:'Kalite', icon:'A', description:'At?f, kaynak?a ve bicim uyarilarini denetle.', keywords:['linter','uyari','kontrol'], run:function(){ openSidePanel('linter'); }},
+        {id:'citation-style-picker', title:'At?f stilini de?i?tir', section:'Belge', icon:'CS', description:'APA 7, MLA, Chicago, IEEE veya Harvard stiline gec.', keywords:['citation','style','csl','apa','mla','ieee','harvard'], run:openCitationStylePicker},
+        {id:'citation-style-next', title:'At?f stilini siradaki stile gecir', section:'Belge', icon:'CS+', description:'Mevcut atif stilini bir sonraki desteklenen stile cevirir.', keywords:['citation','style','next','de?i?tir'], run:cycleCitationStyle},
+        {id:'open-citation-graph', title:'At?f grafigini a?', section:'Referans', icon:'C', description:'Metindeki atiflarla library kay?tlarini kar??la?t?r.', keywords:['citation','atif','graph'], run:function(){ openSidePanel('citegraph'); }},
+        {id:'open-suggestions', title:'oneriler panelini a?', section:'Veri', icon:'S', description:'Belge icin dusuk kalabalikli sonraki adimlari g?ster.', keywords:['oneri','kaynak'], run:function(){ openSidePanel('suggest'); }},
+        {id:'open-track-review', title:'Inceleme panelini a?', section:'Yazim', icon:'TR', description:'Track changes onerilerini tek panelde kabul/geri al.', keywords:['track changes','inceleme','review','suggestion'], run:function(){ openSidePanel('track'); }},
+        {id:'open-history', title:'Ge?mi? ve recovery panelini a?', section:'Yazim', icon:'H', description:'Autosave, recovery ve son snapshot durumunu g?ster.', keywords:['autosave','recovery','gecmis'], run:function(){ openSidePanel('history'); }},
+        {id:'toggle-track-changes', title:'Inceleme modunu a?/kapat', section:'Yazim', icon:'TR', shortcut:'Ctrl+Shift+E', description:'Word benzeri onerili degisiklik modunu a?ar/kapatir.', keywords:['track changes','suggestion','inceleme','revizyon'], run:function(){ var w = win(); if(w && typeof w.toggleTrackChangesMode === 'function') w.toggleTrackChangesMode(); else if(w && w.AQTipTapWordCommands && typeof w.AQTipTapWordCommands.setTrackChangesEnabled === 'function'){ w.AQTipTapWordCommands.setTrackChangesEnabled(null, { source:'palette' }); } }},
+        {id:'focus-prev-track-change', title:'?nceki oneriye git', section:'Yazim', icon:'T←', description:'Inceleme modundaki onceki degisiklik onerisine gider.', keywords:['track changes','previous','onceki','oneri'], run:function(){ var w = win(); if(w && typeof w.focusPrevTrackedChange === 'function') w.focusPrevTrackedChange(); else if(w && typeof w.ec === 'function') w.ec('focusPrevTrackChange'); }},
         {id:'focus-next-track-change', title:'Sonraki oneriye git', section:'Yazim', icon:'T→', description:'Inceleme modundaki sonraki degisiklik onerisine gider.', keywords:['track changes','next','sonraki','oneri'], run:function(){ var w = win(); if(w && typeof w.focusNextTrackedChange === 'function') w.focusNextTrackedChange(); else if(w && typeof w.ec === 'function') w.ec('focusNextTrackChange'); }},
-        {id:'accept-current-track-change', title:'Secili oneriyi kabul et', section:'Yazim', icon:'T✓', description:'Imlecin/seleksiyonun oldugu degisiklik onerisini kabul eder.', keywords:['track changes','accept current','secili','kabul'], run:function(){ var w = win(); if(w && typeof w.acceptCurrentTrackedChange === 'function') w.acceptCurrentTrackedChange(); else if(w && typeof w.ec === 'function') w.ec('acceptCurrentTrackChange'); }},
-        {id:'reject-current-track-change', title:'Secili oneriyi geri al', section:'Yazim', icon:'T↺', description:'Imlecin/seleksiyonun oldugu degisiklik onerisini geri alir.', keywords:['track changes','reject current','secili','geri al'], run:function(){ var w = win(); if(w && typeof w.rejectCurrentTrackedChange === 'function') w.rejectCurrentTrackedChange(); else if(w && typeof w.ec === 'function') w.ec('rejectCurrentTrackChange'); }},
+        {id:'accept-current-track-change', title:'Se?ili oneriyi kabul et', section:'Yazim', icon:'T✓', description:'Imlecin/seleksiyonun oldugu degisiklik onerisini kabul eder.', keywords:['track changes','accept current','se?ili','kabul'], run:function(){ var w = win(); if(w && typeof w.acceptCurrentTrackedChange === 'function') w.acceptCurrentTrackedChange(); else if(w && typeof w.ec === 'function') w.ec('acceptCurrentTrackChange'); }},
+        {id:'reject-current-track-change', title:'Se?ili oneriyi geri al', section:'Yazim', icon:'T↺', description:'Imlecin/seleksiyonun oldugu degisiklik onerisini geri alir.', keywords:['track changes','reject current','se?ili','geri al'], run:function(){ var w = win(); if(w && typeof w.rejectCurrentTrackedChange === 'function') w.rejectCurrentTrackedChange(); else if(w && typeof w.ec === 'function') w.ec('rejectCurrentTrackChange'); }},
         {id:'accept-track-changes', title:'Tum onerileri kabul et', section:'Yazim', icon:'TA', description:'Inceleme modundaki tum silme/ekleme onerilerini kabul eder.', keywords:['track changes','accept','kabul'], run:function(){ var w = win(); if(w && typeof w.acceptTrackedChanges === 'function') w.acceptTrackedChanges(); else if(w && typeof w.ec === 'function') w.ec('acceptTrackChanges'); }},
         {id:'reject-track-changes', title:'Tum onerileri geri al', section:'Yazim', icon:'TRJ', description:'Inceleme modundaki tum silme/ekleme onerilerini geri alir.', keywords:['track changes','reject','geri al'], run:function(){ var w = win(); if(w && typeof w.rejectTrackedChanges === 'function') w.rejectTrackedChanges(); else if(w && typeof w.ec === 'function') w.ec('rejectTrackChanges'); }},
-        {id:'refresh-side-panel', title:'Sag paneli yenile', section:'Gorunum', icon:'R', description:'Acik paneldeki verileri yeniden hesapla.', keywords:['panel','outline','linter','yenile'], run:function(){ renderSidePanel(); }},
-        {id:'export-preflight', title:'Export oncesi kalite kontrolu', section:'Kalite', icon:'Q', description:'PDF/DOCX cikti oncesi riskleri tek panelde goster.', keywords:['preflight','pdf','docx','apa','kontrol'], run:function(){ runPreflight({interactive:false, openPanel:true}); }},
-        {id:'insert-bibliography', title:'Kaynakca bolumu ekle', section:'Kaynakca', icon:'B+', description:'Belgeye otomatik guncellenen Kaynakca basligini ekler.', keywords:['kaynakca','references','bibliography','ekle','insert'], run:function(){ var w = win(); if(w && typeof w.ec === 'function') w.ec('insertBibliographySection'); }},
-        {id:'bibliography-refresh', title:'Kaynakcayi guncelle', section:'Kaynakca', icon:'B', description:'APA 7 kaynakca sayfasini yeniden sirala ve senkronla.', keywords:['apa','references'], run:function(){ if(!clickIfExists('bibliographyRefreshBtn')) clickIfExists('refreshBibliographyBtn'); }},
-        {id:'bibliography-go', title:'Kaynakcaya git', section:'Kaynakca', icon:'G', description:'Kaynakca sayfasina hizlica atla.', keywords:['references','git'], run:function(){ if(!clickIfExists('bibliographyGoBtn')) clickIfExists('goBibliographyBtn'); }},
-        {id:'external-bibliography', title:'Disaridan kaynakca ekle', section:'Kaynakca', icon:'+', description:'APA metni, DOI, BibTeX veya RIS kaynagini iceri al.', keywords:['apa metin','bib','ris','doi'], run:function(){ if(!clickIfExists('externalBibliographyBtn')) clickIfExists('bibliographyMenuBtn'); }},
-        {id:'export-bibliography-apa', title:'Kaynakcayi APA TXT olarak disa aktar', section:'Disa Aktar', icon:'EA', description:'Kaynakca listesini APA 7 sirali duz metin olarak kaydeder.', keywords:['kaynakca','apa','txt','export','disa aktar'], run:function(){ var w = win(); if(w && typeof w.expBibliographyAPA === 'function') w.expBibliographyAPA(); }},
-        {id:'export-bibliography-chicago', title:'Kaynakcayi Chicago TXT olarak disa aktar', section:'Disa Aktar', icon:'EC', description:'Kaynakca listesini Chicago Author-Date duz metin cikti olarak kaydeder.', keywords:['kaynakca','chicago','txt','export','disa aktar'], run:function(){ var w = win(); if(w && typeof w.expBibliographyChicago === 'function') w.expBibliographyChicago(); }},
-        {id:'export-bibliography-vancouver', title:'Kaynakcayi Vancouver TXT olarak disa aktar', section:'Disa Aktar', icon:'EV', description:'Kaynakca listesini Vancouver benzeri numerik duz metin cikti olarak kaydeder.', keywords:['kaynakca','vancouver','txt','export','disa aktar'], run:function(){ var w = win(); if(w && typeof w.expBibliographyVancouver === 'function') w.expBibliographyVancouver(); }},
-        {id:'export-bibliography-csl', title:'Kaynakcayi CSL-JSON olarak disa aktar', section:'Disa Aktar', icon:'EJ', description:'Kaynakca kayitlarini CSL-JSON veri formatinda kaydeder.', keywords:['kaynakca','csl','json','export','disa aktar'], run:function(){ var w = win(); if(w && typeof w.expCSLJSON === 'function') w.expCSLJSON(); }},
-        {id:'find-duplicates', title:'Yinelenen kaynaklari tara', section:'Referans', icon:'D', description:'DOI ve baslik benzerligiyle tekrar kayitlari bul.', keywords:['duplicate','dedupe'], run:function(){ clickIfExists('btnFindDuplicates'); }},
+        {id:'refresh-side-panel', title:'Sa? paneli yenile', section:'G?r?n?m', icon:'R', description:'A?ik paneldeki verileri yeniden hesapla.', keywords:['panel','outline','linter','yenile'], run:function(){ renderSidePanel(); }},
+        {id:'export-preflight', title:'Export oncesi kalite kontrolu', section:'Kalite', icon:'Q', description:'PDF/DOCX cikti oncesi riskleri tek panelde g?ster.', keywords:['preflight','pdf','docx','apa','kontrol'], run:function(){ runPreflight({interactive:false, openPanel:true}); }},
+        {id:'insert-bibliography', title:'Kaynak?a bolumu ekle', section:'Kaynak?a', icon:'B+', description:'Belgeye otomatik guncellenen Kaynak?a ba?l???ni ekler.', keywords:['kaynak?a','references','bibliography','ekle','insert'], run:function(){ var w = win(); if(w && typeof w.ec === 'function') w.ec('insertBibliographySection'); }},
+        {id:'bibliography-refresh', title:'Kaynak?ayi guncelle', section:'Kaynak?a', icon:'B', description:'APA 7 kaynak?a sayfas?n? yeniden s?rala ve senkronla.', keywords:['apa','references'], run:function(){ if(!clickIfExists('bibliographyRefreshBtn')) clickIfExists('refreshBibliographyBtn'); }},
+        {id:'bibliography-go', title:'Kaynak?aya git', section:'Kaynak?a', icon:'G', description:'Kaynak?a sayfasina hizlica atla.', keywords:['references','git'], run:function(){ if(!clickIfExists('bibliographyGoBtn')) clickIfExists('goBibliographyBtn'); }},
+        {id:'external-bibliography', title:'D??ar?dan kaynak?a ekle', section:'Kaynak?a', icon:'+', description:'APA metni, DOI, BibTeX veya RIS kaynagini iceri al.', keywords:['apa metin','bib','ris','doi'], run:function(){ if(!clickIfExists('externalBibliographyBtn')) clickIfExists('bibliographyMenuBtn'); }},
+        {id:'export-bibliography-apa', title:'Kaynak?ayi APA TXT olarak d??a aktar', section:'D??a Aktar', icon:'EA', description:'Kaynak?a listesini APA 7 s?ral? duz metin olarak kaydeder.', keywords:['kaynak?a','apa','txt','export','d??a aktar'], run:function(){ var w = win(); if(w && typeof w.expBibliographyAPA === 'function') w.expBibliographyAPA(); }},
+        {id:'export-bibliography-chicago', title:'Kaynak?ayi Chicago TXT olarak d??a aktar', section:'D??a Aktar', icon:'EC', description:'Kaynak?a listesini Chicago Author-Date duz metin cikti olarak kaydeder.', keywords:['kaynak?a','chicago','txt','export','d??a aktar'], run:function(){ var w = win(); if(w && typeof w.expBibliographyChicago === 'function') w.expBibliographyChicago(); }},
+        {id:'export-bibliography-vancouver', title:'Kaynak?ayi Vancouver TXT olarak d??a aktar', section:'D??a Aktar', icon:'EV', description:'Kaynak?a listesini Vancouver benzeri numerik duz metin cikti olarak kaydeder.', keywords:['kaynak?a','vancouver','txt','export','d??a aktar'], run:function(){ var w = win(); if(w && typeof w.expBibliographyVancouver === 'function') w.expBibliographyVancouver(); }},
+        {id:'export-bibliography-csl', title:'Kaynak?ayi CSL-JSON olarak d??a aktar', section:'D??a Aktar', icon:'EJ', description:'Kaynak?a kay?tlarini CSL-JSON veri formatinda kaydeder.', keywords:['kaynak?a','csl','json','export','d??a aktar'], run:function(){ var w = win(); if(w && typeof w.expCSLJSON === 'function') w.expCSLJSON(); }},
+        {id:'find-duplicates', title:'Yinelenen kaynaklari tara', section:'Referans', icon:'D', description:'DOI ve ba?l?k benzerligiyle tekrar kay?tlari bul.', keywords:['duplicate','dedupe'], run:function(){ clickIfExists('btnFindDuplicates'); }},
         {id:'page-jump', title:'Sayfaya git', section:'Belge', icon:'PG', shortcut:'Ctrl+G', description:'Belgede hedef sayfaya hizli atla.', keywords:['sayfa','page','jump','git'], run:openPageJump},
         {id:'find-in-document', title:'Belgede bul', section:'Yazim', icon:'F', shortcut:'Ctrl+F', description:'Editor toolbarindaki bul alanina odaklan.', keywords:['bul','ara','ctrl f','find'], run:openFindCommand},
-        {id:'find-replace', title:'Bul ve degistir', section:'Yazim', icon:'R', description:'Bul/degistir akisini ac.', keywords:['degistir','replace','bul'], run:openReplaceCommand},
-        {id:'word-stats', title:'Kelime ve belge istatistikleri', section:'Yazim', icon:'W', description:'Kelime, sayfa ve APA durumunu status/panel uzerinden goster.', keywords:['kelime','sayfa','istatistik'], run:function(){ openSidePanel('linter'); }},
-        {id:'focus-mode', title:'Odak modunu ac/kapat', section:'Yazim', icon:'F', description:'Dikkat dagitan panelleri azaltan yazim modunu degistir.', keywords:['zen','focus'], run:function(){ clickIfExists('zenbtn'); }},
-        {id:'backup-project', title:'Proje yedegi al (.aqresearch)', section:'Veri', icon:'BK', description:'Tum calisma alanlari, notlar, belgeler ve PDF verisini tek dosyaya yedekler.', keywords:['backup','yedek','aqresearch','export','proje'], run:function(){ var w = win(); if(w && typeof w.aqBackupProject === 'function') w.aqBackupProject(); }},
-        {id:'restore-project', title:'Proje yedegini geri yukle (.aqresearch)', section:'Veri', icon:'RS', description:'Secilen .aqresearch yedegini geri yukler ve uygulamayi yeniler.', keywords:['restore','geri','yukle','aqresearch','import','proje'], run:function(){ var w = win(); if(w && typeof w.aqRestoreProject === 'function') w.aqRestoreProject(); }},
-        {id:'pdf-annotation-digest', title:'PDF not ozetini ac', section:'PDF', icon:'P', description:'Highlight ve PDF notlarini tek sindirilebilir ozette topla.', keywords:['annotasyon','digest','not','highlight'], run:function(){ openSidePanel('pdfnotes'); }},
-        {id:'open-annotation-digest', title:'PDF not ozetini belgeye aktar', section:'PDF', icon:'A+', description:'Aktif PDF annotationlarindan ozet olusturup belgeye aktar.', keywords:['annotation','not','ozet','digest','belge'], run:function(){ var w = win(); if(w && typeof w.insertPdfAnnotationDigestIntoDocument === 'function') w.insertPdfAnnotationDigestIntoDocument(); }},
+        {id:'find-replace', title:'Bul ve de?i?tir', section:'Yazim', icon:'R', description:'Bul/de?i?tir akisini a?.', keywords:['de?i?tir','replace','bul'], run:openReplaceCommand},
+        {id:'word-stats', title:'Kelime ve belge istatistikleri', section:'Yazim', icon:'W', description:'Kelime, sayfa ve APA durumunu status/panel ?zerinden g?ster.', keywords:['kelime','sayfa','istatistik'], run:function(){ openSidePanel('linter'); }},
+        {id:'focus-mode', title:'Odak modunu a?/kapat', section:'Yazim', icon:'F', description:'Dikkat dagitan panelleri azaltan yazim modunu de?i?tir.', keywords:['zen','focus'], run:function(){ clickIfExists('zenbtn'); }},
+        {id:'backup-project', title:'Proje yede?i al (.aqresearch)', section:'Veri', icon:'BK', description:'Tum calisma alanlari, notlar, belgeler ve PDF verisini tek dosyaya yedekler.', keywords:['backup','yedek','aqresearch','export','proje'], run:function(){ var w = win(); if(w && typeof w.aqBackupProject === 'function') w.aqBackupProject(); }},
+        {id:'restore-project', title:'Proje yede?ini geri y?kle (.aqresearch)', section:'Veri', icon:'RS', description:'Se?ilen .aqresearch yede?ini geri y?kler ve uygulamay? yeniler.', keywords:['restore','geri','y?kle','aqresearch','import','proje'], run:function(){ var w = win(); if(w && typeof w.aqRestoreProject === 'function') w.aqRestoreProject(); }},
+        {id:'pdf-annotation-digest', title:'PDF not ozetini a?', section:'PDF', icon:'P', description:'Highlight ve PDF notlar?n? tek sindirilebilir ozette topla.', keywords:['annotasyon','digest','not','highlight'], run:function(){ openSidePanel('pdfnotes'); }},
+        {id:'open-annotation-digest', title:'PDF not ozetini belgeye aktar', section:'PDF', icon:'A+', description:'Aktif PDF annotationlarindan ozet olu?turup belgeye aktar.', keywords:['annotation','not','ozet','digest','belge'], run:function(){ var w = win(); if(w && typeof w.insertPdfAnnotationDigestIntoDocument === 'function') w.insertPdfAnnotationDigestIntoDocument(); }},
         {id:'copy-annotation-digest', title:'PDF not ozetini panoya kopyala', section:'PDF', icon:'AC', description:'Aktif PDF annotation ozetini markdown olarak panoya kopyalar.', keywords:['annotation','kopyala','copy','digest','markdown'], run:function(){ var w = win(); if(w && typeof w.copyPdfAnnotationDigest === 'function') w.copyPdfAnnotationDigest(); }},
-        {id:'annotations-to-notes', title:'PDF annotationlarini notlara aktar', section:'PDF', icon:'AN', description:'Aktif PDF highlight ve notlarini arastirma notlarina tasir.', keywords:['annotation','not','notes','aktar'], run:function(){ var w = win(); if(w && typeof w.createNotesFromPdfAnnotationItems === 'function') w.createNotesFromPdfAnnotationItems(); }},
+        {id:'annotations-to-notes', title:'PDF annotationlarini notlara aktar', section:'PDF', icon:'AN', description:'Aktif PDF highlight ve notlar?n? ara?t?rma notlarina ta??r.', keywords:['annotation','not','notes','aktar'], run:function(){ var w = win(); if(w && typeof w.createNotesFromPdfAnnotationItems === 'function') w.createNotesFromPdfAnnotationItems(); }},
         {id:'search-pdf-annotations', title:'PDF notlarinda ara', section:'PDF', icon:'AS', description:'Aktif PDF highlight ve notlari icinde lokal arama yap.', keywords:['annotation','not','highlight','ara','search'], run:openPdfAnnotationSearch},
-        {id:'toggle-pdf-compare', title:'PDF karsilastirma modunu ac/kapat', section:'PDF', icon:'CP', description:'Aktif PDF ile ikinci bir PDF sekmesini yan yana goruntuler.', keywords:['pdf','compare','karsilastirma','side by side','yan yana'], run:function(){ var w = win(); if(w && typeof w.togglePdfCompareMode === 'function') w.togglePdfCompareMode(); }},
-        {id:'select-pdf-compare-secondary', title:'Karsilastirma icin ikinci PDF sec', section:'PDF', icon:'C2', description:'Yan yana karsilastirma icin ikinci PDF sekmesini degistirir.', keywords:['pdf','compare','karsilastirma','ikinci'], run:function(){ var w = win(); if(w && typeof w.selectPdfCompareSecondaryTab === 'function') w.selectPdfCompareSecondaryTab(); }},
-        {id:'toggle-pdf-compare-sync', title:'PDF karsilastirma scroll senkronu ac/kapat', section:'PDF', icon:'CS', description:'Yan yana compare modunda iki PDF arasinda scroll oranini esitler (desteklenen gorunumlerde).', keywords:['pdf','compare','scroll','senkron','sync'], run:function(){ var w = win(); if(w && typeof w.togglePdfCompareScrollSync === 'function') w.togglePdfCompareScrollSync(); }},
-        {id:'scan-pdf-ocr-need', title:'PDF OCR ihtiyacini tara', section:'PDF', icon:'OCR', description:'Aktif PDFde metin katmanini kontrol eder ve OCR gereksinimini gunceller.', keywords:['pdf','ocr','text layer','metin katmani','scan','taranmis'], run:function(){ var w = win(); if(w && typeof w.runPdfOcrNeedScan === 'function') return w.runPdfOcrNeedScan(); if(w && typeof w.ec === 'function') return w.ec('runPdfOcrNeedScan'); }},
-        {id:'run-pdf-ocr-now', title:'PDF OCR metin cikarimini baslat', section:'PDF', icon:'OCR+', description:'Metin katmani zayif PDF sayfalarindan AI ile OCR metni olusturur.', keywords:['pdf','ocr','extract','ai','text'], run:function(){ var w = win(); if(w && typeof w.runPdfOcrExtractionNow === 'function') return w.runPdfOcrExtractionNow(); if(w && typeof w.ec === 'function') return w.ec('runPdfOcrExtractionNow'); }},
-        {id:'retry-pdf-ocr-failed', title:'PDF OCR basarisiz sayfalari tekrar dene', section:'PDF', icon:'OCRR', description:'Daha once OCR hatasi alan sayfalari yeniden dener.', keywords:['pdf','ocr','retry','failed','tekrar dene'], run:function(){ var w = win(); if(w && typeof w.runPdfOcrRetryFailedNow === 'function') return w.runPdfOcrRetryFailedNow(); if(w && typeof w.ec === 'function') return w.ec('runPdfOcrRetryFailedNow'); }},
-        {id:'cancel-pdf-ocr', title:'PDF OCR islemini iptal et', section:'PDF', icon:'OCRX', description:'Calisan veya kuyrukta bekleyen OCR isini durdurur.', keywords:['pdf','ocr','cancel','iptal','dur'], run:function(){ var w = win(); if(w && typeof w.cancelPdfOcrRun === 'function') return w.cancelPdfOcrRun(); if(w && typeof w.ec === 'function') return w.ec('cancelPdfOcrRun'); }},
-        {id:'show-pdf-ocr-status', title:'PDF OCR durumunu goster', section:'PDF', icon:'OS', description:'Aktif PDF icin OCR tarama/uygunluk durumunu ozetler.', keywords:['pdf','ocr','status','durum'], run:function(){ var w = win(); if(w && typeof w.showPdfOcrStatus === 'function') return w.showPdfOcrStatus(); if(w && typeof w.ec === 'function') return w.ec('showPdfOcrStatus'); }},
-        {id:'capture-pdf-region', title:'PDF bolgesi sec (sekil/tablo yakala)', section:'PDF', icon:'RG', description:'PDF uzerinde bir dikdortgen secip belgeye sekil olarak ekle veya PNG indir.', keywords:['region','crop','sekil','figure','tablo','table','select','bolge','capture'], run:function(){ var w = win(); if(w && typeof w.togglePdfRegionCaptureMode === 'function') w.togglePdfRegionCaptureMode(); }},
-        {id:'capture-pdf-page-to-doc', title:'PDF sayfasini belgeye sekil olarak ekle', section:'PDF', icon:'FI', description:'Aktif PDF sayfasini PNG olarak yakalayip belgeye sekil/figcaption ile ekler.', keywords:['figure','sekil','capture','pdf','sayfa','image','gorsel'], run:function(){ var w = win(); if(w && typeof w.capturePdfCurrentPageToDocument === 'function') w.capturePdfCurrentPageToDocument(); }},
-        {id:'capture-pdf-page-download', title:'PDF sayfasini PNG olarak indir', section:'PDF', icon:'PN', description:'Aktif PDF sayfasini yuksek cozunurluklu PNG olarak kaydeder.', keywords:['png','capture','pdf','sayfa','download','indir'], run:function(){ var w = win(); if(w && typeof w.capturePdfCurrentPageDownload === 'function') w.capturePdfCurrentPageDownload(); }},
-        {id:'pdf-annotated-export', title:'Annotationli PDF disa aktar', section:'PDF', icon:'PDF', description:'PDF notlarini flatten ederek disa aktar.', keywords:['annotasyon','flatten'], run:function(){ var w = win(); if(w && typeof w.exportAnnotatedPdf === 'function') w.exportAnnotatedPdf(); }}
+        {id:'toggle-pdf-compare', title:'PDF kar??la?t?rma modunu a?/kapat', section:'PDF', icon:'CP', description:'Aktif PDF ile ikinci bir PDF sekmesini yan yana goruntuler.', keywords:['pdf','compare','kar??la?t?rma','side by side','yan yana'], run:function(){ var w = win(); if(w && typeof w.togglePdfCompareMode === 'function') w.togglePdfCompareMode(); }},
+        {id:'select-pdf-compare-secondary', title:'Karsilastirma icin ikinci PDF se?', section:'PDF', icon:'C2', description:'Yan yana kar??la?t?rma icin ikinci PDF sekmesini de?i?tirir.', keywords:['pdf','compare','kar??la?t?rma','ikinci'], run:function(){ var w = win(); if(w && typeof w.selectPdfCompareSecondaryTab === 'function') w.selectPdfCompareSecondaryTab(); }},
+        {id:'toggle-pdf-compare-sync', title:'PDF kar??la?t?rma scroll senkronu a?/kapat', section:'PDF', icon:'CS', description:'Yan yana compare modunda iki PDF arasinda scroll oranini esitler (desteklenen gorunumlerde).', keywords:['pdf','compare','scroll','senkron','sync'], run:function(){ var w = win(); if(w && typeof w.togglePdfCompareScrollSync === 'function') w.togglePdfCompareScrollSync(); }},
+        {id:'scan-pdf-ocr-need', title:'PDF OCR ihtiya?ini tara', section:'PDF', icon:'OCR', description:'Aktif PDFde metin katmanini kontrol eder ve OCR gereksinimini gunceller.', keywords:['pdf','ocr','text layer','metin katmani','scan','taranmis'], run:function(){ var w = win(); if(w && typeof w.runPdfOcrNeedScan === 'function') return w.runPdfOcrNeedScan(); if(w && typeof w.ec === 'function') return w.ec('runPdfOcrNeedScan'); }},
+        {id:'run-pdf-ocr-now', title:'PDF OCR metin ??kar?m?n? ba?lat', section:'PDF', icon:'OCR+', description:'Metin katmani zayif PDF sayfalar?ndan AI ile OCR metni olusturur.', keywords:['pdf','ocr','extra?t','ai','text'], run:function(){ var w = win(); if(w && typeof w.runPdfOcrExtractionNow === 'function') return w.runPdfOcrExtractionNow(); if(w && typeof w.ec === 'function') return w.ec('runPdfOcrExtractionNow'); }},
+        {id:'retry-pdf-ocr-failed', title:'PDF OCR ba?ar?s?z sayfalar? tekrar dene', section:'PDF', icon:'OCRR', description:'Daha once OCR hatasi alan sayfalar? yeniden dener.', keywords:['pdf','ocr','retry','failed','tekrar dene'], run:function(){ var w = win(); if(w && typeof w.runPdfOcrRetryFailedNow === 'function') return w.runPdfOcrRetryFailedNow(); if(w && typeof w.ec === 'function') return w.ec('runPdfOcrRetryFailedNow'); }},
+        {id:'cancel-pdf-ocr', title:'PDF OCR i?lemini iptal et', section:'PDF', icon:'OCRX', description:'?al??an veya kuyrukta bekleyen OCR isini durdurur.', keywords:['pdf','ocr','cancel','iptal','dur'], run:function(){ var w = win(); if(w && typeof w.cancelPdfOcrRun === 'function') return w.cancelPdfOcrRun(); if(w && typeof w.ec === 'function') return w.ec('cancelPdfOcrRun'); }},
+        {id:'show-pdf-ocr-status', title:'PDF OCR durumunu g?ster', section:'PDF', icon:'OS', description:'Aktif PDF icin OCR tarama/uygunluk durumunu ozetler.', keywords:['pdf','ocr','status','durum'], run:function(){ var w = win(); if(w && typeof w.showPdfOcrStatus === 'function') return w.showPdfOcrStatus(); if(w && typeof w.ec === 'function') return w.ec('showPdfOcrStatus'); }},
+        {id:'capture-pdf-page-to-doc', title:'PDF sayfas?n? belgeye ?ekil olarak ekle', section:'PDF', icon:'FI', description:'Aktif PDF sayfas?n? PNG olarak yakalayip belgeye ?ekil/figcaption ile ekler.', keywords:['figure','?ekil','capture','pdf','sayfa','image','gorsel'], run:function(){ var w = win(); if(w && typeof w.capturePdfCurrentPageToDocument === 'function') w.capturePdfCurrentPageToDocument(); }},
+        {id:'capture-pdf-page-download', title:'PDF sayfas?n? PNG olarak indir', section:'PDF', icon:'PN', description:'Aktif PDF sayfas?n? y?ksek ??z?n?rl?kl? PNG olarak kaydeder.', keywords:['png','capture','pdf','sayfa','download','indir'], run:function(){ var w = win(); if(w && typeof w.capturePdfCurrentPageDownload === 'function') w.capturePdfCurrentPageDownload(); }},
+        {id:'capture-pdf-region', title:'PDF b?lgesi se?', section:'PDF', icon:'RG', description:'PDF ?zerinde bir b?lge se?ip belgeye ?ekil olarak eklemek icin b?lge yakalama modunu a?ar.', keywords:['region','b?lge','capture','pdf','?ekil','image','gorsel'], run:function(){ var w = win(); if(w && typeof w.togglePdfRegionCaptureMode === 'function') return w.togglePdfRegionCaptureMode(); }},
+        {id:'pdf-annotated-export', title:'Annotationli PDF d??a aktar', section:'PDF', icon:'PDF', description:'PDF notlar?n? flatten ederek d??a aktar.', keywords:['annotasyon','flatten'], run:function(){ var w = win(); if(w && typeof w.exportAnnotatedPdf === 'function') w.exportAnnotatedPdf(); }}
       ].forEach(registerCommand);
       registerCitationStyleCommands();
     }
@@ -2151,7 +2161,7 @@
       if(state.activePanelTab === 'pdfnotes'){ renderPdfDigest(body); return; }
       if(state.activePanelTab === 'track'){ renderTrackChanges(body); return; }
       if(state.activePanelTab === 'history'){ renderHistory(body); return; }
-      body.innerHTML = '<div class="aq-side-muted">Oneriler burada toplanacak: eksik DOI, olasi kaynak onerileri, PDFden cikarilan kanitlar ve yaziya baglanabilecek notlar.</div>';
+      body.innerHTML = '<div class="aq-side-muted">oneriler burada toplana?ak: eksik DOI, olasi kaynak onerileri, PDFden cikarilan kanitlar ve yaziya baglanabilecek notlar.</div>';
     }
 
     function getEditorRoot(){
@@ -2167,7 +2177,7 @@
               id: entry.id,
               type: entry.type || 'heading',
               level: Number(entry.level || 1) || 1,
-              text: entry.label || entry.title || 'Basliksiz',
+              text: entry.label || entry.title || 'Ba?l?ksiz',
               title: entry.title || '',
               index: entry.index
             };
@@ -2179,7 +2189,7 @@
       return Array.prototype.slice.call(rootEl.querySelectorAll('h1,h2,h3,h4,h5,[data-heading-level]')).map(function(el, index){
         var tagLevel = /^H([1-5])$/i.test(el.tagName || '') ? Number(RegExp.$1) : 1;
         var attrLevel = Number(el.getAttribute('data-heading-level') || el.getAttribute('level') || tagLevel);
-        return {el:el, index:index, type:'heading', level:Math.max(1, Math.min(5, attrLevel || tagLevel)), text:(el.textContent || '').trim() || 'Basliksiz'};
+        return {el:el, index:index, type:'heading', level:Math.max(1, Math.min(5, attrLevel || tagLevel)), text:(el.textContent || '').trim() || 'Ba?l?ksiz'};
       }).filter(function(item){ return item.text; });
     }
 
@@ -2206,12 +2216,12 @@
       }
       body.innerHTML = '<div class="aq-side-controls">'
         + '<input class="aq-side-search" id="aqOutlineSearch" placeholder="Anahatta ara..." value="' + escapeHTML(state.outlineQuery) + '"/>'
-        + '<select class="aq-side-select" id="aqOutlineType"><option value="all">Tumu</option><option value="heading">Baslik</option><option value="table">Tablo</option><option value="figure">Sekil</option></select>'
+        + '<select class="aq-side-select" id="aqOutlineType"><option value="all">Tumu</option><option value="heading">Ba?l?k</option><option value="table">Tablo</option><option value="figure">?ekil</option></select>'
         + '</div><div class="aq-side-summary">'
         + '<span class="aq-side-chip">' + summary.total + ' oge</span>'
-        + '<span class="aq-side-chip">' + summary.headings + ' baslik</span>'
+        + '<span class="aq-side-chip">' + summary.headings + ' ba?l?k</span>'
         + '<span class="aq-side-chip">' + summary.tables + ' tablo</span>'
-        + '<span class="aq-side-chip">' + summary.figures + ' sekil</span>'
+        + '<span class="aq-side-chip">' + summary.figures + ' ?ekil</span>'
         + '</div><div class="aq-outline-list" id="aqOutlineList"></div>';
       var search = byId('aqOutlineSearch');
       var type = byId('aqOutlineType');
@@ -2236,7 +2246,7 @@
       var list = byId('aqOutlineList');
       if(!list) return;
       if(!items.length){
-        list.innerHTML = '<div class="aq-side-muted">Bu filtreyle gorunur baslik, tablo veya sekil yok.</div>';
+        list.innerHTML = '<div class="aq-side-muted">Bu filtreyle gorunur ba?l?k, tablo veya ?ekil yok.</div>';
         return;
       }
       items.forEach(function(item){
@@ -2355,7 +2365,7 @@
     var text = String(rootEl.innerText || rootEl.textContent || '').trim();
     var lines = text.split(/\r?\n+/);
     var bibliographyHeadingIndex = lines.findIndex(function(line){
-      return /^(kaynakca|references|bibliography)\s*:?$/i.test(String(line || '').trim());
+      return /^(kaynak?a|references|bibliography)\s*:?$/i.test(String(line || '').trim());
     });
     if(bibliographyHeadingIndex >= 0){
       text = lines.slice(0, bibliographyHeadingIndex).join('\n').trim();
@@ -2520,13 +2530,13 @@
         ? readability.label + ' - ort. ' + readability.avgWordsPerSentence + ' kelime/cumle'
         : readability.label;
       var grammarLabel = 'Dil kontrolu devre disi';
-      var grammarDetailHtml = '<div class="aq-side-muted">Dil kontrolu uygulamadan kaldirildi. Grammarly veya benzeri harici araclari kullanabilirsin.</div>';
+      var grammarDetailHtml = '<div class="aq-side-muted">Dil kontrolu uygulamadan kaldirildi. Grammarly veya benzeri harici ara?lari kullanabilirsin.</div>';
       body.innerHTML = '<div class="aq-side-summary"><span class="aq-side-chip">' + escapeHTML(status) + '</span><span class="aq-side-chip">' + report.errors + ' hata</span><span class="aq-side-chip">' + report.warnings + ' uyari</span>'
         + '<span class="aq-side-chip">' + escapeHTML(readabilityLabel) + '</span>'
         + '<span class="aq-side-chip">' + escapeHTML(grammarLabel) + '</span>'
         + (report.ignoredCount ? '<button class="aq-issue-ignore" type="button" data-aq-linter-reset-doc-ignores="1">bu belgede yoksayilanlari sifirla</button><button class="aq-issue-ignore" type="button" data-aq-linter-reset-ignores="1">' + report.ignoredCount + ' yoksayilan - tumunu sifirla</button>' : '') + '</div>'
         + '<p><b>Kelime:</b> ' + stats.words + '</p>'
-        + '<p><b>Atif:</b> ' + stats.citations + '</p>'
+        + '<p><b>At?f:</b> ' + stats.citations + '</p>'
         + '<p><b>Kaynak:</b> ' + stats.references + '</p>'
         + '<p><b>Sayfa:</b> ' + stats.pages + '</p>'
         + '<p><b>Okunabilirlik:</b> ' + escapeHTML(readabilityLabel) + '</p>'
@@ -2537,7 +2547,7 @@
             + '<div class="aq-issue-title">' + escapeHTML(issue.title) + '</div>'
             + '<div class="aq-issue-body">' + escapeHTML(issue.message) + '</div>'
             + (issue.code && issue.code !== 'clean' ? '<div class="aq-issue-actions">'
-              + (issue.action ? '<button class="aq-issue-action" type="button" data-aq-linter-action="' + escapeHTML(issue.action) + '">' + escapeHTML(issue.actionLabel || 'Ac') + '</button>' : '')
+              + (issue.action ? '<button class="aq-issue-action" type="button" data-aq-linter-action="' + escapeHTML(issue.action) + '">' + escapeHTML(issue.actionLabel || 'A?') + '</button>' : '')
               + '<button class="aq-issue-ignore" type="button" data-aq-linter-ignore="' + escapeHTML(issue.ignoreCode || issue.code) + '">Yoksay</button></div>' : '')
             + '</div>';
         }).join('') + '</div>';
@@ -2586,7 +2596,7 @@
         + '<span class="aq-side-chip">' + graph.uncitedCount + ' kullanilmayan</span>'
         + '<span class="aq-side-chip">' + graph.missingCount + ' eksik</span>'
         + '</div>'
-        + renderGraphSection('Bagli kaynaklar', graph.citedRefs.map(function(ref){ return {kind:'ok', text:getReferenceLabel(ref)}; }), 'Metinde henuz bagli atif yok.')
+        + renderGraphSection('Bagli kaynaklar', graph.citedRefs.map(function(ref){ return {kind:'ok', text:getReferenceLabel(ref)}; }), 'Metinde hen?z bagli atif yok.')
         + renderGraphSection('Eksik baglantilar', graph.missingRefIds.map(function(id){ return {kind:'error', text:'Kaynak kaydi bulunamadi: ' + id}; }), 'Eksik atif baglantisi yok.')
         + renderGraphSection('Libraryde olup metinde kullanilmayanlar', graph.uncitedRefs.slice(0, 20).map(function(ref){ return {kind:'warn', text:getReferenceLabel(ref)}; }), graph.uncitedRefs.length > 20 ? '+ ' + (graph.uncitedRefs.length - 20) + ' kaynak daha var.' : 'Kullanilmayan kaynak yok.');
     }
@@ -2596,7 +2606,7 @@
       return '<div class="aq-graph-section"><div class="aq-graph-section-title">' + escapeHTML(title) + '</div><div class="aq-graph-list">'
         + (list.length ? list.map(function(item){
           return '<div class="aq-graph-item ' + escapeHTML(item.kind || '') + '">' + escapeHTML(item.text || '') + '</div>';
-        }).join('') : '<div class="aq-side-muted">' + escapeHTML(emptyText || 'Kayit yok.') + '</div>')
+        }).join('') : '<div class="aq-side-muted">' + escapeHTML(emptyText || 'Kay?t yok.') + '</div>')
         + '</div></div>';
     }
 
@@ -2629,7 +2639,7 @@
           return '<div class="aq-suggest-card ' + escapeHTML(item.severity || 'info') + '">'
             + '<div class="aq-suggest-title">' + escapeHTML(item.title) + '</div>'
             + '<div class="aq-suggest-body">' + escapeHTML(item.body) + '</div>'
-            + (item.action ? '<button class="aq-suggest-action" type="button" data-aq-suggest-action="' + escapeHTML(item.action) + '">' + escapeHTML(item.actionLabel || 'Ac') + '</button>' : '')
+            + (item.action ? '<button class="aq-suggest-action" type="button" data-aq-suggest-action="' + escapeHTML(item.action) + '">' + escapeHTML(item.actionLabel || 'A?') + '</button>' : '')
             + '</div>';
         }).join('')
         + '</div>';
@@ -2729,17 +2739,17 @@
         + '<span class="aq-side-chip">' + model.deleteCount + ' silme</span>'
         + '</div>'
         + '<div class="aq-history-actions">'
-        + '<button class="aq-history-action" type="button" data-aq-track-action="toggle">' + (model.enabled ? 'Inceleme Modunu Kapat' : 'Inceleme Modunu Ac') + '</button>'
-        + '<button class="aq-history-action" type="button" data-aq-track-action="prev"' + (model.hasChanges ? '' : ' disabled') + '>Onceki Oneri</button>'
-        + '<button class="aq-history-action" type="button" data-aq-track-action="next"' + (model.hasChanges ? '' : ' disabled') + '>Sonraki Oneri</button>'
+        + '<button class="aq-history-action" type="button" data-aq-track-action="toggle">' + (model.enabled ? 'Inceleme Modunu Kapat' : 'Inceleme Modunu A?') + '</button>'
+        + '<button class="aq-history-action" type="button" data-aq-track-action="prev"' + (model.hasChanges ? '' : ' disabled') + '>?nceki oneri</button>'
+        + '<button class="aq-history-action" type="button" data-aq-track-action="next"' + (model.hasChanges ? '' : ' disabled') + '>Sonraki oneri</button>'
         + '</div>'
         + '<div class="aq-history-actions">'
-        + '<button class="aq-history-action" type="button" data-aq-track-action="acceptCurrent"' + (model.hasChanges ? '' : ' disabled') + '>Seciliyi Kabul Et</button>'
-        + '<button class="aq-history-action" type="button" data-aq-track-action="rejectCurrent"' + (model.hasChanges ? '' : ' disabled') + '>Seciliyi Geri Al</button>'
+        + '<button class="aq-history-action" type="button" data-aq-track-action="acceptCurrent"' + (model.hasChanges ? '' : ' disabled') + '>Se?iliyi Kabul Et</button>'
+        + '<button class="aq-history-action" type="button" data-aq-track-action="rejectCurrent"' + (model.hasChanges ? '' : ' disabled') + '>Se?iliyi Geri Al</button>'
         + '</div>'
         + '<div class="aq-history-actions">'
-        + '<button class="aq-history-action" type="button" data-aq-track-action="acceptAll"' + (model.hasChanges ? '' : ' disabled') + '>Tumunu Kabul Et</button>'
-        + '<button class="aq-history-action" type="button" data-aq-track-action="rejectAll"' + (model.hasChanges ? '' : ' disabled') + '>Tumunu Geri Al</button>'
+        + '<button class="aq-history-action" type="button" data-aq-track-action="acceptAll"' + (model.hasChanges ? '' : ' disabled') + '>T?m?n? Kabul Et</button>'
+        + '<button class="aq-history-action" type="button" data-aq-track-action="rejectAll"' + (model.hasChanges ? '' : ' disabled') + '>T?m?n? Geri Al</button>'
         + '<button class="aq-history-action" type="button" data-aq-track-action="refresh">Yenile</button>'
         + '</div>';
       body.querySelectorAll('[data-aq-track-action]').forEach(function(btn){
@@ -2761,9 +2771,9 @@
         query: state.pdfAnnotationQuery,
         filter: state.pdfAnnotationFilter
       });
-      body.innerHTML = '<div class="aq-side-muted">Aktif PDF highlight ve notlarini tek bir okunabilir digest olarak toplar.</div>'
+      body.innerHTML = '<div class="aq-side-muted">Aktif PDF highlight ve notlar?n? tek bir okunabilir digest olarak toplar.</div>'
         + '<div class="aq-side-summary">'
-        + '<span class="aq-side-chip">' + model.count + ' kayit</span>'
+        + '<span class="aq-side-chip">' + model.count + ' kay?t</span>'
         + '<span class="aq-side-chip">' + model.highlightCount + ' highlight</span>'
         + '<span class="aq-side-chip">' + model.noteCount + ' not</span>'
         + '</div>'
@@ -2782,7 +2792,7 @@
         + '<button class="aq-pdf-digest-action" type="button" data-aq-pdf-digest-action="copy">Ozeti Kopyala</button>'
         + '<button class="aq-pdf-digest-action primary" type="button" data-aq-pdf-digest-action="insert">Belgeye Ekle</button>'
         + '</div>'
-        + '<div class="aq-pdf-digest-preview">' + escapeHTML(model.hasItems ? model.markdown : 'Aktif PDF icin henuz highlight veya not yok.') + '</div>';
+        + '<div class="aq-pdf-digest-preview">' + escapeHTML(model.hasItems ? model.markdown : 'Aktif PDF icin hen?z highlight veya not yok.') + '</div>';
       var search = byId('aqPdfAnnotationSearch');
       var filter = byId('aqPdfAnnotationFilter');
       if(filter) filter.value = searchModel.filter;
@@ -2907,7 +2917,7 @@
       var docName = currentDoc && currentDoc.name ? String(currentDoc.name) : 'Belge';
       var api = getElectronAPI();
       var token = ++state.historyToken;
-      body.innerHTML = '<div class="aq-side-muted">Autosave, recovery ve belge snapshot durumu yukleniyor...</div>';
+      body.innerHTML = '<div class="aq-side-muted">Autosave, recovery ve belge snapshot durumu y?kleniyor...</div>';
       if(!api){
         renderHistoryModel(body, buildHistoryPanelModel({
           saveStatus: saveText,
@@ -2942,10 +2952,10 @@
         var words = Number(snapshot && snapshot.wordCount || 0);
         return '<div class="aq-history-card">'
           + '<div class="aq-history-title">' + escapeHTML(when || 'Snapshot') + (words ? ' · ' + words + ' kelime' : '') + '</div>'
-          + '<div class="aq-history-body">' + escapeHTML(snapshot && snapshot.excerpt || 'Onizleme yok') + '</div>'
+          + '<div class="aq-history-body">' + escapeHTML(snapshot && snapshot.excerpt || '?nizleme yok') + '</div>'
           + '</div>';
       }).join('');
-      body.innerHTML = '<div class="aq-side-muted">Autosave ve recovery, capture queue sisteminden ayridir; bu panel sadece editor veri guvenligini gosterir.</div>'
+      body.innerHTML = '<div class="aq-side-muted">Autosave ve recovery, capture queue sisteminden ayridir; bu panel sadece editor veri g?venli?ini g?sterir.</div>'
         + '<div class="aq-side-summary">'
         + '<span class="aq-side-chip">' + escapeHTML(model.saveStatus || 'kaydedildi') + '</span>'
         + '<span class="aq-side-chip">' + escapeHTML(model.docName || 'Belge') + '</span>'
@@ -2957,7 +2967,7 @@
         }).join('')
         + '</div>'
         + '<div class="aq-history-actions">'
-        + '<button class="aq-history-action" type="button" data-aq-history-action="openHistory">Belge Gecmisini Ac</button>'
+        + '<button class="aq-history-action" type="button" data-aq-history-action="openHistory">Belge Ge?mi?ini A?</button>'
         + '<button class="aq-history-action" type="button" data-aq-history-action="refreshHistory">Yenile</button>'
         + '</div>'
         + (snapshotRows ? '<div class="aq-graph-section"><div class="aq-graph-section-title">Son snapshotlar</div><div class="aq-history-list">' + snapshotRows + '</div></div>' : '');

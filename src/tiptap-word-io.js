@@ -741,6 +741,13 @@ function isWordListParagraph(node){
 
   function repairWordImportTextBoundariesInDOM(rootNode){
     if(!rootNode || !rootNode.querySelectorAll || typeof document === 'undefined') return;
+    Array.from(rootNode.querySelectorAll('span,sup,sub,b,strong,i,em,u,s,strike')).forEach(function(node){
+      if(!node || !node.parentNode) return;
+      var text = String(node.textContent || '').replace(/\u00ad/g, '').replace(/[\u200b-\u200d\ufeff]/g, '').replace(/\u00a0/g, ' ').trim();
+      if(text) return;
+      node.remove();
+    });
+    if(typeof rootNode.normalize === 'function') rootNode.normalize();
     var walker = document.createTreeWalker(rootNode, NodeFilter.SHOW_TEXT, null);
     var textNodes = [];
     while(walker.nextNode()) textNodes.push(walker.currentNode);
@@ -760,6 +767,7 @@ function isWordListParagraph(node){
       repairWordImportTextBoundariesInDOM(wrapper);
       return wrapper.innerHTML;
     }
+    source = source.replace(/<(span|sup|sub|b|strong|i|em|u|s|strike)\b[^>]*>(?:\s|&nbsp;|\u00a0|\u200b|\u200c|\u200d|\ufeff|\u00ad)*<\/\1\s*>/gi, '');
     return source.replace(/>([^<>]+)</g, function(_match, text){
       return '>' + repairWordImportTextBoundaries(text) + '<';
     });
@@ -1287,13 +1295,14 @@ function isWordListParagraph(node){
     if(/^\s*\{\\rtf/.test(value)){
       value = stripRtfControlCodes(value);
     }
-    if(looksLikeHTML(value)) return normalizeWordHtml(value);
+    if(looksLikeHTML(value)) return repairWordImportHTML(normalizeWordHtml(value));
     if(String(value || '').split('\n').some(looksLikeWordArtifactLine)){
       value = stripWordArtifactPlainText(value);
       if(!normalizeWhitespace(value)) return '<p><br></p>';
     }
-    if(typeof formatPlainTextAPA === 'function') return formatPlainTextAPA(value || '');
-    return '<p>' + value.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>';
+    value = repairWordImportTextBoundaries(value || '');
+    if(typeof formatPlainTextAPA === 'function') return repairWordImportHTML(formatPlainTextAPA(value || ''));
+    return repairWordImportHTML('<p>' + value.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>');
   }
 
   function restoreEditorFocusAfterImport(editor){
@@ -1368,6 +1377,7 @@ function isWordListParagraph(node){
     if(typeof options.cleanPastedHTML === 'function'){
       html = options.cleanPastedHTML(html || '');
     }
+    html = repairWordImportHTML(html || '');
     if(applyAQEngineImportedHTML(editor, html, options)){
       return true;
     }

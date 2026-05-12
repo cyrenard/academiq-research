@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell, Menu, net: electronNet } = r
 const { session } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const net = require('net');
 const { execFile } = require('child_process');
 const crypto = require('crypto');
 const { createStorageService } = require('./src/main-process-storage.js');
@@ -182,9 +183,50 @@ function normalizeHost(hostname) {
   return String(hostname || '').trim().toLowerCase().replace(/\.$/, '');
 }
 
+function normalizeIpLiteral(hostname) {
+  const host = normalizeHost(hostname);
+  return host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+}
+
+function isPrivateIPv4(address) {
+  const parts = String(address || '').split('.').map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true;
+  const [a, b] = parts;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    a >= 224
+  );
+}
+
+function isPrivateIP(hostname) {
+  const host = normalizeIpLiteral(hostname);
+  const family = net.isIP(host);
+  if (family === 4) return isPrivateIPv4(host);
+  if (family === 6) {
+    return (
+      host === '::' ||
+      host === '::1' ||
+      host.startsWith('fc') ||
+      host.startsWith('fd') ||
+      host.startsWith('fe80:') ||
+      host.startsWith('::ffff:127.') ||
+      host.startsWith('::ffff:10.') ||
+      host.startsWith('::ffff:192.168.')
+    );
+  }
+  return false;
+}
+
 function isBlockedHost(hostname) {
   const host = normalizeHost(hostname);
   if (!host) return true;
+  if (isPrivateIP(host)) return true;
   if (host === 'localhost' || host.endsWith('.localhost')) return true;
   if (host === '0.0.0.0') return true;
   if (host === '::1' || host === '[::1]') return true;
@@ -1992,7 +2034,8 @@ function createWindow() {
     minHeight: 600,
     title: 'AcademiQ Research',
     icon: path.join(__dirname, 'icon.ico'),
-    backgroundColor: '#0d1117',
+    frame: false,
+    backgroundColor: '#fbfaf7',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -2326,6 +2369,26 @@ app.on('open-url', (event, url) => {
 // ── IPC: DATA ────────────────────────────────────────────────────────────────
 ipcMain.on('renderer:probeError', (_event, payload) => {
   appendRendererProbeError(payload);
+});
+
+// Window chrome
+ipcMain.handle('window:minimize', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+  if (win && !win.isDestroyed()) win.minimize();
+  return { ok: true };
+});
+ipcMain.handle('window:toggleMaximize', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+  if (win && !win.isDestroyed()) {
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+  }
+  return { ok: true, maximized: !!(win && !win.isDestroyed() && win.isMaximized()) };
+});
+ipcMain.handle('window:close', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+  if (win && !win.isDestroyed()) win.close();
+  return { ok: true };
 });
 
 ipcMain.handle('data:load', async () => {

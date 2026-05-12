@@ -120,7 +120,7 @@ export function RefSidebar({
   };
 
   const runFeature = (id: string) => {
-    if (id === 'reference-batch-oa') {
+    if (id === 'reference-batch-oa' || id === 'pdf-download') {
       onBatchOADownload();
       setOpenMenu(null);
       return;
@@ -207,6 +207,9 @@ export function RefSidebar({
   const renderReferenceCard = (ref: AcademiqReference) => {
     const tags = cardTags(ref);
     const hasPdf = Boolean(ref.pdfAttached || ref.pdfData || ref.pdfPath);
+    const hasPdfUrl = Boolean(String(ref.pdfUrl || '').trim());
+    const hasDoi = Boolean(String(ref.doi || '').trim());
+    const metadataIncomplete = !referenceTitle(ref) || !referenceAuthors(ref) || !String(ref.year || '').trim();
     return (
       <button
         type="button"
@@ -254,6 +257,15 @@ export function RefSidebar({
           {hasPdf ? (
             <span className="rounded border border-aq-navy/20 bg-aq-navy/10 px-1.5 py-0.5 text-[9px] font-semibold text-aq-navy">PDF</span>
           ) : null}
+          {!hasPdf && hasPdfUrl ? (
+            <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-semibold text-blue-700">PDF URL</span>
+          ) : null}
+          {hasDoi ? (
+            <span className="rounded border border-aq-line bg-white px-1.5 py-0.5 text-[9px] font-semibold text-aq-muted">DOI</span>
+          ) : null}
+          {metadataIncomplete ? (
+            <span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700">Eksik</span>
+          ) : null}
           {tags.slice(0, 3).map((tag) => (
             <span key={tag} className="rounded bg-aq-panel px-1.5 py-0.5 text-[9px] text-aq-ink">{tag}</span>
           ))}
@@ -298,7 +310,7 @@ export function RefSidebar({
             type="button"
             onClick={() => onRenameCollection(id)}
             className="hidden h-6 w-6 rounded-md text-[11px] text-aq-muted hover:bg-aq-panel group-hover:block"
-            title="Klasör? yeniden adlandir"
+            title="Klasörü yeniden adlandır"
           >
             ...
           </button>
@@ -306,7 +318,7 @@ export function RefSidebar({
             type="button"
             onClick={() => onDeleteCollection(id)}
             className="hidden h-6 w-6 rounded-md text-[13px] text-red-600 hover:bg-red-50 group-hover:block"
-            title="Klasör? sil"
+            title="Klasörü sil"
           >
             x
           </button>
@@ -316,7 +328,7 @@ export function RefSidebar({
   );
 
   return (
-    <aside className="relative h-full min-h-0 w-full min-w-0 overflow-hidden border-r border-aq-line bg-[#fbfaf7]">
+    <aside className="relative h-full min-h-0 w-full min-w-0 overflow-hidden bg-[#fbfaf7]">
       <div className="flex h-full flex-col gap-2 p-3">
         <div className="flex gap-1">
           <input
@@ -342,13 +354,13 @@ export function RefSidebar({
         <div className="grid grid-cols-2 gap-2">
           <button type="button" onClick={onOpenCollections} className="h-8 rounded-md border border-aq-line bg-white text-xs font-semibold transition hover:bg-aq-panel active:translate-y-px">Klasörler</button>
           <button type="button" onClick={onToggleFilters} className={['h-8 rounded-md border border-aq-line text-xs font-semibold transition hover:bg-aq-panel active:translate-y-px', filtersOpen ? 'bg-aq-panel text-aq-ink' : 'bg-white'].join(' ')}>Filtrele</button>
-          {menuButton('import', '??e Aktar', [
+          {menuButton('import', 'İçe Aktar', [
             ['reference-import-bib', '.bib/.ris Aktar'],
             ['reference-import-zotero', "Zotero'dan Aktar"]
           ])}
           {menuButton('pdf', 'PDF', [
             ['pdf-upload', '+ PDF Yükle'],
-            ['pdf-download', 'OA PDF ?ndir']
+            ['reference-batch-oa', 'OA PDF İndir']
           ])}
         </div>
 
@@ -378,7 +390,7 @@ export function RefSidebar({
                 {!collapsed ? (
                   <div className="space-y-2 pl-4">
                     {folderRefs.length ? folderRefs.map(renderReferenceCard) : (
-                      <div className="rounded-lg border border-dashed border-aq-line p-4 text-center text-xs text-aq-muted">Kaynaklari buraya surukle.</div>
+                      <div className="rounded-lg border border-dashed border-aq-line p-4 text-center text-xs text-aq-muted">Kaynakları buraya sürükle.</div>
                     )}
                   </div>
                 ) : null}
@@ -413,7 +425,7 @@ export function RefSidebar({
 
           {!searchableReferences.length ? (
             <div className="flex h-28 items-center justify-center text-center text-xs text-aq-muted">
-              DOI/URL gir veya PDF yukle.
+              DOI/URL gir veya PDF yükle.
             </div>
           ) : null}
         </div>
@@ -422,7 +434,7 @@ export function RefSidebar({
       {referenceMenu && activeMenuReference ? (
         <>
           <div
-            className="fixed z-[2200] max-h-[min(520px,calc(100vh-24px))] w-56 overflow-auto rounded-lg border border-aq-line bg-white/95 p-1.5 text-xs shadow-2xl backdrop-blur"
+            className="fixed z-[2200] max-h-[min(520px,calc(100vh-24px))] w-56 overflow-auto rounded-[13px] border border-aq-line/90 bg-white/95 p-1.5 text-xs shadow-[0_24px_64px_rgba(22,27,34,0.20)] backdrop-blur-xl"
             style={{
               left: Math.min(referenceMenu.x, window.innerWidth - 232),
               top: Math.min(referenceMenu.y, window.innerHeight - 532)
@@ -470,7 +482,7 @@ export function RefSidebar({
               PDF Reader Aç
             </button>
             <button type="button" disabled={!Boolean(activeMenuReference.doi || activeMenuReference.pdfUrl)} title={Boolean(activeMenuReference.doi || activeMenuReference.pdfUrl) ? 'OA PDF indir' : 'Bu kaynakta DOI/PDF URL yok'} className="block w-full rounded-md px-2.5 py-2 text-left font-medium text-aq-ink hover:bg-aq-panel disabled:cursor-not-allowed disabled:text-aq-muted disabled:hover:bg-transparent" onClick={() => { onReferencePdfAction('download', activeMenuReference.id); closeReferenceMenu(); }}>
-            ['pdf-download', 'OA PDF ?ndir']
+              OA PDF indir
             </button>
             <button type="button" disabled={!Boolean(activeMenuReference.pdfAttached || activeMenuReference.pdfData || activeMenuReference.pdfPath)} title={Boolean(activeMenuReference.pdfAttached || activeMenuReference.pdfData || activeMenuReference.pdfPath) ? 'PDF dosyasını göster' : 'Bu kaynağa bağlı PDF yok'} className="block w-full rounded-md px-2.5 py-2 text-left font-medium text-aq-ink hover:bg-aq-panel disabled:cursor-not-allowed disabled:text-aq-muted disabled:hover:bg-transparent" onClick={() => { onShowReferenceInExplorer(activeMenuReference.id); closeReferenceMenu(); }}>
               Dosya gezgininde aç
@@ -485,7 +497,7 @@ export function RefSidebar({
 
           {referenceSubmenu ? (
             <div
-              className="fixed z-[2201] max-h-[min(420px,calc(100vh-24px))] w-64 overflow-auto rounded-lg border border-aq-line bg-white/95 p-1.5 text-xs shadow-2xl backdrop-blur"
+              className="fixed z-[2201] max-h-[min(420px,calc(100vh-24px))] w-64 overflow-auto rounded-[13px] border border-aq-line/90 bg-white/95 p-1.5 text-xs shadow-[0_24px_64px_rgba(22,27,34,0.20)] backdrop-blur-xl"
               style={{
                 left: Math.min(referenceMenu.x + 226, window.innerWidth - 272),
                 top: Math.min(referenceMenu.y + 70, window.innerHeight - 432)

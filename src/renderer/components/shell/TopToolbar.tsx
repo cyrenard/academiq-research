@@ -33,17 +33,20 @@ type ToolbarButtonProps = {
   label?: string;
   onClick: () => void;
   strong?: boolean;
+  active?: boolean;
 };
 
-function ToolbarButton({ children, label, onClick, strong }: ToolbarButtonProps) {
+function ToolbarButton({ children, label, onClick, strong, active }: ToolbarButtonProps) {
   return (
     <button
       type="button"
+      aria-pressed={active || undefined}
       title={label || (typeof children === 'string' ? children : undefined)}
       onClick={onClick}
       className={[
         'inline-flex h-[29px] items-center justify-center gap-1 rounded px-1.5 text-[11px] leading-none transition hover:bg-aq-panel active:translate-y-px',
-        strong ? 'font-semibold text-aq-ink' : 'text-aq-ink'
+        strong ? 'font-semibold text-aq-ink' : 'text-aq-ink',
+        active ? 'bg-aq-navy/10 text-aq-navy shadow-[inset_0_0_0_1px_rgba(30,58,95,0.18)]' : ''
       ].join(' ')}
     >
       {children}
@@ -77,10 +80,71 @@ function ToolbarGroup({ label, children, wide }: { label: string; children: Reac
 export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
   const editorRef = useEditorCommands();
   const findStateRef = useRef<{ matches: unknown[]; index: number; editorRanges?: unknown[] }>({ matches: [], index: -1 });
+  const findTimerRef = useRef<number | null>(null);
   const savedAqSelectionRef = useRef<unknown>(null);
   const [findQuery, setFindQuery] = useState('');
   const [replaceOpen, setReplaceOpen] = useState(false);
   const [replaceText, setReplaceText] = useState('');
+  const [activeMarks, setActiveMarks] = useState<Record<string, boolean>>({});
+
+  const refreshActiveMarks = () => {
+    const editor = (window as any).editor;
+    const isActive = (nameOrAttrs: unknown, attrs?: unknown) => {
+      try {
+        return !!(editor && typeof editor.isActive === 'function' && editor.isActive(nameOrAttrs, attrs));
+      } catch (_error) {
+        return false;
+      }
+    };
+    const next: Record<string, boolean> = {
+      bold: isActive('bold'),
+      italic: isActive('italic'),
+      underline: isActive('underline'),
+      strike: isActive('strike') || isActive('strikeThrough'),
+      paragraph: isActive('paragraph') && !isActive('heading') && !isActive('blockquote'),
+      h1: isActive('heading', { level: 1 }),
+      h2: isActive('heading', { level: 2 }),
+      h3: isActive('heading', { level: 3 }),
+      h4: isActive('heading', { level: 4 }),
+      h5: isActive('heading', { level: 5 }),
+      quote: isActive('blockquote'),
+      bulletList: isActive('bulletList'),
+      orderedList: isActive('orderedList'),
+      alignLeft: isActive({ textAlign: 'left' }),
+      alignCenter: isActive({ textAlign: 'center' }),
+      alignRight: isActive({ textAlign: 'right' }),
+      alignJustify: isActive({ textAlign: 'justify' }),
+      superscript: isActive('superscript'),
+      subscript: isActive('subscript')
+    };
+    setActiveMarks((current) => {
+      const keys = Object.keys(next);
+      if (keys.length === Object.keys(current).length && keys.every((key) => current[key] === next[key])) return current;
+      return next;
+    });
+  };
+
+  const scheduleActiveMarksRefresh = () => {
+    window.setTimeout(refreshActiveMarks, 0);
+    window.setTimeout(refreshActiveMarks, 80);
+  };
+
+  useEffect(() => {
+    scheduleActiveMarksRefresh();
+    const onChange = () => scheduleActiveMarksRefresh();
+    document.addEventListener('selectionchange', onChange);
+    document.addEventListener('keyup', onChange, true);
+    document.addEventListener('mouseup', onChange, true);
+    document.addEventListener('pointerup', onChange, true);
+    window.addEventListener('aq:react-sync', onChange as EventListener);
+    return () => {
+      document.removeEventListener('selectionchange', onChange);
+      document.removeEventListener('keyup', onChange, true);
+      document.removeEventListener('mouseup', onChange, true);
+      document.removeEventListener('pointerup', onChange, true);
+      window.removeEventListener('aq:react-sync', onChange as EventListener);
+    };
+  }, []);
 
   const preserveEditorSelection = () => {
     callLegacy('restoreEditorListStyleSelection');
@@ -94,17 +158,20 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     preserveEditorSelection();
     runEditorCommand(cmd, val);
     focusEditor();
+    scheduleActiveMarksRefresh();
   };
 
   const action = (fn: string, ...args: unknown[]) => {
     preserveEditorSelection();
     callLegacy(fn, ...args);
+    scheduleActiveMarksRefresh();
   };
 
   const editorAction = (fn: string, ...args: unknown[]) => {
     preserveEditorSelection();
     runEditorAction(fn, ...args);
     focusEditor();
+    scheduleActiveMarksRefresh();
   };
 
   const applyFontSize = (pt: string) => {
@@ -121,6 +188,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
       runEditorAction('applyFontSize', pt);
     }
     focusEditor();
+    scheduleActiveMarksRefresh();
   };
 
   const guardEditorToolbarPointer = (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -179,7 +247,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     const built = typeof api.buildSummary === 'function' ? api.buildSummary(entries) : {};
     summary.textContent = entries.length
       ? `${built.headingCount || 0} başlık, ${built.tableCount || 0} tablo, ${built.figureCount || 0} Şekil`
-      : 'Anahat icin başlık bulunamad?.';
+      : 'Anahat için başlık bulunamadı.';
     list.innerHTML = entries.length
       ? entries.map((entry: any) => `<button class="doc-outline-item" type="button" data-outline-id="${String(entry.id || '')}"><span>${String(entry.label || entry.text || 'Başlık')}</span></button>`).join('')
       : '<div class="empty">Belgede başlık yok.</div>';
@@ -205,7 +273,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     const entries = api && typeof api.getCaptionManagerEntries === 'function'
       ? api.getCaptionManagerEntries({ root, editor }) || []
       : [];
-    summary.textContent = entries.length ? `${entries.length} başlık bulundu.` : 'Tablo veya Şekil başlığı bulunamad?.';
+    summary.textContent = entries.length ? `${entries.length} başlık bulundu.` : 'Tablo veya Şekil başlığı bulunamadı.';
     list.innerHTML = entries.length
       ? entries.map((entry: any) => `<button class="doc-outline-item" type="button" data-caption-target="${String(entry.id || '')}">${String(entry.label || entry.title || entry.text || 'Başlık')}</button>`).join('')
       : '<div class="empty">Başlık yok.</div>';
@@ -826,7 +894,11 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
 
   const handleFindInput = (value: string) => {
     setFindQuery(value);
-    executeFind(value);
+    if (findTimerRef.current != null) window.clearTimeout(findTimerRef.current);
+    findTimerRef.current = window.setTimeout(() => {
+      findTimerRef.current = null;
+      executeFind(value);
+    }, 180);
   };
 
   const handleFindKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -858,7 +930,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
 
   return (
     <div
-      className="aq-editor-toolbars space-y-1.5 border-b border-aq-line bg-[#fbfaf7] px-2 py-1.5"
+      className="aq-editor-toolbars space-y-1.5 bg-[#fbfaf7] px-2 py-1.5"
     >
       <div className="flex h-8 w-full items-center overflow-hidden rounded-md border border-aq-line bg-white shadow-sm">
         <TopBarButton id="outlineOpenBtn" onClick={openDocumentOutline} title="Belge anahatı">
@@ -954,7 +1026,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
       </div>
 
       <div
-        className="aq-editor-toolbar-panel flex w-full flex-col overflow-visible rounded-md border border-aq-line bg-white shadow-sm"
+        className="aq-editor-toolbar-panel flex w-full flex-col overflow-visible rounded-md border border-aq-line bg-white shadow-none"
         onMouseDownCapture={guardEditorToolbarPointer}
       >
         <div className="flex h-[31px] w-full items-center overflow-hidden border-b border-aq-line/70">
@@ -978,20 +1050,20 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
             <option value="24">24</option>
             <option value="36">36</option>
           </select>
-          <IconButton icon={<Bold size={13} />} label="Bold" onClick={() => command('bold')} className="h-7 w-7" />
-          <IconButton icon={<Italic size={13} />} label="Italic" onClick={() => command('italic')} className="h-7 w-7" />
-          <IconButton icon={<Underline size={13} />} label="Underline" onClick={() => command('underline')} className="h-7 w-7" />
-          <IconButton icon={<Strikethrough size={13} />} label="Strike" onClick={() => command('strikeThrough')} className="h-7 w-7" />
+          <IconButton icon={<Bold size={13} />} label="Bold" active={activeMarks.bold} onClick={() => command('bold')} className="h-7 w-7" />
+          <IconButton icon={<Italic size={13} />} label="Italic" active={activeMarks.italic} onClick={() => command('italic')} className="h-7 w-7" />
+          <IconButton icon={<Underline size={13} />} label="Underline" active={activeMarks.underline} onClick={() => command('underline')} className="h-7 w-7" />
+          <IconButton icon={<Strikethrough size={13} />} label="Strike" active={activeMarks.strike} onClick={() => command('strikeThrough')} className="h-7 w-7" />
           <input type="color" defaultValue="#000000" title="Metin rengi" onChange={(event) => command('foreColor', event.target.value)} className="h-7 w-7 rounded border border-aq-line bg-white p-0.5" />
           <input type="color" defaultValue="#ffff00" title="Vurgu rengi" onChange={(event) => command('hiliteColor', event.target.value)} className="h-7 w-7 rounded border border-aq-line bg-white p-0.5" />
         </ToolbarGroup>
 
         <ToolbarGroup label="Başlık">
-          <ToolbarButton onClick={() => command('formatBlock', 'p')}>¶</ToolbarButton>
+          <ToolbarButton active={activeMarks.paragraph} onClick={() => command('formatBlock', 'p')}>¶</ToolbarButton>
           {(['1', '2', '3', '4', '5'] as const).map((level) => (
-            <ToolbarButton key={level} onClick={() => command('formatBlock', `h${level}`)}>H{level}</ToolbarButton>
+            <ToolbarButton key={level} active={activeMarks[`h${level}`]} onClick={() => command('formatBlock', `h${level}`)}>H{level}</ToolbarButton>
           ))}
-          <ToolbarButton label="Blok alıntı" onClick={() => action('insBlkQ')}>❝</ToolbarButton>
+          <ToolbarButton label="Blok alıntı" active={activeMarks.quote} onClick={() => action('insBlkQ')}>❝</ToolbarButton>
         </ToolbarGroup>
 
         <ToolbarGroup label="Paragraf">
@@ -1021,16 +1093,16 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
             <option value="2.5">2.5</option>
             <option value="3">3.0</option>
           </select>
-          <ToolbarButton label="Sola hizala" onClick={() => command('justifyLeft')}><AlignLeft size={13} /></ToolbarButton>
-          <ToolbarButton label="Ortala" onClick={() => command('justifyCenter')}><AlignCenter size={13} /></ToolbarButton>
-          <ToolbarButton label="Sağa hizala" onClick={() => command('justifyRight')}><AlignRight size={13} /></ToolbarButton>
-          <ToolbarButton label="İki yana yasla" onClick={() => command('justifyFull')}><AlignJustify size={13} /></ToolbarButton>
+          <ToolbarButton label="Sola hizala" active={activeMarks.alignLeft} onClick={() => command('justifyLeft')}><AlignLeft size={13} /></ToolbarButton>
+          <ToolbarButton label="Ortala" active={activeMarks.alignCenter} onClick={() => command('justifyCenter')}><AlignCenter size={13} /></ToolbarButton>
+          <ToolbarButton label="Sağa hizala" active={activeMarks.alignRight} onClick={() => command('justifyRight')}><AlignRight size={13} /></ToolbarButton>
+          <ToolbarButton label="İki yana yasla" active={activeMarks.alignJustify} onClick={() => command('justifyFull')}><AlignJustify size={13} /></ToolbarButton>
         </ToolbarGroup>
         </div>
 
         <div className="flex h-[31px] w-full items-center overflow-hidden">
         <ToolbarGroup label="Liste">
-          <ToolbarButton label="Madde listesi" onClick={() => command('insertUnorderedList')}><List size={13} /></ToolbarButton>
+          <ToolbarButton label="Madde listesi" active={activeMarks.bulletList} onClick={() => command('insertUnorderedList')}><List size={13} /></ToolbarButton>
           <select
             defaultValue=""
             title="Numaralandırma stili"
@@ -1100,8 +1172,8 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
         </ToolbarGroup>
 
         <ToolbarGroup label="Dönüşüm">
-          <ToolbarButton onClick={() => command('superscript')}>X²</ToolbarButton>
-          <ToolbarButton onClick={() => command('subscript')}>X₂</ToolbarButton>
+          <ToolbarButton active={activeMarks.superscript} onClick={() => command('superscript')}>X²</ToolbarButton>
+          <ToolbarButton active={activeMarks.subscript} onClick={() => command('subscript')}>X₂</ToolbarButton>
           <ToolbarButton label="Tümünü büyük harf" onClick={() => transformSelection('upper')}>AA</ToolbarButton>
           <ToolbarButton label="Kelime başlarını büyüt" onClick={() => transformSelection('title')}>Aa</ToolbarButton>
           <ToolbarButton label="Tümünü küçük harf" onClick={() => transformSelection('lower')}>aa</ToolbarButton>

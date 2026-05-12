@@ -803,7 +803,6 @@
             status('Browser Capture köprüsü hazır değil. Uygulamayı yeniden başlatın.', 'er');
             return;
           }
-          try { console.log('[browser-capture] dispatching action', action); } catch(_l2){}
           var info = null;
           try {
             info = await liveApi.runBrowserCaptureAction(action);
@@ -812,7 +811,6 @@
             status((failPrefix || 'İşlem başarısız') + ': ' + (ipcError && ipcError.message ? ipcError.message : 'IPC hatası'), 'er');
             return;
           }
-          try { console.log('[browser-capture] action result', action, info); } catch(_l4){}
           renderSettingsStatus(info || {});
           if(info && info.ok){
             status(successMsg, 'ok');

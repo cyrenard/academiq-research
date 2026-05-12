@@ -293,6 +293,16 @@
         for(var k = 0; k < nested.length; k++) runs.push(nested[k]);
       }
     }
+    var starts = /^(birlikte|gelmi\u015ftir|gelmistir|g\u00f6r\u00fclmektedir|gorulmektedir|gostermektedir|yaln\u0131zca|yalnizca|\u00f6\u011frenme|ogrenme|ileti\u015fim|iletisim|bilgi|\u00fcretimi|uretimi|gibi|\u00e7e\u015fitli|cesitli|alanlarda|aktif|\u015fekilde|sekilde|kullan\u0131lmaya|kullanilmaya|ba\u015flad\u0131\u011f\u0131|basladigi|hayat\u0131m\u0131z\u0131n|hayatimizin|alan\u0131na|alanina|giren|bireyler|\u00fczerinde|uzerinde|bili\u015fsel|bilissel|izler|b\u0131rakan|birakan|kavram|olarak|ortaya|konmaktad\u0131r|konmaktadir|durum|insan|bili\u015finin|bilisinin|sadece|i\u00e7sel|icsel|unsurlarla|de\u011fil|degil|teknoloji|d\u0131\u015fsal|dissal|etkile\u015fim|etkilesim|i\u00e7erisine|icerisine|girdi\u011fini|girdigini|sayesinde|yo\u011fun|yogun|ak\u0131\u015f\u0131|akisi|y\u00fck\u00fcn\u00fc|yukunu|art\u0131rabilmekte|artirabilmekte|d\u00fczenleme|duzenleme|yeniden|organize|etme|becerilerinin|\u00f6nemini|onemini|ili\u015fkileri|iliskileri|ili\u015fkiler|iliskiler|bulunabilmektedir|bulunabilmekte|bulunabilir|dijitalle\u015fmenin|dijitallesmenin|yayg\u0131nla\u015fmas\u0131yla|yayginlasmasiyla|teknolojilerin|platformlar|arac\u0131l\u0131\u011f\u0131yla|araciligiyla|kullan\u0131lan|kullanilan|olmaktan|\u00e7\u0131k\u0131p|cikip|ba\u011flamda|baglamda|bireylerin|becerileri|art\u0131rmaktad\u0131r|artirmaktadir|d\u00fczenlenmesi|duzenlenmesi)\b/i;
+    var letter = /[0-9A-Za-z\u00c0-\u024f\u1e00-\u1eff\u00c7\u011e\u0130\u00d6\u015e\u00dc\u00e7\u011f\u0131\u00f6\u015f\u00fc]/;
+    for(var r = 0; r < runs.length - 1; r++){
+      var left = runs[r];
+      var right = runs[r + 1];
+      if(!left || !right || typeof left.text !== 'string' || typeof right.text !== 'string') continue;
+      if(/\s$/.test(left.text) || /^\s/.test(right.text)) continue;
+      if(!letter.test(left.text.slice(-1)) || !letter.test(right.text.charAt(0))) continue;
+      if(starts.test(String(right.text || '').toLocaleLowerCase('tr-TR'))) right.text = ' ' + right.text;
+    }
     return runs;
   }
 

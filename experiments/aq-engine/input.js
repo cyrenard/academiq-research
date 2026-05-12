@@ -65,6 +65,7 @@
     // Mirrors Word's "press Ctrl+B then type → that text is bold". Cleared on
     // any non-insert action (cursor move, click, Enter, delete, etc.).
     var pendingMarks = {};
+    var trigRefreshTimer = 0;
     function clearPending(){ pendingMarks = {}; reflectPending(); }
     function setPending(mark, value){ pendingMarks[mark] = !!value; reflectPending(); }
     function hasPending(){ for(var k in pendingMarks) if(pendingMarks[k] !== undefined) return true; return false; }
@@ -96,6 +97,81 @@
     // ── Edit operations ────────────────────────────────────────────────────
     function r(){ return getSel().getRange(); }
 
+    function normalizeBibliographyTitleText(text){
+      return String(text || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\u00e7/g, 'c')
+        .replace(/\u0131/g, 'i')
+        .replace(/\u015f/g, 's')
+        .replace(/\u011f/g, 'g')
+        .replace(/\u00fc/g, 'u')
+        .replace(/\u00f6/g, 'o');
+    }
+
+    function blockText(block){
+      return ((block && block.runs) || []).map(function(run){ return String(run && run.text || ''); }).join('');
+    }
+
+    function isBibliographyHeadingBlock(block){
+      var t = normalizeBibliographyTitleText(blockText(block));
+      return !!(block && (block._isBibHeading || (block.type === 'heading' && (t === 'kaynakca' || t === 'references' || t === 'bibliography' || t === 'kaynaklar'))));
+    }
+
+    function isBibliographyEntryBlock(block){
+      var cls = String(block && block.attrs && block.attrs.class || '');
+      return !!(block && (block._isBibEntry || (block.attrs && block.attrs.refId) || /\b(refe|aq-ref-entry)\b/.test(cls)));
+    }
+
+    function findBibliographyHeadingIndex(blocks){
+      blocks = Array.isArray(blocks) ? blocks : [];
+      for(var i = 0; i < blocks.length; i++){
+        if(isBibliographyHeadingBlock(blocks[i])) return i;
+      }
+      return -1;
+    }
+
+    function blockStartOffset(blockIdx){
+      var blocks = doc.get().blocks || [];
+      var off = 0;
+      for(var i = 0; i < blockIdx && i < blocks.length; i++){
+        off += blockTextLength(blocks[i]) + 1;
+      }
+      return off;
+    }
+
+    function markManualBibliographyEditSoon(){
+      if(typeof window === 'undefined') return;
+      setTimeout(function(){
+        try{
+          var state = window.S || {};
+          var docs = Array.isArray(state.docs) ? state.docs : [];
+          var current = docs.find(function(item){ return item && item.id === state.curDoc; }) || null;
+          if(current && window.AQBibliographyState && typeof window.AQBibliographyState.captureAQEngineBibliographyHTML === 'function'){
+            window.AQBibliographyState.captureAQEngineBibliographyHTML(window.editor || null, current);
+            if(typeof window.save === 'function') window.save();
+          }
+        }catch(_e){}
+      }, 0);
+    }
+
+    function routeTypingBeforeBibliographyIfNeeded(at){
+      var d = doc.get();
+      var blocks = d.blocks || [];
+      var loc = doc.locate(at);
+      var block = blocks[loc.blockIdx];
+      var isBibliographyEntry = isBibliographyEntryBlock(block);
+      if(!isBibliographyHeadingBlock(block) && !isBibliographyEntry) return at;
+      var headingIdx = isBibliographyHeadingBlock(block) ? loc.blockIdx : findBibliographyHeadingIndex(blocks);
+      if(headingIdx < 0) return at;
+      var blank = { type:'paragraph', runs:[{ text:'' }], firstLineIndentPx:36, font:{ sizePt:12, weight:'400', style:'normal' } };
+      doc.replace(blocks.slice(0, headingIdx).concat([blank]).concat(blocks.slice(headingIdx)));
+      onChanged();
+      var nextAt = blockStartOffset(headingIdx);
+      getSel().setRange(nextAt, nextAt);
+      return nextAt;
+    }
+
     function citationRunBoundsAtOffset(off){
       var d = doc.get();
       var cursor = 0;
@@ -116,6 +192,29 @@
         cursor += intra + 1;
       }
       return null;
+    }
+
+    function expandRangeToCitationRuns(from, to){
+      var lo = Math.min(from, to);
+      var hi = Math.max(from, to);
+      var left = citationRunBoundsAtOffset(lo);
+      var right = citationRunBoundsAtOffset(Math.max(lo, hi - 1));
+      if(left && lo > left.from && lo < left.to) lo = left.from;
+      if(right && hi > right.from && hi < right.to) hi = right.to;
+      return { from: lo, to: hi };
+    }
+
+    function deleteCitationRunIfAtBoundary(offset, direction){
+      var bounds = citationRunBoundsAtOffset(offset);
+      if(!bounds) return false;
+      if(direction === 'backward' && offset <= bounds.from) return false;
+      if(direction === 'forward' && offset >= bounds.to) return false;
+      if(isTrackChangesEnabled()) markTrackedDeletion(bounds.from, bounds.to);
+      else doc.deleteRange(bounds.from, bounds.to);
+      onChanged();
+      getSel().setRange(bounds.from, bounds.from);
+      scheduleTrigRefresh();
+      return true;
     }
 
     function doInsertText(text){
@@ -142,10 +241,16 @@
       var range = r();
       var tracking = isTrackChangesEnabled();
       if(range.from !== range.to){
-        if(tracking) markTrackedDeletion(range.from, range.to);
-        else doc.deleteRange(range.from, range.to);
+        var expandedDelete = expandRangeToCitationRuns(range.from, range.to);
+        if(tracking) markTrackedDeletion(expandedDelete.from, expandedDelete.to);
+        else doc.deleteRange(expandedDelete.from, expandedDelete.to);
+        range = { from: expandedDelete.from, to: expandedDelete.from };
       }
       var at = Math.min(range.from, range.to);
+      if(range.from === range.to) at = routeTypingBeforeBibliographyIfNeeded(at);
+      var locForManual = doc.locate(at);
+      var blockForManual = (doc.get().blocks || [])[locForManual.blockIdx];
+      var manualBibliographyEdit = isBibliographyEntryBlock(blockForManual) && !isBibliographyHeadingBlock(blockForManual);
       if(range.from === range.to){
         var citationBounds = citationRunBoundsAtOffset(at);
         if(citationBounds && at < citationBounds.to){
@@ -154,7 +259,9 @@
       }
       doc.insertText(at, text);
       var newOff = at + text.length;
-      doc.applyMark(at, newOff, 'citation', false);
+      if(doc.rangeHasMark && doc.rangeHasMark(at, newOff, 'citation')){
+        doc.applyMark(at, newOff, 'citation', false);
+      }
       if(tracking) doc.applyMark(at, newOff, 'trackInsert', true);
       // Apply pending marks to just the inserted range so Ctrl+B → typing
       // produces bold characters without changing surrounding text.
@@ -166,6 +273,7 @@
         }
       }
       onChanged();
+      if(manualBibliographyEdit) markManualBibliographyEditSoon();
       getSel().setRange(newOff, newOff);
 
       scheduleTrigRefresh();
@@ -224,7 +332,9 @@
 
     function scheduleTrigRefresh(){
       if(isCitationTransactionBlocked()) return;
-      setTimeout(function(){
+      if(trigRefreshTimer) clearTimeout(trigRefreshTimer);
+      trigRefreshTimer = setTimeout(function(){
+        trigRefreshTimer = 0;
         if(isCitationTransactionBlocked()) return;
         try {
           if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
@@ -233,7 +343,7 @@
             window.checkTrig();
           }
         } catch(_e){}
-      }, 0);
+      }, 350);
     }
 
     function doSplitBlock(){
@@ -245,6 +355,13 @@
       // another empty bullet.
       var loc = doc.locate(at);
       var block = doc.get().blocks[loc.blockIdx];
+      if(isBibliographyHeadingBlock(block) || isBibliographyEntryBlock(block)){
+        var nextAt = routeTypingBeforeBibliographyIfNeeded(at);
+        getSel().setRange(nextAt, nextAt);
+        scheduleTrigRefresh();
+        return;
+      }
+      var manualBibliographySplit = isBibliographyEntryBlock(block);
       if(block && block.list && blockTextLength(block) === 0){
         doc.setListType(loc.blockIdx, null);
         onChanged();
@@ -255,6 +372,7 @@
       doc.splitBlock(at);
       var newOff = at + 1;
       onChanged();
+      if(manualBibliographySplit) markManualBibliographyEditSoon();
       getSel().setRange(newOff, newOff);
       scheduleTrigRefresh();
     }
@@ -262,22 +380,30 @@
     function doDeleteBackward(){
       clearPending();
       var range = r();
+      var manualBibliographyEdit = false;
       if(range.from !== range.to){
-        var lo = Math.min(range.from, range.to);
-        if(isTrackChangesEnabled()) markTrackedDeletion(range.from, range.to);
-        else doc.deleteRange(range.from, range.to);
+        var expandedDelete = expandRangeToCitationRuns(range.from, range.to);
+        var lo = expandedDelete.from;
+        var delLoc = doc.locate(lo);
+        manualBibliographyEdit = isBibliographyEntryBlock((doc.get().blocks || [])[delLoc.blockIdx]);
+        if(isTrackChangesEnabled()) markTrackedDeletion(expandedDelete.from, expandedDelete.to);
+        else doc.deleteRange(expandedDelete.from, expandedDelete.to);
         onChanged();
+        if(manualBibliographyEdit) markManualBibliographyEditSoon();
         getSel().setRange(lo, lo);
         scheduleTrigRefresh();
         return;
       }
       if(range.from <= 0) return;
+      if(deleteCitationRunIfAtBoundary(range.from, 'backward')) return;
       var loc = doc.locate(range.from);
       var blockLen = blockTextLength(doc.get().blocks[loc.blockIdx]);
+      manualBibliographyEdit = isBibliographyEntryBlock((doc.get().blocks || [])[loc.blockIdx]);
       if(loc.intra === 0 && loc.blockIdx > 0){
         // Caret at very start of a block → merge with previous
         var newOff = doc.mergeWithPrevious(loc.blockIdx);
         onChanged();
+        if(manualBibliographyEdit) markManualBibliographyEditSoon();
         if(newOff >= 0) getSel().setRange(newOff, newOff);
         scheduleTrigRefresh();
         return;
@@ -286,6 +412,7 @@
       if(isTrackChangesEnabled()) markTrackedDeletion(range.from - 1, range.from);
       else doc.deleteRange(range.from - 1, range.from);
       onChanged();
+      if(manualBibliographyEdit) markManualBibliographyEditSoon();
       getSel().setRange(range.from - 1, range.from - 1);
       scheduleTrigRefresh();
     }
@@ -293,24 +420,32 @@
     function doDeleteForward(){
       clearPending();
       var range = r();
+      var manualBibliographyEdit = false;
       if(range.from !== range.to){
-        var lo = Math.min(range.from, range.to);
-        if(isTrackChangesEnabled()) markTrackedDeletion(range.from, range.to);
-        else doc.deleteRange(range.from, range.to);
+        var expandedDelete = expandRangeToCitationRuns(range.from, range.to);
+        var lo = expandedDelete.from;
+        var delLoc = doc.locate(lo);
+        manualBibliographyEdit = isBibliographyEntryBlock((doc.get().blocks || [])[delLoc.blockIdx]);
+        if(isTrackChangesEnabled()) markTrackedDeletion(expandedDelete.from, expandedDelete.to);
+        else doc.deleteRange(expandedDelete.from, expandedDelete.to);
         onChanged();
+        if(manualBibliographyEdit) markManualBibliographyEditSoon();
         getSel().setRange(lo, lo);
         scheduleTrigRefresh();
         return;
       }
       var docLen = doc.length();
       if(range.from >= docLen) return;
+      if(deleteCitationRunIfAtBoundary(range.from, 'forward')) return;
       var loc = doc.locate(range.from);
       var block = doc.get().blocks[loc.blockIdx];
+      manualBibliographyEdit = isBibliographyEntryBlock(block);
       var blockLen = blockTextLength(block);
       if(loc.intra >= blockLen && loc.blockIdx < doc.get().blocks.length - 1){
         // Caret at very end of a block → merge next block back
         var newOff = doc.mergeWithPrevious(loc.blockIdx + 1);
         onChanged();
+        if(manualBibliographyEdit) markManualBibliographyEditSoon();
         if(newOff >= 0) getSel().setRange(newOff, newOff);
         scheduleTrigRefresh();
         return;
@@ -318,6 +453,7 @@
       if(isTrackChangesEnabled()) markTrackedDeletion(range.from, range.from + 1);
       else doc.deleteRange(range.from, range.from + 1);
       onChanged();
+      if(manualBibliographyEdit) markManualBibliographyEditSoon();
       getSel().setRange(range.from, range.from);
       scheduleTrigRefresh();
     }
@@ -718,7 +854,11 @@
       deleteBackward: doDeleteBackward,
       deleteForward: doDeleteForward,
       getRange: function(){ return r(); },
-      destroy: function(){ if(ta.parentNode) ta.parentNode.removeChild(ta); }
+      destroy: function(){
+        if(trigRefreshTimer) clearTimeout(trigRefreshTimer);
+        trigRefreshTimer = 0;
+        if(ta.parentNode) ta.parentNode.removeChild(ta);
+      }
     };
   }
 

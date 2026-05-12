@@ -215,6 +215,11 @@ const electronAPI = {
   downloadUpdate:  (url)      => invoke('update:download', asURL(url)),
   setUpdateUrl:    (url)      => invoke('update:setUrl', asURL(url)),
   restartApp:      ()         => invoke('update:restart'),
+
+  // Window chrome
+  minimizeWindow:  ()         => invoke('window:minimize'),
+  toggleMaximizeWindow: ()    => invoke('window:toggleMaximize'),
+  closeWindow:     ()         => invoke('window:close'),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', Object.freeze(electronAPI));

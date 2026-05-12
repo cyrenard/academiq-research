@@ -15,7 +15,6 @@ import {
   createBlankState,
   deleteWorkspace,
   deleteDocument,
-  deleteNote,
   getActiveDocument,
   getActiveWorkspace,
   hydrateAppState,
@@ -83,7 +82,7 @@ function normalizeDoiInput(value: string) {
 }
 
 function escapeHTML(value: unknown) {
-  return String(value ?? '')
+  return String(value == null ? '' : value)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -115,6 +114,23 @@ function buildNoteInsertHTML(note: AcademiqNote) {
   const isQuote = note.noteType === 'direct_quote' || note.type === 'hl' || Boolean(note.q);
   const body = isQuote ? `<blockquote>${paragraphs}</blockquote>` : paragraphs;
   return `<span class="aq-note-link" ${attrs}>${body}</span>`;
+}
+
+function collectReferenceIdsFromHTML(html: string) {
+  const ids = new Set<string>();
+  const source = String(html || '');
+  const addIds = (raw: string) => {
+    raw.split(',').map((id) => id.trim()).filter(Boolean).forEach((id) => ids.add(id));
+  };
+  source.replace(/\b(?:data-ref|data-aq-ref)\s*=\s*(['"])(.*?)\1/gi, (_match, _quote, raw) => {
+    addIds(String(raw || ''));
+    return _match;
+  });
+  source.replace(/\b(?:ref|id)\s*:\s*(['"]?)([A-Za-z0-9_:-]+)\1/gi, (_match, _quote, raw) => {
+    addIds(String(raw || ''));
+    return _match;
+  });
+  return ids;
 }
 
 function normalizeIsbnInput(value: string) {
@@ -448,6 +464,19 @@ export default function App() {
   const editorContext = useMemo(() => ({ editorRef }), []);
   const activeWorkspace = getActiveWorkspace(appState);
   const activeDocument = getActiveDocument(appState);
+  const activeWorkspaceNotes = useMemo(
+    () => appState.notes.filter((note) => String(note.wsId || appState.cur) === appState.cur),
+    [appState.notes, appState.cur]
+  );
+  const activeWorkspaceNotebooks = useMemo(
+    () => (appState.notebooks || []).filter((notebook) => String(notebook.wsId || appState.cur) === appState.cur),
+    [appState.notebooks, appState.cur]
+  );
+  const activeDocumentUsedReferences = useMemo(() => {
+    const usedIds = collectReferenceIdsFromHTML(String(activeDocument.content || appState.doc || ''));
+    if (!usedIds.size) return [];
+    return (activeWorkspace.lib || []).filter((ref) => usedIds.has(ref.id));
+  }, [activeDocument.content, activeWorkspace.lib, appState.doc]);
   const referenceLabels = useMemo(() => {
     const byName = new Map<string, { name: string; color?: string }>();
     const customLabels = Array.isArray(appState.customLabels) ? appState.customLabels : [];
@@ -507,10 +536,7 @@ export default function App() {
   };
 
   const openLegacySaveSurface = () => {
-    const win = window as any;
-    if (win.AQLeanUIShell && typeof win.AQLeanUIShell.openSidePanel === 'function') {
-      win.AQLeanUIShell.openSidePanel('history');
-    }
+    setFeatureModal('recovery');
   };
 
   appStateRef.current = appState;
@@ -551,16 +577,53 @@ export default function App() {
     await window.electronAPI?.saveData?.(payload);
   }, []);
 
+  const persistEditorDraft = useCallback(async (nextState: AcademiqAppState) => {
+    appStateRef.current = nextState;
+    const win = window as any;
+    win.S = { ...(win.S || {}), ...nextState };
+    await window.electronAPI?.saveEditorDraft?.(JSON.stringify(nextState));
+  }, []);
+
+  const reloadStateFromDisk = useCallback(async (focus?: { workspaceId?: string; refId?: string }) => {
+    const result = await window.electronAPI?.loadData?.();
+    const hydrated = normalizeReferenceState(
+      result?.ok && result.data ? hydrateAppState(JSON.parse(String(result.data))) : createBlankState()
+    );
+    const next = focus?.workspaceId && hydrated.wss.some((workspace) => workspace.id === focus.workspaceId)
+      ? switchWorkspace(hydrated, focus.workspaceId)
+      : hydrated;
+    setLoadMeta(result && typeof result === 'object' ? result as Record<string, unknown> : null);
+    setAppState(next);
+    appStateRef.current = next;
+    const workspace = getActiveWorkspace(next);
+    setActiveReferenceId((current) => (
+      focus?.refId && workspace.lib.some((ref) => ref.id === focus.refId)
+        ? focus.refId
+        : workspace.lib.some((ref) => ref.id === current)
+          ? current
+          : workspace.lib[0]?.id || ''
+    ));
+    setLoading(false);
+    return next;
+  }, []);
+
+  const flushEditorToState = useCallback(async () => {
+    const currentHTML = editorRef.current?.getHTML?.();
+    const nextState = currentHTML ? updateActiveDocumentHTML(appStateRef.current, currentHTML) : appStateRef.current;
+    appStateRef.current = nextState;
+    setAppState(nextState);
+    const win = window as any;
+    win.S = { ...(win.S || {}), ...nextState };
+    try { if (typeof win.save === 'function') win.save(); } catch (_error) {}
+    await window.electronAPI?.saveData?.(JSON.stringify(nextState));
+    return nextState;
+  }, []);
+
   useEffect(() => {
     let alive = true;
-    window.electronAPI?.loadData?.()
-      .then((result) => {
+    reloadStateFromDisk()
+      .then(() => {
         if (!alive) return;
-        const hydrated = normalizeReferenceState(result?.ok && result.data ? hydrateAppState(JSON.parse(String(result.data))) : createBlankState());
-        setLoadMeta(result && typeof result === 'object' ? result as Record<string, unknown> : null);
-        setAppState(hydrated);
-        appStateRef.current = hydrated;
-        setActiveReferenceId(getActiveWorkspace(hydrated).lib[0]?.id || '');
         setLoading(false);
       })
       .catch(() => {
@@ -569,13 +632,15 @@ export default function App() {
         setAppState(fallback);
         appStateRef.current = fallback;
         setLoading(false);
-        flashStatus('Veri yuklenemedi');
+        flashStatus('Veri yüklenemedi');
       });
     return () => { alive = false; };
-  }, []);
+  }, [reloadStateFromDisk]);
 
   useEffect(() => {
-    window.electronAPI?.browserCaptureRendererReady?.().catch(() => {});
+    window.electronAPI?.browserCaptureRendererReady?.()
+      .then(() => reloadStateFromDisk().catch(() => undefined))
+      .catch(() => {});
     const offIncoming = window.electronAPI?.onBrowserCaptureIncoming?.((payload: any) => {
       const refPayload = payload?.payload || payload || {};
       const ref = {
@@ -590,12 +655,17 @@ export default function App() {
         referenceType: String(refPayload.referenceType || 'article'),
         browserCaptureMeta: refPayload
       };
-      const next = addReferenceToActiveWorkspace(appStateRef.current, ref);
+      const targetWorkspaceId = String(refPayload.selectedWorkspaceId || refPayload.workspaceId || '');
+      const baseState = targetWorkspaceId && appStateRef.current.wss.some((workspace) => workspace.id === targetWorkspaceId)
+        ? switchWorkspace(appStateRef.current, targetWorkspaceId)
+        : appStateRef.current;
+      const next = addReferenceToActiveWorkspace(baseState, ref);
       persistState(next)
         .then(() => {
           setActiveReferenceId(ref.id);
           flashStatus('Browser capture kaynağı eklendi');
-          if (payload?.id) window.electronAPI.ackBrowserCapturePayload(String(payload.id)).catch(() => {});
+          const queueId = String(payload?.queueId || payload?.id || '');
+          if (queueId) window.electronAPI.ackBrowserCapturePayload(queueId).catch(() => {});
         })
         .catch(() => flashStatus('Browser capture kaydedilemedi'));
     });
@@ -604,7 +674,16 @@ export default function App() {
       handleAddWorkspace(name);
       flashStatus('Capture workspace oluşturuldu');
     });
-    const offState = window.electronAPI?.onBrowserCaptureStateChanged?.(() => {
+    const offState = window.electronAPI?.onBrowserCaptureStateChanged?.((payload: any) => {
+      if (payload?.reason === 'capture-imported') {
+        reloadStateFromDisk({
+          workspaceId: String(payload.workspaceId || ''),
+          refId: String(payload.refId || '')
+        })
+          .then(() => flashStatus('Browser capture kaynağı eklendi'))
+          .catch(() => flashStatus('Browser capture geldi, veri yenilenemedi'));
+        return;
+      }
       flashStatus('Browser capture durumu güncellendi');
     });
     return () => {
@@ -612,7 +691,7 @@ export default function App() {
       offWorkspace?.();
       offState?.();
     };
-  }, [persistState]);
+  }, [persistState, reloadStateFromDisk]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -628,8 +707,8 @@ export default function App() {
 
   const handleEditorChange = useCallback((editorState: AcademiqEditorState) => {
     const next = updateActiveDocumentHTML(appStateRef.current, editorState.html);
-    persistState(next, true).catch(() => flashStatus('Taslak kaydedilemedi'));
-  }, [persistState]);
+    persistEditorDraft(next).catch(() => flashStatus('Taslak kaydedilemedi'));
+  }, [persistEditorDraft]);
 
   const handleWorkspaceChange = (workspaceId: string) => {
     const currentHTML = editorRef.current?.getHTML?.();
@@ -637,14 +716,14 @@ export default function App() {
     const next = switchWorkspace(committed, workspaceId);
     persistState(next).catch(() => flashStatus('Workspace kaydedilemedi'));
     setActiveReferenceId(getActiveWorkspace(next).lib[0]?.id || '');
-    flashStatus('Workspace degisti');
+    flashStatus('Workspace değişti');
   };
 
   const handleDocumentChange = (docId: string) => {
     const currentHTML = editorRef.current?.getHTML?.();
     const committed = currentHTML ? updateActiveDocumentHTML(appStateRef.current, currentHTML) : appStateRef.current;
     const next = switchDocument(committed, docId);
-    persistState(next).then(() => flashStatus('Belge degisti')).catch(() => flashStatus('Belge kaydedilemedi'));
+    persistState(next).then(() => flashStatus('Belge değişti')).catch(() => flashStatus('Belge kaydedilemedi'));
   };
 
   const handleAddDocument = () => {
@@ -660,7 +739,7 @@ export default function App() {
     const name = window.prompt('Belge ad?', current.name || current.id);
     if (!name) return;
     const next = renameDocument(appStateRef.current, current.id, name);
-    persistState(next).then(() => flashStatus('Belge yeniden adlandirildi')).catch(() => flashStatus('Belge kaydedilemedi'));
+    persistState(next).then(() => flashStatus('Belge yeniden adlandırıldı')).catch(() => flashStatus('Belge kaydedilemedi'));
   };
 
   const handleDeleteDocument = () => {
@@ -693,7 +772,7 @@ export default function App() {
       const workspace = appStateRef.current.wss.find((item) => item.id === target.workspaceId);
       if (!workspace) return;
       const next = renameWorkspace(appStateRef.current, workspace.id, name);
-      persistState(next).then(() => flashStatus('Workspace yeniden adlandirildi')).catch(() => flashStatus('Workspace kaydedilemedi'));
+      persistState(next).then(() => flashStatus('Workspace yeniden adlandırıldı')).catch(() => flashStatus('Workspace kaydedilemedi'));
       return;
     }
     handleAddWorkspace(name);
@@ -749,7 +828,7 @@ export default function App() {
       return;
     }
 
-    flashStatus(doi ? 'DOI metadata cekiliyor...' : isbn ? 'ISBN metadata cekiliyor...' : 'Kaynak araniyor...');
+    flashStatus(doi ? 'DOI metadata çekiliyor...' : isbn ? 'ISBN metadata çekiliyor...' : 'Kaynak aranıyor...');
     let metadata: AcademiqReference | Record<string, unknown> | null = null;
     try {
       if (doi) {
@@ -910,7 +989,7 @@ export default function App() {
   const handleUpdateNote = (noteId: string, patch: Record<string, unknown>) => {
     const next = {
       ...appStateRef.current,
-      notes: appStateRef.current.notes.map((note) => note.id === noteId ? { ...note, ...patch } : note)
+      notes: appStateRef.current.notes.map((note) => note.id === noteId && String(note.wsId || appStateRef.current.cur) === appStateRef.current.cur ? { ...note, ...patch } : note)
     };
     persistState(next).then(() => flashStatus('Not güncellendi')).catch(() => flashStatus('Not kaydedilemedi'));
   };
@@ -947,7 +1026,7 @@ export default function App() {
     }
     const next = {
       ...appStateRef.current,
-      notes: appStateRef.current.notes.map((item) => item.id === note.id ? { ...item, inserted: true } : item)
+      notes: appStateRef.current.notes.map((item) => item.id === note.id && String(item.wsId || appStateRef.current.cur) === appStateRef.current.cur ? { ...item, inserted: true } : item)
     };
     persistState(next).then(() => flashStatus('Not belgeye eklendi')).catch(() => flashStatus('Not eklendi, kayıt hatası'));
   };
@@ -988,9 +1067,15 @@ export default function App() {
       scroll.innerHTML = '';
       const total = Number(pdf.numPages || 0);
       const pdfUtil = pdfjs.Util || {};
-      const savedHighlights = Array.isArray(win.__aqCurrentPdfReference?._hlData)
+      const savedHighlightsRaw = Array.isArray(win.__aqCurrentPdfReference?._hlData)
         ? win.__aqCurrentPdfReference._hlData
         : [];
+      const savedHighlights = savedHighlightsRaw.map((item: any, index: number) => ({
+        ...item,
+        id: String(item?.id || `hl_${Number(item?.page || 1)}_${index}_${String(item?.createdAt || Date.now())}`)
+      }));
+      if (win.__aqCurrentPdfReference) win.__aqCurrentPdfReference._hlData = savedHighlights.slice();
+      win.hlData = savedHighlights.slice();
       for (let pageNumber = 1; pageNumber <= total; pageNumber += 1) {
         const page = await pdf.getPage(pageNumber);
         const viewport = page.getViewport({ scale });
@@ -1028,6 +1113,18 @@ export default function App() {
         drawCanvas.style.width = `${Math.round(viewport.width)}px`;
         drawCanvas.style.height = `${Math.round(viewport.height)}px`;
         wrap.appendChild(drawCanvas);
+        const savedDrawing = win.__aqCurrentPdfReference?._drawings?.[String(pageNumber)];
+        if (savedDrawing) {
+          const drawContext = drawCanvas.getContext('2d');
+          if (drawContext) {
+            const image = new Image();
+            image.onload = () => {
+              drawContext.setTransform(dpr, 0, 0, dpr, 0, 0);
+              drawContext.drawImage(image, 0, 0, Math.round(viewport.width), Math.round(viewport.height));
+            };
+            image.src = String(savedDrawing);
+          }
+        }
         scroll.appendChild(wrap);
         if (context) {
           context.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1074,7 +1171,12 @@ export default function App() {
         } catch (error) {
           console.warn('[react-pdf-text-layer]', error);
         }
-        const pageHighlights = savedHighlights.filter((item: any) => Number(item?.page || 0) === pageNumber);
+        const pageHighlights = savedHighlights
+          .map((item: any, index: number) => ({
+            ...item,
+            id: String(item?.id || `hl_${Number(item?.page || 1)}_${index}_${String(item?.createdAt || Date.now())}`)
+          }))
+          .filter((item: any) => Number(item?.page || 0) === pageNumber);
         if (pageHighlights.length) {
           const highlightContext = highlightCanvas.getContext('2d');
           if (highlightContext) {
@@ -1091,6 +1193,7 @@ export default function App() {
                 const hit = document.createElement('button');
                 hit.type = 'button';
                 hit.className = 'pdf-fallback-highlight-hit';
+                hit.dataset.highlightId = String(highlight.id || '');
                 hit.dataset.page = String(pageNumber);
                 hit.dataset.text = String(highlight.text || '');
                 hit.dataset.rects = JSON.stringify(highlight.rects || []);
@@ -1192,12 +1295,17 @@ export default function App() {
             }
             if (!opened) opened = await renderPdfBufferFallback(buffer, title);
           } else if (result && result.ok === false) {
-            flashStatus(`PDF yuklenemedi: ${String(result.error || 'dosya bulunamad?')}`);
+            flashStatus(`PDF yüklenemedi: ${String(result.error || 'dosya bulunamadı')}`);
           }
         }
         if (!opened) {
-          if (!callLegacy('togglePDF')) flashStatus('PDF viewer hazır değil');
-          else flashStatus('PDF dosyas? bulunamad?');
+          const panel = document.getElementById('pdfpanel');
+          if (panel?.classList.contains('open')) {
+            flashStatus('PDF açılıyor');
+          } else {
+            panel?.classList.add('open');
+            flashStatus(panel ? 'PDF dosyası bulunamadı' : 'PDF viewer hazır değil');
+          }
         } else {
           flashStatus('PDF açılıyor');
         }
@@ -1207,7 +1315,7 @@ export default function App() {
         flashStatus('PDF klasörde gösterildi');
       }
       if (action === 'delete') {
-        if (!window.confirm('Bu kaynaçın PDF dosyas? silinsin mi?')) return;
+        if (!window.confirm('Bu kaynağın PDF dosyası silinsin mi?')) return;
         await window.electronAPI?.deletePDF?.(referenceId, { id: workspace.id, name: workspace.name });
         flashStatus('PDF silindi');
       }
@@ -1216,11 +1324,12 @@ export default function App() {
           flashStatus('Kaynak seçilmedi');
           return;
         }
+        setPdfProgress({ total: 1, attempted: 0, downloaded: 0, failed: 0, active: true });
         setActiveReferenceId(referenceId);
         const win = window as any;
         let url = String(ref.pdfUrl || '').trim();
         if (!url && ref.doi && typeof win.fetchOAUrls === 'function') {
-          flashStatus('OA PDF URL araniyor...');
+          flashStatus('OA PDF URL aranıyor...');
           try {
             const urls = await win.fetchOAUrls(ref.doi);
             if (Array.isArray(urls) && urls.length) {
@@ -1232,17 +1341,13 @@ export default function App() {
             }
           } catch (_error) {}
         }
-        if (typeof win.downloadPDF === 'function') {
-          win.downloadPDF(referenceId, url || undefined);
-          flashStatus(url ? 'OA PDF indiriliyor' : 'OA PDF araniyor');
-          return;
-        }
         url = url || String(ref.url || '').trim();
         if (!url) {
-          flashStatus('PDF URL bulunamad?');
+          setPdfProgress({ total: 1, attempted: 1, downloaded: 0, failed: 1, active: false });
+          flashStatus('PDF URL bulunamadı');
           return;
         }
-        await window.electronAPI?.downloadPDFfromURL?.(url, referenceId, {
+        const result = await window.electronAPI?.downloadPDFfromURL?.(url, referenceId, {
           ws: { id: workspace.id, name: workspace.name },
           expectedDoi: ref.doi,
           expectedTitle: ref.title,
@@ -1250,11 +1355,18 @@ export default function App() {
           expectedYear: ref.year,
           requireDoiEvidence: Boolean(ref.doi),
           allowUnverifiedPdf: true
-        });
-        callLegacy('openRef', referenceId);
-        flashStatus('PDF indirildi');
+        }) as any;
+        if (result?.ok) {
+          setPdfProgress({ total: 1, attempted: 1, downloaded: 1, failed: 0, active: false });
+          callLegacy('openRef', referenceId);
+          flashStatus('PDF indirildi');
+        } else {
+          setPdfProgress({ total: 1, attempted: 1, downloaded: 0, failed: 1, active: false });
+          flashStatus(`PDF indirilemedi${result?.error ? ` · ${String(result.error).slice(0, 120)}` : ''}`);
+        }
       }
     } catch (_error) {
+      if (action === 'download') setPdfProgress({ total: 1, attempted: 1, downloaded: 0, failed: 1, active: false });
       flashStatus('PDF işlemi başarısız');
     }
   };
@@ -1269,8 +1381,8 @@ export default function App() {
       : [...current, String(collectionId)];
     const next = updateReferenceInActiveWorkspace(appStateRef.current, referenceId, { collectionIds: nextCollectionIds });
     persistState(next)
-      .then(() => flashStatus(nextCollectionIds.length === current.length ? 'Kaynak klasörden cikarildi' : 'Kaynak klasöre eklendi'))
-      .catch(() => flashStatus('Klasör atamas? kaydedilemedi'));
+      .then(() => flashStatus(nextCollectionIds.length === current.length ? 'Kaynak klasörden çıkarıldı' : 'Kaynak klasöre eklendi'))
+      .catch(() => flashStatus('Klasör ataması kaydedilemedi'));
   };
 
   const handleToggleReferenceLabel = (referenceId: string, label: { name: string; color?: string }) => {
@@ -1284,7 +1396,7 @@ export default function App() {
       : [...current, { name: label.name, color: label.color || '#9aa' }];
     const next = updateReferenceInActiveWorkspace(appStateRef.current, referenceId, { labels: nextLabels });
     persistState(next)
-      .then(() => flashStatus(exists ? 'Etiket kaldirildi' : 'Etiket eklendi'))
+      .then(() => flashStatus(exists ? 'Etiket kaldırıldı' : 'Etiket eklendi'))
       .catch(() => flashStatus('Etiket kaydedilemedi'));
   };
 
@@ -1366,7 +1478,7 @@ export default function App() {
         : item)
     };
     persistState(next)
-      .then(() => flashStatus('Klasör yeniden adlandirildi'))
+      .then(() => flashStatus('Klasör yeniden adlandırıldı'))
       .catch(() => flashStatus('Klasör kaydedilemedi'));
   };
 
@@ -1437,7 +1549,7 @@ export default function App() {
           : '';
         setPdfProgress({ total: candidates.length, attempted: candidates.length, downloaded, failed, active: false });
         if (downloaded) {
-          flashStatus(`OA PDF indirme bitti: ${downloaded} bulundu${failed ? `, ${failed} bulunamad?` : ''}`);
+          flashStatus(`OA PDF indirme bitti: ${downloaded} bulundu${failed ? `, ${failed} bulunamadı` : ''}`);
           return;
         }
         flashStatus(`Legacy OA bulamad?, alternatif resolver deneniyor${lastFailure ? `: ${lastFailure}` : ''}`);
@@ -1457,7 +1569,7 @@ export default function App() {
       if (!url) {
         failed++;
         setPdfProgress({ total: candidates.length, attempted: done + failed, downloaded: done, failed, active: true });
-        flashStatus(`OA PDF bulunamad?: ${done + failed}/${candidates.length}`);
+        flashStatus(`OA PDF bulunamadı: ${done + failed}/${candidates.length}`);
         continue;
       }
       try {
@@ -1519,7 +1631,11 @@ export default function App() {
   };
 
   const handleDeleteNote = (noteId: string) => {
-    const next = deleteNote(appStateRef.current, noteId);
+    const currentWsId = appStateRef.current.cur;
+    const next = {
+      ...appStateRef.current,
+      notes: appStateRef.current.notes.filter((note) => note.id !== noteId || String(note.wsId || currentWsId) !== currentWsId)
+    };
     persistState(next).then(() => flashStatus('Not silindi')).catch(() => flashStatus('Not silinemedi'));
   };
 
@@ -1533,15 +1649,70 @@ export default function App() {
           .split(/[;,]/)
           .map((item) => item.trim())
           .filter(Boolean);
-        if (!currentTags.includes(target)) return note;
+        if (String(note.wsId || appStateRef.current.cur) !== appStateRef.current.cur || !currentTags.includes(target)) return note;
         const merged = currentTags.filter((item) => item !== target).join(', ');
         return { ...note, tag: merged, sourcePage: merged };
       })
     };
-    persistState(next).then(() => flashStatus('Etiket notlardan kaldirildi')).catch(() => flashStatus('Etiket silinemedi'));
+    persistState(next).then(() => flashStatus('Etiket notlardan kaldırıldı')).catch(() => flashStatus('Etiket silinemedi'));
+  };
+
+  const handleCreateNotebook = (name: string) => {
+    const title = String(name || '').trim();
+    if (!title) {
+      flashStatus('Not defteri adı boş');
+      return;
+    }
+    const id = `${appStateRef.current.cur}:nb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    const next = {
+      ...appStateRef.current,
+      notebooks: [...(appStateRef.current.notebooks || []), { id, wsId: appStateRef.current.cur, name: title }],
+      curNb: id
+    };
+    persistState(next).then(() => flashStatus('Not defteri oluşturuldu')).catch(() => flashStatus('Not defteri kaydedilemedi'));
+  };
+
+  const handleRenameNotebook = (notebookId: string, name: string) => {
+    const title = String(name || '').trim();
+    if (!notebookId || !title) return;
+    const next = {
+      ...appStateRef.current,
+      notebooks: (appStateRef.current.notebooks || []).map((notebook) => notebook.id === notebookId ? { ...notebook, name: title } : notebook)
+    };
+    persistState(next).then(() => flashStatus('Not defteri güncellendi')).catch(() => flashStatus('Not defteri kaydedilemedi'));
+  };
+
+  const handleDeleteNotebook = (notebookId: string) => {
+    const currentWs = appStateRef.current.cur;
+    const notebooks = (appStateRef.current.notebooks || []).filter((notebook) => String(notebook.wsId || currentWs) === currentWs);
+    if (notebooks.length <= 1) {
+      flashStatus('Son not defteri silinemez');
+      return;
+    }
+    const fallback = notebooks.find((notebook) => notebook.id !== notebookId);
+    if (!fallback) return;
+    const next = {
+      ...appStateRef.current,
+      notebooks: (appStateRef.current.notebooks || []).filter((notebook) => notebook.id !== notebookId),
+      curNb: appStateRef.current.curNb === notebookId ? fallback.id : appStateRef.current.curNb,
+      notes: appStateRef.current.notes.map((note) => String(note.wsId || currentWs) === currentWs && note.nbId === notebookId ? { ...note, nbId: fallback.id } : note)
+    };
+    persistState(next).then(() => flashStatus('Not defteri silindi')).catch(() => flashStatus('Not defteri silinemedi'));
+  };
+
+  const handleMoveNoteToNotebook = (noteId: string, notebookId: string) => {
+    if (!noteId || !notebookId) return;
+    const currentWs = appStateRef.current.cur;
+    const next = {
+      ...appStateRef.current,
+      curNb: notebookId,
+      notes: appStateRef.current.notes.map((note) => note.id === noteId && String(note.wsId || currentWs) === currentWs ? { ...note, nbId: notebookId } : note)
+    };
+    persistState(next).then(() => flashStatus('Not deftere taşındı')).catch(() => flashStatus('Not taşınamadı'));
   };
 
   const handleExportPDF = async () => {
+    await flushEditorToState().catch(() => flashStatus('Export öncesi kayıt tamamlanamadı'));
     if (callLegacy('expPDF')) {
       flashStatus('PDF dışa aktarma açıldı');
       return;
@@ -1560,6 +1731,7 @@ export default function App() {
   };
 
   const handleExportDOCX = async () => {
+    await flushEditorToState().catch(() => flashStatus('Export öncesi kayıt tamamlanamadı'));
     if (callLegacy('expDOC') || callLegacy('expDOCX')) {
       flashStatus('DOCX dışa aktarma açıldı');
       return;
@@ -1585,7 +1757,8 @@ export default function App() {
     flashStatus('PDF önizleme hazır değil');
   };
 
-  const handleExportAnnotatedPDF = () => {
+  const handleExportAnnotatedPDF = async () => {
+    await flushEditorToState().catch(() => flashStatus('Export öncesi kayıt tamamlanamadı'));
     if (callLegacy('exportAnnotatedPdf') || callLegacy('expAnnotatedPDF')) {
       flashStatus('Annotationlı PDF dışa aktarma açıldı');
       return;
@@ -1602,7 +1775,14 @@ export default function App() {
   };
 
   const handleOpenMatrix = () => {
-    if (callLegacy('toggleLiteratureMatrix') || callLegacy('openLiteratureMatrix')) {
+    const win = window as any;
+    win.S = { ...(win.S || {}), ...appStateRef.current };
+    if (callLegacy('openLiteratureMatrix')) {
+      window.setTimeout(() => {
+        try {
+          win.AQLiteratureMatrix?.render?.();
+        } catch (_error) {}
+      }, 0);
       flashStatus('Literatür matrisi açıldı');
       return;
     }
@@ -1618,8 +1798,21 @@ export default function App() {
     { id: 'new-workspace', group: 'Workspace', label: 'Yeni workspace', run: openNewWorkspaceModal },
     { id: 'new-document', group: 'Belge', label: 'Yeni belge', run: handleAddDocument },
     { id: 'edit-reference', group: 'Kaynak', label: 'Seçili kaynağı düzenle', run: () => setFeatureModal('referenceEdit') },
-    { id: 'attach-pdf', group: 'PDF', label: 'PDF yukle', run: handleOpenPDF },
-    { id: 'open-pdf-viewer', group: 'PDF', label: 'PDF viewer a?', run: () => { if (!callLegacy('togglePDF')) flashStatus('PDF viewer hazır değil'); } },
+    { id: 'attach-pdf', group: 'PDF', label: 'PDF yükle', run: handleOpenPDF },
+    {
+      id: 'open-pdf-viewer',
+      group: 'PDF',
+      label: 'PDF viewer aç',
+      run: () => {
+        const panel = document.getElementById('pdfpanel');
+        if (panel) {
+          panel.classList.add('open');
+          flashStatus('PDF viewer açıldı');
+        } else {
+          flashStatus('PDF viewer hazır değil');
+        }
+      }
+    },
     { id: 'export-pdf', group: 'Export', label: 'PDF dışa aktar', run: handleExportPDF },
     { id: 'export-docx', group: 'Export', label: 'DOCX dışa aktar', run: handleExportDOCX },
     { id: 'insert-citation', group: 'Editor', label: 'Atıf ekle', run: handleInsertCitation },
@@ -1645,9 +1838,15 @@ export default function App() {
           if (view === 'settings') setFeatureModal('settings');
           if (view === 'pdf') {
             if (activeReferenceId) {
-              if (!callLegacy('openRef', activeReferenceId)) callLegacy('togglePDF');
-            } else if (!callLegacy('togglePDF')) {
-              flashStatus('PDF viewer hazır değil');
+              if (!callLegacy('openRef', activeReferenceId)) {
+                const panel = document.getElementById('pdfpanel');
+                if (panel) panel.classList.add('open');
+                else flashStatus('PDF viewer hazır değil');
+              }
+            } else {
+              const panel = document.getElementById('pdfpanel');
+              if (panel) panel.classList.add('open');
+              else flashStatus('PDF viewer hazır değil');
             }
           }
           if (view === 'focus') callLegacy('toggleZenMode');
@@ -1685,8 +1884,10 @@ export default function App() {
           <NoteSidebar
             activeTab={rightTab}
             onTabChange={setRightTab}
-            notes={appState.notes}
+            notes={activeWorkspaceNotes}
+            notebooks={activeWorkspaceNotebooks}
             references={activeWorkspace.lib}
+            usedReferences={activeDocumentUsedReferences}
             workspaceName={activeWorkspace.name}
             documentName={String(activeDocument.name || activeDocument.id)}
             activeReferenceId={activeReferenceId}
@@ -1695,6 +1896,10 @@ export default function App() {
             onUpdateNote={handleUpdateNote}
             onDeleteNote={handleDeleteNote}
             onDeleteNoteTag={handleDeleteNoteTag}
+            onCreateNotebook={handleCreateNotebook}
+            onRenameNotebook={handleRenameNotebook}
+            onDeleteNotebook={handleDeleteNotebook}
+            onMoveNoteToNotebook={handleMoveNoteToNotebook}
             onInsertNote={handleInsertNoteIntoDocument}
             onInsertCitation={(refId) => editorRef.current?.insertCitation(refId)}
             onEditReference={(refId) => {

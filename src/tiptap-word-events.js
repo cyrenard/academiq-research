@@ -256,6 +256,47 @@
     return sel && sel.toString ? sel.toString() : '';
   }
 
+  function writeClipboardText(text){
+    text = String(text || '');
+    if(!text) return false;
+    if(typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).catch(function(){});
+      return true;
+    }
+    if(typeof document !== 'undefined'){
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', 'readonly');
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+      document.body.appendChild(ta);
+      ta.select();
+      try{ document.execCommand('copy'); }catch(_e){}
+      document.body.removeChild(ta);
+      return true;
+    }
+    return false;
+  }
+
+  function escapeHTML(value){
+    return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function plainTextToHTML(text){
+    return String(text || '').split(/\r\n|\r|\n/).map(function(line){
+      return '<p>' + (line ? escapeHTML(line) : '<br>') + '</p>';
+    }).join('');
+  }
+
+  function focusEditor(){
+    if(typeof window !== 'undefined' && window.AQEditorCore && typeof window.AQEditorCore.focus === 'function'){
+      try{ window.AQEditorCore.focus(false); }catch(_e){}
+    }
+    var editor = typeof window !== 'undefined' ? (window.editor || null) : null;
+    try{
+      if(editor && editor.commands && typeof editor.commands.focus === 'function') editor.commands.focus();
+    }catch(_focusErr){}
+  }
+
   function getSelectionCitationKey(host){
     host = host || getHost();
     if(!host || typeof document === 'undefined') return '';
@@ -323,28 +364,32 @@
       });
       items.push({ kind:'sep' });
     }else if(hasSelection && opts.grammarChecked){
-      items.push({ kind:'hint', label:'Dil kontrolu: onerilen duzeltme yok', disabled:true });
+      items.push({ kind:'hint', label:'Dil kontrolü: önerilen düzeltme yok', disabled:true });
       items.push({ kind:'sep' });
     }
+    items.push({ kind:'action', action:'undo', label:'Geri Al', key:'Ctrl+Z' });
+    items.push({ kind:'action', action:'redo', label:'Yinele', key:'Ctrl+Y' });
+    items.push({ kind:'sep' });
     if(hasSelection){
       items.push({ kind:'action', action:'cut', label:'Kes', key:'Ctrl+X' });
       items.push({ kind:'action', action:'copy', label:'Kopyala', key:'Ctrl+C' });
     }
-    items.push({ kind:'action', action:'paste', label:'Yapistir', key:'Ctrl+V' });
+    items.push({ kind:'action', action:'paste', label:'Yapıştır', key:'Ctrl+V' });
     if(hasSelection){
       items.push({ kind:'sep' });
-      items.push({ kind:'action', action:'bold', label:'Kalin', key:'Ctrl+B' });
-      items.push({ kind:'action', action:'italic', label:'Italik', key:'Ctrl+I' });
-      items.push({ kind:'action', action:'underline', label:'Alti Cizili', key:'Ctrl+U' });
+      items.push({ kind:'action', action:'bold', label:'Kalın', key:'Ctrl+B' });
+      items.push({ kind:'action', action:'italic', label:'İtalik', key:'Ctrl+I' });
+      items.push({ kind:'action', action:'underline', label:'Altı Çizili', key:'Ctrl+U' });
     }
     items.push({ kind:'sep' });
-    items.push({ kind:'action', action:'selectAll', label:'Tumunu Sec', key:'Ctrl+A' });
+    items.push({ kind:'action', action:'selectAll', label:'Tümünü Seç', key:'Ctrl+A' });
     return items;
   }
 
   function runContextMenuAction(action, item, options){
     options = options || {};
     var editor = typeof window !== 'undefined' ? (window.editor || null) : null;
+    focusEditor();
     if(action === 'replaceSelection'){
       var replacement = item && typeof item.replacement === 'string' ? item.replacement : '';
       if(!replacement) return;
@@ -358,24 +403,35 @@
     if(action === 'cut'){
       if(editor && editor.state && editor.state.selection){
         var text = editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ');
-        if(typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText){
-          navigator.clipboard.writeText(text).catch(function(){});
+        writeClipboardText(text);
+        if(editor.commands && typeof editor.commands.deleteSelection === 'function'){
+          editor.commands.deleteSelection();
+          return;
         }
-        editor.chain().focus().deleteSelection().run();
+        if(editor.chain) editor.chain().focus().deleteSelection().run();
         return;
       }
       if(typeof document !== 'undefined') document.execCommand('cut');
       return;
     }
     if(action === 'copy'){
+      var copyText = getSelectedText(editor);
+      if(copyText && writeClipboardText(copyText)) return;
       if(typeof document !== 'undefined') document.execCommand('copy');
       return;
     }
     if(action === 'paste'){
       if(typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.readText){
         navigator.clipboard.readText().then(function(text){
+          if(!text) return;
+          focusEditor();
+          var html = plainTextToHTML(text);
+          if(editor && editor.commands && typeof editor.commands.insertContent === 'function'){
+            editor.commands.insertContent(html);
+            return;
+          }
           if(editor && editor.chain){
-            editor.chain().focus().insertContent(text).run();
+            editor.chain().focus().insertContent(html).run();
             return;
           }
           if(typeof document !== 'undefined') document.execCommand('insertText', false, text);
@@ -383,7 +439,24 @@
       }
       return;
     }
+    if(action === 'undo'){
+      if(editor && editor.commands && typeof editor.commands.undo === 'function'){ editor.commands.undo(); return; }
+      if(editor && editor.chain){ editor.chain().focus().undo().run(); return; }
+      if(typeof document !== 'undefined') document.execCommand('undo');
+      return;
+    }
+    if(action === 'redo'){
+      if(editor && editor.commands && typeof editor.commands.redo === 'function'){ editor.commands.redo(); return; }
+      if(editor && editor.chain){ editor.chain().focus().redo().run(); return; }
+      if(typeof document !== 'undefined') document.execCommand('redo');
+      return;
+    }
     if(action === 'bold' || action === 'italic' || action === 'underline'){
+      if(editor && editor.commands){
+        if(action === 'bold' && typeof editor.commands.toggleBold === 'function'){ editor.commands.toggleBold(); return; }
+        if(action === 'italic' && typeof editor.commands.toggleItalic === 'function'){ editor.commands.toggleItalic(); return; }
+        if(action === 'underline' && typeof editor.commands.toggleUnderline === 'function'){ editor.commands.toggleUnderline(); return; }
+      }
       if(typeof window !== 'undefined' && typeof window.ec === 'function'){
         window.ec(action);
       }
@@ -491,6 +564,7 @@
           menu.appendChild(row);
           return;
         }
+        row.className = 'ctx-action';
         if(item.key){
           var key = document.createElement('span');
           key.className = 'ctx-shortcut';
@@ -505,11 +579,73 @@
         });
         menu.appendChild(row);
       });
+      menu.addEventListener('mousedown', function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+      });
       menu.style.left = Math.min(e.clientX, window.innerWidth - 180) + 'px';
       menu.style.top = Math.min(e.clientY, window.innerHeight - 200) + 'px';
       document.body.appendChild(menu);
       state.ctxMenu = menu;
     });
+  }
+
+  function bindNativeEditShortcuts(){
+    if(typeof document === 'undefined') return;
+    document.addEventListener('keydown', function(e){
+      var mod = !!(e.ctrlKey || e.metaKey);
+      if(!mod) return;
+      var target = e.target && e.target.nodeType === 3 ? e.target.parentElement : e.target;
+      if(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      var host = getHost();
+      var active = document.activeElement;
+      if(!host || !(active === host || host.contains(active) || (target && (target === host || host.contains(target))))) return;
+      var key = String(e.key || '').toLowerCase();
+      if(!/^(c|x|v|z|y|a)$/.test(key)) return;
+      var editor = typeof window !== 'undefined' ? (window.editor || null) : null;
+      if(key === 'c'){
+        var copyText = getSelectedText(editor);
+        if(copyText && writeClipboardText(copyText)) e.preventDefault();
+        return;
+      }
+      if(key === 'x'){
+        var cutText = getSelectedText(editor);
+        if(!cutText) return;
+        e.preventDefault();
+        writeClipboardText(cutText);
+        focusEditor();
+        if(editor && editor.commands && typeof editor.commands.deleteSelection === 'function') editor.commands.deleteSelection();
+        return;
+      }
+      if(key === 'v'){
+        if(!(typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.readText)) return;
+        e.preventDefault();
+        navigator.clipboard.readText().then(function(text){
+          if(!text) return;
+          focusEditor();
+          var html = plainTextToHTML(text);
+          if(editor && editor.commands && typeof editor.commands.insertContent === 'function') editor.commands.insertContent(html);
+        }).catch(function(){});
+        return;
+      }
+      if(key === 'z'){
+        e.preventDefault();
+        focusEditor();
+        if(editor && editor.commands && typeof editor.commands.undo === 'function') editor.commands.undo();
+        return;
+      }
+      if(key === 'y'){
+        e.preventDefault();
+        focusEditor();
+        if(editor && editor.commands && typeof editor.commands.redo === 'function') editor.commands.redo();
+        return;
+      }
+      if(key === 'a'){
+        e.preventDefault();
+        focusEditor();
+        if(editor && editor.commands && typeof editor.commands.selectAll === 'function') editor.commands.selectAll();
+      }
+    }, true);
   }
 
   function bindReferenceSync(){
@@ -559,6 +695,7 @@
     bindFocusEvents();
     bindClickAnywhereTyping();
     bindContextMenu();
+    bindNativeEditShortcuts();
     bindReferenceSync();
     watchSurface();
     return true;

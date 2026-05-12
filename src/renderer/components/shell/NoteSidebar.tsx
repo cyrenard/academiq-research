@@ -9,7 +9,9 @@ type NoteSidebarProps = {
   activeTab: NoteSidebarTab;
   onTabChange: (tab: NoteSidebarProps['activeTab']) => void;
   notes: AcademiqNote[];
+  notebooks?: Array<{ id: string; name: string; wsId?: string }>;
   references: AcademiqReference[];
+  usedReferences?: AcademiqReference[];
   workspaceName: string;
   documentName: string;
   activeReferenceId: string;
@@ -18,6 +20,10 @@ type NoteSidebarProps = {
   onUpdateNote: (id: string, patch: Record<string, unknown>) => void;
   onDeleteNote: (id: string) => void;
   onDeleteNoteTag: (tag: string) => void;
+  onCreateNotebook: (name: string) => void;
+  onRenameNotebook: (id: string, name: string) => void;
+  onDeleteNotebook: (id: string) => void;
+  onMoveNoteToNotebook: (noteId: string, notebookId: string) => void;
   onInsertNote: (note: AcademiqNote) => void;
   onInsertCitation: (refId: string) => void;
   onEditReference: (refId: string) => void;
@@ -31,7 +37,9 @@ export function NoteSidebar({
   activeTab,
   onTabChange,
   notes,
+  notebooks = [],
   references,
+  usedReferences,
   workspaceName,
   activeReferenceId,
   onSelectReference,
@@ -39,6 +47,10 @@ export function NoteSidebar({
   onUpdateNote,
   onDeleteNote,
   onDeleteNoteTag,
+  onCreateNotebook,
+  onRenameNotebook,
+  onDeleteNotebook,
+  onMoveNoteToNotebook,
   onInsertNote,
   onInsertCitation,
   onEditReference,
@@ -52,6 +64,11 @@ export function NoteSidebar({
   const [editingNoteId, setEditingNoteId] = useState('');
   const [editingText, setEditingText] = useState('');
   const [editingTag, setEditingTag] = useState('');
+  const [notebookOpen, setNotebookOpen] = useState(false);
+  const [selectedNotebookId, setSelectedNotebookId] = useState('all');
+  const [newNotebookName, setNewNotebookName] = useState('');
+  const [renamingNotebookId, setRenamingNotebookId] = useState('');
+  const [renamingNotebookName, setRenamingNotebookName] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [usageFilter, setUsageFilter] = useState('all');
   const [tagFilter, setTagFilter] = useState('all');
@@ -60,9 +77,20 @@ export function NoteSidebar({
   const [tagPopup, setTagPopup] = useState<{ noteId: string; x: number; y: number } | null>(null);
   const [newTagName, setNewTagName] = useState('');
   const visibleTab: 'notes' | 'refs' = activeTab === 'refs' ? 'refs' : 'notes';
+  const bibliographyReferences = usedReferences || references;
   const editingNote = notes.find((note) => note.id === editingNoteId) || null;
   const menuNote = noteMenu ? notes.find((note) => note.id === noteMenu.noteId) || null : null;
   const tagPopupNote = tagPopup ? notes.find((note) => note.id === tagPopup.noteId) || null : null;
+  const fallbackNotebookId = notebooks[0]?.id || '';
+  const notebookCounts = useMemo(() => new Map(notebooks.map((notebook) => [
+    notebook.id,
+    notes.filter((note) => String(note.nbId || '') === notebook.id).length
+  ])), [notebooks, notes]);
+  const isInboxNote = (note: AcademiqNote) => {
+    const hasSource = Boolean(note.src || note.rid || note.q || note.sourceExcerpt);
+    return hasSource && !note.inserted;
+  };
+  const inboxCount = useMemo(() => notes.filter(isInboxNote).length, [notes]);
   const getNoteTags = (note: AcademiqNote) => String(note.tag || note.sourcePage || '')
     .split(/[;,]/)
     .map((item) => item.trim())
@@ -72,13 +100,15 @@ export function NoteSidebar({
   const filteredNotes = useMemo(() => notes.filter((note) => {
     const noteTypeValue = String(note.noteType || (note.type === 'hl' ? 'direct_quote' : note.type || 'summary'));
     const noteTagList = getNoteTags(note);
+    if (selectedNotebookId === 'inbox' && !isInboxNote(note)) return false;
+    if (selectedNotebookId !== 'all' && selectedNotebookId !== 'inbox' && String(note.nbId || fallbackNotebookId) !== selectedNotebookId) return false;
     if (typeFilter !== 'all' && noteTypeValue !== typeFilter) return false;
     if (usageFilter === 'inserted' && !note.inserted) return false;
     if (usageFilter === 'not_inserted' && note.inserted) return false;
     if (tagFilter !== 'all' && !noteTagList.includes(tagFilter)) return false;
     if (refFilter !== 'all' && String(note.rid || '') !== refFilter) return false;
     return true;
-  }), [notes, refFilter, tagFilter, typeFilter, usageFilter]);
+  }), [notes, refFilter, tagFilter, typeFilter, usageFilter, selectedNotebookId, fallbackNotebookId]);
 
   useEffect(() => {
     if (!editingNoteId) return;
@@ -107,9 +137,40 @@ export function NoteSidebar({
   };
 
   const openNoteEditor = (note: AcademiqNote) => {
+    setNotebookOpen(true);
     setEditingNoteId(note.id);
     setEditingText(String(note.txt || note.q || note.comment || note.sourceExcerpt || ''));
     setEditingTag(String(note.tag || note.sourcePage || ''));
+  };
+
+  const openNotebook = () => {
+    setNotebookOpen(true);
+    if (!editingNoteId && filteredNotes[0]) openNoteEditor(filteredNotes[0]);
+  };
+
+  const notePreview = (note: AcademiqNote) => String(note.txt || note.q || note.comment || note.sourceExcerpt || '(bos not)');
+
+  const submitNotebook = () => {
+    const name = newNotebookName.trim();
+    if (!name) {
+      onAction('Not defteri adi bos');
+      return;
+    }
+    onCreateNotebook(name);
+    setNewNotebookName('');
+  };
+
+  const beginRenameNotebook = (notebook: { id: string; name: string }) => {
+    setRenamingNotebookId(notebook.id);
+    setRenamingNotebookName(notebook.name);
+  };
+
+  const submitRenameNotebook = () => {
+    const name = renamingNotebookName.trim();
+    if (!renamingNotebookId || !name) return;
+    onRenameNotebook(renamingNotebookId, name);
+    setRenamingNotebookId('');
+    setRenamingNotebookName('');
   };
 
   const saveEditingNote = () => {
@@ -145,6 +206,7 @@ export function NoteSidebar({
     }
     const merged = Array.from(new Set([...currentTags, nextTag])).join(', ');
     onUpdateNote(note.id, { tag: merged, sourcePage: merged });
+    setNewTagName('');
     onAction('Etiket eklendi');
   };
 
@@ -155,11 +217,29 @@ export function NoteSidebar({
   };
 
   return (
-    <aside className="flex h-full min-h-0 w-full min-w-0 flex-col border-l border-aq-line bg-[#fbfaf7] p-3">
+    <aside className="flex h-full min-h-0 w-full min-w-0 flex-col bg-[#fbfaf7] p-3">
       <div className="mb-3 flex items-start justify-between">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-aq-muted">Workspace</div>
           <h2 className="mt-1 text-lg font-semibold leading-none">{workspaceName || 'Genel Notlar'}</h2>
+        </div>
+        <div className="flex gap-1">
+          <button
+            type="button"
+            onClick={openNotebook}
+            className="h-8 rounded-md border border-aq-line bg-white px-3 text-xs font-semibold text-aq-ink shadow-sm transition hover:bg-aq-panel"
+            title="Not defterini aç"
+          >
+            Defter
+          </button>
+          <button
+            type="button"
+            onClick={onOpenMatrix}
+            className="h-8 rounded-md border border-aq-line bg-white px-3 text-xs font-semibold text-aq-ink shadow-sm transition hover:bg-aq-panel"
+            title="Literatür matrisini aç"
+          >
+            Matris
+          </button>
         </div>
       </div>
 
@@ -296,7 +376,7 @@ export function NoteSidebar({
             <button type="button" onClick={() => run('bibliography-insert')} className="rounded-md border border-aq-line bg-white px-2 py-2 font-medium">Otomatik</button>
             <button type="button" onClick={() => run('bibliography-insert')} className="rounded-md border border-aq-line bg-white px-2 py-2 font-medium">Git</button>
           </div>
-          {references.length ? references.map((ref) => (
+          {bibliographyReferences.length ? bibliographyReferences.map((ref) => (
             <button
               type="button"
               key={ref.id}
@@ -319,78 +399,124 @@ export function NoteSidebar({
           )}
         </div>
       )}
-      {editingNote ? (
-        <div className="fixed inset-0 z-[2800] bg-black/20" onClick={() => setEditingNoteId('')}>
+      {notebookOpen ? (
+        <div className="fixed inset-0 z-[2800] bg-black/20" onClick={() => setNotebookOpen(false)}>
           <section
-            className="absolute bottom-8 left-1/2 top-16 flex w-[min(920px,calc(100vw-40px))] -translate-x-1/2 flex-col rounded-xl border border-aq-line bg-[#fbfaf7] p-4 shadow-2xl"
+            className="absolute bottom-8 left-1/2 top-16 flex w-[min(1120px,calc(100vw-40px))] -translate-x-1/2 flex-col rounded-xl border border-aq-line bg-[#fbfaf7] p-4 shadow-2xl"
             onClick={(event) => event.stopPropagation()}
             aria-label="Not defteri"
           >
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-aq-muted">Not Defteri</div>
-                <h3 className="mt-1 text-lg font-semibold text-aq-ink">Not Defteri</h3>
+                <h3 className="mt-1 text-lg font-semibold text-aq-ink">{workspaceName || 'Workspace'} notları</h3>
+                <p className="mt-1 text-xs text-aq-muted">Gelen Kutusu, defterler, etiketler ve belgeye/matrise aktarma tek yerde.</p>
               </div>
-              <button type="button" onClick={() => setEditingNoteId('')} className="rounded-md border border-aq-line bg-white px-3 py-1.5 text-xs font-semibold hover:bg-aq-panel">Kapat</button>
+              <button type="button" onClick={() => setNotebookOpen(false)} className="rounded-md border border-aq-line bg-white px-3 py-1.5 text-xs font-semibold hover:bg-aq-panel">Kapat</button>
             </div>
-            <div className="grid min-h-0 flex-1 grid-cols-[minmax(220px,38%)_1fr] gap-3">
+            <div className="grid min-h-0 flex-1 grid-cols-[220px_minmax(260px,36%)_1fr] gap-3">
+              <aside className="flex min-h-0 flex-col rounded-xl border border-aq-line bg-white/75 p-3">
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-aq-muted">Defterler</div>
+                <div className="min-h-0 flex-1 overflow-auto pr-1">
+                  <button type="button" onClick={() => setSelectedNotebookId('all')} className={['mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs', selectedNotebookId === 'all' ? 'bg-aq-navy text-white' : 'hover:bg-aq-panel'].join(' ')}>
+                    <span>Tüm Notlar</span><span>{notes.length}</span>
+                  </button>
+                  <button type="button" onClick={() => setSelectedNotebookId('inbox')} className={['mb-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs', selectedNotebookId === 'inbox' ? 'bg-aq-navy text-white' : 'hover:bg-aq-panel'].join(' ')}>
+                    <span>Gelen Kutusu</span><span>{inboxCount}</span>
+                  </button>
+                  {notebooks.map((notebook) => (
+                    <div key={notebook.id} className="group mb-1 flex items-center gap-1 rounded-lg hover:bg-aq-panel">
+                      <button type="button" onClick={() => setSelectedNotebookId(notebook.id)} className={['min-w-0 flex-1 rounded-lg px-3 py-2 text-left text-xs', selectedNotebookId === notebook.id ? 'bg-aq-navy text-white' : ''].join(' ')}>
+                        <span className="block truncate">{notebook.name}</span>
+                        <span className="text-[10px] opacity-70">{notebookCounts.get(notebook.id) || 0} not</span>
+                      </button>
+                      <button type="button" onClick={() => beginRenameNotebook(notebook)} className="hidden rounded px-1.5 py-1 text-[10px] text-aq-muted hover:bg-white group-hover:block">Ad</button>
+                      {notebooks.length > 1 ? <button type="button" onClick={() => { if (window.confirm('Not defteri silinsin mi? Notlar Genel Notlar defterine taşınır.')) onDeleteNotebook(notebook.id); }} className="hidden rounded px-1.5 py-1 text-[10px] text-red-700 hover:bg-red-50 group-hover:block">Sil</button> : null}
+                    </div>
+                  ))}
+                </div>
+                {renamingNotebookId ? (
+                  <div className="mt-3 rounded-lg border border-aq-line bg-[#fbfaf7] p-2">
+                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-aq-muted">Yeniden adlandır</div>
+                    <input value={renamingNotebookName} onChange={(event) => setRenamingNotebookName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') submitRenameNotebook(); }} className="h-8 w-full rounded-md border border-aq-line bg-white px-2 text-xs outline-none focus:border-aq-navy" />
+                    <div className="mt-2 flex gap-1">
+                      <button type="button" onClick={submitRenameNotebook} className="h-7 flex-1 rounded-md bg-aq-navy text-xs font-semibold text-white">Kaydet</button>
+                      <button type="button" onClick={() => setRenamingNotebookId('')} className="h-7 rounded-md border border-aq-line bg-white px-2 text-xs font-semibold">İptal</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 rounded-lg border border-aq-line bg-[#fbfaf7] p-2">
+                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-aq-muted">Yeni defter</div>
+                    <div className="flex gap-1">
+                      <input value={newNotebookName} onChange={(event) => setNewNotebookName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') submitNotebook(); }} className="h-8 min-w-0 flex-1 rounded-md border border-aq-line bg-white px-2 text-xs outline-none focus:border-aq-navy" placeholder="Defter adı" />
+                      <button type="button" onClick={submitNotebook} className="h-8 rounded-md bg-aq-navy px-3 text-xs font-semibold text-white">Ekle</button>
+                    </div>
+                  </div>
+                )}
+              </aside>
+
               <div className="min-h-0 overflow-auto rounded-xl border border-aq-line bg-white/70 p-3">
-                {notes.length ? notes.map((note) => (
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-aq-muted">Notlar</div>
+                  <div className="text-[11px] text-aq-muted">{filteredNotes.length} / {notes.length}</div>
+                </div>
+                {filteredNotes.length ? filteredNotes.map((note) => (
                   <button
                     type="button"
                     key={note.id}
                     onClick={() => openNoteEditor(note)}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      setNoteMenu({ noteId: note.id, x: event.clientX, y: event.clientY });
-                    }}
-                    className={[
-                      'mb-2 block w-full rounded-lg border p-3 text-left text-xs transition hover:border-aq-navy',
-                      note.id === editingNote.id ? 'border-aq-navy bg-white shadow-sm ring-1 ring-aq-navy/15' : 'border-aq-line bg-white'
-                    ].join(' ')}
+                    onContextMenu={(event) => { event.preventDefault(); setNoteMenu({ noteId: note.id, x: event.clientX, y: event.clientY }); }}
+                    className={['mb-2 block w-full rounded-lg border p-3 text-left text-xs transition hover:border-aq-navy', note.id === editingNoteId ? 'border-aq-navy bg-white shadow-sm ring-1 ring-aq-navy/15' : 'border-aq-line bg-white'].join(' ')}
                   >
                     <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.14em] text-aq-muted">
                       <span>{String(note.noteType || note.type || 'not')}</span>
                       {note.dt ? <span>{String(note.dt)}</span> : null}
                     </div>
-                    <div className="mt-2 line-clamp-2 font-semibold leading-5 text-aq-ink">
-                      {String(note.txt || note.q || note.comment || note.sourceExcerpt || '(bos not)')}
+                    <div className="mt-2 line-clamp-3 font-semibold leading-5 text-aq-ink">{notePreview(note)}</div>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {getNoteTags(note).slice(0, 4).map((item) => <span key={item} className="inline-flex rounded-full border border-aq-line bg-aq-panel px-2 py-0.5 text-[10px] text-aq-muted">{item}</span>)}
+                      {isInboxNote(note) ? <span className="inline-flex rounded-full border border-aq-line bg-white px-2 py-0.5 text-[10px] text-aq-muted">gelen</span> : null}
                     </div>
-                    {getNoteTags(note).length ? (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {getNoteTags(note).map((item) => (
-                          <span key={item} className="inline-flex rounded-full border border-aq-line bg-aq-panel px-2 py-0.5 text-[10px] text-aq-muted">{item}</span>
-                        ))}
-                      </div>
-                    ) : null}
                   </button>
-                )) : (
-                  <div className="rounded-lg border border-dashed border-aq-line p-4 text-center text-xs text-aq-muted">Not yok.</div>
-                )}
+                )) : <div className="rounded-lg border border-dashed border-aq-line p-4 text-center text-xs text-aq-muted">Bu görünümde not yok.</div>}
               </div>
+
               <div className="flex min-h-0 flex-col rounded-xl border border-aq-line bg-white p-3">
-                <div className="mb-3 rounded-lg border border-aq-line bg-[#fbfaf7] p-3 text-xs text-aq-muted">
-                  <span className="font-semibold text-aq-ink">{String(editingNote.noteType || editingNote.type || 'not')}</span>
-                  {editingNote.src ? <span> · {String(editingNote.src)}</span> : null}
-                  {editingNote.dt ? <span> · {String(editingNote.dt)}</span> : null}
-                </div>
-                <label className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-aq-muted">Not metni</label>
-                <textarea
-                  value={editingText}
-                  onChange={(event) => setEditingText(event.target.value)}
-                  className="min-h-0 flex-1 resize-none rounded-lg border border-aq-line bg-white p-3 text-sm leading-6 outline-none focus:border-aq-navy"
-                />
-                <label className="mb-1 mt-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-aq-muted">Etiket / sayfa</label>
-                <input
-                  value={editingTag}
-                  onChange={(event) => setEditingTag(event.target.value)}
-                  className="h-9 rounded-lg border border-aq-line bg-white px-3 text-sm outline-none focus:border-aq-navy"
-                  placeholder="genel, metodoloji, s.12..."
-                />
-                <div className="mt-4 flex justify-between gap-2">
-                  <button type="button" onClick={() => { onDeleteNote(editingNote.id); setEditingNoteId(notes.find((note) => note.id !== editingNote.id)?.id || ''); }} className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">Notu Sil</button>
-                  <button type="button" onClick={saveEditingNote} className="rounded-lg bg-aq-navy px-5 py-2 text-sm font-semibold text-white hover:bg-[#172852]">Kaydet</button>
-                </div>
+                {editingNote ? (
+                  <>
+                    <div className="mb-3 rounded-lg border border-aq-line bg-[#fbfaf7] p-3 text-xs text-aq-muted">
+                      <span className="font-semibold text-aq-ink">{String(editingNote.noteType || editingNote.type || 'not')}</span>
+                      {editingNote.src ? <span> · {String(editingNote.src)}</span> : null}
+                      {editingNote.dt ? <span> · {String(editingNote.dt)}</span> : null}
+                    </div>
+                    <label className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-aq-muted">Not metni</label>
+                    <textarea value={editingText} onChange={(event) => setEditingText(event.target.value)} className="min-h-0 flex-1 resize-none rounded-lg border border-aq-line bg-white p-3 text-sm leading-6 outline-none focus:border-aq-navy" />
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <label className="block">
+                        <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.18em] text-aq-muted">Etiket / sayfa</span>
+                        <input value={editingTag} onChange={(event) => setEditingTag(event.target.value)} className="h-9 w-full rounded-lg border border-aq-line bg-white px-3 text-sm outline-none focus:border-aq-navy" placeholder="genel, metodoloji, s.12..." />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.18em] text-aq-muted">Defter</span>
+                        <select value={String(editingNote.nbId || fallbackNotebookId)} onChange={(event) => onMoveNoteToNotebook(editingNote.id, event.target.value)} className="h-9 w-full rounded-lg border border-aq-line bg-white px-3 text-sm outline-none focus:border-aq-navy">
+                          {notebooks.map((notebook) => <option key={notebook.id} value={notebook.id}>{notebook.name}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                    <div className="mt-4 flex flex-wrap justify-between gap-2">
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => insertNoteToDocument(editingNote)} className="rounded-lg border border-aq-line bg-white px-4 py-2 text-sm font-semibold hover:bg-aq-panel">Belgeye ekle</button>
+                        {editingNote.rid ? <button type="button" onClick={onOpenMatrix} className="rounded-lg border border-aq-line bg-white px-4 py-2 text-sm font-semibold hover:bg-aq-panel">Matrise gönder</button> : null}
+                      </div>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => { onDeleteNote(editingNote.id); setEditingNoteId(filteredNotes.find((note) => note.id !== editingNote.id)?.id || ''); }} className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">Notu Sil</button>
+                        <button type="button" onClick={saveEditingNote} className="rounded-lg bg-aq-navy px-5 py-2 text-sm font-semibold text-white hover:bg-[#172852]">Kaydet</button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-aq-line text-center text-sm leading-6 text-aq-muted">Soldan bir not seç veya sidebar altından yeni not oluştur.</div>
+                )}
               </div>
             </div>
           </section>
@@ -399,16 +525,16 @@ export function NoteSidebar({
       {menuNote && noteMenu ? (
         <div className="fixed inset-0 z-[2900]" onClick={() => setNoteMenu(null)}>
           <div
-            className="absolute w-48 rounded-lg border border-aq-line bg-white p-1 text-xs text-aq-ink shadow-xl"
+            className="absolute w-48 rounded-[13px] border border-aq-line/90 bg-white/95 p-1.5 text-xs text-aq-ink shadow-[0_24px_64px_rgba(22,27,34,0.20)] backdrop-blur-xl"
             style={{ left: Math.min(noteMenu.x, window.innerWidth - 210), top: Math.min(noteMenu.y, window.innerHeight - 190) }}
             onClick={(event) => event.stopPropagation()}
           >
-            <button type="button" onClick={() => { openNoteEditor(menuNote); setNoteMenu(null); }} className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel">Not defterinde a?</button>
+            <button type="button" onClick={() => { openNoteEditor(menuNote); setNoteMenu(null); }} className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel">Not defterinde aç</button>
             <button type="button" onClick={() => { openNoteEditor(menuNote); setNoteMenu(null); }} className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel">Düzenle</button>
             <button type="button" onClick={() => openTagPopup(menuNote, noteMenu.x, noteMenu.y)} className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel">Etiket ekle</button>
             <button type="button" onClick={() => { insertNoteToDocument(menuNote); setNoteMenu(null); }} className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel">Belgeye ekle</button>
             {menuNote.rid ? (
-              <button type="button" onClick={() => { onOpenMatrix(); setNoteMenu(null); }} className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel">Matrise gonder</button>
+              <button type="button" onClick={() => { onOpenMatrix(); setNoteMenu(null); }} className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel">Matrise gönder</button>
             ) : null}
             <div className="my-1 border-t border-aq-line" />
             <button type="button" onClick={() => { onDeleteNote(menuNote.id); setNoteMenu(null); }} className="block w-full rounded-md px-3 py-2 text-left text-red-700 hover:bg-red-50">Notu sil</button>
@@ -418,7 +544,7 @@ export function NoteSidebar({
       {tagPopup && tagPopupNote ? (
         <div className="fixed inset-0 z-[2950]" onClick={() => setTagPopup(null)}>
           <div
-            className="absolute w-72 rounded-xl border border-aq-line bg-white p-3 text-xs text-aq-ink shadow-2xl"
+            className="absolute w-72 rounded-[13px] border border-aq-line/90 bg-white/95 p-3 text-xs text-aq-ink shadow-[0_24px_64px_rgba(22,27,34,0.20)] backdrop-blur-xl"
             style={{ left: tagPopup.x, top: tagPopup.y }}
             onClick={(event) => event.stopPropagation()}
           >

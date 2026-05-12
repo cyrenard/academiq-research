@@ -105,6 +105,7 @@
         block.runs.forEach(function(run){
           if(run && typeof run.text === 'string') run.text = repairJoinedWordImportText(run.text);
         });
+        repairRunBoundarySpacing(block.runs);
       }
       if(block && Array.isArray(block.rows)){
         block.rows.forEach(function(row){
@@ -113,6 +114,21 @@
       }
     });
     return blocks;
+  }
+
+  function repairRunBoundarySpacing(runs){
+    if(!Array.isArray(runs) || runs.length < 2) return runs;
+    var letter = /[0-9A-Za-z\u00c0-\u024f\u1e00-\u1eff\u00c7\u011e\u0130\u00d6\u015e\u00dc\u00e7\u011f\u0131\u00f6\u015f\u00fc]/;
+    var starts = /^(birlikte|gelmi\u015ftir|gelmistir|g\u00f6r\u00fclmektedir|gorulmektedir|gostermektedir|yaln\u0131zca|yalnizca|\u00f6\u011frenme|ogrenme|ileti\u015fim|iletisim|bilgi|\u00fcretimi|uretimi|gibi|\u00e7e\u015fitli|cesitli|alanlarda|aktif|\u015fekilde|sekilde|kullan\u0131lmaya|kullanilmaya|ba\u015flad\u0131\u011f\u0131|basladigi|hayat\u0131m\u0131z\u0131n|hayatimizin|alan\u0131na|alanina|giren|bireyler|\u00fczerinde|uzerinde|bili\u015fsel|bilissel|izler|b\u0131rakan|birakan|kavram|olarak|ortaya|konmaktad\u0131r|konmaktadir|durum|insan|bili\u015finin|bilisinin|sadece|i\u00e7sel|icsel|unsurlarla|de\u011fil|degil|teknoloji|d\u0131\u015fsal|dissal|etkile\u015fim|etkilesim|i\u00e7erisine|icerisine|girdi\u011fini|girdigini|sayesinde|yo\u011fun|yogun|ak\u0131\u015f\u0131|akisi|y\u00fck\u00fcn\u00fc|yukunu|art\u0131rabilmekte|artirabilmekte|d\u00fczenleme|duzenleme|yeniden|organize|etme|becerilerinin|\u00f6nemini|onemini|ili\u015fkileri|iliskileri|ili\u015fkiler|iliskiler|bulunabilmektedir|bulunabilmekte|bulunabilir|dijitalle\u015fmenin|dijitallesmenin|yayg\u0131nla\u015fmas\u0131yla|yayginlasmasiyla|teknolojilerin|platformlar|arac\u0131l\u0131\u011f\u0131yla|araciligiyla|kullan\u0131lan|kullanilan|olmaktan|\u00e7\u0131k\u0131p|cikip|ba\u011flamda|baglamda|bireylerin|becerileri|art\u0131rmaktad\u0131r|artirmaktadir|d\u00fczenlenmesi|duzenlenmesi)\b/i;
+    for(var i = 0; i < runs.length - 1; i++){
+      var left = runs[i];
+      var right = runs[i + 1];
+      if(!left || !right || typeof left.text !== 'string' || typeof right.text !== 'string') continue;
+      if(!left.text || !right.text || /\s$/.test(left.text) || /^\s/.test(right.text)) continue;
+      if(!letter.test(left.text.slice(-1)) || !letter.test(right.text.charAt(0))) continue;
+      if(starts.test(String(right.text || '').toLocaleLowerCase('tr-TR'))) right.text = ' ' + right.text;
+    }
+    return runs;
   }
 
   function normalizeHeadingLevel(level){
@@ -452,8 +468,11 @@
   // on every <img.aq-engine-image> in the rendered stage. All mutations go
   // through docModel so the model stays the source of truth.
   function wireImageInteraction(stageEl, docModel, onMutate){
-    if(!stageEl || stageEl._aqImageWired) return;
-    stageEl._aqImageWired = true;
+    if(!stageEl) return;
+    if(typeof stageEl._aqImageInteractionCleanup === 'function'){
+      try { stageEl._aqImageInteractionCleanup(); } catch(_cleanupErr){}
+      stageEl._aqImageInteractionCleanup = null;
+    }
 
     var selectedImg = null;
     var overlay = null;
@@ -708,7 +727,7 @@
       document.addEventListener('mouseup', onUp);
     }
 
-    stageEl.addEventListener('mousedown', function(e){
+    function onStageImageMouseDown(e){
       var img = e.target && e.target.classList && e.target.classList.contains('aq-engine-image') ? e.target : null;
       if(img){
         onImageMouseDown(e, img);
@@ -718,7 +737,8 @@
       if(selectedImg && !(e.target.closest && e.target.closest('.aq-image-overlay'))){
         clearSelection();
       }
-    });
+    }
+    stageEl.addEventListener('mousedown', onStageImageMouseDown);
 
     // ── Table cell editing ────────────────────────────────────────────────
     // Click a cell → render a textarea overlay on top of it. The textarea
@@ -727,6 +747,7 @@
     // (which would otherwise steal focus from a contenteditable cell).
     var activeEditor_cell = null;       // the table cell DOM element
     var activeEditor_textarea = null;   // the floating textarea
+    var activeEditor_keepAlive = 0;
     var tableToolbar = null;
 
     function clearTableToolbar(){
@@ -754,6 +775,7 @@
       var newText = ta.value || '';
       activeEditor_cell = null;
       activeEditor_textarea = null;
+      if(activeEditor_keepAlive){ clearInterval(activeEditor_keepAlive); activeEditor_keepAlive = 0; }
       if(ta.parentNode) ta.parentNode.removeChild(ta);
       cell.style.outline = '';
       setEngineCaptureEnabled(true);
@@ -997,8 +1019,9 @@
       // (.aq-input-capture) on every pointer event. Reclaim focus only when
       // it landed there — any other target means the user clicked elsewhere
       // intentionally and we should commit.
-      var keepAlive = setInterval(function(){
-        if(activeEditor_textarea !== ta){ clearInterval(keepAlive); return; }
+      if(activeEditor_keepAlive) clearInterval(activeEditor_keepAlive);
+      activeEditor_keepAlive = setInterval(function(){
+        if(activeEditor_textarea !== ta){ clearInterval(activeEditor_keepAlive); activeEditor_keepAlive = 0; return; }
         var ae = document.activeElement;
         if(ae === ta) return;
         if(ae && ae.classList && ae.classList.contains('aq-input-capture')){
@@ -1028,7 +1051,7 @@
       showTableToolbar(cell);
     }
 
-    stageEl.addEventListener('mousedown', function(e){
+    function onStageTableMouseDown(e){
       if(e.target.closest && e.target.closest('.aq-table-toolbar')) return;
       // Click inside an active cell editor — let the textarea handle it.
       if(activeEditor_textarea && e.target === activeEditor_textarea) return;
@@ -1041,13 +1064,14 @@
       e.stopPropagation();
       e.preventDefault();
       startCellEdit(cell);
-    }, true);
+    }
+    stageEl.addEventListener('mousedown', onStageTableMouseDown, true);
 
     // Delete/Backspace removes the currently selected image (when no cell is
     // being edited). Listening on the document is fine: the keydown only
     // matters when there's a selected image and no other editable surface
     // owns the keystroke.
-    document.addEventListener('keydown', function(e){
+    function onDocumentImageKeyDown(e){
       if(activeEditor_textarea) return;        // table cell editor active
       if(!selectedImg) return;
       if(e.key !== 'Delete' && e.key !== 'Backspace') return;
@@ -1062,7 +1086,21 @@
       if(!nextBlocks.length) nextBlocks = [{ type: 'paragraph', runs: [{ text: '' }] }];
       docModel.replace(nextBlocks);
       onMutate();
-    });
+    }
+    document.addEventListener('keydown', onDocumentImageKeyDown);
+
+    stageEl._aqImageInteractionCleanup = function(){
+      if(activeEditor_keepAlive){ clearInterval(activeEditor_keepAlive); activeEditor_keepAlive = 0; }
+      if(activeEditor_textarea && activeEditor_textarea.parentNode) activeEditor_textarea.parentNode.removeChild(activeEditor_textarea);
+      activeEditor_textarea = null;
+      activeEditor_cell = null;
+      clearTableToolbar();
+      clearSelection();
+      setEngineCaptureEnabled(true);
+      stageEl.removeEventListener('mousedown', onStageImageMouseDown);
+      stageEl.removeEventListener('mousedown', onStageTableMouseDown, true);
+      document.removeEventListener('keydown', onDocumentImageKeyDown);
+    };
   }
 
   // ── Editor factory ────────────────────────────────────────────────────────
@@ -1092,6 +1130,11 @@
     element.innerHTML = '';
     element.style.cssText = 'display:block;width:100%;min-height:100%;position:relative;z-index:190;pointer-events:auto;';
     element.appendChild(stageEl);
+    var _boundScrollHost = null;
+    try {
+      _boundScrollHost = document.getElementById('escroll') || stageEl.parentElement;
+      if(_boundScrollHost && _boundScrollHost.addEventListener) _boundScrollHost.addEventListener('scroll', scheduleViewportRender, { passive: true });
+    } catch(_scrollBindErr){}
 
     var blocks   = htmlToBlocks(initialHTML);
     var docModel = window.AQEngineDocument.create(blocks);
@@ -1102,6 +1145,72 @@
     var _destroyed = false;
     var _reflowing = false;
     var _setupDone = false;
+    var _refSyncTimer = 0;
+    var _lastLayout = null;
+    var _scrollRenderTimer = 0;
+
+    function scheduleTypingRefSync(){
+      if(typeof window === 'undefined' || typeof window.scheduleRefSectionSync !== 'function') return;
+      try {
+        if(_refSyncTimer) window.clearTimeout(_refSyncTimer);
+        _refSyncTimer = window.setTimeout(function(){
+          _refSyncTimer = 0;
+          try { window.scheduleRefSectionSync(); } catch(_e){}
+        }, 900);
+      } catch(_e){}
+    }
+
+    function pageIndexForOffset(layout, off){
+      if(!layout || !layout.pages || !layout.pages.length) return 0;
+      off = Math.max(0, Number(off || 0));
+      for(var p = 0; p < layout.pages.length; p++){
+        var lines = layout.pages[p].lines || [];
+        for(var li = 0; li < lines.length; li++){
+          var line = lines[li];
+          if(!line) continue;
+          if(off >= Number(line.offsetStart || 0) && off <= Number(line.offsetEnd || line.offsetStart || 0)) return p;
+        }
+      }
+      return Math.max(0, Math.min(layout.pages.length - 1, 0));
+    }
+
+    function pageRangeAround(layout, pageIndex){
+      var max = layout && layout.pages ? layout.pages.length - 1 : 0;
+      pageIndex = Math.max(0, Math.min(max, Number(pageIndex || 0)));
+      return { from: Math.max(0, pageIndex - 2), to: Math.min(max, pageIndex + 2) };
+    }
+
+    function visiblePageRange(layout){
+      var scrollEl = document.getElementById('escroll') || stageEl.parentElement;
+      if(!layout || !layout.pages || !layout.pages.length || !scrollEl) return pageRangeAround(layout, 0);
+      var pageStep = layout.pageHeightPx + (engineOpts.pageGapPx || 0);
+      var top = Math.max(0, Number(scrollEl.scrollTop || 0) - 48);
+      var bottom = top + Number(scrollEl.clientHeight || window.innerHeight || layout.pageHeightPx) + 96;
+      var from = Math.floor(Math.max(0, top - 32) / pageStep) - 1;
+      var to = Math.ceil(Math.max(0, bottom - 32) / pageStep) + 1;
+      var max = layout.pages.length - 1;
+      return { from: Math.max(0, from), to: Math.min(max, to) };
+    }
+
+    function renderLayout(layout, range){
+      if(_destroyed || !layout) return;
+      _lastLayout = layout;
+      window.AQEngine.renderToDOM(layout, stageEl, Object.assign({}, engineOpts, { renderPageRange: range || visiblePageRange(layout) }));
+      wireImageInteraction(stageEl, docModel, function(){ reflow(); onUpdate({ editor: editorObj }); });
+    }
+
+    function scheduleViewportRender(){
+      if(_destroyed || !_lastLayout) return;
+      try { if(_scrollRenderTimer) window.clearTimeout(_scrollRenderTimer); } catch(_e){}
+      try {
+        _scrollRenderTimer = window.setTimeout(function(){
+          _scrollRenderTimer = 0;
+          renderLayout(_lastLayout, visiblePageRange(_lastLayout));
+          if(selection && selection.repaint) selection.repaint();
+          if(input && input.syncCapturePosition) input.syncCapturePosition();
+        }, 80);
+      } catch(_e){}
+    }
 
     var engineOpts = {
       pageSize:         { widthPt: 595.276, heightPt: 841.89 },
@@ -1135,8 +1244,12 @@
         var layout = window.AQEngine.paginate(d.blocks, engineOpts);
         editorObj._aqLayout = layout;
         editorObj._aqLayoutOptions = engineOpts;
-        window.AQEngine.renderToDOM(layout, stageEl, engineOpts);
-        wireImageInteraction(stageEl, docModel, function(){ reflow(); onUpdate({ editor: editorObj }); });
+        var activePageIndex = 0;
+        try {
+          var activeRange = selection && typeof selection.getRange === 'function' ? selection.getRange() : null;
+          activePageIndex = pageIndexForOffset(layout, activeRange ? activeRange.focus : 0);
+        } catch(_pageErr){}
+        renderLayout(layout, _setupDone ? pageRangeAround(layout, activePageIndex) : visiblePageRange(layout));
 
         // Empty-document placeholder. Shown when the doc has a single empty
         // paragraph block — fades on the first keystroke. Pure visual hint.
@@ -1184,6 +1297,7 @@
           selection = window.AQEngineSelection.create({ container: stageEl, docModel: docModel });
           selection.attach();
           selection.onChange(function(ev){
+            if(_redirectSelectionOutOfBibliography()) return;
             onSelUpdate();
             if(editorObj._onSelCb) editorObj._onSelCb(ev);
           });
@@ -1194,10 +1308,7 @@
             onChanged:    function(){
               reflow();
               onUpdate({ editor: editorObj });
-              // Safe bibliography sync
-              if(typeof window.scheduleRefSectionSync === 'function'){
-                try { window.scheduleRefSectionSync(); } catch(_e){}
-              }
+              scheduleTypingRefSync();
             }
           });
           if(input && typeof input.attach === 'function') input.attach();
@@ -1221,6 +1332,68 @@
         cursor += rlen;
       }
       return null;
+    }
+
+    function _blockPlainText(block){
+      return ((block && block.runs) || []).map(function(run){ return String(run && run.text || ''); }).join('');
+    }
+
+    function _normalizeBibTitle(text){
+      return String(text || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\u00e7/g, 'c')
+        .replace(/\u0131/g, 'i')
+        .replace(/\u015f/g, 's')
+        .replace(/\u011f/g, 'g')
+        .replace(/\u00fc/g, 'u')
+        .replace(/\u00f6/g, 'o');
+    }
+
+    function _isBibliographyHeading(block){
+      var text = _normalizeBibTitle(_blockPlainText(block));
+      return !!(block && (block._isBibHeading || (block.type === 'heading' && (text === 'kaynakca' || text === 'references' || text === 'bibliography' || text === 'kaynaklar'))));
+    }
+
+    function _isBibliographyEntry(block){
+      var cls = String(block && block.attrs && block.attrs.class || '');
+      return !!(block && (block._isBibEntry || (block.attrs && block.attrs.refId) || /\b(refe|aq-ref-entry)\b/.test(cls)));
+    }
+
+    function _findBibliographyHeadingIndex(blocks){
+      blocks = Array.isArray(blocks) ? blocks : [];
+      for(var i = 0; i < blocks.length; i++){
+        if(_isBibliographyHeading(blocks[i])) return i;
+      }
+      return -1;
+    }
+
+    function _blockStartOffset(blocks, blockIdx){
+      var out = 0;
+      for(var i = 0; i < blockIdx && i < blocks.length; i++){
+        out += _blockPlainText(blocks[i]).length + 1;
+      }
+      return out;
+    }
+
+    var _redirectingBibliographySelection = false;
+    function _redirectSelectionOutOfBibliography(){
+      if(_redirectingBibliographySelection || !selection || !docModel) return false;
+      var range = selection.getRange ? selection.getRange() : null;
+      if(!range || typeof range.from !== 'number') return false;
+      var blocks = docModel.get().blocks || [];
+      var loc = docModel.locate(range.from);
+      var block = blocks[loc.blockIdx];
+      if(!_isBibliographyHeading(block) && !_isBibliographyEntry(block)) return false;
+      var headingIdx = _isBibliographyHeading(block) ? loc.blockIdx : _findBibliographyHeadingIndex(blocks);
+      if(headingIdx < 0) return false;
+      var at = _blockStartOffset(blocks, headingIdx);
+      _redirectingBibliographySelection = true;
+      setTimeout(function(){
+        try{ if(selection && selection.setRange) selection.setRange(at, at); }catch(_e){}
+        _redirectingBibliographySelection = false;
+      }, 0);
+      return true;
     }
 
     // ── TipTap-compatible editor object ──────────────────────────────────────
@@ -1426,6 +1599,20 @@
 
       destroy: function(){
         _destroyed = true; this.isDestroyed = true;
+        try { if(_refSyncTimer) window.clearTimeout(_refSyncTimer); } catch(_e){}
+        try { if(_scrollRenderTimer) window.clearTimeout(_scrollRenderTimer); } catch(_e){}
+        _refSyncTimer = 0;
+        _scrollRenderTimer = 0;
+        try {
+          if(_boundScrollHost && _boundScrollHost.removeEventListener) _boundScrollHost.removeEventListener('scroll', scheduleViewportRender);
+          _boundScrollHost = null;
+        } catch(_scrollUnbindErr){}
+        try {
+          if(stageEl && typeof stageEl._aqImageInteractionCleanup === 'function'){
+            stageEl._aqImageInteractionCleanup();
+            stageEl._aqImageInteractionCleanup = null;
+          }
+        } catch(_imageCleanupErr){}
         if(input && input.destroy) input.destroy();
         if(selection && selection.detach) selection.detach();
         stageEl.innerHTML = '';

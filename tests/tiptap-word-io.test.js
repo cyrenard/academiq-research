@@ -104,6 +104,46 @@ test('repairWordImportHTML repairs zero-width damaged Turkish joins from saved d
   assert.equal(/\u200b/.test(text), false);
 });
 
+test('repairWordImportHTML repairs persisted Word import joins during document reload', () => {
+  const html = io.repairWordImportHTML(
+    '<p>Teknolojinin geli\u015fimiylebirlikte dijitalle\u015fme, t\u00fcm alanlarda kendini g\u00f6steren \u00f6nemli bir olgu halinegelmi\u015ftir. ' +
+    'Dijital teknolojilerinyaln\u0131zca cihaz veya platformlar arac\u0131l\u0131\u011f\u0131yla kullan\u0131lan bir unsur olmaktan \u00e7\u0131k\u0131p,\u00f6\u011frenme, ileti\u015fim ve bilgi \u00fcretimi gibi \u00e7e\u015fitli alanlarda da aktif bir \u015fekildekullan\u0131lmaya ba\u015flad\u0131\u011f\u0131 g\u00f6r\u00fclmektedir. ' +
+    'Bu ba\u011flamda dijitalle\u015fmehayat\u0131m\u0131z\u0131n her alan\u0131na giren ve bireyler \u00fczerinde bili\u015fsel izler b\u0131rakan birkavram olarak ortaya konmaktad\u0131r. ' +
+    'Bu durum insanbili\u015finin sadece i\u00e7sel unsurlarla de\u011fil teknoloji gibi d\u0131\u015fsal unsurlarla daetkile\u015fim i\u00e7erisine girdi\u011fini g\u00f6stermektedir.</p>'
+  );
+  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  assert.match(text, /geli\u015fimiyle birlikte/);
+  assert.match(text, /haline gelmi\u015ftir/);
+  assert.match(text, /teknolojilerin yaln\u0131zca/);
+  assert.match(text, /\u00e7\u0131k\u0131p, \u00f6\u011frenme/);
+  assert.match(text, /\u015fekilde kullan\u0131lmaya/);
+  assert.match(text, /dijitalle\u015fme hayat\u0131m\u0131z\u0131n/);
+  assert.match(text, /bir kavram/);
+  assert.match(text, /insan bili\u015finin/);
+  assert.match(text, /da etkile\u015fim/);
+});
+
+test('normalizeImportHTML repairs joined words in plain-text Word fallback', () => {
+  const html = io.normalizeImportHTML(
+    'Teknolojinin geli\u015fimiylebirlikte dijitalle\u015fme halinegelmi\u015ftir. Bu durum insanbili\u015finin daetkile\u015fim i\u00e7erisine girdi\u011fini g\u00f6stermektedir.',
+    (text) => '<p>' + text + '</p>'
+  );
+  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  assert.match(text, /geli\u015fimiyle birlikte/);
+  assert.match(text, /haline gelmi\u015ftir/);
+  assert.match(text, /insan bili\u015finin/);
+  assert.match(text, /da etkile\u015fim/);
+});
+
+test('repairWordImportHTML removes empty inline Word artifacts before repairing joins', () => {
+  const html = io.repairWordImportHTML(
+    '<p>Dijitalle\u015fmenin temel bili\u015fsel \u00f6zellikler \u00fczerinde \u00e7e\u015fitli <sup> </sup>leri bulunabilmektedir.</p>'
+  );
+  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  assert.match(text, /\u00fczerinde \u00e7e\u015fitli ili\u015fkileri bulunabilmektedir/);
+  assert.equal(/<sup/i.test(html), false);
+});
+
 test('normalizeWordHtml upgrades common Word heading classes', () => {
   const html = io.normalizeWordHtml('<p class="MsoTitle">Ana Baslik</p><p class="MsoHeading2">Alt Baslik</p>');
   assert.match(html, /<h1>Ana Baslik<\/h1>/);
