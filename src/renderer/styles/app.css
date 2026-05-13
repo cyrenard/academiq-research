@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../../../tailwind.config.js";
 
 * {
   box-sizing: border-box;
@@ -72,21 +71,33 @@ button:disabled {
   outline-offset: 2px;
 }
 
-.aq-editor-toolbar-panel {
-  font-size: 1.02em;
-}
-
-.aq-editor-toolbar-panel :where(button, select, input[type="color"]) {
-  min-height: 28px;
-}
-
-.aq-editor-toolbar-panel :where(button, select) {
-  line-height: 1;
-  vertical-align: middle;
+.aq-editor-toolbars :where(button, input, select),
+.aq-note-sidebar-actions :where(button),
+.aq-ref-sidebar-actions :where(button),
+#doiinp {
+  font-size: 12px !important;
+  line-height: 1 !important;
 }
 
 .aq-editor-toolbar-panel select {
   background-position: right 0.35rem center;
+}
+
+#ctxmenu,
+#folderCtxmenu,
+.ctx-menu,
+.aq-pdf-context-menu,
+.absolute[class*="shadow"],
+.fixed[class*="shadow"] {
+  font-size: 11px;
+}
+
+#ctxmenu button,
+#folderCtxmenu button,
+.ctx-menu button,
+.aq-pdf-context-menu button {
+  font-size: 11px !important;
+  line-height: 1.15;
 }
 
 .aq-legacy-pdf-panel {
@@ -1218,9 +1229,9 @@ body.aq-matrix-fullscreen .aq-legacy-pdf-panel.open {
   border: 0;
   border-radius: 8px;
   background: transparent;
-  padding: 8px 9px;
+  padding: 7px 8px;
   color: #1f2937;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 650;
   text-align: left;
 }
@@ -2050,7 +2061,18 @@ body.aq-matrix-fullscreen #matrixView {
 .aq-pdf-context-menu button {
   border-radius: 8px;
   color: #263241;
-  font-size: 12px;
+  font-size: 11px;
+}
+
+#ctxmenu .ctxi,
+#folderCtxmenu .ctxi,
+#ctxlabelpanel .ctxi,
+.ctx-menu .ctx-action,
+.ctx-menu .ctx-disabled,
+.aq-pdf-context-menu button,
+#hltip .htb {
+  font-size: 11px !important;
+  line-height: 1.2;
 }
 
 #hltip .htb-primary {

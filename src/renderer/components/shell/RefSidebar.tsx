@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type MouseEvent } from 'react';
+﻿import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import type { AcademiqReference } from '../../lib/app-state';
 import { referenceAuthors, referenceTags, referenceTitle } from '../../lib/app-state';
 import { legacyFeatures, runLegacyFeature } from '../../lib/legacy-feature-adapter';
@@ -33,7 +33,7 @@ type RefSidebarProps = {
   onDeleteCollection: (collectionId: string) => void;
   onMoveReferenceToCollection: (referenceId: string, collectionId: string) => void;
   onToggleReferenceCollection: (referenceId: string, collectionId: string) => void;
-  onReferencePdfAction: (action: 'open' | 'show' | 'delete' | 'download', referenceId: string) => void;
+  onReferencePdfAction: (action: 'open' | 'show' | 'delete' | 'download' | 'browser' | 'institutional', referenceId: string) => void;
   onBatchOADownload: () => void;
   onShowReferenceInExplorer: (referenceId: string) => void;
   onOpenRelatedPapers: (reference: AcademiqReference) => void;
@@ -188,12 +188,12 @@ export function RefSidebar({
       <button
         type="button"
         onClick={() => setOpenMenu((value) => value === id ? null : id)}
-        className="h-8 w-full rounded-md border border-aq-line bg-white text-xs font-semibold transition hover:bg-aq-panel active:translate-y-px"
+        className="h-8 w-full rounded-md border border-aq-line bg-white text-[12px] font-semibold transition hover:bg-aq-panel active:translate-y-px"
       >
         {label}
       </button>
       {openMenu === id ? (
-        <div className="absolute left-0 top-9 z-40 w-44 rounded-md border border-aq-line bg-white p-1.5 text-xs shadow-xl">
+        <div className="absolute left-0 top-9 z-40 w-44 rounded-md border border-aq-line bg-white p-1.5 text-[11px] shadow-xl">
           {items.map(([featureId, itemLabel]) => (
             <button key={featureId} type="button" onClick={() => runFeature(featureId)} className="block w-full rounded px-2 py-2 text-left hover:bg-aq-panel">
               {itemLabel}
@@ -351,9 +351,9 @@ export function RefSidebar({
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <button type="button" onClick={onOpenCollections} className="h-8 rounded-md border border-aq-line bg-white text-xs font-semibold transition hover:bg-aq-panel active:translate-y-px">Klasörler</button>
-          <button type="button" onClick={onToggleFilters} className={['h-8 rounded-md border border-aq-line text-xs font-semibold transition hover:bg-aq-panel active:translate-y-px', filtersOpen ? 'bg-aq-panel text-aq-ink' : 'bg-white'].join(' ')}>Filtrele</button>
+        <div className="aq-ref-sidebar-actions grid grid-cols-2 gap-2">
+          <button type="button" onClick={onOpenCollections} className="h-8 rounded-md border border-aq-line bg-white text-[12px] font-semibold transition hover:bg-aq-panel active:translate-y-px">Klasörler</button>
+          <button type="button" onClick={onToggleFilters} className={['h-8 rounded-md border border-aq-line text-[12px] font-semibold transition hover:bg-aq-panel active:translate-y-px', filtersOpen ? 'bg-aq-panel text-aq-ink' : 'bg-white'].join(' ')}>Filtrele</button>
           {menuButton('import', 'İçe Aktar', [
             ['reference-import-bib', '.bib/.ris Aktar'],
             ['reference-import-zotero', "Zotero'dan Aktar"]
@@ -434,7 +434,7 @@ export function RefSidebar({
       {referenceMenu && activeMenuReference ? (
         <>
           <div
-            className="fixed z-[2200] max-h-[min(520px,calc(100vh-24px))] w-56 overflow-auto rounded-[13px] border border-aq-line/90 bg-white/95 p-1.5 text-xs shadow-[0_24px_64px_rgba(22,27,34,0.20)] backdrop-blur-xl"
+            className="fixed z-[2200] max-h-[min(520px,calc(100vh-24px))] w-56 overflow-auto rounded-[13px] border border-aq-line/90 bg-white/95 p-1.5 text-[11px] shadow-[0_24px_64px_rgba(22,27,34,0.20)] backdrop-blur-xl"
             style={{
               left: Math.min(referenceMenu.x, window.innerWidth - 232),
               top: Math.min(referenceMenu.y, window.innerHeight - 532)
@@ -484,6 +484,12 @@ export function RefSidebar({
             <button type="button" disabled={!Boolean(activeMenuReference.doi || activeMenuReference.pdfUrl)} title={Boolean(activeMenuReference.doi || activeMenuReference.pdfUrl) ? 'OA PDF indir' : 'Bu kaynakta DOI/PDF URL yok'} className="block w-full rounded-md px-2.5 py-2 text-left font-medium text-aq-ink hover:bg-aq-panel disabled:cursor-not-allowed disabled:text-aq-muted disabled:hover:bg-transparent" onClick={() => { onReferencePdfAction('download', activeMenuReference.id); closeReferenceMenu(); }}>
               OA PDF indir
             </button>
+            <button type="button" disabled={!Boolean(activeMenuReference.doi || activeMenuReference.url || activeMenuReference.pdfUrl)} title={Boolean(activeMenuReference.doi || activeMenuReference.url || activeMenuReference.pdfUrl) ? 'Varsayılan tarayıcıda aç' : 'Bu kaynakta URL/DOI yok'} className="block w-full rounded-md px-2.5 py-2 text-left font-medium text-aq-ink hover:bg-aq-panel disabled:cursor-not-allowed disabled:text-aq-muted disabled:hover:bg-transparent" onClick={() => { onReferencePdfAction('browser', activeMenuReference.id); closeReferenceMenu(); }}>
+              Tarayıcıda aç
+            </button>
+            <button type="button" disabled={!Boolean(activeMenuReference.doi || activeMenuReference.url || activeMenuReference.pdfUrl)} title={Boolean(activeMenuReference.doi || activeMenuReference.url || activeMenuReference.pdfUrl) ? 'Kurumsal oturum penceresinde aç' : 'Bu kaynakta URL/DOI yok'} className="block w-full rounded-md px-2.5 py-2 text-left font-medium text-aq-ink hover:bg-aq-panel disabled:cursor-not-allowed disabled:text-aq-muted disabled:hover:bg-transparent" onClick={() => { onReferencePdfAction('institutional', activeMenuReference.id); closeReferenceMenu(); }}>
+              Kurumsal erişimle aç
+            </button>
             <button type="button" disabled={!Boolean(activeMenuReference.pdfAttached || activeMenuReference.pdfData || activeMenuReference.pdfPath)} title={Boolean(activeMenuReference.pdfAttached || activeMenuReference.pdfData || activeMenuReference.pdfPath) ? 'PDF dosyasını göster' : 'Bu kaynağa bağlı PDF yok'} className="block w-full rounded-md px-2.5 py-2 text-left font-medium text-aq-ink hover:bg-aq-panel disabled:cursor-not-allowed disabled:text-aq-muted disabled:hover:bg-transparent" onClick={() => { onShowReferenceInExplorer(activeMenuReference.id); closeReferenceMenu(); }}>
               Dosya gezgininde aç
             </button>
@@ -497,7 +503,7 @@ export function RefSidebar({
 
           {referenceSubmenu ? (
             <div
-              className="fixed z-[2201] max-h-[min(420px,calc(100vh-24px))] w-64 overflow-auto rounded-[13px] border border-aq-line/90 bg-white/95 p-1.5 text-xs shadow-[0_24px_64px_rgba(22,27,34,0.20)] backdrop-blur-xl"
+              className="fixed z-[2201] max-h-[min(420px,calc(100vh-24px))] w-64 overflow-auto rounded-[13px] border border-aq-line/90 bg-white/95 p-1.5 text-[11px] shadow-[0_24px_64px_rgba(22,27,34,0.20)] backdrop-blur-xl"
               style={{
                 left: Math.min(referenceMenu.x + 226, window.innerWidth - 272),
                 top: Math.min(referenceMenu.y + 70, window.innerHeight - 432)

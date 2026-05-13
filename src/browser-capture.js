@@ -295,7 +295,11 @@
       ref.browserCaptureMeta.pdfCaptureStatus = 'detected_only';
       return { status: 'detected_only', detected: true, storedUrl: safe.pdfUrl };
     }
-    if(ref.pdfData || ref.pdfUrl){
+    if(ref.pdfData){
+      ref.browserCaptureMeta.pdfCaptureStatus = 'downloaded';
+      return { status: 'downloaded', detected: true, storedUrl: ref.pdfUrl || safe.pdfUrl };
+    }
+    if(ref.pdfUrl && String(ref.pdfUrl) !== String(safe.pdfUrl)){
       ref.browserCaptureMeta.pdfCaptureStatus = 'already_present';
       return { status: 'already_present', detected: true, storedUrl: ref.pdfUrl || safe.pdfUrl };
     }
@@ -760,6 +764,7 @@
         bibliographyManual: !!doc.bibliographyManual,
         coverHTML: String(doc.coverHTML || ''),
         tocHTML: String(doc.tocHTML || ''),
+        abstractHTML: String(doc.abstractHTML || ''),
         appendicesHTML: String(doc.appendicesHTML || ''),
         citationStyle: String(doc.citationStyle || 'apa7')
       });

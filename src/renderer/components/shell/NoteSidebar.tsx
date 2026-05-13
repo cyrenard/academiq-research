@@ -27,7 +27,7 @@ type NoteSidebarProps = {
   onInsertNote: (note: AcademiqNote) => void;
   onInsertCitation: (refId: string) => void;
   onEditReference: (refId: string) => void;
-  onReferencePdfAction: (action: 'open' | 'show' | 'delete' | 'download', refId: string) => void;
+  onReferencePdfAction: (action: 'open' | 'show' | 'delete' | 'download' | 'browser' | 'institutional', refId: string) => void;
   onOpenPDF: () => void;
   onOpenMatrix: () => void;
   onAction: (message: string) => void;
@@ -223,11 +223,11 @@ export function NoteSidebar({
           <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-aq-muted">Workspace</div>
           <h2 className="mt-1 text-lg font-semibold leading-none">{workspaceName || 'Genel Notlar'}</h2>
         </div>
-        <div className="flex gap-1">
+        <div className="aq-note-sidebar-actions flex gap-1">
           <button
             type="button"
             onClick={openNotebook}
-            className="h-8 rounded-md border border-aq-line bg-white px-3 text-xs font-semibold text-aq-ink shadow-sm transition hover:bg-aq-panel"
+            className="h-8 rounded-md border border-aq-line bg-white px-3 text-[12px] font-semibold text-aq-ink shadow-sm transition hover:bg-aq-panel"
             title="Not defterini aç"
           >
             Defter
@@ -235,7 +235,7 @@ export function NoteSidebar({
           <button
             type="button"
             onClick={onOpenMatrix}
-            className="h-8 rounded-md border border-aq-line bg-white px-3 text-xs font-semibold text-aq-ink shadow-sm transition hover:bg-aq-panel"
+            className="h-8 rounded-md border border-aq-line bg-white px-3 text-[12px] font-semibold text-aq-ink shadow-sm transition hover:bg-aq-panel"
             title="Literatür matrisini aç"
           >
             Matris
@@ -525,7 +525,7 @@ export function NoteSidebar({
       {menuNote && noteMenu ? (
         <div className="fixed inset-0 z-[2900]" onClick={() => setNoteMenu(null)}>
           <div
-            className="absolute w-48 rounded-[13px] border border-aq-line/90 bg-white/95 p-1.5 text-xs text-aq-ink shadow-[0_24px_64px_rgba(22,27,34,0.20)] backdrop-blur-xl"
+            className="absolute w-48 rounded-[13px] border border-aq-line/90 bg-white/95 p-1.5 text-[11px] text-aq-ink shadow-[0_24px_64px_rgba(22,27,34,0.20)] backdrop-blur-xl"
             style={{ left: Math.min(noteMenu.x, window.innerWidth - 210), top: Math.min(noteMenu.y, window.innerHeight - 190) }}
             onClick={(event) => event.stopPropagation()}
           >
@@ -544,7 +544,7 @@ export function NoteSidebar({
       {tagPopup && tagPopupNote ? (
         <div className="fixed inset-0 z-[2950]" onClick={() => setTagPopup(null)}>
           <div
-            className="absolute w-72 rounded-[13px] border border-aq-line/90 bg-white/95 p-3 text-xs text-aq-ink shadow-[0_24px_64px_rgba(22,27,34,0.20)] backdrop-blur-xl"
+            className="absolute w-72 rounded-[13px] border border-aq-line/90 bg-white/95 p-3 text-[11px] text-aq-ink shadow-[0_24px_64px_rgba(22,27,34,0.20)] backdrop-blur-xl"
             style={{ left: tagPopup.x, top: tagPopup.y }}
             onClick={(event) => event.stopPropagation()}
           >

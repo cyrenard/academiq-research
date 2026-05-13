@@ -47,7 +47,7 @@ test('buildContextMenuModel shows no-suggestion hint when grammar check is empty
   assert.equal(model[0].disabled, true);
 });
 
-test('applySurfaceAttributes sets spellcheck (no Grammarly attributes)', () => {
+test('applySurfaceAttributes sets writing-assist attributes', () => {
   const attrs = {};
   const node = {
     nodeType: 1,
@@ -62,11 +62,8 @@ test('applySurfaceAttributes sets spellcheck (no Grammarly attributes)', () => {
     const ok = events.applySurfaceAttributes(node);
     assert.equal(ok, true);
     assert.equal(attrs.spellcheck, 'true');
-    assert.equal(attrs['data-gramm'], undefined);
-    assert.equal(attrs['data-gramm_editor'], undefined);
-    assert.equal(attrs['data-enable-grammarly'], undefined);
-    assert.equal(attrs['data-grammarly-part'], undefined);
-    assert.equal(attrs['data-grammarly-integration'], undefined);
+    assert.equal(attrs['data-gramm'], 'true');
+    assert.equal(attrs['data-gramm_editor'], 'true');
   } finally {
     delete global.document;
   }

@@ -132,16 +132,51 @@ function readPersistedDoc(docId: string, raw: unknown) {
 
 function buildEditorSurface(mount: HTMLElement) {
   mount.innerHTML = [
-    '<div id="legacy-editor-shell" class="h-full w-full">',
+    '<div id="legacy-editor-shell" class="h-full w-full" spellcheck="true" data-gramm="true" data-gramm_editor="true">',
     '<div id="escroll" class="aq-editor-scroll">',
     '<div id="coverpage" class="aq-legacy-page" style="display:none"><div id="coverbody"></div></div>',
     '<div id="tocpage" class="aq-legacy-page" style="display:none"><div id="tocbody"></div></div>',
-    '<div id="apapage" class="aq-legacy-page"><div id="apaed"></div></div>',
+    '<div id="abstractpage" class="aq-legacy-page" style="display:none"><div id="abstractbody"></div></div>',
+    '<div id="apapage" class="aq-legacy-page" spellcheck="true"><div id="apaed" spellcheck="true" data-gramm="true" data-gramm_editor="true"></div></div>',
     '<div id="bibpage"></div><div id="appendixpage" class="aq-legacy-page" style="display:none"><div id="appendixbody"></div></div>',
     '</div>',
     '<div id="reflist" hidden></div><div id="bibbody" hidden></div>',
     '</div>'
   ].join('');
+}
+
+function markWritingAssistSurface(root: ParentNode | null = document) {
+  const targets = [
+    document.body,
+    document.getElementById('legacy-editor-shell'),
+    document.getElementById('escroll'),
+    document.getElementById('apapage'),
+    document.getElementById('apaed'),
+    document.getElementById('aq-engine-host'),
+    root && 'querySelector' in root ? root.querySelector('.aq-engine-stage') : null,
+    root && 'querySelector' in root ? root.querySelector('.aq-input-capture') : null,
+    root && 'querySelector' in root ? root.querySelector('.ProseMirror') : null
+  ].filter((node): node is HTMLElement => node instanceof HTMLElement);
+
+  targets.forEach((node) => {
+    node.setAttribute('spellcheck', 'true');
+    node.setAttribute('data-gramm', 'true');
+    node.setAttribute('data-gramm_editor', 'true');
+    if (node.id === 'apaed' || node.classList.contains('ProseMirror')) {
+      node.setAttribute('role', 'textbox');
+      node.setAttribute('aria-multiline', 'true');
+    }
+  });
+
+  document.querySelectorAll<HTMLElement>('.aq-input-capture').forEach((node) => {
+    node.setAttribute('spellcheck', 'true');
+    node.setAttribute('autocorrect', 'on');
+    node.setAttribute('autocomplete', 'on');
+    node.setAttribute('data-gramm', 'true');
+    node.setAttribute('data-gramm_editor', 'true');
+    node.removeAttribute('aria-hidden');
+    node.setAttribute('aria-label', 'AcademiQ editor input');
+  });
 }
 
 function setAuxiliaryPage(pageId: string, bodyId: string, html: unknown) {
@@ -150,12 +185,30 @@ function setAuxiliaryPage(pageId: string, bodyId: string, html: unknown) {
   const body = document.getElementById(bodyId);
   if (body) body.innerHTML = content;
   if (page) page.style.display = content ? 'block' : 'none';
+  if (content && pageId === 'abstractpage' && body instanceof HTMLElement) {
+    decorateAbstractPage(body);
+  }
+}
+
+function decorateAbstractPage(body: HTMLElement) {
+  if (body.querySelector('.abstract-remove-btn')) return;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'abstract-remove-btn';
+  button.textContent = 'Özü Sil';
+  button.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    window.dispatchEvent(new CustomEvent('aq:remove-abstract-page'));
+  });
+  body.appendChild(button);
 }
 
 function hydrateAuxiliaryPages(win: LegacyWindow, doc: any) {
   if (!doc) return;
   setAuxiliaryPage('coverpage', 'coverbody', doc.coverHTML);
   setAuxiliaryPage('tocpage', 'tocbody', doc.tocHTML);
+  setAuxiliaryPage('abstractpage', 'abstractbody', doc.abstractHTML);
   setAuxiliaryPage('appendixpage', 'appendixbody', doc.appendicesHTML);
   const tocBody = document.getElementById('tocbody');
   try {
@@ -621,6 +674,7 @@ export function createAcademiqEditor(options: CreateAcademiqEditorOptions): Acad
   destroyLegacyEditor(win);
   activeMount = options.mount;
   buildEditorSurface(options.mount);
+  markWritingAssistSurface(options.mount);
   installLegacySaveBridge(win, options.docId, options.onChange);
 
   const host = document.getElementById('apaed');
@@ -628,6 +682,8 @@ export function createAcademiqEditor(options: CreateAcademiqEditorOptions): Acad
   activeEditor = win.AQTipTapWordInit && typeof win.AQTipTapWordInit.init === 'function'
     ? win.AQTipTapWordInit.init()
     : null;
+  markWritingAssistSurface(options.mount);
+  window.setTimeout(() => markWritingAssistSurface(options.mount), 0);
   win.editor = activeEditor;
   hydrateInitialDocument(win, options.docId, options.initialState);
   installReferenceBridge(win);

@@ -171,6 +171,10 @@ const electronAPI = {
 
   // PDF download (CORS-free, Node.js redirect following)
   downloadPDFfromURL: (url, refId, options) => invoke('pdf:download', asURL(url), asRefId(refId), pickDownloadOptions(options)),
+  openExternalUrl: (url) => invoke('app:openExternalUrl', asURL(url)),
+  openInstitutionalAccess: (payload) => invoke('institutionalAccess:open', payload && typeof payload === 'object' ? payload : {}),
+  clearInstitutionalAccessSession: () => invoke('institutionalAccess:clearSession'),
+  onInstitutionalAccessPdfSaved: (callback) => listen('institutionalAccess:pdfSaved', callback),
   netFetchJSON:      (url, options) => invoke('net:fetch-json', asURL(url), pickNetFetchOptions(options)),
   netFetchText:      (url, options) => invoke('net:fetch-text', asURL(url), pickNetFetchOptions(options)),
 

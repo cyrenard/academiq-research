@@ -36,6 +36,7 @@
 #apaed .ProseMirror,
 #coverbody,
 #tocbody,
+#abstractbody,
 #bibbody,
 #appendixbody {
   min-height: 980px;
@@ -50,6 +51,7 @@
 #apaed,
 #coverbody,
 #tocbody,
+#abstractbody,
 #bibbody,
 #appendixbody {
   padding: 96px 86px;
@@ -65,9 +67,54 @@
 
 #coverpage,
 #tocpage,
+#abstractpage,
 #bibpage,
 #appendixpage {
   display: none;
+}
+
+#abstractbody {
+  position: relative;
+}
+
+#abstractbody [data-aq-abstract="1"] p,
+#abstractbody .aq-abstract-text {
+  text-indent: 0 !important;
+  margin: 0 !important;
+  text-align: left;
+}
+
+#abstractbody .aq-abstract-keywords {
+  text-indent: 36pt !important;
+}
+
+#abstractbody .abstract-remove-btn {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 8;
+  border: 1px solid rgba(178, 88, 88, 0.45);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #8f2e2e;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 10px;
+  line-height: 1;
+  padding: 5px 9px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+}
+
+#abstractpage:hover #abstractbody .abstract-remove-btn,
+#abstractbody:focus-within .abstract-remove-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#abstractbody .abstract-remove-btn:hover {
+  border-color: rgba(178, 88, 88, 0.75);
+  background: #fff;
 }
 
 .aq-appendix-heading-line,

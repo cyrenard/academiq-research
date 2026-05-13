@@ -10,7 +10,15 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: true,
     rollupOptions: {
-      input: 'index.html'
+      input: 'index.html',
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('react') || id.includes('scheduler')) return 'vendor-react';
+          if (id.includes('lucide-react')) return 'vendor-icons';
+          return 'vendor';
+        }
+      }
     }
   },
   server: {

@@ -837,6 +837,8 @@
             // intact for proper kerning + selection.
             span.style.marginRight = extraSpace + 'px';
           }
+          span.dataset.offsetStart = it.offsetStart;
+          span.dataset.offsetEnd = it.offsetEnd;
           if(it.citation){
             span.className = 'aq-cit';
             span.style.color = 'inherit';

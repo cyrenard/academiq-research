@@ -265,6 +265,7 @@ export function addDocument(state: AcademiqAppState, name?: string): AcademiqApp
       bibliographyExtraRefIds: [],
       coverHTML: '',
       tocHTML: '',
+      abstractHTML: '',
       appendicesHTML: '',
       citationStyle: state.cm || 'apa7'
     }],

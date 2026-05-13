@@ -44,7 +44,7 @@ function ToolbarButton({ children, label, onClick, strong, active }: ToolbarButt
       title={label || (typeof children === 'string' ? children : undefined)}
       onClick={onClick}
       className={[
-        'inline-flex h-[29px] items-center justify-center gap-1 rounded px-1.5 text-[11px] leading-none transition hover:bg-aq-panel active:translate-y-px',
+        'inline-flex h-[29px] items-center justify-center gap-1 rounded px-1.5 text-[12px] leading-none transition hover:bg-aq-panel active:translate-y-px',
         strong ? 'font-semibold text-aq-ink' : 'text-aq-ink',
         active ? 'bg-aq-navy/10 text-aq-navy shadow-[inset_0_0_0_1px_rgba(30,58,95,0.18)]' : ''
       ].join(' ')}
@@ -61,7 +61,7 @@ function TopBarButton({ children, onClick, title, id }: { children: ReactNode; o
       type="button"
       title={title}
       onClick={onClick}
-      className="relative inline-flex h-full shrink-0 items-center gap-1 px-2.5 text-left text-[12.5px] leading-none text-aq-ink transition after:absolute after:right-0 after:top-1/2 after:h-5 after:w-px after:-translate-y-1/2 after:bg-aq-line hover:bg-aq-panel"
+      className="relative inline-flex h-full shrink-0 items-center gap-1 px-2.5 text-left text-[12px] leading-none text-aq-ink transition after:absolute after:right-0 after:top-1/2 after:h-5 after:w-px after:-translate-y-1/2 after:bg-aq-line hover:bg-aq-panel"
     >
       {children}
     </button>
@@ -86,6 +86,17 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
   const [replaceOpen, setReplaceOpen] = useState(false);
   const [replaceText, setReplaceText] = useState('');
   const [activeMarks, setActiveMarks] = useState<Record<string, boolean>>({});
+  const [coverOpen, setCoverOpen] = useState(false);
+  const [coverTitle, setCoverTitle] = useState('');
+  const [coverAuthor, setCoverAuthor] = useState('');
+  const [coverInstitution, setCoverInstitution] = useState('');
+  const [coverCourse, setCoverCourse] = useState('');
+  const [coverProfessor, setCoverProfessor] = useState('');
+  const [abstractOpen, setAbstractOpen] = useState(false);
+  const [abstractText, setAbstractText] = useState('');
+  const [abstractKeywords, setAbstractKeywords] = useState('');
+  const [abstractEnglishText, setAbstractEnglishText] = useState('');
+  const [abstractEnglishKeywords, setAbstractEnglishKeywords] = useState('');
 
   const refreshActiveMarks = () => {
     const editor = (window as any).editor;
@@ -144,6 +155,12 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
       document.removeEventListener('pointerup', onChange, true);
       window.removeEventListener('aq:react-sync', onChange as EventListener);
     };
+  }, []);
+
+  useEffect(() => {
+    const onRemoveAbstract = () => removeAbstractPage();
+    window.addEventListener('aq:remove-abstract-page', onRemoveAbstract);
+    return () => window.removeEventListener('aq:remove-abstract-page', onRemoveAbstract);
   }, []);
 
   const preserveEditorSelection = () => {
@@ -332,6 +349,23 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     const body = document.getElementById(bodyId);
     if (body) body.innerHTML = html;
     if (page) page.style.display = html.trim() ? 'block' : 'none';
+    if (html.trim() && pageId === 'abstractpage' && body instanceof HTMLElement) {
+      decorateAbstractPage(body);
+    }
+  };
+
+  const decorateAbstractPage = (body: HTMLElement) => {
+    if (body.querySelector('.abstract-remove-btn')) return;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'abstract-remove-btn';
+    button.textContent = 'Özü Sil';
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      window.dispatchEvent(new CustomEvent('aq:remove-abstract-page'));
+    });
+    body.appendChild(button);
   };
 
   const buildTOCPageHTML = () => {
@@ -376,6 +410,187 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
       document.getElementById('tocpage')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 0);
     return true;
+  };
+
+  const openCoverDialog = () => {
+    const doc = getActiveDocRecord();
+    setCoverTitle(String(doc?.name || '').trim());
+    setCoverAuthor('');
+    setCoverInstitution('');
+    setCoverCourse('');
+    setCoverProfessor('');
+    setCoverOpen(true);
+  };
+
+  const buildCoverPageHTML = () => {
+    const win = window as any;
+    const builder = win.AQTipTapWordTemplates?.buildCoverHTML;
+    const dateText = new Date().toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+    const payload = {
+      title: coverTitle.trim(),
+      author: coverAuthor.trim(),
+      institution: coverInstitution.trim(),
+      course: coverCourse.trim(),
+      professor: coverProfessor.trim(),
+      dateText
+    };
+    if (typeof builder === 'function') {
+      return String(builder(payload) || '');
+    }
+    const escape = (value: string) => value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    const rows = [
+      { text: payload.title, bold: true },
+      { text: payload.author },
+      { text: payload.institution },
+      { text: payload.course },
+      { text: payload.professor },
+      { text: payload.dateText }
+    ].filter((row) => row.text);
+    return [
+      '<div style="text-align:center;padding-top:192px;font-family:&quot;Times New Roman&quot;,Times,serif;font-size:12pt;line-height:2;">',
+      ...rows.map((row) => `<p style="text-indent:0;${row.bold ? 'font-weight:bold;' : ''}">${escape(row.text)}</p>`),
+      '</div><p><br></p>'
+    ].join('');
+  };
+
+  const insertCoverPage = () => {
+    const title = coverTitle.trim();
+    if (!title) {
+      setStatusText('Kapak için başlık girin.', 'er');
+      return;
+    }
+    commitEditorHTMLToLegacyState();
+    const doc = getActiveDocRecord();
+    if (!doc) return;
+    doc.coverHTML = sanitizeAuxiliaryHTML(buildCoverPageHTML());
+    setAuxiliaryPageHTML('coverpage', 'coverbody', doc.coverHTML);
+    saveAuxiliaryChange();
+    setCoverOpen(false);
+    window.setTimeout(() => {
+      document.getElementById('coverpage')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+    setStatusText('APA 7 kapak sayfası eklendi');
+  };
+
+  const openAbstractDialog = () => {
+    const doc = getActiveDocRecord();
+    const existing = String(doc?.abstractHTML || '').trim();
+    if (existing) {
+      const holder = document.createElement('div');
+      holder.innerHTML = existing;
+      holder.querySelector('.abstract-remove-btn')?.remove();
+      const readSection = (section: HTMLElement | null, keywordPattern: RegExp) => {
+        if (!section) return { text: '', keywords: '' };
+        const clone = section.cloneNode(true) as HTMLElement;
+        const keywordNode = Array.from(clone.querySelectorAll('p')).find((node) => keywordPattern.test(node.textContent || ''));
+        const keywords = keywordNode ? String(keywordNode.textContent || '').replace(keywordPattern, '').trim() : '';
+        keywordNode?.remove();
+        clone.querySelector('h1')?.remove();
+        return {
+          text: String(clone.textContent || '').replace(/\s+/g, ' ').trim(),
+          keywords
+        };
+      };
+      const sections = Array.from(holder.querySelectorAll('[data-aq-abstract-section]')) as HTMLElement[];
+      const tr = readSection(sections.find((section) => section.getAttribute('data-aq-abstract-section') === 'tr') || holder, /anahtar kelimeler\s*:/i);
+      const en = readSection(sections.find((section) => section.getAttribute('data-aq-abstract-section') === 'en') || null, /keywords\s*:/i);
+      setAbstractText(tr.text);
+      setAbstractKeywords(tr.keywords);
+      setAbstractEnglishText(en.text);
+      setAbstractEnglishKeywords(en.keywords);
+    } else {
+      setAbstractText('');
+      setAbstractKeywords('');
+      setAbstractEnglishText('');
+      setAbstractEnglishKeywords('');
+    }
+    setAbstractOpen(true);
+  };
+
+  const buildAbstractPageHTML = () => {
+    const escape = (value: string) => value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    const body = escape(abstractText.trim());
+    const keywords = abstractKeywords
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .join(', ');
+    return [
+      '<div data-aq-abstract="1" style="font-family:&quot;Times New Roman&quot;,Times,serif;font-size:12pt;line-height:2;color:#000;">',
+      '<h1 style="text-align:center;font-family:&quot;Times New Roman&quot;,Times,serif;font-size:12pt;line-height:2;font-weight:bold;margin:0 0 16px 0;">Öz</h1>',
+      `<p class="aq-abstract-text" style="text-indent:0!important;margin:0;text-align:left;">${body}</p>`,
+      keywords ? `<p class="aq-abstract-keywords" style="text-indent:36pt!important;margin:0;text-align:left;"><em>Anahtar Kelimeler:</em> ${escape(keywords)}</p>` : '',
+      '</div>'
+    ].join('');
+  };
+
+  const buildBilingualAbstractPageHTML = () => {
+    const escape = (value: string) => value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    const body = escape(abstractText.trim());
+    const keywords = abstractKeywords
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .join(', ');
+    const englishBody = escape(abstractEnglishText.trim());
+    const englishKeywords = abstractEnglishKeywords
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .join(', ');
+    return [
+      '<div data-aq-abstract="1" style="font-family:&quot;Times New Roman&quot;,Times,serif;font-size:12pt;line-height:2;color:#000;">',
+      '<section data-aq-abstract-section="tr">',
+      '<h1 style="text-align:center;font-family:&quot;Times New Roman&quot;,Times,serif;font-size:12pt;line-height:2;font-weight:bold;margin:0 0 16px 0;">Öz</h1>',
+      `<p style="text-indent:0;margin:0;text-align:left;">${body}</p>`,
+      keywords ? `<p style="text-indent:36pt;margin:0;text-align:left;"><em>Anahtar Kelimeler:</em> ${escape(keywords)}</p>` : '',
+      '</section>',
+      englishBody ? '<section data-aq-abstract-section="en" style="margin-top:24pt;">' : '',
+      englishBody ? '<h1 style="text-align:center;font-family:&quot;Times New Roman&quot;,Times,serif;font-size:12pt;line-height:2;font-weight:bold;margin:0 0 16px 0;">Abstract</h1>' : '',
+      englishBody ? `<p class="aq-abstract-text" style="text-indent:0!important;margin:0;text-align:left;">${englishBody}</p>` : '',
+      englishBody && englishKeywords ? `<p class="aq-abstract-keywords" style="text-indent:36pt!important;margin:0;text-align:left;"><em>Keywords:</em> ${escape(englishKeywords)}</p>` : '',
+      englishBody ? '</section>' : '',
+      '</div>'
+    ].join('');
+  };
+
+  const insertAbstractPage = () => {
+    if (!abstractText.trim()) {
+      setStatusText('Özet metni girin.', 'er');
+      return;
+    }
+    commitEditorHTMLToLegacyState();
+    const doc = getActiveDocRecord();
+    if (!doc) return;
+    doc.abstractHTML = sanitizeAuxiliaryHTML(buildBilingualAbstractPageHTML());
+    setAuxiliaryPageHTML('abstractpage', 'abstractbody', doc.abstractHTML);
+    saveAuxiliaryChange();
+    setAbstractOpen(false);
+    setAbstractText('');
+    setAbstractKeywords('');
+    setAbstractEnglishText('');
+    setAbstractEnglishKeywords('');
+    window.setTimeout(() => {
+      document.getElementById('abstractpage')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+    setStatusText('APA 7 abstract sayfası eklendi');
+  };
+
+  const removeAbstractPage = () => {
+    const doc = getActiveDocRecord();
+    if (doc) doc.abstractHTML = '';
+    setAuxiliaryPageHTML('abstractpage', 'abstractbody', '');
+    saveAuxiliaryChange();
+    setStatusText('Öz sayfası silindi');
   };
 
   const removeTOCPage = () => {
@@ -930,7 +1145,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
 
   return (
     <div
-      className="aq-editor-toolbars space-y-1.5 bg-[#fbfaf7] px-2 py-1.5"
+      className="aq-editor-toolbars space-y-1.5 bg-transparent px-2 py-1.5"
     >
       <div className="flex h-8 w-full items-center overflow-hidden rounded-md border border-aq-line bg-white shadow-sm">
         <TopBarButton id="outlineOpenBtn" onClick={openDocumentOutline} title="Belge anahatı">
@@ -947,7 +1162,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
           <select
             defaultValue=""
             onChange={(event) => selectAction(event, (value) => runTOC(value === 'removeTOC' ? 'remove' : 'insert'))}
-            className="h-[29px] min-w-28 rounded border-0 bg-transparent px-1 text-[12.5px] leading-none text-aq-ink outline-none hover:bg-aq-panel"
+            className="h-[29px] min-w-28 rounded border-0 bg-transparent px-1 text-[12px] leading-none text-aq-ink outline-none hover:bg-aq-panel"
             title="İçindekiler"
           >
             <option value="">İçindekiler</option>
@@ -962,7 +1177,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
           <select
             defaultValue="apa7"
             onChange={(event) => action('setCitationStyle', event.target.value)}
-            className="h-[29px] rounded border-0 bg-transparent px-1 text-[12.5px] leading-none text-aq-ink outline-none hover:bg-aq-panel"
+            className="h-[29px] rounded border-0 bg-transparent px-1 text-[12px] leading-none text-aq-ink outline-none hover:bg-aq-panel"
             title="Atıf stili"
           >
             <option value="apa7">APA 7</option>
@@ -982,7 +1197,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
           <select
             defaultValue=""
             onChange={(event) => selectAction(event, runBibliographyMenuAction)}
-            className="h-[29px] w-20 rounded border-0 bg-transparent px-1 text-[12.5px] leading-none text-aq-ink outline-none hover:bg-aq-panel"
+            className="h-[29px] w-20 rounded border-0 bg-transparent px-1 text-[12px] leading-none text-aq-ink outline-none hover:bg-aq-panel"
             title="Kaynakça"
           >
             <option value="">Kaynakça</option>
@@ -1005,7 +1220,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
               title="Bul (Ctrl+F)"
               onInput={(event) => handleFindInput((event.target as HTMLInputElement).value)}
               onKeyDown={handleFindKeyDown}
-              className="h-[29px] w-full rounded-md border border-aq-line bg-white pl-8 pr-2 text-[12.5px] leading-none text-aq-ink outline-none focus:border-aq-navy"
+              className="h-[29px] w-full rounded-md border border-aq-line bg-white pl-8 pr-2 text-[12px] leading-none text-aq-ink outline-none focus:border-aq-navy"
             />
           </div>
           <span id="toolbarFindCount" className="hidden min-w-8 text-center text-[10px] text-aq-muted">--</span>
@@ -1017,7 +1232,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
             type="button"
             title="Değiştir"
             onClick={() => setReplaceOpen(true)}
-            className="inline-flex h-[29px] shrink-0 items-center gap-1 rounded px-2 text-[12.5px] leading-none text-aq-ink hover:bg-aq-panel"
+            className="inline-flex h-[29px] shrink-0 items-center gap-1 rounded px-2 text-[12px] leading-none text-aq-ink hover:bg-aq-panel"
           >
             <RefreshCw size={13} />
             Değiştir
@@ -1031,7 +1246,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
       >
         <div className="flex h-[31px] w-full items-center overflow-hidden border-b border-aq-line/70">
         <ToolbarGroup label="Metin" wide>
-          <select onChange={(event) => command('fontName', event.target.value)} defaultValue="Times New Roman" className="h-[29px] rounded border-0 bg-transparent px-1 text-[11px] leading-none outline-none hover:bg-aq-panel">
+          <select onChange={(event) => command('fontName', event.target.value)} defaultValue="Times New Roman" className="h-[29px] rounded border-0 bg-transparent px-1 text-[12px] leading-none outline-none hover:bg-aq-panel">
             <option value="Times New Roman">Times New Roman</option>
             <option value="Arial">Arial</option>
             <option value="Calibri">Calibri</option>
@@ -1039,7 +1254,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
             <option value="Verdana">Verdana</option>
             <option value="Courier New">Courier New</option>
           </select>
-          <select onChange={(event) => applyFontSize(event.target.value)} defaultValue="12" className="h-[29px] rounded border-0 bg-transparent px-1 text-[11px] leading-none outline-none hover:bg-aq-panel">
+          <select onChange={(event) => applyFontSize(event.target.value)} defaultValue="12" className="h-[29px] rounded border-0 bg-transparent px-1 text-[12px] leading-none outline-none hover:bg-aq-panel">
             <option value="8">8</option>
             <option value="10">10</option>
             <option value="11">11</option>
@@ -1070,7 +1285,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
           <select
             defaultValue=""
             onChange={(event) => selectAction(event, (value) => command('setParagraphStyle', value))}
-            className="h-[29px] w-20 rounded border-0 bg-transparent px-1 text-[11px] leading-none outline-none hover:bg-aq-panel"
+            className="h-[29px] w-20 rounded border-0 bg-transparent px-1 text-[12px] leading-none outline-none hover:bg-aq-panel"
           >
             <option value="">Normal</option>
             <option value="normal">Normal</option>
@@ -1086,7 +1301,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
             <option value="tableFigureLabel">Tablo/Şekil Etiketi</option>
             <option value="tableFigureTitle">Tablo/Şekil Başlığı</option>
           </select>
-          <select onChange={(event) => editorAction('setLineSpacing', event.target.value)} defaultValue="2" className="h-[29px] w-14 rounded border-0 bg-transparent px-1 text-[11px] leading-none outline-none hover:bg-aq-panel">
+          <select onChange={(event) => editorAction('setLineSpacing', event.target.value)} defaultValue="2" className="h-[29px] w-14 rounded border-0 bg-transparent px-1 text-[12px] leading-none outline-none hover:bg-aq-panel">
             <option value="1">1.0</option>
             <option value="1.5">1.5</option>
             <option value="2">2.0</option>
@@ -1145,11 +1360,13 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
               else if (value === 'endnote') moduleAction('AQFootnotes', 'insertFootnote', 'endnote');
               else if (value === 'crossref') moduleAction('AQFootnotes', 'showCrossRefDialog');
               else if (value === 'wordImport') importWord();
+              else if (value === 'insCover') openCoverDialog();
+              else if (value === 'insAbstract') openAbstractDialog();
               else if (value === 'insAppendix') insertAppendix();
               else if (value.startsWith('cmd:')) command(value.slice(4));
               else action(value);
             })}
-            className="h-[29px] w-20 rounded border-0 bg-transparent px-1 text-[11px] leading-none outline-none hover:bg-aq-panel"
+            className="h-[29px] w-20 rounded border-0 bg-transparent px-1 text-[12px] leading-none outline-none hover:bg-aq-panel"
             title="Diğer ekle"
           >
             <option value="">Diğer</option>
@@ -1202,6 +1419,121 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
               <button className="mbtn s" type="button" onClick={() => setReplaceOpen(false)}>Kapat</button>
               <button className="mbtn s" type="button" onClick={() => runReplace(false)}>Değiştir</button>
               <button className="mbtn p" type="button" onClick={() => runReplace(true)}>Tümünü</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {coverOpen ? (
+        <div className="modal-bg show" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setCoverOpen(false);
+        }}>
+          <div className="modal aq-legacy-modal-sm" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="mt">APA 7 Kapak Sayfası</div>
+            <div className="text-sm text-aq-muted">
+              Kapak ilk sayfaya, içindekilerden önce yerleştirilir.
+            </div>
+            <div className="wr">
+              <div className="wf">
+                <label>Makale Başlığı *</label>
+                <input
+                  className="minp"
+                  value={coverTitle}
+                  onChange={(event) => setCoverTitle(event.target.value)}
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="wr">
+              <div className="wf">
+                <label>Yazar</label>
+                <input className="minp" value={coverAuthor} onChange={(event) => setCoverAuthor(event.target.value)} />
+              </div>
+            </div>
+            <div className="wr">
+              <div className="wf">
+                <label>Kurum</label>
+                <input className="minp" value={coverInstitution} onChange={(event) => setCoverInstitution(event.target.value)} />
+              </div>
+            </div>
+            <div className="wr">
+              <div className="wf">
+                <label>Ders / Program</label>
+                <input className="minp" value={coverCourse} onChange={(event) => setCoverCourse(event.target.value)} />
+              </div>
+            </div>
+            <div className="wr">
+              <div className="wf">
+                <label>Danışman / Öğretim Üyesi</label>
+                <input className="minp" value={coverProfessor} onChange={(event) => setCoverProfessor(event.target.value)} />
+              </div>
+            </div>
+            <div className="mb">
+              <button className="mbtn s" type="button" onClick={() => setCoverOpen(false)}>İptal</button>
+              <button className="mbtn p" type="button" onClick={insertCoverPage}>Kapak Ekle</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {abstractOpen ? (
+        <div className="modal-bg show" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setAbstractOpen(false);
+        }}>
+          <div className="modal w-[min(760px,calc(100vw-56px))] max-w-none" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="mt">APA 7 Öz / Abstract</div>
+            <div className="text-sm text-aq-muted">
+              Abstract sayfası kapak ve içindekilerden sonra, ana metinden önce yerleştirilir.
+            </div>
+            <div className="wr">
+              <div className="wf">
+                <label>Öz metni *</label>
+                <textarea
+                  className="minp min-h-40 resize-y"
+                  value={abstractText}
+                  onChange={(event) => setAbstractText(event.target.value)}
+                  placeholder="150-250 kelimelik özet metni..."
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="wr">
+              <div className="wf">
+                <label>Anahtar Kelimeler</label>
+                <input
+                  className="minp"
+                  value={abstractKeywords}
+                  onChange={(event) => setAbstractKeywords(event.target.value)}
+                  placeholder="anahtar kelime 1, anahtar kelime 2, anahtar kelime 3"
+                />
+              </div>
+            </div>
+            <div className="mt-5 border-t border-aq-line pt-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-aq-muted">Gerekirse İngilizce Abstract</div>
+            </div>
+            <div className="wr">
+              <div className="wf">
+                <label>Abstract text</label>
+                <textarea
+                  className="minp min-h-32 resize-y"
+                  value={abstractEnglishText}
+                  onChange={(event) => setAbstractEnglishText(event.target.value)}
+                  placeholder="Optional English abstract..."
+                />
+              </div>
+            </div>
+            <div className="wr">
+              <div className="wf">
+                <label>Keywords</label>
+                <input
+                  className="minp"
+                  value={abstractEnglishKeywords}
+                  onChange={(event) => setAbstractEnglishKeywords(event.target.value)}
+                  placeholder="keyword one, keyword two, keyword three"
+                />
+              </div>
+            </div>
+            <div className="mb">
+              <button className="mbtn s" type="button" onClick={() => setAbstractOpen(false)}>İptal</button>
+              <button className="mbtn p" type="button" onClick={insertAbstractPage}>Öz Ekle</button>
             </div>
           </div>
         </div>

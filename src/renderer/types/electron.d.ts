@@ -16,6 +16,10 @@ declare global {
       showPdfInExplorer: (refId: string, ws?: unknown) => IpcResult<unknown>;
       deleteWorkspacePdfFolder: (ws?: unknown) => IpcResult<unknown>;
       downloadPDFfromURL: (url: string, refId: string, options?: unknown) => IpcResult<unknown>;
+      openExternalUrl: (url: string) => IpcResult<unknown>;
+      openInstitutionalAccess: (payload: unknown) => IpcResult<unknown>;
+      clearInstitutionalAccessSession: () => IpcResult<unknown>;
+      onInstitutionalAccessPdfSaved: (callback: BrowserCaptureListener) => () => void;
       netFetchJSON: (url: string, options?: unknown) => IpcResult<unknown>;
       netFetchText: (url: string, options?: unknown) => IpcResult<unknown>;
       pdfSyncAll: () => IpcResult<unknown>;

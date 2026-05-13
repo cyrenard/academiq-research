@@ -600,7 +600,18 @@
       }));
     }
 
-    var directMatch = findMetaEntry(metaEntries, ['citation_pdf_url', 'pdf_url', 'eprints.document_url', 'wkhealth_pdf_url']);
+    var directMatch = findMetaEntry(metaEntries, [
+      'citation_pdf_url',
+      'pdf_url',
+      'eprints.document_url',
+      'wkhealth_pdf_url',
+      'bepress_citation_pdf_url',
+      'fulltext_pdf',
+      'article_pdf_url',
+      'dc.identifier.pdf',
+      'dc.relation.ispartof',
+      'prism.url'
+    ]);
     var direct = directMatch ? normalizeUrl(directMatch.content) : '';
     if(direct){
       candidates.push(buildCandidate(direct, {
@@ -660,7 +671,7 @@
 
     anchorEntries.forEach(function(anchor){
       var href = normalizeUrl(anchor && anchor.href);
-      var hay = ((anchor && anchor.text) || '') + ' ' + ((anchor && anchor.aria) || '') + ' ' + ((anchor && anchor.title) || '');
+      var hay = ((anchor && anchor.text) || '') + ' ' + ((anchor && anchor.aria) || '') + ' ' + ((anchor && anchor.title) || '') + ' ' + ((anchor && anchor.rel) || '') + ' ' + ((anchor && anchor.data) || '');
       var lowered = hay.toLowerCase();
       if(!href) return;
       if(/\.pdf(?:$|[?#])/i.test(href)){
@@ -673,11 +684,11 @@
         }));
         return;
       }
-      if(/\/pdf(?:\/|$|\?)/i.test(href) || /\/epdf(?:\/|$|\?)/i.test(href) || /download.*pdf/i.test(href) || /view.*pdf/i.test(lowered) || /full text pdf|article pdf|download pdf|epdf/.test(lowered)){
+      if(/\/pdf(?:\/|$|\?)/i.test(href) || /\/epdf(?:\/|$|\?)/i.test(href) || /\/doi\/pdf\//i.test(href) || /download.*pdf/i.test(href) || /view.*pdf/i.test(lowered) || /full text pdf|article pdf|download pdf|pdf full text|full article pdf|epdf|pdf download/.test(lowered)){
         candidates.push(buildCandidate(href, {
           source: /pdf|download|view/.test(lowered) ? 'button_link' : 'page_link',
           sourceField: 'anchor_hint',
-          score: /pdf|download|view/.test(lowered) ? 230 : 190,
+          score: /pdf|download|view|full text/.test(lowered) ? 255 : 195,
           normalizer: normalizeUrl,
           context: hay
         }));

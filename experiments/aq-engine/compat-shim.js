@@ -1299,6 +1299,12 @@
           selection.onChange(function(ev){
             if(_redirectSelectionOutOfBibliography()) return;
             onSelUpdate();
+            if(input && typeof input.mirrorSelectionForWritingAssist === 'function'){
+              input.mirrorSelectionForWritingAssist();
+            }
+            if(input && typeof input.activateWritingAssistBridge === 'function'){
+              input.activateWritingAssistBridge();
+            }
             if(editorObj._onSelCb) editorObj._onSelCb(ev);
           });
           input = window.AQEngineInput.create({
@@ -1428,7 +1434,6 @@
         selection.setRange(anchor, focus);
         return true;
       },
-
       getHTML: function(){ return blocksToHTML(docModel.get().blocks); },
       getJSON: function(){
         if(window.AQEngineTipTapAdapter && window.AQEngineTipTapAdapter.exportToTipTap)

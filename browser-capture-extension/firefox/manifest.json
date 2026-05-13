@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "AcademiQ Browser Capture",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Yerel AcademiQ masaüstü uygulamasına makale yakalama uzantısı",
   "permissions": ["activeTab", "tabs", "storage", "alarms", "http://127.0.0.1/*", "https://*/*", "http://*/*"],
   "icons": {

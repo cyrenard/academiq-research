@@ -18,6 +18,7 @@
         : [],
       coverHTML: typeof doc.coverHTML === 'string' ? doc.coverHTML : '',
       tocHTML: typeof doc.tocHTML === 'string' ? doc.tocHTML : '',
+      abstractHTML: typeof doc.abstractHTML === 'string' ? doc.abstractHTML : '',
       appendicesHTML: typeof doc.appendicesHTML === 'string' ? doc.appendicesHTML : '',
       citationStyle: citationStyle
     };
@@ -61,6 +62,7 @@
           bibliographyExtraRefIds: [],
           coverHTML: '',
           tocHTML: '',
+          abstractHTML: '',
           appendicesHTML: '',
           citationStyle: 'apa7'
         };
@@ -111,6 +113,7 @@
       bibliographyExtraRefIds: [],
       coverHTML: '',
       tocHTML: '',
+      abstractHTML: '',
       appendicesHTML: '',
       citationStyle: 'apa7'
     };
@@ -185,6 +188,7 @@
       bibliographyExtraRefIds: [],
       coverHTML: '',
       tocHTML: '',
+      abstractHTML: '',
       appendicesHTML: '',
       citationStyle: 'apa7'
     };

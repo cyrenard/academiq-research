@@ -23,7 +23,7 @@
     var s = doc.createElement('style');
     s.id = STYLE_ID;
     s.textContent = [
-      '.aq-engine-page { user-select:none; }',
+      '.aq-engine-page { user-select:text; }',
       '.aq-sel-rect { position:absolute; background:rgba(26,68,128,.22); pointer-events:none; z-index:1; }',
       '.aq-sel-caret { position:absolute; width:1px; background:#1d1b16; pointer-events:none; z-index:3; animation:aq-sel-blink 1s step-end infinite; }',
       '@keyframes aq-sel-blink { 50% { opacity:0; } }',
@@ -175,6 +175,55 @@
       }
     }
 
+    function currentNativeSelectionIsInEditor(sel){
+      if(!sel || !sel.rangeCount) return false;
+      try {
+        var range = sel.getRangeAt(0);
+        return container.contains(range.startContainer) || container.contains(range.endContainer);
+      } catch(_e) {
+        return false;
+      }
+    }
+
+    function findNativeBoundary(offset, side){
+      var spans = container.querySelectorAll('.aq-engine-line span[data-offset-start][data-offset-end]');
+      var fallback = null;
+      for(var i = 0; i < spans.length; i++){
+        var span = spans[i];
+        var start = Number(span.dataset.offsetStart || 0);
+        var end = Number(span.dataset.offsetEnd || start);
+        var node = span.firstChild;
+        if(!node || node.nodeType !== 3) continue;
+        if(offset >= start && offset <= end){
+          return { node: node, offset: Math.max(0, Math.min(String(node.nodeValue || '').length, offset - start)) };
+        }
+        if(side === 'start' && end <= offset) fallback = { node: node, offset: String(node.nodeValue || '').length };
+        if(side === 'end' && start >= offset && !fallback) fallback = { node: node, offset: 0 };
+      }
+      return fallback;
+    }
+
+    function syncNativeSelection(lo, hi, collapsed){
+      var sel = doc.defaultView && doc.defaultView.getSelection ? doc.defaultView.getSelection() : null;
+      if(!sel) return;
+      if(collapsed){
+        if(currentNativeSelectionIsInEditor(sel)) {
+          try { sel.removeAllRanges(); } catch(_e){}
+        }
+        return;
+      }
+      var start = findNativeBoundary(lo, 'start');
+      var end = findNativeBoundary(hi, 'end');
+      if(!start || !end) return;
+      try {
+        var range = doc.createRange();
+        range.setStart(start.node, start.offset);
+        range.setEnd(end.node, end.offset);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } catch(_e){}
+    }
+
     function paintSelection(){
       clearVisuals();
       var lo = Math.min(anchor, focus);
@@ -218,6 +267,7 @@
           }
         }
       }
+      syncNativeSelection(lo, hi, collapsed);
     }
 
     // Inverse hit test: where (in line-local x) does a given offset land?

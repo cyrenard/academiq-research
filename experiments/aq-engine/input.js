@@ -34,14 +34,27 @@
 
     if(!container || !doc || !getSel()) throw new Error('AQEngineInput: container, doc, selection(Ref) required');
 
+    if(!document.getElementById('aq-writing-assist-bridge-style')){
+      var assistStyle = document.createElement('style');
+      assistStyle.id = 'aq-writing-assist-bridge-style';
+      assistStyle.textContent = [
+        '.aq-writing-assist-bridge{color:transparent!important;-webkit-text-fill-color:transparent!important;background:transparent!important;text-shadow:none!important;}',
+        '.aq-writing-assist-bridge::selection{color:transparent!important;-webkit-text-fill-color:transparent!important;background:transparent!important;}',
+        '.aq-writing-assist-bridge *::selection{color:transparent!important;-webkit-text-fill-color:transparent!important;background:transparent!important;}'
+      ].join('\n');
+      document.head.appendChild(assistStyle);
+    }
+
     // ── Hidden capture textarea ────────────────────────────────────────────
     var ta = document.createElement('textarea');
     ta.className = 'aq-input-capture';
-    ta.setAttribute('autocapitalize', 'off');
-    ta.setAttribute('autocomplete',   'off');
-    ta.setAttribute('autocorrect',    'off');
-    ta.setAttribute('spellcheck',     'false');
-    ta.setAttribute('aria-hidden',    'true');
+    ta.setAttribute('autocapitalize', 'sentences');
+    ta.setAttribute('autocomplete',   'on');
+    ta.setAttribute('autocorrect',    'on');
+    ta.setAttribute('spellcheck',     'true');
+    ta.setAttribute('aria-label',     'AcademiQ editor input');
+    ta.setAttribute('data-gramm',     'true');
+    ta.setAttribute('data-gramm_editor', 'true');
     ta.style.cssText = [
       'position:fixed',
       'top:0', 'left:0',
@@ -61,6 +74,10 @@
 
     var composing = false;
     var compositionStartOffset = -1; // offset where the IME composition started
+    var assistBridge = null;
+    var assistBridgeTimer = 0;
+    var assistBridgeBlockIdx = -1;
+    var assistBridgeStart = 0;
     // Pending inline marks for the next insertText when selection is collapsed.
     // Mirrors Word's "press Ctrl+B then type → that text is bold". Cleared on
     // any non-insert action (cursor move, click, Enter, delete, etc.).
@@ -96,6 +113,23 @@
 
     // ── Edit operations ────────────────────────────────────────────────────
     function r(){ return getSel().getRange(); }
+
+    function clonePlain(obj){
+      try { return JSON.parse(JSON.stringify(obj)); } catch(_e){ return obj; }
+    }
+
+    function blockStartOffsetByIndex(blockIdx){
+      var blocks = (doc.get().blocks || []);
+      var out = 0;
+      for(var i = 0; i < blockIdx && i < blocks.length; i++){
+        out += blockTextLength(blocks[i]) + 1;
+      }
+      return out;
+    }
+
+    function blockPlainText(block){
+      return ((block && block.runs) || []).map(function(run){ return String(run && run.text || ''); }).join('');
+    }
 
     function normalizeBibliographyTitleText(text){
       return String(text || '')
@@ -459,9 +493,23 @@
     }
 
     // ── Event wiring ───────────────────────────────────────────────────────
+    function markWritingAssistReady(){
+      if(!ta) return;
+      ta.setAttribute('spellcheck', 'true');
+      ta.setAttribute('autocorrect', 'on');
+      ta.setAttribute('autocomplete', 'on');
+      ta.setAttribute('data-gramm', 'true');
+      ta.setAttribute('data-gramm_editor', 'true');
+      ta.removeAttribute('aria-hidden');
+      ta.setAttribute('aria-label', 'AcademiQ editor input');
+    }
+
     function focusCapture(){
       if(!ta) return;
+      if(assistBridge && assistBridge.style.display !== 'none') return;
+      markWritingAssistReady();
       try { ta.focus({ preventScroll: true }); } catch(_e){ ta.focus(); }
+      setTimeout(markWritingAssistReady, 60);
     }
 
     function scheduleFocusCapture(){
@@ -796,6 +844,39 @@
       // textarea is fixed-positioned; align its top-left to caret in viewport
       ta.style.left = caretRect.left + 'px';
       ta.style.top  = caretRect.top  + 'px';
+      ta.style.width = '1px';
+      ta.style.height = '1px';
+      markWritingAssistReady();
+    }
+
+    function positionCaptureAtSelection(){
+      var rectEl = container.querySelector('.aq-sel-rect');
+      if(!rectEl){ syncCapturePosition(); return; }
+      var rect = rectEl.getBoundingClientRect();
+      ta.style.left = Math.round(rect.left) + 'px';
+      ta.style.top = Math.round(rect.top) + 'px';
+      ta.style.width = Math.max(32, Math.min(420, Math.round(rect.width || 32))) + 'px';
+      ta.style.height = Math.max(18, Math.min(84, Math.round(rect.height || 18))) + 'px';
+    }
+
+    function mirrorSelectionForWritingAssist(){
+      if(!ta || composing) return;
+      var selected = getSelectedText();
+      if(!selected){
+        if(ta.value) ta.value = '';
+        syncCapturePosition();
+        return;
+      }
+      markWritingAssistReady();
+      positionCaptureAtSelection();
+      if(ta.value !== selected) ta.value = selected;
+      try { ta.focus({ preventScroll: true }); } catch(_e){ ta.focus(); }
+      try { ta.setSelectionRange(0, selected.length); } catch(_rangeErr){}
+      setTimeout(function(){
+        if(!ta || getSelectedText() !== selected) return;
+        markWritingAssistReady();
+        try { ta.setSelectionRange(0, selected.length); } catch(_rangeErr2){}
+      }, 40);
     }
 
     function clearCapture(){
@@ -803,6 +884,153 @@
       compositionStartOffset = -1;
       ta.value = '';
       clearPending();
+    }
+
+    function ensureAssistBridge(){
+      if(assistBridge) return assistBridge;
+      assistBridge = document.createElement('div');
+      assistBridge.className = 'aq-writing-assist-bridge';
+      assistBridge.setAttribute('contenteditable', 'true');
+      assistBridge.setAttribute('spellcheck', 'true');
+      assistBridge.setAttribute('autocapitalize', 'sentences');
+      assistBridge.setAttribute('data-gramm', 'true');
+      assistBridge.setAttribute('data-gramm_editor', 'true');
+      assistBridge.setAttribute('aria-label', 'AcademiQ writing assist bridge');
+      assistBridge.style.cssText = [
+        'position:absolute',
+        'display:none',
+        'box-sizing:border-box',
+        'z-index:5',
+        'pointer-events:none',
+        'white-space:pre-wrap',
+        'overflow:hidden',
+        'background:transparent',
+        'color:transparent',
+        '-webkit-text-fill-color:transparent',
+        'caret-color:transparent',
+        'outline:0',
+        'border:0',
+        'padding:0',
+        'margin:0',
+        'resize:none',
+        'text-decoration-color:rgba(196,57,57,.95)',
+        'text-underline-offset:2px'
+      ].join(';');
+      assistBridge.addEventListener('input', function(){
+        if(assistBridgeTimer) clearTimeout(assistBridgeTimer);
+        assistBridgeTimer = setTimeout(commitAssistBridge, 220);
+      });
+      assistBridge.addEventListener('keydown', function(e){
+        if(e.key === 'Escape'){
+          e.preventDefault();
+          hideAssistBridge(false);
+          focusCapture();
+        }
+        if((e.ctrlKey || e.metaKey) && (e.key === 'Enter')){
+          e.preventDefault();
+          commitAssistBridge();
+          hideAssistBridge(false);
+          focusCapture();
+        }
+      });
+      container.appendChild(assistBridge);
+      return assistBridge;
+    }
+
+    function hideAssistBridge(commit){
+      if(commit) commitAssistBridge();
+      if(assistBridgeTimer) clearTimeout(assistBridgeTimer);
+      assistBridgeTimer = 0;
+      assistBridgeBlockIdx = -1;
+      assistBridgeStart = 0;
+      if(assistBridge) assistBridge.style.display = 'none';
+    }
+
+    function commitAssistBridge(){
+      if(!assistBridge || assistBridgeBlockIdx < 0) return;
+      var text = String(assistBridge.innerText || assistBridge.textContent || '').replace(/\r/g, '');
+      text = text.replace(/\n+$/g, '');
+      var model = doc.get();
+      var blocks = (model && model.blocks) || [];
+      var current = blocks[assistBridgeBlockIdx];
+      if(!current) return;
+      if(blockPlainText(current) === text) return;
+      var nextBlocks = blocks.map(function(block){ return clonePlain(block); });
+      var target = nextBlocks[assistBridgeBlockIdx] || {};
+      var baseRun = clonePlain((target.runs && target.runs[0]) || { text: '' });
+      baseRun.text = text;
+      delete baseRun.citation;
+      delete baseRun.footnote;
+      delete baseRun.crossRef;
+      target.runs = [baseRun];
+      nextBlocks[assistBridgeBlockIdx] = target;
+      doc.replace(nextBlocks);
+      onChanged();
+      var nextAt = assistBridgeStart + text.length;
+      getSel().setRange(nextAt, nextAt);
+    }
+
+    function lineElsForBlock(blockIdx){
+      return Array.prototype.slice.call(container.querySelectorAll('.aq-engine-line[data-block-index="' + blockIdx + '"]'));
+    }
+
+    function activateWritingAssistBridge(){
+      var range = r();
+      if(range.from === range.to){
+        hideAssistBridge(false);
+        return;
+      }
+      var loc = doc.locate(range.from);
+      var blocks = doc.get().blocks || [];
+      var block = blocks[loc.blockIdx];
+      if(!block || block.table || block.image || block.type === 'hr'){
+        hideAssistBridge(false);
+        return;
+      }
+      var lines = lineElsForBlock(loc.blockIdx);
+      if(!lines.length){
+        hideAssistBridge(false);
+        return;
+      }
+      var page = lines[0].closest('.aq-engine-page') || container;
+      var pageRect = page.getBoundingClientRect();
+      var left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+      lines.forEach(function(lineEl){
+        var rect = lineEl.getBoundingClientRect();
+        left = Math.min(left, rect.left);
+        top = Math.min(top, rect.top);
+        right = Math.max(right, rect.right);
+        bottom = Math.max(bottom, rect.bottom);
+      });
+      if(!isFinite(left) || !isFinite(top)) return;
+      var bridge = ensureAssistBridge();
+      var firstLine = lines[0];
+      var text = blockPlainText(block);
+      assistBridgeBlockIdx = loc.blockIdx;
+      assistBridgeStart = blockStartOffsetByIndex(loc.blockIdx);
+      bridge.textContent = text;
+      bridge.style.display = 'block';
+      bridge.style.left = (left - pageRect.left) + 'px';
+      bridge.style.top = (top - pageRect.top) + 'px';
+      bridge.style.width = Math.max(32, right - left) + 'px';
+      bridge.style.height = Math.max(18, bottom - top) + 'px';
+      bridge.style.font = (firstLine && firstLine.style && firstLine.style.font) || '';
+      bridge.style.lineHeight = (firstLine && firstLine.style && firstLine.style.lineHeight) || '';
+      if(bridge.parentNode !== page) page.appendChild(bridge);
+      var start = Math.max(0, Math.min(text.length, range.from - assistBridgeStart));
+      var end = Math.max(start, Math.min(text.length, range.to - assistBridgeStart));
+      try{
+        bridge.focus({ preventScroll: true });
+        var sel = document.getSelection();
+        var node = bridge.firstChild;
+        if(sel && node && node.nodeType === 3){
+          var nativeRange = document.createRange();
+          nativeRange.setStart(node, start);
+          nativeRange.setEnd(node, end || start);
+          sel.removeAllRanges();
+          sel.addRange(nativeRange);
+        }
+      }catch(_e){}
     }
 
     // ── Public API for programmatic editing (toolbar, citation dialog, etc.) ──
@@ -839,6 +1067,7 @@
     }
     
     // Initial focus
+    markWritingAssistReady();
     setTimeout(focusCapture, 100);
 
     return {
@@ -846,6 +1075,9 @@
       attach: function(){ focusCapture(); },
       clearCapture: clearCapture,
       syncCapturePosition: syncCapturePosition,
+      mirrorSelectionForWritingAssist: mirrorSelectionForWritingAssist,
+      activateWritingAssistBridge: activateWritingAssistBridge,
+      hideWritingAssistBridge: hideAssistBridge,
       insertAtCaret: insertAtCaret,
       applyMarkToSelection: applyMarkToSelection,
       applyFontPropToSelection: applyFontPropToSelection,
@@ -856,7 +1088,10 @@
       getRange: function(){ return r(); },
       destroy: function(){
         if(trigRefreshTimer) clearTimeout(trigRefreshTimer);
+        if(assistBridgeTimer) clearTimeout(assistBridgeTimer);
         trigRefreshTimer = 0;
+        assistBridgeTimer = 0;
+        if(assistBridge && assistBridge.parentNode) assistBridge.parentNode.removeChild(assistBridge);
         if(ta.parentNode) ta.parentNode.removeChild(ta);
       }
     };

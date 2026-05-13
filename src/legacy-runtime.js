@@ -7818,6 +7818,7 @@ function getCompositeExportBodyHTML(){
   var doc=ensureDocAuxFields(getCurrentDocRecord());
   var coverHTML=doc?sanitizeAuxPageHTML(String(doc.coverHTML||'')):'';
   var tocHTML=doc?sanitizeAuxPageHTML(String(doc.tocHTML||'')):'';
+  var abstractHTML=doc?sanitizeAuxPageHTML(String(doc.abstractHTML||'')):'';
   var appendicesHTML=isAQEngine?'':(doc?sanitizeAuxPageHTML(String(doc.appendicesHTML||'')):'');
   var bibBody=document.getElementById('bibbody');
   var bibSource=isAQEngine?'':(doc&&String(doc.bibliographyHTML||'').trim()
@@ -7825,11 +7826,13 @@ function getCompositeExportBodyHTML(){
     : (bibBody?String(bibBody.innerHTML||''):''));
   var bibHTML=sanitizeAuxPageHTML(bibSource);
   var contentHTML=applyLineSpacingForExportHTML(edHTML,lineSpacing);
+  var abstractExportHTML=applyLineSpacingForExportHTML(abstractHTML,lineSpacing);
   var bibliographyHTML=applyLineSpacingForExportHTML(bibHTML,lineSpacing);
   var appendixExportHTML=applyLineSpacingForExportHTML(appendicesHTML,lineSpacing);
   var sections=[];
   if(coverHTML)sections.push('<section class="aq-export-cover aq-export-page">'+coverHTML+'</section>');
   if(tocHTML)sections.push('<section class="aq-export-toc aq-export-page aq-export-page-break-before">'+tocHTML+'</section>');
+  if(abstractExportHTML)sections.push('<section class="aq-export-abstract aq-export-page aq-export-page-break-before">'+abstractExportHTML+'</section>');
   sections.push('<section class="aq-export-main aq-export-page'+(sections.length?' aq-export-page-break-before':'')+'">'+contentHTML+'</section>');
   if(bibliographyHTML)sections.push('<section class="aq-export-bib aq-export-page aq-export-page-break-before">'+bibliographyHTML+'</section>');
   if(appendixExportHTML)sections.push('<section class="aq-export-appendices aq-export-page aq-export-page-break-before">'+appendixExportHTML+'</section>');
@@ -11804,6 +11807,7 @@ function ensureDocAuxFields(doc){
   if(!doc||typeof doc!=='object')return null;
   if(typeof doc.coverHTML!=='string')doc.coverHTML='';
   if(typeof doc.tocHTML!=='string')doc.tocHTML='';
+  if(typeof doc.abstractHTML!=='string')doc.abstractHTML='';
   if(!Array.isArray(doc.bibliographyExtraRefIds))doc.bibliographyExtraRefIds=[];
   else doc.bibliographyExtraRefIds=doc.bibliographyExtraRefIds.map(function(id){return String(id||'').trim();}).filter(Boolean);
   doc.trackChangesEnabled=!!doc.trackChangesEnabled;
@@ -11832,10 +11836,13 @@ function syncAuxiliaryPages(){
   var coverBody=document.getElementById('coverbody');
   var tocPage=document.getElementById('tocpage');
   var tocBody=document.getElementById('tocbody');
+  var abstractPage=document.getElementById('abstractpage');
+  var abstractBody=document.getElementById('abstractbody');
   var appendixPage=document.getElementById('appendixpage');
   var appendixBody=document.getElementById('appendixbody');
   var coverHTML=doc?String(doc.coverHTML||'').trim():'';
   var tocHTML=doc?String(doc.tocHTML||'').trim():'';
+  var abstractHTML=doc?String(doc.abstractHTML||'').trim():'';
   var appendicesHTML=doc?String(doc.appendicesHTML||'').trim():'';
   var activeEditor=typeof getActiveEditorInstance==='function'?getActiveEditorInstance():(window.editor||editor||null);
   var hasDocHeadings=doc?/<h[1-5]\b/i.test(String(doc.content||'')):false;
@@ -11847,6 +11854,22 @@ function syncAuxiliaryPages(){
   if(coverPage)coverPage.style.display=coverHTML?'block':'none';
   if(tocBody){tocBody.innerHTML=tocHTML||'';if(tocHTML)setTimeout(function(){fixTOCDots(tocBody);},0);}
   if(tocPage)tocPage.style.display=tocHTML?'block':'none';
+  if(abstractBody){
+    abstractBody.innerHTML=abstractHTML||'';
+    if(abstractHTML&&!abstractBody.querySelector('.abstract-remove-btn')){
+      var abstractRemove=document.createElement('button');
+      abstractRemove.type='button';
+      abstractRemove.className='abstract-remove-btn';
+      abstractRemove.textContent='Özü Sil';
+      abstractRemove.addEventListener('click',function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        window.dispatchEvent(new CustomEvent('aq:remove-abstract-page'));
+      });
+      abstractBody.appendChild(abstractRemove);
+    }
+  }
+  if(abstractPage)abstractPage.style.display=abstractHTML?'block':'none';
   if(activeEditor&&activeEditor._aqEngine){
     if(appendixBody)appendixBody.innerHTML='';
     if(appendixPage)appendixPage.style.display='none';

@@ -59,7 +59,7 @@ export function FeatureModals({
   const [syncInfo, setSyncInfo] = useState<unknown>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [browserStatus, setBrowserStatus] = useState<unknown>(null);
-  const [settingsTab, setSettingsTab] = useState<'recovery' | 'history' | 'capture' | 'sync' | 'updates' | 'about'>('recovery');
+  const [settingsTab, setSettingsTab] = useState<'recovery' | 'history' | 'capture' | 'institutional' | 'sync' | 'updates' | 'about'>('recovery');
   const [refDraft, setRefDraft] = useState<Record<string, string>>({});
   const [updateUrl, setUpdateUrl] = useState('');
   const [loadingAction, setLoadingAction] = useState('');
@@ -128,7 +128,13 @@ export function FeatureModals({
     window.electronAPI.runBrowserCaptureAction(action)
       .then((result) => {
         setBrowserStatus(result);
-        onStatus(success);
+        const message = result && typeof result === 'object' && 'message' in result
+          ? String((result as { message?: unknown }).message || '')
+          : '';
+        const installDir = result && typeof result === 'object' && 'installDir' in result
+          ? String((result as { installDir?: unknown }).installDir || '')
+          : '';
+        onStatus(message || (installDir ? `${success}: ${installDir}` : success));
       })
       .catch(() => onStatus(failure))
       .finally(() => setLoadingAction(''));
@@ -252,6 +258,7 @@ export function FeatureModals({
               ['recovery', 'Recovery / Autosave'],
               ['history', 'Belge geçmişi'],
               ['capture', 'Capture agent'],
+              ['institutional', 'Kurumsal indirme'],
               ['sync', 'Sync'],
               ['updates', 'Updates'],
               ['about', 'About']
@@ -349,7 +356,54 @@ export function FeatureModals({
                     <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => window.electronAPI.updateBrowserCapturePrefs({ enabled: !capture.enabled }).then((result) => { setBrowserStatus(result); onStatus('Capture tercihleri güncellendi'); }).catch(() => onStatus('Capture tercihleri güncellenemedi'))}>{capture.enabled ? 'Capture kapat' : 'Capture aktif et'}</button>
                     <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => window.electronAPI.updateBrowserCapturePrefs({ autoAttachPdfUrl: capture.autoAttachPdfUrl === false }).then((result) => { setBrowserStatus(result); onStatus('PDF URL tercihi güncellendi'); }).catch(() => onStatus('Tercih güncellenemedi'))}>PDF URL auto attach: {capture.autoAttachPdfUrl === false ? 'kapalı' : 'açık'}</button>
                     <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => window.electronAPI.updateBrowserCapturePrefs({ focusImportedWorkspace: !capture.focusImportedWorkspace }).then((result) => { setBrowserStatus(result); onStatus('Workspace odak tercihi güncellendi'); }).catch(() => onStatus('Tercih güncellenemedi'))}>İçeri aktarılan workspace odağı: {capture.focusImportedWorkspace ? 'açık' : 'kapalı'}</button>
-                    <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureAction('update', 'Capture extension güncellendi', 'Capture extension güncellenemedi')}>Extension güncelle</button>
+                    <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureAction('update', 'Extension dosyaları güncellendi', 'Capture extension güncellenemedi')}>{loadingAction === 'update' ? 'Güncelleniyor...' : 'Extension güncelle'}</button>
+                  </div>
+                </section>
+              </div>
+            ) : null}
+
+            {settingsTab === 'institutional' ? (
+              <div className="space-y-3">
+                <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Kurumsal hesap ile indirme</div>
+                    <span className="rounded-full border border-aq-line bg-white px-2 py-0.5 text-xs">Güvenli pencere</span>
+                  </div>
+                  <p className="text-xs leading-5 text-aq-muted">
+                    Kaynak kartına sağ tıklayıp <b>Kurumsal erişimle aç</b> dediğinde ayrı bir Electron penceresi açılır.
+                    O pencerede kurum hesabınla giriş yapıp PDF indirirsen dosya seçili kaynağa otomatik bağlanır.
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-md bg-white p-3">
+                      <b>Oturum</b><br />
+                      Cookie ve site verileri özel kurumsal profilde saklanır.
+                    </div>
+                    <div className="rounded-md bg-white p-3">
+                      <b>ScienceDirect</b><br />
+                      Embedded pencereyi reddettiği için varsayılan tarayıcıya yönlenir.
+                    </div>
+                    <div className="rounded-md bg-white p-3">
+                      <b>Popup</b><br />
+                      Yeni pencere açma kapalı; güvenli linkler aynı pencerede açılır.
+                    </div>
+                    <div className="rounded-md bg-white p-3">
+                      <b>Güvenlik</b><br />
+                      Node erişimi kapalı, preload kullanılmaz, sandbox açıktır.
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold"
+                      onClick={() => window.electronAPI.clearInstitutionalAccessSession().then((result: any) => onStatus(result?.ok ? 'Kurumsal oturum temizlendi' : 'Kurumsal oturum temizlenemedi')).catch(() => onStatus('Kurumsal oturum temizlenemedi'))}
+                    >
+                      Kurumsal oturumu temizle
+                    </button>
+                    <button
+                      className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold"
+                      onClick={() => onStatus('Kaynak kartına sağ tıkla → Kurumsal erişimle aç')}
+                    >
+                      Kullanım yolunu göster
+                    </button>
                   </div>
                 </section>
               </div>
@@ -440,6 +494,19 @@ export function FeatureModals({
           <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
             <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Preferences</div>
             <button className="w-full rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={() => window.electronAPI.updateBrowserCapturePrefs({ enabled: true }).then((result) => { setBrowserStatus(result); onStatus('Capture tercihleri güncellendi'); }).catch(() => onStatus('Capture tercihleri güncellenemedi'))}>Capture aktif et</button>
+          </section>
+
+          <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Kurumsal Erişim</div>
+            <p className="mb-2 text-xs text-aq-muted">
+              Kaynak menüsünden kurumsal pencerede aç. O pencerede PDF indirildiğinde dosya otomatik olarak seçili kaynağa bağlanır.
+            </p>
+            <button
+              className="w-full rounded-md border border-aq-line bg-white px-3 py-2 text-left"
+              onClick={() => window.electronAPI.clearInstitutionalAccessSession().then((result: any) => onStatus(result?.ok ? 'Kurumsal oturum temizlendi' : 'Kurumsal oturum temizlenemedi')).catch(() => onStatus('Kurumsal oturum temizlenemedi'))}
+            >
+              Kurumsal oturumu temizle
+            </button>
           </section>
 
           <pre className="max-h-60 overflow-auto rounded-md bg-white p-3 text-xs">{JSON.stringify(browserStatus, null, 2)}</pre>

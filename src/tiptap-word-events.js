@@ -50,6 +50,24 @@
     ].filter(Boolean);
     targets.forEach(function(node){
       node.setAttribute('spellcheck','true');
+      node.setAttribute('data-gramm','true');
+      node.setAttribute('data-gramm_editor','true');
+      if(node.id === 'apaed' || (node.classList && node.classList.contains('ProseMirror'))){
+        node.setAttribute('role','textbox');
+        node.setAttribute('aria-multiline','true');
+      }
+    });
+    var captures = typeof document.querySelectorAll === 'function'
+      ? document.querySelectorAll('.aq-input-capture')
+      : [];
+    Array.prototype.forEach.call(captures, function(node){
+      node.setAttribute('spellcheck','true');
+      node.setAttribute('autocorrect','on');
+      node.setAttribute('autocomplete','on');
+      node.setAttribute('data-gramm','true');
+      node.setAttribute('data-gramm_editor','true');
+      node.removeAttribute('aria-hidden');
+      node.setAttribute('aria-label','AcademiQ editor input');
     });
     return !!targets.length;
   }

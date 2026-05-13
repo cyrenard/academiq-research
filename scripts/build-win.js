@@ -55,7 +55,7 @@ let inlined = false;
 let buildError = null;
 
 try {
-  runNpmScript('build:renderer');
+  runNodeScript('build-renderer.js');
   runNodeScript('inline-src.js');
   inlined = true;
   runBuilder(dirMode);

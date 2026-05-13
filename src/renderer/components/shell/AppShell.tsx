@@ -171,7 +171,7 @@ export function AppShell({
               Dışa Aktar <span className="ml-1 text-[10px]">▼</span>
             </button>
             {exportMenuOpen ? (
-              <div className="absolute right-0 top-9 z-[3000] w-56 rounded-lg border border-aq-line bg-white p-1 text-[12px] text-aq-ink shadow-xl">
+              <div className="absolute right-0 top-9 z-[3000] w-56 rounded-lg border border-aq-line bg-white p-1 text-[11px] text-aq-ink shadow-xl">
                 <button type="button" className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel" onClick={() => runExportAction(onExportPreview)}>PDF önizleme</button>
                 <button type="button" className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel" onClick={() => runExportAction(onExportPDF)}>PDF olarak aktar</button>
                 <button type="button" className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel" onClick={() => runExportAction(onExportDOCX)}>DOCX olarak aktar</button>

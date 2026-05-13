@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+﻿import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EditorContext } from './components/editor/EditorContext';
 import { EditorHost } from './components/editor/EditorHost';
 import type { AcademiqEditorApi, AcademiqEditorState } from './lib/editor-adapter';
@@ -31,12 +31,15 @@ import {
 } from './lib/app-state';
 import { WorkspaceTabs } from './components/shell/WorkspaceTabs';
 import { DocumentTabs } from './components/shell/DocumentTabs';
-import { CommandPalette, type CommandItem } from './components/shell/CommandPalette';
-import { FeatureModals, type FeatureModal } from './components/shell/FeatureModals';
-import { CollectionManagerModal } from './components/shell/CollectionManagerModal';
-import { WorkspaceNameModal } from './components/shell/WorkspaceNameModal';
+import type { CommandItem } from './components/shell/CommandPalette';
+import type { FeatureModal } from './components/shell/FeatureModals';
 import { callLegacy } from './lib/legacy-feature-adapter';
-import { LegacyCompatibilityHost } from './components/shell/LegacyCompatibilityHost';
+
+const CommandPalette = lazy(() => import('./components/shell/CommandPalette').then((module) => ({ default: module.CommandPalette })));
+const FeatureModals = lazy(() => import('./components/shell/FeatureModals').then((module) => ({ default: module.FeatureModals })));
+const CollectionManagerModal = lazy(() => import('./components/shell/CollectionManagerModal').then((module) => ({ default: module.CollectionManagerModal })));
+const WorkspaceNameModal = lazy(() => import('./components/shell/WorkspaceNameModal').then((module) => ({ default: module.WorkspaceNameModal })));
+const LegacyCompatibilityHost = lazy(() => import('./components/shell/LegacyCompatibilityHost').then((module) => ({ default: module.LegacyCompatibilityHost })));
 
 type LegacyReferenceFetcher = (value: string, callback: (error: unknown, reference?: AcademiqReference) => void) => void;
 
@@ -366,38 +369,43 @@ async function resolveOpenAccessPdfUrl(doi: string) {
       }
     } catch (_error) {}
   }
-  try {
-    const openAlex = await window.electronAPI?.netFetchJSON?.(
+  const [openAlex, unpaywall] = await Promise.allSettled([
+    window.electronAPI?.netFetchJSON?.(
       `https://api.openalex.org/works/doi:${encodeURIComponent(cleanDoi)}`,
-      { timeoutMs: 12000, allowAnyHost: true }
-    ) as any;
-    const data = openAlex?.ok ? openAlex.data : null;
+      { timeoutMs: 9000, allowAnyHost: true }
+    ),
+    window.electronAPI?.netFetchJSON?.(
+      `https://api.unpaywall.org/v2/${encodeURIComponent(cleanDoi)}?email=academiq@example.com`,
+      { timeoutMs: 9000, allowAnyHost: true }
+    )
+  ]);
+  const candidates: string[] = [];
+  if (openAlex.status === 'fulfilled') {
+    const result = openAlex.value as any;
+    const data = result?.ok ? result.data : null;
     const locations = Array.isArray(data?.locations) ? data.locations : [];
-    const candidates = [
+    candidates.push(
       String(data?.open_access?.oa_url || ''),
       ...locations.flatMap((item: any) => [
         String(item?.pdf_url || ''),
         String(item?.landing_page_url || '')
       ])
-    ].map((item) => item.trim()).filter(Boolean);
-    const direct = candidates.find((item) => /\.pdf($|[?#])|\/pdf(\/|$|[?#])|pdfdirect|epdf/i.test(item));
-    if (direct) return direct;
-    if (candidates[0]) return candidates[0];
-  } catch (_error) {}
-  try {
-    const unpaywall = await window.electronAPI?.netFetchJSON?.(
-      `https://api.unpaywall.org/v2/${encodeURIComponent(cleanDoi)}?email=academiq@example.com`,
-      { timeoutMs: 12000, allowAnyHost: true }
-    ) as any;
-    const data = unpaywall?.ok ? unpaywall.data : null;
+    );
+  }
+  if (unpaywall.status === 'fulfilled') {
+    const result = unpaywall.value as any;
+    const data = result?.ok ? result.data : null;
     const locations = [
       data?.best_oa_location,
       ...(Array.isArray(data?.oa_locations) ? data.oa_locations : [])
     ].filter(Boolean);
-    return locations.map((item: any) => String(item?.url_for_pdf || item?.url || '').trim()).find(Boolean) || '';
-  } catch (_error) {
-    return '';
+    candidates.push(...locations.flatMap((item: any) => [
+      String(item?.url_for_pdf || ''),
+      String(item?.url || '')
+    ]));
   }
+  const unique = Array.from(new Set(candidates.map((item) => item.trim()).filter(Boolean)));
+  return unique.find((item) => /\.pdf($|[?#])|\/pdf(\/|$|[?#])|pdfdirect|epdf/i.test(item)) || unique[0] || '';
 }
 
 function patchReferenceInWorkspace(state: AcademiqAppState, workspaceId: string, referenceId: string, patch: Record<string, unknown>) {
@@ -461,6 +469,7 @@ export default function App() {
   const [featureModal, setFeatureModal] = useState<FeatureModal>(null);
   const editorRef = useRef<AcademiqEditorApi | null>(null);
   const appStateRef = useRef(appState);
+  const statusTimerRef = useRef<number | null>(null);
   const editorContext = useMemo(() => ({ editorRef }), []);
   const activeWorkspace = getActiveWorkspace(appState);
   const activeDocument = getActiveDocument(appState);
@@ -505,7 +514,7 @@ export default function App() {
     return {
       apaLabel: tone === 'error' ? 'APA 7 riskli' : (tone === 'warning' ? 'APA 7 kontrol' : 'APA 7 ok'),
       apaTone: tone as 'ok' | 'warning' | 'error',
-      issuesLabel: issueCount ? `${issueCount} sorun` : '0 uyar?',
+      issuesLabel: issueCount ? `${issueCount} sorun` : '0 uyarı',
       issuesTone: tone as 'ok' | 'warning' | 'error',
       duplicateGroups: duplicateGroups.length
     };
@@ -565,8 +574,12 @@ export default function App() {
   }, []);
 
   const flashStatus = (message: string) => {
+    if (statusTimerRef.current) window.clearTimeout(statusTimerRef.current);
     setStatusMessage(message);
-    window.setTimeout(() => setStatusMessage('kaydedildi'), 1800);
+    statusTimerRef.current = window.setTimeout(() => {
+      setStatusMessage('kaydedildi');
+      statusTimerRef.current = null;
+    }, 1800);
   };
 
   const persistState = useCallback(async (nextState: AcademiqAppState, draft = false) => {
@@ -581,7 +594,20 @@ export default function App() {
     appStateRef.current = nextState;
     const win = window as any;
     win.S = { ...(win.S || {}), ...nextState };
-    await window.electronAPI?.saveEditorDraft?.(JSON.stringify(nextState));
+    await new Promise<void>((resolve) => {
+      const run = async () => {
+        try {
+          await window.electronAPI?.saveEditorDraft?.(JSON.stringify(nextState));
+        } finally {
+          resolve();
+        }
+      };
+      if (typeof win.requestIdleCallback === 'function') {
+        win.requestIdleCallback(run, { timeout: 1200 });
+      } else {
+        window.setTimeout(run, 0);
+      }
+    });
   }, []);
 
   const reloadStateFromDisk = useCallback(async (focus?: { workspaceId?: string; refId?: string }) => {
@@ -686,10 +712,44 @@ export default function App() {
       }
       flashStatus('Browser capture durumu güncellendi');
     });
+    const offInstitutional = window.electronAPI?.onInstitutionalAccessPdfSaved?.((payload: any) => {
+      const refId = String(payload?.refId || '');
+      if (!refId) return;
+      if (payload?.pending) {
+        flashStatus('Kurumsal PDF indiriliyor...');
+        return;
+      }
+      if (!payload?.ok) {
+        flashStatus(`Kurumsal PDF bağlanamadı: ${String(payload?.error || 'bilinmeyen hata')}`);
+        return;
+      }
+      const current = appStateRef.current;
+      const workspace = getActiveWorkspace(current);
+      const ref = workspace.lib.find((item) => item.id === refId);
+      if (!ref) {
+        flashStatus('Kurumsal PDF indirildi, kaynak yenileniyor');
+        reloadStateFromDisk().catch(() => undefined);
+        return;
+      }
+      const labels = Array.from(new Set([...(Array.isArray(ref.labels) ? ref.labels : []), 'PDF']));
+      const next = updateReferenceInActiveWorkspace(current, refId, {
+        labels,
+        pdfAttached: true,
+        browserCaptureMeta: {
+          ...((ref.browserCaptureMeta && typeof ref.browserCaptureMeta === 'object') ? ref.browserCaptureMeta : {}),
+          institutionalAccess: true,
+          institutionalCapturedAt: Date.now()
+        }
+      });
+      persistState(next)
+        .then(() => flashStatus('Kurumsal PDF kaynağa bağlandı'))
+        .catch(() => flashStatus('Kurumsal PDF bağlandı, kayıt güncellenemedi'));
+    });
     return () => {
       offIncoming?.();
       offWorkspace?.();
       offState?.();
+      offInstitutional?.();
     };
   }, [persistState, reloadStateFromDisk]);
 
@@ -1241,7 +1301,7 @@ export default function App() {
     };
   }, []);
 
-  const handleReferencePdfAction = async (action: 'open' | 'show' | 'delete' | 'download', referenceId: string) => {
+  const handleReferencePdfAction = async (action: 'open' | 'show' | 'delete' | 'download' | 'browser' | 'institutional', referenceId: string) => {
     const workspace = getActiveWorkspace(appStateRef.current);
     const ref = workspace.lib.find((item) => item.id === referenceId);
     try {
@@ -1318,6 +1378,54 @@ export default function App() {
         if (!window.confirm('Bu kaynağın PDF dosyası silinsin mi?')) return;
         await window.electronAPI?.deletePDF?.(referenceId, { id: workspace.id, name: workspace.name });
         flashStatus('PDF silindi');
+      }
+      if (action === 'browser') {
+        if (!ref) {
+          flashStatus('Kaynak seçilmedi');
+          return;
+        }
+        const doiUrl = ref.doi ? `https://doi.org/${String(ref.doi).replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '').replace(/^doi:\s*/i, '').trim()}` : '';
+        const url = String(ref.pdfUrl || ref.url || doiUrl || '').trim();
+        if (!url) {
+          flashStatus('Tarayıcıda açılacak URL yok');
+          return;
+        }
+        const result = await window.electronAPI?.openExternalUrl?.(url) as any;
+        flashStatus(result?.ok ? 'Tarayıcıda açıldı' : 'Tarayıcıda açılamadı');
+      }
+      if (action === 'institutional') {
+        if (!ref) {
+          flashStatus('Kaynak seçilmedi');
+          return;
+        }
+        const doiUrl = ref.doi ? `https://doi.org/${String(ref.doi).replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '').replace(/^doi:\s*/i, '').trim()}` : '';
+        const url = String(ref.pdfUrl || ref.url || doiUrl || '').trim();
+        if (!url) {
+          flashStatus('Kurumsal erişim için URL/DOI yok');
+          return;
+        }
+        const isScienceDirect = [ref.pdfUrl, ref.url, doiUrl].some((value) => {
+          try {
+            const host = new URL(String(value || '')).hostname.toLowerCase();
+            return host === 'sciencedirect.com' || host.endsWith('.sciencedirect.com');
+          } catch (_error) {
+            return false;
+          }
+        });
+        if (isScienceDirect) {
+          const result = await window.electronAPI?.openExternalUrl?.(url) as any;
+          flashStatus(result?.ok ? 'ScienceDirect varsayılan tarayıcıda açıldı · PDF için Browser Capture kullan' : 'ScienceDirect açılamadı');
+          return;
+        }
+        const result = await window.electronAPI?.openInstitutionalAccess?.({
+          refId: referenceId,
+          title: ref.title,
+          doi: ref.doi,
+          pdfUrl: ref.pdfUrl,
+          url: ref.url || url,
+          ws: { id: workspace.id, name: workspace.name }
+        }) as any;
+        flashStatus(result?.ok ? 'Kurumsal pencere açıldı · PDF indirirsen kaynağa bağlanacak' : `Kurumsal pencere açılamadı: ${String(result?.error || '')}`);
       }
       if (action === 'download') {
         if (!ref) {
@@ -1561,16 +1669,23 @@ export default function App() {
     let nextState = appStateRef.current;
     let done = 0;
     let failed = 0;
+    let cursor = 0;
+    const concurrency = Math.min(4, Math.max(1, candidates.length));
+    const commitProgress = (message: string) => {
+      setAppState(nextState);
+      appStateRef.current = nextState;
+      setPdfProgress({ total: candidates.length, attempted: done + failed, downloaded: done, failed, active: true });
+      flashStatus(message);
+    };
 
-    for (const candidate of candidates) {
+    const processCandidate = async (candidate: (typeof candidates)[number]) => {
       const { reference } = candidate;
       let url = String(reference.pdfUrl || '').trim();
       if (!url) url = await resolveOpenAccessPdfUrl(String(reference.doi || ''));
       if (!url) {
         failed++;
-        setPdfProgress({ total: candidates.length, attempted: done + failed, downloaded: done, failed, active: true });
-        flashStatus(`OA PDF bulunamadı: ${done + failed}/${candidates.length}`);
-        continue;
+        commitProgress(`OA PDF bulunamadı: ${done + failed}/${candidates.length}`);
+        return;
       }
       try {
         const attemptedUrl = url;
@@ -1590,28 +1705,26 @@ export default function App() {
             pdfAttached: true,
             pdfVerification: result.verification || null
           });
-          setAppState(nextState);
-          appStateRef.current = nextState;
-          setPdfProgress({ total: candidates.length, attempted: done + failed, downloaded: done, failed, active: true });
-          flashStatus(`OA PDF indiriliyor: ${done + failed}/${candidates.length}`);
+          commitProgress(`OA PDF indiriliyor: ${done + failed}/${candidates.length}`);
         } else {
           failed++;
           const reason = String(result?.error || result?.failure?.userMessage || '').slice(0, 120);
           nextState = patchReferenceInWorkspace(nextState, candidate.workspaceId, reference.id, { pdfUrl: attemptedUrl });
-          setAppState(nextState);
-          appStateRef.current = nextState;
-          setPdfProgress({ total: candidates.length, attempted: done + failed, downloaded: done, failed, active: true });
-          flashStatus(`OA PDF indirilemedi: ${done + failed}/${candidates.length}${reason ? ` · ${reason}` : ''}`);
+          commitProgress(`OA PDF indirilemedi: ${done + failed}/${candidates.length}${reason ? ` · ${reason}` : ''}`);
         }
       } catch (_error) {
         failed++;
         nextState = patchReferenceInWorkspace(nextState, candidate.workspaceId, reference.id, { pdfUrl: url });
-        setAppState(nextState);
-        appStateRef.current = nextState;
-        setPdfProgress({ total: candidates.length, attempted: done + failed, downloaded: done, failed, active: true });
-        flashStatus(`OA PDF indirilemedi: ${done + failed}/${candidates.length}`);
+        commitProgress(`OA PDF indirilemedi: ${done + failed}/${candidates.length}`);
       }
-    }
+    };
+
+    await Promise.all(Array.from({ length: concurrency }, async () => {
+      while (cursor < candidates.length) {
+        const candidate = candidates[cursor++];
+        await processCandidate(candidate);
+      }
+    }));
 
     await persistState(nextState);
     setPdfProgress({ total: candidates.length, attempted: done + failed, downloaded: done, failed, active: false });
@@ -1974,49 +2087,57 @@ export default function App() {
           />
         )}
       />
-      <CommandPalette open={commandOpen} commands={commands} onClose={() => setCommandOpen(false)} />
-      <FeatureModals
-        active={featureModal}
-        state={appState}
-        loadMeta={loadMeta}
-        selectedReference={activeWorkspace.lib.find((ref) => ref.id === activeReferenceId) || null}
-        onClose={() => setFeatureModal(null)}
-        onStatus={flashStatus}
-        onUpdateReference={handleUpdateReference}
-        onDeleteReference={handleDeleteReference}
-        onRestoreState={() => {
-          setLoading(true);
-          window.electronAPI.loadData().then((result) => {
-            const hydrated = result?.ok && result.data ? hydrateAppState(JSON.parse(String(result.data))) : appStateRef.current;
-            setAppState(hydrated);
-            appStateRef.current = hydrated;
-            setLoading(false);
-          });
-        }}
-      />
-      <CollectionManagerModal
-        open={collectionManagerOpen}
-        collections={Array.isArray(activeWorkspace.collections) ? activeWorkspace.collections as Array<{ id: string; name: string }> : []}
-        references={activeWorkspace.lib}
-        onClose={() => setCollectionManagerOpen(false)}
-        onCreate={handleCreateCollection}
-        onRename={handleRenameCollection}
-        onDelete={handleDeleteCollection}
-        onSelect={(collectionId) => {
-          setActiveCollectionId(collectionId);
-          setCollectionManagerOpen(false);
-        }}
-      />
-      <WorkspaceNameModal
-        open={Boolean(workspaceNameModal)}
-        title={workspaceNameModal?.mode === 'rename' ? 'Çalışma Alanını Yeniden Adlandır' : 'Yeni Çalışma Alanı'}
-        defaultName={workspaceNameModal?.mode === 'rename'
-          ? (appState.wss.find((workspace) => workspace.id === workspaceNameModal.workspaceId)?.name || '')
-          : `Workspace ${appState.wss.length + 1}`}
-        onClose={() => setWorkspaceNameModal(null)}
-        onSubmit={submitNewWorkspace}
-      />
-      <LegacyCompatibilityHost onStatus={flashStatus} onImportReferences={handleImportReferences} />
+      <Suspense fallback={null}>
+        {commandOpen ? <CommandPalette open={commandOpen} commands={commands} onClose={() => setCommandOpen(false)} /> : null}
+        {featureModal ? (
+          <FeatureModals
+            active={featureModal}
+            state={appState}
+            loadMeta={loadMeta}
+            selectedReference={activeWorkspace.lib.find((ref) => ref.id === activeReferenceId) || null}
+            onClose={() => setFeatureModal(null)}
+            onStatus={flashStatus}
+            onUpdateReference={handleUpdateReference}
+            onDeleteReference={handleDeleteReference}
+            onRestoreState={() => {
+              setLoading(true);
+              window.electronAPI.loadData().then((result) => {
+                const hydrated = result?.ok && result.data ? hydrateAppState(JSON.parse(String(result.data))) : appStateRef.current;
+                setAppState(hydrated);
+                appStateRef.current = hydrated;
+                setLoading(false);
+              });
+            }}
+          />
+        ) : null}
+        {collectionManagerOpen ? (
+          <CollectionManagerModal
+            open={collectionManagerOpen}
+            collections={Array.isArray(activeWorkspace.collections) ? activeWorkspace.collections as Array<{ id: string; name: string }> : []}
+            references={activeWorkspace.lib}
+            onClose={() => setCollectionManagerOpen(false)}
+            onCreate={handleCreateCollection}
+            onRename={handleRenameCollection}
+            onDelete={handleDeleteCollection}
+            onSelect={(collectionId) => {
+              setActiveCollectionId(collectionId);
+              setCollectionManagerOpen(false);
+            }}
+          />
+        ) : null}
+        {workspaceNameModal ? (
+          <WorkspaceNameModal
+            open={Boolean(workspaceNameModal)}
+            title={workspaceNameModal?.mode === 'rename' ? 'Çalışma Alanını Yeniden Adlandır' : 'Yeni Çalışma Alanı'}
+            defaultName={workspaceNameModal?.mode === 'rename'
+              ? (appState.wss.find((workspace) => workspace.id === workspaceNameModal.workspaceId)?.name || '')
+              : `Workspace ${appState.wss.length + 1}`}
+            onClose={() => setWorkspaceNameModal(null)}
+            onSubmit={submitNewWorkspace}
+          />
+        ) : null}
+        <LegacyCompatibilityHost onStatus={flashStatus} onImportReferences={handleImportReferences} />
+      </Suspense>
     </EditorContext.Provider>
   );
 }

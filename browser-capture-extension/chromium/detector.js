@@ -196,7 +196,15 @@
         href: anchor.href || '',
         text: anchor.textContent ? String(anchor.textContent).replace(/\s+/g, ' ').trim() : '',
         aria: anchor.getAttribute('aria-label') || '',
-        title: anchor.getAttribute('title') || ''
+        title: anchor.getAttribute('title') || '',
+        rel: anchor.getAttribute('rel') || '',
+        data: [
+          anchor.getAttribute('data-track-action') || '',
+          anchor.getAttribute('data-track-label') || '',
+          anchor.getAttribute('data-test') || '',
+          anchor.getAttribute('data-testid') || '',
+          anchor.getAttribute('class') || ''
+        ].join(' ')
       };
     }).filter(function(item){ return !!item.href; });
   }
