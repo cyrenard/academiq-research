@@ -48,10 +48,31 @@ test('buildUpdateCheckResult derives availability and download url', () => {
   assert.equal(result.downloadUrl, 'https://example.com/u.html');
 });
 
+test('buildUpdateCheckResult prefers installer assets for packaged releases', () => {
+  const result = updater.buildUpdateCheckResult({
+    tag_name: 'v2.2.0',
+    assets: [
+      { name: 'academiq-research.html', browser_download_url: 'https://github.com/cyrenard/academiq-research/releases/download/v2.2.0/academiq-research.html' },
+      { name: 'AcademiQ-Setup-2.2.0.exe', browser_download_url: 'https://github.com/cyrenard/academiq-research/releases/download/v2.2.0/AcademiQ-Setup-2.2.0.exe' }
+    ],
+    body: 'notes',
+    published_at: '2026-01-01'
+  }, '2.1.0');
+
+  assert.equal(result.available, true);
+  assert.equal(result.assetType, 'installer');
+  assert.equal(result.assetName, 'AcademiQ-Setup-2.2.0.exe');
+  assert.equal(result.downloadUrl.endsWith('/AcademiQ-Setup-2.2.0.exe'), true);
+});
+
 test('normalizeDownloadUrl converts release pages and unknown files', () => {
   assert.equal(
     updater.normalizeDownloadUrl('https://github.com/x/y/releases/tag/v2.0.0'),
     'https://raw.githubusercontent.com/cyrenard/academiq-research/v2.0.0/academiq-research.html'
+  );
+  assert.equal(
+    updater.normalizeDownloadUrl('https://github.com/cyrenard/academiq-research/releases/download/v2.0.0/AcademiQ-Setup-2.0.0.exe'),
+    'https://github.com/cyrenard/academiq-research/releases/download/v2.0.0/AcademiQ-Setup-2.0.0.exe'
   );
   assert.equal(
     updater.normalizeDownloadUrl('https://example.com/update'),
@@ -82,6 +103,29 @@ test('applyDownloadedUpdate writes html updates to versioned runtime override di
   assert.equal(fs.existsSync(path.join(appDir, 'runtime-overrides', '1.1.1', 'academiq-research.html')), true);
   assert.equal(fs.existsSync(path.join(appDir, 'runtime-overrides', '1.1.1', 'tiptap-bundle.js')), true);
   assert.equal(fs.existsSync(path.join(appDir, 'runtime-overrides', '1.1.1', 'src', 'browser-capture.js')), true);
+});
+
+test('applyDownloadedUpdate stores validated installer updates', async () => {
+  const appDir = makeTempDir();
+  const repoDir = makeTempDir();
+  const installer = Buffer.alloc(1024 * 1024 + 10);
+  installer[0] = 0x4d;
+  installer[1] = 0x5a;
+
+  const result = await updater.applyDownloadedUpdate({
+    appDir,
+    dirname: repoDir,
+    url: 'https://github.com/cyrenard/academiq-research/releases/download/v2.0.0/AcademiQ-Setup-2.0.0.exe',
+    buffer: installer,
+    appVersion: '1.1.0',
+    isPackaged: true,
+    fetchBuffer: async () => Buffer.from('')
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.type, 'installer');
+  assert.equal(result.restart, false);
+  assert.equal(fs.existsSync(path.join(appDir, 'updates', 'AcademiQ-Setup-2.0.0.exe')), true);
 });
 
 test('validateRuntimeHtmlBuffer rejects unrelated or remote-script html updates', () => {

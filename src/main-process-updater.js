@@ -21,6 +21,7 @@ const APPDATA_PERSISTED_NAMES = new Set([
   'capture-agent.pid',
   'browser-capture-extension',
   'pdfs',
+  'updates',
   'runtime-overrides',
   'runtime-legacy',
   'update.zip'
@@ -36,17 +37,29 @@ function compareVersions(a, b) {
   return 0;
 }
 
+function classifyUpdateAsset(asset) {
+  const name = String(asset && asset.name || '');
+  if (!name || !asset || !asset.browser_download_url) return null;
+  if (/\.exe$/i.test(name)) return { asset, type: 'installer', priority: /^AcademiQ-Setup-/i.test(name) ? 0 : 1 };
+  if (/\.html?$/i.test(name)) return { asset, type: 'html', priority: 2 };
+  if (/\.zip$/i.test(name)) return { asset, type: 'zip', priority: 3 };
+  return null;
+}
+
+function pickUpdateAsset(assets) {
+  return (Array.isArray(assets) ? assets : [])
+    .map(classifyUpdateAsset)
+    .filter(Boolean)
+    .sort((a, b) => a.priority - b.priority)[0] || null;
+}
+
 function buildUpdateCheckResult(data, currentVersion) {
   if (!data || !data.tag_name) return { available: false, current: currentVersion };
   const remote = data.tag_name.replace(/^v/, '');
   const available = compareVersions(remote, currentVersion) > 0;
-  let htmlAsset = null;
-  if (data.assets && data.assets.length) {
-    htmlAsset = data.assets.find(asset => asset.name && asset.name.endsWith('.html'));
-    if (!htmlAsset) htmlAsset = data.assets.find(asset => asset.name && asset.name.endsWith('.zip'));
-  }
-  const downloadUrl = htmlAsset
-    ? htmlAsset.browser_download_url
+  const picked = pickUpdateAsset(data.assets);
+  const downloadUrl = picked
+    ? picked.asset.browser_download_url
     : 'https://raw.githubusercontent.com/cyrenard/academiq-research/' + data.tag_name + '/academiq-research.html';
   return {
     available,
@@ -54,6 +67,8 @@ function buildUpdateCheckResult(data, currentVersion) {
     remote,
     notes: data.body || '',
     downloadUrl,
+    assetName: picked ? picked.asset.name : 'academiq-research.html',
+    assetType: picked ? picked.type : 'html',
     publishedAt: data.published_at || ''
   };
 }
@@ -71,7 +86,7 @@ function normalizeDownloadUrl(origUrl) {
     return 'https://raw.githubusercontent.com/cyrenard/academiq-research/main/academiq-research.html';
   }
   const fileName = url.split('/').pop() || 'update';
-  const isKnownType = fileName.endsWith('.html') || fileName.endsWith('.zip');
+  const isKnownType = /\.(html?|zip|exe)$/i.test(fileName);
   if (!isKnownType) {
     url = 'https://raw.githubusercontent.com/cyrenard/academiq-research/main/academiq-research.html';
   }
@@ -165,6 +180,16 @@ function validateRuntimeHtmlBuffer(buffer) {
   const hasAcademiqMarker = /AcademiQ|academiq-research|AQTipTap|tiptap-bundle/i.test(text);
   if (!hasAcademiqMarker) return { ok: false, error: 'Downloaded HTML does not look like an AcademiQ runtime' };
   if (/<script[^>]+src=["']https?:\/\//i.test(text)) return { ok: false, error: 'Downloaded runtime contains remote script references' };
+  return { ok: true };
+}
+
+function validateInstallerBuffer(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 1024 * 1024) {
+    return { ok: false, error: 'Downloaded installer is too small' };
+  }
+  if (buffer[0] !== 0x4d || buffer[1] !== 0x5a) {
+    return { ok: false, error: 'Downloaded installer is not a Windows executable' };
+  }
   return { ok: true };
 }
 
@@ -361,6 +386,23 @@ async function applyDownloadedUpdate(options) {
     return { ok: true, type: 'zip', path: zipPath, restart: true };
   }
 
+  if (/\.exe$/i.test(finalName)) {
+    const validation = validateInstallerBuffer(buf);
+    if (!validation.ok) return validation;
+    const updatesDir = path.join(appDir, 'updates');
+    ensureDir(updatesDir);
+    const safeName = finalName.replace(/[^a-z0-9._-]/gi, '-');
+    const installerPath = path.join(updatesDir, safeName);
+    fs.writeFileSync(installerPath, buf);
+    return {
+      ok: true,
+      type: 'installer',
+      path: installerPath,
+      restart: false,
+      message: 'Installer indirildi. Kurulumu tamamlamak için açıldıysa yönergeleri izleyin.'
+    };
+  }
+
   const headerStr = buf.slice(0, 200).toString('utf8');
   if (headerStr.includes('<!DOCTYPE') || headerStr.includes('<html')) {
     const validation = validateRuntimeHtmlBuffer(buf);
@@ -382,10 +424,12 @@ async function applyDownloadedUpdate(options) {
 module.exports = {
   compareVersions,
   buildUpdateCheckResult,
+  pickUpdateAsset,
   normalizeDownloadUrl,
   computeRuntimeSignature,
   computeRendererRuntimeSignature,
   validateRuntimeHtmlBuffer,
+  validateInstallerBuffer,
   applyDownloadedUpdate,
   resolveRuntimeOverride,
   archiveLegacyRuntimeOverrides,

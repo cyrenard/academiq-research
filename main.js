@@ -3320,7 +3320,7 @@ ipcMain.handle('update:download', async (_ev, origUrl) => {
       timeout: 45000
     });
     if (!buf || buf.length < 100) return { ok: false, error: 'Empty download (' + (buf ? buf.length : 0) + ' bytes)' };
-    return applyDownloadedUpdate({
+    const result = await applyDownloadedUpdate({
       appDir: APP_DIR,
       dirname: __dirname,
       url,
@@ -3329,6 +3329,14 @@ ipcMain.handle('update:download', async (_ev, origUrl) => {
       isPackaged: app.isPackaged,
       fetchBuffer: followRedirects
     });
+    if (result && result.ok && result.type === 'installer' && result.path) {
+      const openError = await shell.openPath(result.path);
+      return Object.assign({}, result, {
+        opened: !openError,
+        openError: openError || ''
+      });
+    }
+    return result;
   } catch (e) { return { ok: false, error: e.message }; }
 });
 

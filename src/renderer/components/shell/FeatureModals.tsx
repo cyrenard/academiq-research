@@ -153,6 +153,10 @@ export function FeatureModals({
   const capture = asRecord(browserStatus);
   const meta = asRecord(loadMeta);
   const sync = asRecord(syncInfo);
+  const update = asRecord(info);
+  const checkedUpdateUrl = String(update.downloadUrl || '');
+  const updateDownloadUrl = checkedUpdateUrl || updateUrl.trim();
+  const updateAvailable = update.available === true;
   const latestSnapshot = history[0] || null;
   const currentDoc = state.docs.find((doc) => doc.id === state.curDoc);
 
@@ -427,17 +431,67 @@ export function FeatureModals({
 
             {settingsTab === 'updates' ? (
               <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
-                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Updates</div>
-                <button className="w-full rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => window.electronAPI.checkUpdate().then((result) => { setInfo(result); onStatus('Güncelleme kontrol edildi'); }).catch(() => onStatus('Güncelleme kontrol edilemedi'))}>Güncellemeyi kontrol et</button>
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Güncelleme</div>
+                <div className="mb-3 rounded-md bg-white p-3 text-xs text-aq-ink">
+                  <div className="font-semibold">
+                    {update.remote
+                      ? updateAvailable
+                        ? `Yeni sürüm hazır: ${String(update.remote)}`
+                        : `Güncel sürüm: ${String(update.current || update.remote)}`
+                      : 'Güncelleme durumunu kontrol edin.'}
+                  </div>
+                  {update.assetName ? <div className="mt-1 text-aq-muted">Paket: {String(update.assetName)}</div> : null}
+                  {update.error ? <div className="mt-2 text-red-700">{String(update.error)}</div> : null}
+                  {update.ok === true ? <div className="mt-2 text-emerald-700">{String(update.message || 'Güncelleme indirildi.')}</div> : null}
+                  {update.ok === false ? <div className="mt-2 text-red-700">{String(update.error || 'Güncelleme indirilemedi.')}</div> : null}
+                </div>
+                <button
+                  className="w-full rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={loadingAction === 'check-update'}
+                  onClick={() => {
+                    setLoadingAction('check-update');
+                    window.electronAPI.checkUpdate()
+                      .then((result) => {
+                        const record = asRecord(result);
+                        setInfo(result);
+                        if (record.downloadUrl) setUpdateUrl(String(record.downloadUrl));
+                        onStatus(record.available ? 'Yeni güncelleme bulundu' : 'Uygulama güncel');
+                      })
+                      .catch(() => onStatus('Güncelleme kontrol edilemedi'))
+                      .finally(() => setLoadingAction(''));
+                  }}
+                >
+                  {loadingAction === 'check-update' ? 'Kontrol ediliyor...' : 'Güncellemeyi kontrol et'}
+                </button>
                 <div className="mt-2 flex gap-2">
                   <input value={updateUrl} onChange={(event) => setUpdateUrl(event.target.value)} className="h-9 min-w-0 flex-1 rounded-md border border-aq-line bg-white px-3 text-xs outline-none" placeholder="Update URL" />
-                  <button className="rounded-md bg-aq-navy px-3 text-xs font-semibold text-white" onClick={() => window.electronAPI.setUpdateUrl(updateUrl).then(() => onStatus('Update URL kaydedildi')).catch(() => onStatus('Update URL kaydedilemedi'))}>Kaydet</button>
+                  <button className="rounded-md bg-aq-navy px-3 text-xs font-semibold text-white" onClick={() => window.electronAPI.setUpdateUrl(updateUrl).then(() => onStatus('Güncelleme adresi kaydedildi')).catch(() => onStatus('Güncelleme adresi kaydedilemedi'))}>Kaydet</button>
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2">
-                  <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => window.electronAPI.downloadUpdate(updateUrl).then((result) => { setInfo(result); onStatus('Update indirildi'); }).catch(() => onStatus('Update indirilemedi'))}>Update indir</button>
+                  <button
+                    className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!updateDownloadUrl || loadingAction === 'download-update'}
+                    onClick={() => {
+                      if (!updateDownloadUrl) {
+                        onStatus('Önce güncellemeyi kontrol edin');
+                        return;
+                      }
+                      setLoadingAction('download-update');
+                      window.electronAPI.downloadUpdate(updateDownloadUrl)
+                        .then((result) => {
+                          setInfo(result);
+                          const record = asRecord(result);
+                          onStatus(record.ok ? 'Güncelleme indirildi' : String(record.error || 'Güncelleme indirilemedi'));
+                        })
+                        .catch(() => onStatus('Güncelleme indirilemedi'))
+                        .finally(() => setLoadingAction(''));
+                    }}
+                  >
+                    {loadingAction === 'download-update' ? 'İndiriliyor...' : 'Güncellemeyi indir'}
+                  </button>
                   <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => window.electronAPI.restartApp()}>Uygulamayı yeniden başlat</button>
                 </div>
-                <pre className="mt-3 max-h-40 overflow-auto rounded-md bg-white p-3 text-xs">{JSON.stringify(info, null, 2)}</pre>
+                {checkedUpdateUrl ? <div className="mt-3 break-all rounded-md bg-white p-3 text-[11px] text-aq-muted">{checkedUpdateUrl}</div> : null}
               </section>
             ) : null}
 
