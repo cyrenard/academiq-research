@@ -32,6 +32,7 @@ const { createBrowserCaptureStore } = require('./src/main-process-browser-captur
 const { createCaptureAgentManager } = require('./src/main-process-capture-agent-manager.js');
 const { createCaptureQueueDispatcher } = require('./src/main-process-capture-queue-dispatcher.js');
 const { createCaptureStatusBuilder } = require('./src/main-process-capture-status-builder.js');
+const { createCaptureQueuePoller } = require('./src/main-process-capture-queue-poller.js');
 const {
   normalizeCaptureReferenceType,
   normalizeCaptureReference,
@@ -129,8 +130,6 @@ let browserCaptureRuntime = {
   quitEnsured: false
 };
 let captureAgentRuntime = null;
-let captureQueuePollTimer = null;
-let captureQueuePollRunning = false;
 const captureQueueDispatcher = createCaptureQueueDispatcher({
   runtime: browserCaptureRuntime,
   getMainWindow: () => mainWindow,
@@ -352,35 +351,20 @@ function saveMainState(state) {
   return persisted;
 }
 
-async function processCaptureQueueFromApp(reason) {
-  if (captureQueuePollRunning || IS_CAPTURE_AGENT_MODE) return { ok: false, skipped: true };
-  captureQueuePollRunning = true;
-  try {
-    return await processCaptureQueue({
-      storage,
-      createWorkspace: createWorkspaceFromMain,
-      importCapture: importBrowserCaptureIntoState,
-      reason: reason || 'app-poll'
-    });
-  } finally {
-    captureQueuePollRunning = false;
-  }
-}
-
-function stopCaptureQueuePolling() {
-  if (captureQueuePollTimer) {
-    clearInterval(captureQueuePollTimer);
-    captureQueuePollTimer = null;
-  }
-}
-
-function startCaptureQueuePolling() {
-  stopCaptureQueuePolling();
-  if (IS_CAPTURE_AGENT_MODE) return;
-  captureQueuePollTimer = setInterval(function () {
-    processCaptureQueueFromApp('interval').catch(() => {});
-  }, 2500);
-}
+// Polling wrapper — implementation in main-process-capture-queue-poller.js.
+const captureQueuePoller = createCaptureQueuePoller({
+  processQueue: ({ reason }) => processCaptureQueue({
+    storage,
+    createWorkspace: createWorkspaceFromMain,
+    importCapture: importBrowserCaptureIntoState,
+    reason
+  }),
+  isAgentMode: IS_CAPTURE_AGENT_MODE,
+  intervalMs: 2500
+});
+const processCaptureQueueFromApp = (reason) => captureQueuePoller.processNow(reason);
+const startCaptureQueuePolling = () => captureQueuePoller.start();
+const stopCaptureQueuePolling = () => captureQueuePoller.stop();
 
 // Reference utility wrappers — pure logic lives in main-process-capture-reference-utils.js.
 // These thin wrappers inject the deps (uid factory, AQWebRelatedPapers, AQLiteratureMatrixState).
