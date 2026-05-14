@@ -30,6 +30,7 @@ const {
 const captureRefUtils = require('./src/main-process-capture-reference-utils.js');
 const { createBrowserCaptureStore } = require('./src/main-process-browser-capture-store.js');
 const { createCaptureAgentManager } = require('./src/main-process-capture-agent-manager.js');
+const { createCaptureQueueDispatcher } = require('./src/main-process-capture-queue-dispatcher.js');
 const {
   normalizeCaptureReferenceType,
   normalizeCaptureReference,
@@ -129,6 +130,11 @@ let browserCaptureRuntime = {
 let captureAgentRuntime = null;
 let captureQueuePollTimer = null;
 let captureQueuePollRunning = false;
+const captureQueueDispatcher = createCaptureQueueDispatcher({
+  runtime: browserCaptureRuntime,
+  getMainWindow: () => mainWindow,
+  store: browserCaptureStore
+});
 const UPDATE_ALLOWED_HOSTS = [
   /^api\.github\.com$/i,
   /^github\.com$/i,
@@ -279,23 +285,9 @@ const getBrowserCaptureSettings = browserCaptureStore.getSettings;
 const getPersistedPendingCaptures = browserCaptureStore.getPersistedPendingCaptures;
 const savePersistedPendingCaptures = browserCaptureStore.savePersistedPendingCaptures;
 
-function hydratePendingCaptureRuntime() {
-  browserCaptureRuntime.pendingPayloads = getPersistedPendingCaptures();
-  return browserCaptureRuntime.pendingPayloads;
-}
-
-function scheduleBrowserCaptureFlush(delayMs) {
-  if (browserCaptureRuntime.flushTimer) {
-    clearTimeout(browserCaptureRuntime.flushTimer);
-  }
-  browserCaptureRuntime.flushTimer = setTimeout(function () {
-    browserCaptureRuntime.flushTimer = null;
-    flushPendingBrowserCaptures();
-    if (getPersistedPendingCaptures().length || browserCaptureRuntime.pendingWorkspaceEvents.length) {
-      scheduleBrowserCaptureFlush(1200);
-    }
-  }, Math.max(80, Number(delayMs) || 200));
-}
+// Queue dispatch wrappers — implementation in main-process-capture-queue-dispatcher.js
+const hydratePendingCaptureRuntime = () => captureQueueDispatcher.hydratePendingFromStore();
+const scheduleBrowserCaptureFlush = (delayMs) => captureQueueDispatcher.scheduleFlush(delayMs);
 
 function persistPendingCapture(payload) {
   const { entry, all } = browserCaptureStore.persistPending(payload);
@@ -641,59 +633,8 @@ function buildCaptureLookup(payload) {
   };
 }
 
-function flushPendingBrowserCaptures() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  hydratePendingCaptureRuntime().forEach(function (entry) {
-    if (!entry || !entry.id || !entry.payload) return;
-    const deliveredAt = Number(browserCaptureRuntime.deliveredPayloadIds[entry.id] || 0);
-    if (deliveredAt && (Date.now() - deliveredAt) < 1500) return;
-    try {
-      browserCaptureRuntime.deliveredPayloadIds[entry.id] = Date.now();
-      mainWindow.webContents.send('browserCapture:incoming', Object.assign({}, entry.payload, {
-        queueId: entry.id
-      }));
-    } catch (_e) {}
-  });
-  browserCaptureRuntime.pendingWorkspaceEvents = browserCaptureRuntime.pendingWorkspaceEvents.filter(function (entry) {
-    if (!entry || !entry.workspace || !entry.workspace.id) return false;
-    entry.attempts = Number(entry.attempts || 0);
-    const deliveredAt = Number(browserCaptureRuntime.deliveredWorkspaceIds[entry.workspace.id] || 0);
-    if (deliveredAt && (Date.now() - deliveredAt) < 1200) return entry.attempts < 4;
-    try {
-      browserCaptureRuntime.deliveredWorkspaceIds[entry.workspace.id] = Date.now();
-      entry.attempts += 1;
-      mainWindow.webContents.send('browserCapture:workspaceCreated', entry);
-      return entry.attempts < 4;
-    } catch (_e) {
-      entry.attempts += 1;
-      return entry.attempts < 4;
-    }
-  });
-}
-
-function queueBrowserCapturePayload(payload) {
-  const safePayload = sanitizeCapturePayload(payload);
-  if (!safePayload.detectedTitle && !safePayload.doi && !safePayload.sourcePageUrl) {
-    return { ok: false, error: 'Capture verisi yetersiz' };
-  }
-  const queued = persistPendingCapture(safePayload);
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    try {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.show();
-      mainWindow.focus();
-    } catch (_e) {}
-  }
-  scheduleBrowserCaptureFlush(50);
-  return {
-    ok: true,
-    queued: true,
-    queueId: queued.id,
-    message: browserCaptureRuntime.ready
-      ? 'Capture AcademiQ kuyru�una al�nd� ve i�leniyor.'
-      : 'Capture AcademiQ kuyru�una al�nd�. Uygulama haz�r oldu�unda senkronize edilecek.'
-  };
-}
+const flushPendingBrowserCaptures = () => captureQueueDispatcher.flushPending();
+const queueBrowserCapturePayload = (payload) => captureQueueDispatcher.queuePayload(payload);
 
 function parseDataState() {
   if (latestStateJSON) {
