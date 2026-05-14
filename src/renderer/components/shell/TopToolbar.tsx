@@ -36,6 +36,7 @@ import {
 } from '../../lib/auxiliary-page-html';
 import { scrollToBibliographyBlock } from '../../lib/bibliography-navigation';
 import { openDocumentOutline, openCaptionManager } from '../../lib/outline-modals';
+import { computeActiveMarks, activeMarksEqual, type ActiveMarks } from '../../lib/editor-active-marks';
 import {
   getActiveDocRecord,
   commitEditorHTMLToLegacyState as commitEditorHTMLToLegacyStateLib,
@@ -113,7 +114,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
   const [findQuery, setFindQuery] = useState('');
   const [replaceOpen, setReplaceOpen] = useState(false);
   const [replaceText, setReplaceText] = useState('');
-  const [activeMarks, setActiveMarks] = useState<Record<string, boolean>>({});
+  const [activeMarks, setActiveMarks] = useState<ActiveMarks>({});
   const [coverOpen, setCoverOpen] = useState(false);
   const [coverTitle, setCoverTitle] = useState('');
   const [coverAuthor, setCoverAuthor] = useState('');
@@ -127,40 +128,8 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
   const [abstractEnglishKeywords, setAbstractEnglishKeywords] = useState('');
 
   const refreshActiveMarks = () => {
-    const editor = (window as any).editor;
-    const isActive = (nameOrAttrs: unknown, attrs?: unknown) => {
-      try {
-        return !!(editor && typeof editor.isActive === 'function' && editor.isActive(nameOrAttrs, attrs));
-      } catch (_error) {
-        return false;
-      }
-    };
-    const next: Record<string, boolean> = {
-      bold: isActive('bold'),
-      italic: isActive('italic'),
-      underline: isActive('underline'),
-      strike: isActive('strike') || isActive('strikeThrough'),
-      paragraph: isActive('paragraph') && !isActive('heading') && !isActive('blockquote'),
-      h1: isActive('heading', { level: 1 }),
-      h2: isActive('heading', { level: 2 }),
-      h3: isActive('heading', { level: 3 }),
-      h4: isActive('heading', { level: 4 }),
-      h5: isActive('heading', { level: 5 }),
-      quote: isActive('blockquote'),
-      bulletList: isActive('bulletList'),
-      orderedList: isActive('orderedList'),
-      alignLeft: isActive({ textAlign: 'left' }),
-      alignCenter: isActive({ textAlign: 'center' }),
-      alignRight: isActive({ textAlign: 'right' }),
-      alignJustify: isActive({ textAlign: 'justify' }),
-      superscript: isActive('superscript'),
-      subscript: isActive('subscript')
-    };
-    setActiveMarks((current) => {
-      const keys = Object.keys(next);
-      if (keys.length === Object.keys(current).length && keys.every((key) => current[key] === next[key])) return current;
-      return next;
-    });
+    const next = computeActiveMarks();
+    setActiveMarks((current) => activeMarksEqual(current, next) ? current : next);
   };
 
   const scheduleActiveMarksRefresh = () => {
