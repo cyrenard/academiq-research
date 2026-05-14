@@ -34,6 +34,7 @@ import {
   removeAppendixFromHTML as removeAppendixFromHTMLLib
 } from '../../lib/auxiliary-page-html';
 import { scrollToBibliographyBlock } from '../../lib/bibliography-navigation';
+import { openDocumentOutline, openCaptionManager } from '../../lib/outline-modals';
 import {
   applyAppendicesToEngine as applyAppendicesToEngineLib,
   removeAppendixFromEngine as removeAppendixFromEngineLib,
@@ -267,52 +268,6 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     const modal = event.currentTarget as HTMLElement;
     modal.classList.remove('show');
     modal.removeEventListener('mousedown', closeLegacyModalOnBackdrop);
-  };
-
-  const openDocumentOutline = () => {
-    if (callLegacy('openDocumentOutline')) return;
-    if (!showModal('docOutlineModal')) return;
-    const summary = document.getElementById('docOutlineSummary');
-    const list = document.getElementById('docOutlineList');
-    const api = (window as any).AQDocumentOutline;
-    const editor = (window as any).editor || null;
-    const root = document.getElementById('apaed');
-    if (!summary || !list || !api || typeof api.collectEntries !== 'function') return;
-    const entries = api.collectEntries({ root, editor }) || [];
-    const built = typeof api.buildSummary === 'function' ? api.buildSummary(entries) : {};
-    summary.textContent = entries.length
-      ? `${built.headingCount || 0} başlık, ${built.tableCount || 0} tablo, ${built.figureCount || 0} Şekil`
-      : 'Anahat için başlık bulunamadı.';
-    list.innerHTML = entries.length
-      ? entries.map((entry: any) => `<button class="doc-outline-item" type="button" data-outline-id="${String(entry.id || '')}"><span>${String(entry.label || entry.text || 'Başlık')}</span></button>`).join('')
-      : '<div class="empty">Belgede başlık yok.</div>';
-    list.onclick = (event) => {
-      const target = event.target as HTMLElement | null;
-      const button = target?.closest?.('[data-outline-id]') as HTMLElement | null;
-      if (!button || typeof api.scrollToEntry !== 'function') return;
-      api.scrollToEntry({ root, editor, id: button.getAttribute('data-outline-id') || '' });
-      closeModal('docOutlineModal');
-    };
-    document.getElementById('docOutlineCloseBtn')?.addEventListener('click', () => closeModal('docOutlineModal'), { once: true });
-  };
-
-  const openCaptionManager = () => {
-    if (callLegacy('openCaptionManager')) return;
-    if (!showModal('captionManagerModal')) return;
-    const summary = document.getElementById('captionManagerSummary');
-    const list = document.getElementById('captionManagerList');
-    const api = (window as any).AQAcademicObjects;
-    const editor = (window as any).editor || null;
-    const root = document.getElementById('apaed');
-    if (!summary || !list) return;
-    const entries = api && typeof api.getCaptionManagerEntries === 'function'
-      ? api.getCaptionManagerEntries({ root, editor }) || []
-      : [];
-    summary.textContent = entries.length ? `${entries.length} başlık bulundu.` : 'Tablo veya Şekil başlığı bulunamadı.';
-    list.innerHTML = entries.length
-      ? entries.map((entry: any) => `<button class="doc-outline-item" type="button" data-caption-target="${String(entry.id || '')}">${String(entry.label || entry.title || entry.text || 'Başlık')}</button>`).join('')
-      : '<div class="empty">Başlık yok.</div>';
-    document.getElementById('captionManagerCloseBtn')?.addEventListener('click', () => closeModal('captionManagerModal'), { once: true });
   };
 
   const getEditorHTML = () => editorRef.current?.getHTML?.() || document.getElementById('apaed')?.innerHTML || '<p></p>';
