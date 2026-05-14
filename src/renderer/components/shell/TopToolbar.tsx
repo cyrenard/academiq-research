@@ -37,6 +37,14 @@ import {
 import { scrollToBibliographyBlock } from '../../lib/bibliography-navigation';
 import { openDocumentOutline, openCaptionManager } from '../../lib/outline-modals';
 import {
+  getActiveDocRecord,
+  commitEditorHTMLToLegacyState as commitEditorHTMLToLegacyStateLib,
+  sanitizeAuxiliaryHTML,
+  saveAuxiliaryChange as saveAuxiliaryChangeLib,
+  setStatusText,
+  setAuxiliaryPageHTML as setAuxiliaryPageHTMLLib
+} from '../../lib/legacy-doc-helpers';
+import {
   applyAppendicesToEngine as applyAppendicesToEngineLib,
   removeAppendixFromEngine as removeAppendixFromEngineLib,
   scrollToLatestAppendix as scrollToLatestAppendixLib,
@@ -274,58 +282,15 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
   const getEditorHTML = () => editorRef.current?.getHTML?.() || document.getElementById('apaed')?.innerHTML || '<p></p>';
   const setEditorHTML = (html: string) => editorRef.current?.setHTML?.(html);
 
-  const commitEditorHTMLToLegacyState = () => {
-    const win = window as any;
-    const html = getEditorHTML();
-    const state = win.S;
-    if (!state || typeof state !== 'object') return html;
-    state.doc = html;
-    const docs = Array.isArray(state.docs) ? state.docs : [];
-    const docId = state.curDoc;
-    const doc = docs.find((item: any) => item && item.id === docId) || docs[0];
-    if (doc) doc.content = html;
-    return html;
-  };
+  const commitEditorHTMLToLegacyState = () =>
+    commitEditorHTMLToLegacyStateLib(getEditorHTML());
 
-  const getActiveDocRecord = () => {
-    const state = (window as any).S;
-    if (!state || typeof state !== 'object') return null;
-    const docs = Array.isArray(state.docs) ? state.docs : [];
-    return docs.find((item: any) => item && item.id === state.curDoc) || docs[0] || null;
-  };
-
-  const sanitizeAuxiliaryHTML = (html: string) => {
-    const sanitizer = (window as any).sanitizeAuxPageHTML;
-    return typeof sanitizer === 'function' ? sanitizer(html) : html;
-  };
-
-  const saveAuxiliaryChange = () => {
-    const win = window as any;
-    try {
-      if (typeof win.syncAuxiliaryPages === 'function') win.syncAuxiliaryPages();
-    } catch (error) {
-      console.warn('[auxiliary-pages] sync failed', error);
-    }
-    if (typeof win.save === 'function') {
-      win.save();
-    } else {
-      activeNotifySave();
-    }
-  };
-
-  const setStatusText = (message: string, tone: 'ok' | 'er' = 'ok') => {
-    const setter = (window as any).setDst;
-    if (typeof setter === 'function') setter(message, tone);
-  };
+  const saveAuxiliaryChange = () => saveAuxiliaryChangeLib(activeNotifySave);
 
   const setAuxiliaryPageHTML = (pageId: string, bodyId: string, html: string) => {
-    const page = document.getElementById(pageId);
-    const body = document.getElementById(bodyId);
-    if (body) body.innerHTML = html;
-    if (page) page.style.display = html.trim() ? 'block' : 'none';
-    if (html.trim() && pageId === 'abstractpage' && body instanceof HTMLElement) {
-      decorateAbstractPage(body);
-    }
+    setAuxiliaryPageHTMLLib(pageId, bodyId, html,
+      pageId === 'abstractpage' ? decorateAbstractPage : undefined
+    );
   };
 
   const decorateAbstractPage = (body: HTMLElement) => {
