@@ -3,17 +3,17 @@ import { Component, type ErrorInfo, type ReactNode } from 'react';
 type ErrorBoundaryState = { error: Error | null };
 
 export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { error: null };
+  override state: ErrorBoundaryState = { error: null };
 
   static getDerivedStateFromError(error: Error) {
     return { error };
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo) {
+  override componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('[react-shell]', error, info);
   }
 
-  render() {
+  override render() {
     if (this.state.error) {
       return (
         <div className="flex h-screen items-center justify-center bg-aq-paper p-8 text-aq-ink">

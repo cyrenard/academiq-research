@@ -577,7 +577,7 @@ test('React shell keeps PDF region capture controls behind a guarded legacy brid
   assert.ok(reactHtml.includes('<script src="/src/legacy-runtime.js"></script>'));
   assert.match(host, /pdfRegionBtn/);
   assert.match(host, /togglePdfRegionCaptureMode/);
-  assert.match(host, /PDF bölge seçimi için eski runtime fonksiyonu bulunamadı/);
+  assert.match(host, /PDF bölge yakalama henüz aktif değil/);
   assert.match(adapter, /pdf-region/);
   assert.match(shell, /capture-pdf-region/);
 });
@@ -707,6 +707,12 @@ test('React shell scopes notes by workspace and hydrates auxiliary document page
   assert.match(adapter, /function hydrateAuxiliaryPages/);
   assert.match(adapter, /setAuxiliaryPage\('tocpage', 'tocbody', doc\.tocHTML\)/);
   assert.match(adapter, /setAuxiliaryPage\('appendixpage', 'appendixbody', doc\.appendicesHTML\)/);
+});
+
+test('React shell deletes workspace PDF folders when a workspace is removed', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'App.tsx'), 'utf8');
+  assert.match(app, /const workspacePdfContext = \{ id: current\.id, name: current\.name \}/);
+  assert.match(app, /electronAPI\.deleteWorkspacePdfFolder\(workspacePdfContext\)/);
 });
 
 test('Legacy Word import persists imported document through saveData', () => {

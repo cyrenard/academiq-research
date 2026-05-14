@@ -1,29 +1,46 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type UserConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig({
-  plugins: [react()],
-  root: '.',
-  base: './',
-  build: {
-    outDir: 'dist/renderer',
-    emptyOutDir: true,
-    sourcemap: true,
-    rollupOptions: {
-      input: 'index.html',
-      output: {
-        manualChunks(id) {
-          if (!id.includes('node_modules')) return undefined;
-          if (id.includes('react') || id.includes('scheduler')) return 'vendor-react';
-          if (id.includes('lucide-react')) return 'vendor-icons';
-          return 'vendor';
+export default defineConfig(({ mode }): UserConfig => {
+  const isProd = mode === 'production';
+  return {
+    plugins: [react()],
+    root: '.',
+    base: './',
+    build: {
+      outDir: 'dist/renderer',
+      emptyOutDir: true,
+      // Keep sourcemaps for production crash diagnostics but use 'hidden' so
+      // they're not referenced from the bundle (they ship for symbolication
+      // without bloating page-load).
+      sourcemap: isProd ? 'hidden' : true,
+      rollupOptions: {
+        input: 'index.html',
+        output: {
+          manualChunks(id: string) {
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('react') || id.includes('scheduler')) return 'vendor-react';
+            if (id.includes('lucide-react')) return 'vendor-icons';
+            return 'vendor';
+          }
         }
       }
+    },
+    // Strip debugger statements and dead-code-eliminate informational console
+    // calls from production. console.error / console.warn are kept so genuine
+    // failures still surface in DevTools.
+    // (Vite's ESBuildOptions type misses drop/pure; the underlying esbuild
+    // supports both — see https://esbuild.github.io/api/#drop)
+    esbuild: isProd
+      ? ({
+          drop: ['debugger'],
+          pure: ['console.log', 'console.debug', 'console.info', 'console.trace']
+        } as unknown as UserConfig['esbuild'])
+      : {},
+    server: {
+      host: '127.0.0.1',
+      port: 5173,
+      strictPort: false
     }
-  },
-  server: {
-    host: '127.0.0.1',
-    port: 5173,
-    strictPort: false
-  }
+  };
 });

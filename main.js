@@ -2406,7 +2406,23 @@ ipcMain.handle('browserCapture:ackPayload', async (_ev, queueId = '') => {
 });
 
 // ── IPC: APP INFO ────────────────────────────────────────────────────────────
-const UPDATE_URL = 'https://api.github.com/repos/cyrenard/academiq-research/releases/latest';
+const DEFAULT_UPDATE_OWNER = 'cyrenard';
+const DEFAULT_UPDATE_REPO = 'academiq-research';
+const UPDATE_URL = `https://api.github.com/repos/${DEFAULT_UPDATE_OWNER}/${DEFAULT_UPDATE_REPO}/releases/latest`;
+
+function getUpdateAllowedOwner() {
+  const snapshot = storage.getSettingsSnapshot ? storage.getSettingsSnapshot() : {};
+  const raw = String(snapshot.updateAllowedOwner || '').trim();
+  // Only allow alphanumeric + dash (GitHub username spec); reject anything else
+  if (!raw || !/^[a-z0-9](?:[a-z0-9-]{0,38})$/i.test(raw)) return DEFAULT_UPDATE_OWNER;
+  return raw;
+}
+
+function isAllowedUpdateDownloadUrl(url) {
+  const owner = getUpdateAllowedOwner().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`^https://(raw\\.githubusercontent\\.com/${owner}|github\\.com/${owner}|api\\.github\\.com/repos/${owner})/`, 'i');
+  return pattern.test(String(url || ''));
+}
 
 ipcMain.handle('app:getInfo', async () => {
   return storage.getAppInfo(APP_VERSION);
@@ -2439,8 +2455,9 @@ ipcMain.handle('update:check', async () => {
 ipcMain.handle('update:download', async (_ev, origUrl) => {
   try {
     if (!origUrl) return { ok: false, error: 'No URL' };
-    if (!/^https:\/\/(raw\.githubusercontent\.com\/cyrenard|github\.com\/cyrenard|api\.github\.com\/repos\/cyrenard)\//i.test(origUrl)) {
-      return { ok: false, error: 'G�ncelleme yaln�zca github.com/cyrenard adresinden yap�labilir' };
+    if (!isAllowedUpdateDownloadUrl(origUrl)) {
+      const owner = getUpdateAllowedOwner();
+      return { ok: false, error: `Güncelleme yalnızca github.com/${owner} adresinden yapılabilir` };
     }
     const url = normalizeDownloadUrl(origUrl);
     console.log('[UPDATE] Downloading from:', url, '(original:', origUrl, ')');
