@@ -33,6 +33,7 @@ import {
   normalizeAppendicesHTML as normalizeAppendicesHTMLLib,
   removeAppendixFromHTML as removeAppendixFromHTMLLib
 } from '../../lib/auxiliary-page-html';
+import { scrollToBibliographyBlock } from '../../lib/bibliography-navigation';
 import {
   applyAppendicesToEngine as applyAppendicesToEngineLib,
   removeAppendixFromEngine as removeAppendixFromEngineLib,
@@ -715,58 +716,6 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     } else if (!openedByLegacy) {
       console.warn('[external-reference-import] modal not found');
     }
-  };
-
-  const normalizeHeadingText = (value: string) => value
-    .toLocaleLowerCase('tr-TR')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, '')
-    .trim();
-
-  const getBlockText = (block: any) => {
-    if (!block) return '';
-    return Array.isArray(block.runs)
-      ? block.runs.map((run: any) => String(run?.text || '')).join('')
-      : String(block.text || '');
-  };
-
-  const findBibliographyBlockIndex = () => {
-    const editor = (window as any).editor;
-    const blocks = editor?._aqEngine && editor?._docModel?.get?.()?.blocks;
-    if (!Array.isArray(blocks)) return -1;
-    return blocks.findIndex((block: any) => {
-      if (block?._isBibHeading) return true;
-      const text = normalizeHeadingText(getBlockText(block));
-      return text === 'kaynakça' || text === 'references' || text === 'bibliography';
-    });
-  };
-
-  const getBlockStartOffset = (blockIndex: number) => {
-    const editor = (window as any).editor;
-    const blocks = editor?._docModel?.get?.()?.blocks;
-    if (!Array.isArray(blocks) || blockIndex < 0) return 0;
-    let offset = 0;
-    for (let index = 0; index < blockIndex; index += 1) {
-      const blockLength = typeof editor._docModel.blockTextLength === 'function'
-        ? editor._docModel.blockTextLength(index)
-        : getBlockText(blocks[index]).length;
-      offset += blockLength + 1;
-    }
-    return offset;
-  };
-
-  const scrollToBibliographyBlock = () => {
-    const blockIndex = findBibliographyBlockIndex();
-    if (blockIndex < 0) return false;
-    const line = document.querySelector(`.aq-engine-line[data-block-index="${blockIndex}"]`) as HTMLElement | null;
-    if (!line) return false;
-    line.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-    const editor = (window as any).editor;
-    const offset = getBlockStartOffset(blockIndex);
-    editor?._restoreSelection?.({ type: 'aq', from: offset, to: offset, anchor: offset, focus: offset });
-    editor?._reflow?.();
-    return true;
   };
 
   const goToBibliography = () => {
