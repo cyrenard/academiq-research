@@ -29,6 +29,7 @@ const {
 } = require('./src/main-process-browser-capture.js');
 const captureRefUtils = require('./src/main-process-capture-reference-utils.js');
 const { createBrowserCaptureStore } = require('./src/main-process-browser-capture-store.js');
+const { createCaptureAgentManager } = require('./src/main-process-capture-agent-manager.js');
 const {
   normalizeCaptureReferenceType,
   normalizeCaptureReference,
@@ -80,11 +81,21 @@ const {
 const APP_DIR = path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'AcademiQ');
 const storage = createStorageService({ appDir: APP_DIR });
 const browserCaptureStore = createBrowserCaptureStore({ storage });
+const APP_VERSION = require('./package.json').version;
+const captureAgentManager = createCaptureAgentManager({
+  app,
+  storage,
+  getBrowserSettings: () => browserCaptureStore.getSettings(),
+  appVersion: APP_VERSION,
+  captureAgentArg: '--capture-agent',
+  captureAgentAutostartArg: '--capture-agent-autostart',
+  startRetries: 2,
+  startDelayMs: 1200
+});
 const localOcr = createLocalOcr({ appDir: APP_DIR });
 const BROWSER_CAPTURE_SOURCE_DIR = path.join(__dirname, 'browser-capture-extension');
 const INSTITUTIONAL_ACCESS_PARTITION = 'persist:academiq-institutional-access';
 const INSTITUTIONAL_DOWNLOAD_DIR = path.join(APP_DIR, 'institutional-downloads');
-const APP_VERSION = require('./package.json').version;
 const APP_USER_MODEL_ID = 'com.academiq.research';
 const RENDERER_DEV_SERVER_URL = process.env.ACADEMIQ_RENDERER_URL || process.env.VITE_DEV_SERVER_URL || '';
 const CAPTURE_AGENT_ARG = '--capture-agent';
@@ -116,11 +127,8 @@ let browserCaptureRuntime = {
   quitEnsured: false
 };
 let captureAgentRuntime = null;
-let captureAgentStartPromise = null;
 let captureQueuePollTimer = null;
 let captureQueuePollRunning = false;
-const CAPTURE_AGENT_START_RETRIES = 2;
-const CAPTURE_AGENT_START_DELAY_MS = 1200;
 const UPDATE_ALLOWED_HOSTS = [
   /^api\.github\.com$/i,
   /^github\.com$/i,
@@ -973,223 +981,17 @@ async function openBrowserCaptureExtensionManager(status) {
   }
 }
 
-function buildCaptureAgentSpawnArgs() {
-  const args = [];
-  if (process.defaultApp) {
-    args.push(path.resolve(app.getAppPath()));
-  }
-  args.push(CAPTURE_AGENT_ARG);
-  return args;
-}
-
-function buildCaptureAgentAutoStartArgs() {
-  return buildCaptureAgentSpawnArgs().concat([CAPTURE_AGENT_AUTOSTART_ARG]);
-}
-
-function getCaptureAgentLoginItemState() {
-  if (process.platform !== 'win32' || !app.isPackaged || typeof app.getLoginItemSettings !== 'function') {
-    return { supported: false, enabled: false };
-  }
-  try {
-    const info = app.getLoginItemSettings({
-      path: process.execPath,
-      args: buildCaptureAgentAutoStartArgs()
-    });
-    return {
-      supported: true,
-      enabled: !!(info && info.openAtLogin)
-    };
-  } catch (_e) {
-    return { supported: false, enabled: false };
-  }
-}
-
-function syncCaptureAgentLoginItem(enabled) {
-  const current = getCaptureAgentLoginItemState();
-  if (!current.supported || typeof app.setLoginItemSettings !== 'function') {
-    return current;
-  }
-  try {
-    app.setLoginItemSettings({
-      openAtLogin: !!enabled,
-      path: process.execPath,
-      args: buildCaptureAgentAutoStartArgs()
-    });
-  } catch (_e) {}
-  return getCaptureAgentLoginItemState();
-}
-
-async function startDetachedCaptureAgentProcess() {
-  const args = buildCaptureAgentSpawnArgs();
-  if (process.platform === 'win32') {
-    const psArgs = [
-      '-NoProfile',
-      '-NonInteractive',
-      '-WindowStyle',
-      'Hidden',
-      '-Command',
-      'Start-Process -FilePath ' + psQuote(process.execPath)
-        + ' -ArgumentList @(' + args.map(psQuote).join(',') + ')'
-        + ' -WindowStyle Hidden'
-    ];
-    await new Promise(function (resolve, reject) {
-      execFile('powershell.exe', psArgs, { windowsHide: true }, function (error) {
-        if (error) reject(error);
-        else resolve();
-      });
-    });
-    return;
-  }
-  await new Promise(function (resolve, reject) {
-    try {
-      const child = execFile(process.execPath, args, {
-        detached: true,
-        windowsHide: true
-      }, function (error) {
-        if (error) reject(error);
-      });
-      if (child && typeof child.unref === 'function') child.unref();
-      resolve();
-    } catch (error) {
-      reject(error);
-    }
-  });
-}
-
-async function pingCaptureAgentStatus() {
-  const settings = getBrowserCaptureSettings();
-  const port = Number(settings.port || DEFAULT_CAPTURE_PORT) || DEFAULT_CAPTURE_PORT;
-  const token = encodeURIComponent(String(settings.token || ''));
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 1200);
-  try {
-    const response = await fetch('http://127.0.0.1:' + port + '/status?token=' + token, {
-      method: 'GET',
-      signal: controller.signal
-    });
-    if (!response.ok) throw new Error('agent-status-' + response.status);
-    return await response.json();
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function waitForMs(ms) {
-  return new Promise(function (resolve) {
-    setTimeout(resolve, Math.max(0, Number(ms) || 0));
-  });
-}
-
-async function refreshCaptureAgentStatusSnapshot() {
-  try {
-    const live = await pingCaptureAgentStatus();
-    if (storage.saveCaptureAgentState) {
-      const current = storage.loadCaptureAgentState ? storage.loadCaptureAgentState() : {};
-      storage.saveCaptureAgentState(Object.assign({}, current, {
-        running: true,
-        pid: Number(live.agentPid || live.pid || current.pid || 0),
-        port: Number(live.agentPort || live.port || getBrowserCaptureSettings().port || DEFAULT_CAPTURE_PORT),
-        agentVersion: String(live.agentVersion || current.agentVersion || APP_VERSION),
-        extensionVersion: String(live.extensionVersion || current.extensionVersion || ''),
-        protocolVersion: Number(live.protocolVersion || current.protocolVersion || BROWSER_CAPTURE_PROTOCOL_VERSION),
-        lastHelloAt: Number(live.lastHelloAt || current.lastHelloAt || 0),
-        lastCaptureReceivedAt: Number(live.lastCaptureReceivedAt || current.lastCaptureReceivedAt || 0),
-        lastError: ''
-      }));
-    }
-    return live;
-  } catch (error) {
-    if (storage.saveCaptureAgentState) {
-      const current = storage.loadCaptureAgentState ? storage.loadCaptureAgentState() : {};
-      storage.saveCaptureAgentState(Object.assign({}, current, {
-        running: false,
-        pid: 0,
-        port: 0,
-        lastError: error && error.message ? String(error.message) : 'Capture agent ulasilamiyor'
-      }));
-    }
-    return null;
-  }
-}
-
-async function ensureCaptureAgentRunning() {
-  const live = await refreshCaptureAgentStatusSnapshot();
-  if (live && live.ok) {
-    const liveVersion = String(live.agentVersion || '');
-    const liveProtocolVersion = Number(live.protocolVersion || 0);
-    if (liveVersion === APP_VERSION && (!liveProtocolVersion || liveProtocolVersion === BROWSER_CAPTURE_PROTOCOL_VERSION)) {
-      return live;
-    }
-    try { await stopCaptureAgent(); } catch (_e) {}
-  }
-  if (captureAgentStartPromise) return captureAgentStartPromise;
-  captureAgentStartPromise = new Promise(function (resolve, reject) {
-    try {
-      const tryStart = function (attemptIndex) {
-        startDetachedCaptureAgentProcess().then(function () {
-          setTimeout(async function () {
-            try {
-              const status = await refreshCaptureAgentStatusSnapshot();
-              if (status && status.ok) {
-                resolve(status);
-                return;
-              }
-              if (attemptIndex + 1 < CAPTURE_AGENT_START_RETRIES) {
-                await waitForMs(350);
-                tryStart(attemptIndex + 1);
-                return;
-              }
-              reject(new Error('Capture agent baslatildi ancak ulasilamiyor'));
-            } catch (error) {
-              if (attemptIndex + 1 < CAPTURE_AGENT_START_RETRIES) {
-                await waitForMs(350);
-                tryStart(attemptIndex + 1);
-                return;
-              }
-              reject(error);
-            }
-          }, CAPTURE_AGENT_START_DELAY_MS);
-        }).catch(function (error) {
-          try {
-            if (attemptIndex + 1 < CAPTURE_AGENT_START_RETRIES) {
-              tryStart(attemptIndex + 1);
-              return;
-            }
-            reject(error);
-          } catch (nestedError) {
-            reject(nestedError);
-          }
-        });
-      };
-      tryStart(0);
-    } catch (error) {
-      reject(error);
-    }
-  }).finally(function () {
-    captureAgentStartPromise = null;
-  });
-  return captureAgentStartPromise;
-}
-
-async function stopCaptureAgent() {
-  const settings = getBrowserCaptureSettings();
-  const port = Number(settings.port || DEFAULT_CAPTURE_PORT) || DEFAULT_CAPTURE_PORT;
-  const token = encodeURIComponent(String(settings.token || ''));
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 1500);
-  try {
-    const response = await fetch('http://127.0.0.1:' + port + '/agent/stop?token=' + token, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: '{}',
-      signal: controller.signal
-    });
-    if (!response.ok) throw new Error('agent-stop-' + response.status);
-    return await response.json();
-  } finally {
-    clearTimeout(timer);
-  }
-}
+// Capture agent process lifecycle — extracted to main-process-capture-agent-manager.js.
+// Thin aliases preserve existing callers/IPC handlers.
+const buildCaptureAgentSpawnArgs = () => captureAgentManager.buildSpawnArgs();
+const buildCaptureAgentAutoStartArgs = () => captureAgentManager.buildAutoStartArgs();
+const getCaptureAgentLoginItemState = () => captureAgentManager.getLoginItemState();
+const syncCaptureAgentLoginItem = (enabled) => captureAgentManager.syncLoginItem(enabled);
+const startDetachedCaptureAgentProcess = () => captureAgentManager.startDetached();
+const pingCaptureAgentStatus = () => captureAgentManager.pingStatus();
+const refreshCaptureAgentStatusSnapshot = () => captureAgentManager.refreshStatusSnapshot();
+const ensureCaptureAgentRunning = () => captureAgentManager.ensureRunning();
+const stopCaptureAgent = () => captureAgentManager.stop();
 
 async function prepareBrowserCaptureSetup() {
   const settings = await refreshBrowserCaptureSettings();
