@@ -28,6 +28,7 @@ const {
   prepareExtensionBundle
 } = require('./src/main-process-browser-capture.js');
 const captureRefUtils = require('./src/main-process-capture-reference-utils.js');
+const { createBrowserCaptureStore } = require('./src/main-process-browser-capture-store.js');
 const {
   normalizeCaptureReferenceType,
   normalizeCaptureReference,
@@ -78,6 +79,7 @@ const {
 // ── PATHS ────────────────────────────────────────────────────────────────────
 const APP_DIR = path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'AcademiQ');
 const storage = createStorageService({ appDir: APP_DIR });
+const browserCaptureStore = createBrowserCaptureStore({ storage });
 const localOcr = createLocalOcr({ appDir: APP_DIR });
 const BROWSER_CAPTURE_SOURCE_DIR = path.join(__dirname, 'browser-capture-extension');
 const INSTITUTIONAL_ACCESS_PARTITION = 'persist:academiq-institutional-access';
@@ -261,63 +263,13 @@ function isSafeHttpURL(rawUrl, options = {}) {
   }
 }
 
-function createCaptureToken() {
-  // Cryptographically random; 32 bytes -> 64 hex chars. Used to authenticate
-  // the local browser-capture bridge, so it must not be predictable.
-  return 'aq_' + crypto.randomBytes(32).toString('hex');
-}
-
-function getBrowserCaptureSettings() {
-  const raw = storage.getBrowserCaptureSettings ? storage.getBrowserCaptureSettings() : {};
-  const normalized = normalizeBrowserCaptureSettings(raw);
-  if (!normalized.token) {
-    normalized.token = createCaptureToken();
-    if (storage.setBrowserCaptureSettings) storage.setBrowserCaptureSettings({ token: normalized.token });
-  }
-  if (!normalized.port) {
-    normalized.port = DEFAULT_CAPTURE_PORT;
-    if (storage.setBrowserCaptureSettings) storage.setBrowserCaptureSettings({ port: normalized.port });
-  }
-  return normalized;
-}
-
-function getPersistedPendingCaptures() {
-  const snapshot = storage.getSettingsSnapshot ? storage.getSettingsSnapshot() : {};
-  const browserCapture = snapshot && snapshot.browserCapture && typeof snapshot.browserCapture === 'object'
-    ? snapshot.browserCapture
-    : {};
-  const items = Array.isArray(browserCapture.pendingPayloads) ? browserCapture.pendingPayloads : [];
-  return items
-    .map(function (entry) {
-      const raw = entry && typeof entry === 'object' ? entry : {};
-      const id = safeId(raw.id) || '';
-      const payload = sanitizeCapturePayload(raw.payload || raw);
-      if (!id || (!payload.detectedTitle && !payload.doi && !payload.sourcePageUrl)) return null;
-      return {
-        id,
-        createdAt: Number(raw.createdAt) > 0 ? Number(raw.createdAt) : Date.now(),
-        payload
-      };
-    })
-    .filter(Boolean)
-    .slice(-40);
-}
-
-function savePersistedPendingCaptures(entries) {
-  const normalized = Array.isArray(entries) ? entries.map(function (entry) {
-    const raw = entry && typeof entry === 'object' ? entry : {};
-    const id = safeId(raw.id) || '';
-    const payload = sanitizeCapturePayload(raw.payload || raw);
-    if (!id || (!payload.detectedTitle && !payload.doi && !payload.sourcePageUrl)) return null;
-    return {
-      id,
-      createdAt: Number(raw.createdAt) > 0 ? Number(raw.createdAt) : Date.now(),
-      payload
-    };
-  }).filter(Boolean).slice(-40) : [];
-  storage.setBrowserCaptureSettings({ pendingPayloads: normalized });
-  return normalized;
-}
+// Storage-facing browser-capture helpers — pure logic in
+// main-process-browser-capture-store.js; these thin wrappers feed
+// browserCaptureRuntime so the rest of main.js keeps the existing API.
+const createCaptureToken = browserCaptureStore.createCaptureToken;
+const getBrowserCaptureSettings = browserCaptureStore.getSettings;
+const getPersistedPendingCaptures = browserCaptureStore.getPersistedPendingCaptures;
+const savePersistedPendingCaptures = browserCaptureStore.savePersistedPendingCaptures;
 
 function hydratePendingCaptureRuntime() {
   browserCaptureRuntime.pendingPayloads = getPersistedPendingCaptures();
@@ -338,26 +290,16 @@ function scheduleBrowserCaptureFlush(delayMs) {
 }
 
 function persistPendingCapture(payload) {
-  const safePayload = sanitizeCapturePayload(payload);
-  const entry = {
-    id: safeId((payload && payload.queueId) || '') || ('cap_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)),
-    createdAt: Date.now(),
-    payload: safePayload
-  };
-  const existing = getPersistedPendingCaptures().filter(function (item) { return item && item.id !== entry.id; });
-  const next = savePersistedPendingCaptures(existing.concat([entry]));
-  browserCaptureRuntime.pendingPayloads = next;
+  const { entry, all } = browserCaptureStore.persistPending(payload);
+  browserCaptureRuntime.pendingPayloads = all;
   return entry;
 }
 
 function acknowledgePendingCapture(queueId) {
-  const id = safeId(queueId);
-  if (!id) return { ok: false, error: 'Ge�ersiz capture kimli�i' };
-  const next = savePersistedPendingCaptures(getPersistedPendingCaptures().filter(function (entry) {
-    return entry && entry.id !== id;
-  }));
-  browserCaptureRuntime.pendingPayloads = next;
-  delete browserCaptureRuntime.deliveredPayloadIds[id];
+  const result = browserCaptureStore.acknowledgePending(queueId);
+  if (!result.ok) return { ok: false, error: result.error };
+  browserCaptureRuntime.pendingPayloads = result.next;
+  delete browserCaptureRuntime.deliveredPayloadIds[result.id];
   return { ok: true };
 }
 
