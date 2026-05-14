@@ -9,8 +9,14 @@ const stubIpc = new Proxy({}, {
 });
 const stubOcr = { recognize: async () => ({ ok: true, text: '' }) };
 
-if (!(window as any).electronAPI) Object.defineProperty(window, 'electronAPI', { value: stubIpc, writable: true });
-if (!(window as any).ocrAPI) Object.defineProperty(window, 'ocrAPI', { value: stubOcr, writable: true });
+// configurable:true so tests can re-define / delete the property when
+// they want to install per-test mocks
+if (!(window as any).electronAPI) {
+  Object.defineProperty(window, 'electronAPI', { value: stubIpc, writable: true, configurable: true });
+}
+if (!(window as any).ocrAPI) {
+  Object.defineProperty(window, 'ocrAPI', { value: stubOcr, writable: true, configurable: true });
+}
 
 afterEach(() => {
   cleanup();

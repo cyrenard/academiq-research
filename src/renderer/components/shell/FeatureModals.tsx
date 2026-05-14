@@ -3,6 +3,7 @@ import { Modal } from '../ui/Modal';
 import type { AcademiqAppState, AcademiqReference } from '../../lib/app-state';
 import { formatDate, formatAge, asRecord, statusText } from '../../lib/modal-helpers';
 import { ReferenceEditModal } from './modals/ReferenceEditModal';
+import { BrowserCaptureModal } from './modals/BrowserCaptureModal';
 
 type FeatureModal = 'settings' | 'recovery' | 'history' | 'browserCapture' | 'referenceEdit' | null;
 
@@ -653,39 +654,11 @@ export function FeatureModals({
         </div>
       </Modal>
 
-      <Modal title="Browser Capture" open={active === 'browserCapture'} onClose={onClose}>
-        <div className="space-y-3 text-sm">
-          <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Setup</div>
-            <div className="grid grid-cols-2 gap-2">
-              <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={() => window.electronAPI.prepareBrowserCaptureSetup().then(() => onStatus('Capture kurulumu hazırlandı')).catch(() => onStatus('Capture kurulumu hazırlanamadı'))}>Kurulumu hazırla</button>
-              <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={() => window.electronAPI.openBrowserCaptureInstallDir().then(() => onStatus('Kurulum klasörü açıldı')).catch(() => onStatus('Kurulum klasörü açılamadı'))}>Kurulum klasörünü aç</button>
-              <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={() => window.electronAPI.openBrowserCaptureGuide().then(() => onStatus('Kurulum rehberi açıldı')).catch(() => onStatus('Kurulum rehberi açılamadı'))}>Rehberi aç</button>
-              <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={() => window.electronAPI.testBrowserCaptureConnection().then((result) => { setBrowserStatus(result); onStatus('Capture test edildi'); }).catch(() => onStatus('Capture test edilemedi'))}>Bağlantıyı test et</button>
-            </div>
-          </section>
-
-          <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Preferences</div>
-            <button className="w-full rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={() => window.electronAPI.updateBrowserCapturePrefs({ enabled: true }).then((result) => { setBrowserStatus(result); onStatus('Capture tercihleri güncellendi'); }).catch(() => onStatus('Capture tercihleri güncellenemedi'))}>Capture aktif et</button>
-          </section>
-
-          <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Kurumsal Erişim</div>
-            <p className="mb-2 text-xs text-aq-muted">
-              Kaynak menüsünden kurumsal pencerede aç. O pencerede PDF indirildiğinde dosya otomatik olarak seçili kaynağa bağlanır.
-            </p>
-            <button
-              className="w-full rounded-md border border-aq-line bg-white px-3 py-2 text-left"
-              onClick={() => window.electronAPI.clearInstitutionalAccessSession().then((result: any) => onStatus(result?.ok ? 'Kurumsal oturum temizlendi' : 'Kurumsal oturum temizlenemedi')).catch(() => onStatus('Kurumsal oturum temizlenemedi'))}
-            >
-              Kurumsal oturumu temizle
-            </button>
-          </section>
-
-          <pre className="max-h-60 overflow-auto rounded-md bg-white p-3 text-xs">{JSON.stringify(browserStatus, null, 2)}</pre>
-        </div>
-      </Modal>
+      <BrowserCaptureModal
+        open={active === 'browserCapture'}
+        onClose={onClose}
+        onStatus={onStatus}
+      />
 
       <ReferenceEditModal
         open={active === 'referenceEdit'}
