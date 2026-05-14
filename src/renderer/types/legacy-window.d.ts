@@ -134,7 +134,13 @@ declare global {
     // --- Editor selection plumbing -----------------------------------------
     captureEditorListStyleSelection?: () => void;
     restoreEditorListStyleSelection?: () => void;
-    runEditorMutationEffects?: (opts?: { layout?: boolean; syncChrome?: boolean; refreshTrigger?: boolean }) => void;
+    runEditorMutationEffects?: (opts?: {
+      layout?: boolean;
+      syncChrome?: boolean;
+      syncTOC?: boolean;
+      syncRefs?: boolean;
+      refreshTrigger?: boolean;
+    }) => void;
     applyFontSize?: (pt: string) => boolean;
     transformSelectedText?: (mode: 'upper' | 'title' | 'lower') => void;
 
