@@ -23,6 +23,16 @@ import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent, type
 import { IconButton } from '../ui/IconButton';
 import { useEditorCommands } from '../editor/EditorContext';
 import { callLegacy, runEditorAction, runEditorCommand } from '../../lib/legacy-feature-adapter';
+import {
+  buildTOCPageHTML,
+  buildCoverPageHTML,
+  buildBilingualAbstractPageHTML,
+  turkishToday,
+  getAppendixCount,
+  buildAppendixBlockHTML,
+  normalizeAppendicesHTML as normalizeAppendicesHTMLLib,
+  removeAppendixFromHTML as removeAppendixFromHTMLLib
+} from '../../lib/auxiliary-page-html';
 
 type TopToolbarProps = {
   selectedReferenceId?: string;
@@ -368,28 +378,6 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     body.appendChild(button);
   };
 
-  const buildTOCPageHTML = () => {
-    const win = window as any;
-    const activeEditor = win.editor || null;
-    const tocApi = win.AQTipTapWordTOC;
-    if (activeEditor?._aqEngine && typeof activeEditor._reflow === 'function') {
-      activeEditor._reflow();
-    }
-    if (activeEditor?._docModel && tocApi && typeof tocApi.buildAQEngineTOCHTML === 'function') {
-      const html = tocApi.buildAQEngineTOCHTML(activeEditor, {
-        pageTotalHeight: 1155,
-        idFactory: (index: number) => `aq-hdg-${index}`
-      });
-      if (String(html || '').trim()) return String(html);
-    }
-    const root = document.getElementById('apaed');
-    const headings = root ? root.querySelectorAll('h1,h2,h3,h4,h5') : [];
-    if (headings.length && tocApi && typeof tocApi.buildTOCHTML === 'function') {
-      return String(tocApi.buildTOCHTML(root, headings, { pageTotalHeight: 1155 }) || '');
-    }
-    return '';
-  };
-
   const insertTOCPage = () => {
     commitEditorHTMLToLegacyState();
     const tocHTML = buildTOCPageHTML();
@@ -422,39 +410,14 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     setCoverOpen(true);
   };
 
-  const buildCoverPageHTML = () => {
-    const win = window as any;
-    const builder = win.AQTipTapWordTemplates?.buildCoverHTML;
-    const dateText = new Date().toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
-    const payload = {
-      title: coverTitle.trim(),
-      author: coverAuthor.trim(),
-      institution: coverInstitution.trim(),
-      course: coverCourse.trim(),
-      professor: coverProfessor.trim(),
-      dateText
-    };
-    if (typeof builder === 'function') {
-      return String(builder(payload) || '');
-    }
-    const escape = (value: string) => value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-    const rows = [
-      { text: payload.title, bold: true },
-      { text: payload.author },
-      { text: payload.institution },
-      { text: payload.course },
-      { text: payload.professor },
-      { text: payload.dateText }
-    ].filter((row) => row.text);
-    return [
-      '<div style="text-align:center;padding-top:192px;font-family:&quot;Times New Roman&quot;,Times,serif;font-size:12pt;line-height:2;">',
-      ...rows.map((row) => `<p style="text-indent:0;${row.bold ? 'font-weight:bold;' : ''}">${escape(row.text)}</p>`),
-      '</div><p><br></p>'
-    ].join('');
-  };
+  const buildLocalCoverHTML = () => buildCoverPageHTML({
+    title: coverTitle.trim(),
+    author: coverAuthor.trim(),
+    institution: coverInstitution.trim(),
+    course: coverCourse.trim(),
+    professor: coverProfessor.trim(),
+    dateText: turkishToday()
+  });
 
   const insertCoverPage = () => {
     const title = coverTitle.trim();
@@ -465,7 +428,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     commitEditorHTMLToLegacyState();
     const doc = getActiveDocRecord();
     if (!doc) return;
-    doc.coverHTML = sanitizeAuxiliaryHTML(buildCoverPageHTML());
+    doc.coverHTML = sanitizeAuxiliaryHTML(buildLocalCoverHTML());
     setAuxiliaryPageHTML('coverpage', 'coverbody', doc.coverHTML);
     saveAuxiliaryChange();
     setCoverOpen(false);
@@ -510,58 +473,10 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     setAbstractOpen(true);
   };
 
-  const buildAbstractPageHTML = () => {
-    const escape = (value: string) => value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-    const body = escape(abstractText.trim());
-    const keywords = abstractKeywords
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .join(', ');
-    return [
-      '<div data-aq-abstract="1" style="font-family:&quot;Times New Roman&quot;,Times,serif;font-size:12pt;line-height:2;color:#000;">',
-      '<h1 style="text-align:center;font-family:&quot;Times New Roman&quot;,Times,serif;font-size:12pt;line-height:2;font-weight:bold;margin:0 0 16px 0;">Öz</h1>',
-      `<p class="aq-abstract-text" style="text-indent:0!important;margin:0;text-align:left;">${body}</p>`,
-      keywords ? `<p class="aq-abstract-keywords" style="text-indent:36pt!important;margin:0;text-align:left;"><em>Anahtar Kelimeler:</em> ${escape(keywords)}</p>` : '',
-      '</div>'
-    ].join('');
-  };
-
-  const buildBilingualAbstractPageHTML = () => {
-    const escape = (value: string) => value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-    const body = escape(abstractText.trim());
-    const keywords = abstractKeywords
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .join(', ');
-    const englishBody = escape(abstractEnglishText.trim());
-    const englishKeywords = abstractEnglishKeywords
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .join(', ');
-    return [
-      '<div data-aq-abstract="1" style="font-family:&quot;Times New Roman&quot;,Times,serif;font-size:12pt;line-height:2;color:#000;">',
-      '<section data-aq-abstract-section="tr">',
-      '<h1 style="text-align:center;font-family:&quot;Times New Roman&quot;,Times,serif;font-size:12pt;line-height:2;font-weight:bold;margin:0 0 16px 0;">Öz</h1>',
-      `<p style="text-indent:0;margin:0;text-align:left;">${body}</p>`,
-      keywords ? `<p style="text-indent:36pt;margin:0;text-align:left;"><em>Anahtar Kelimeler:</em> ${escape(keywords)}</p>` : '',
-      '</section>',
-      englishBody ? '<section data-aq-abstract-section="en" style="margin-top:24pt;">' : '',
-      englishBody ? '<h1 style="text-align:center;font-family:&quot;Times New Roman&quot;,Times,serif;font-size:12pt;line-height:2;font-weight:bold;margin:0 0 16px 0;">Abstract</h1>' : '',
-      englishBody ? `<p class="aq-abstract-text" style="text-indent:0!important;margin:0;text-align:left;">${englishBody}</p>` : '',
-      englishBody && englishKeywords ? `<p class="aq-abstract-keywords" style="text-indent:36pt!important;margin:0;text-align:left;"><em>Keywords:</em> ${escape(englishKeywords)}</p>` : '',
-      englishBody ? '</section>' : '',
-      '</div>'
-    ].join('');
-  };
+  const buildLocalBilingualAbstractHTML = () => buildBilingualAbstractPageHTML({
+    turkish: { text: abstractText, keywords: abstractKeywords },
+    english: { text: abstractEnglishText, keywords: abstractEnglishKeywords }
+  });
 
   const insertAbstractPage = () => {
     if (!abstractText.trim()) {
@@ -571,7 +486,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     commitEditorHTMLToLegacyState();
     const doc = getActiveDocRecord();
     if (!doc) return;
-    doc.abstractHTML = sanitizeAuxiliaryHTML(buildBilingualAbstractPageHTML());
+    doc.abstractHTML = sanitizeAuxiliaryHTML(buildLocalBilingualAbstractHTML());
     setAuxiliaryPageHTML('abstractpage', 'abstractbody', doc.abstractHTML);
     saveAuxiliaryChange();
     setAbstractOpen(false);
@@ -601,30 +516,8 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     return true;
   };
 
-  const getAppendixCount = (html: string) => {
-    if (!html.trim()) return 0;
-    const matches = html.match(/class=["'][^"']*\bappendix-block\b[^"']*["']/gi);
-    if (matches?.length) return matches.length;
-    const titleMatches = html.match(/>\s*EK-\d+\s*</gi);
-    return titleMatches?.length || 0;
-  };
-
-  const buildAppendixBlockHTML = (index: number) => {
-    const builder = (window as any).buildAppendixHTML;
-    if (typeof builder === 'function') return String(builder(index) || '');
-    return [
-      `<div class="appendix-block" data-appendix-id="appendix-${index}">`,
-      `<h1 class="appendix-title" style="text-align:center;font-weight:bold;">EK-${index}</h1>`,
-      '<p class="ni">Ek içeriği...</p>',
-      '</div>'
-    ].join('');
-  };
-
-  const normalizeAppendicesHTML = (html: string) => {
-    const renumber = (window as any).renumberAppendicesHTML;
-    const normalized = typeof renumber === 'function' ? renumber(html) : html;
-    return sanitizeAuxiliaryHTML(normalized);
-  };
+  const normalizeAppendicesHTML = (html: string) =>
+    normalizeAppendicesHTMLLib(html, sanitizeAuxiliaryHTML);
 
   const applyAppendicesToEngine = (appendicesHTML: string) => {
     const win = window as any;
@@ -662,15 +555,8 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     return false;
   };
 
-  const removeAppendixFromHTML = (html: string, appendixId: string) => {
-    const current = String(html || '').trim();
-    if (!current || !document.createElement) return '';
-    const div = document.createElement('div');
-    div.innerHTML = current;
-    const target = div.querySelector(`.appendix-block[data-appendix-id="${appendixId}"]`);
-    if (target) target.remove();
-    return normalizeAppendicesHTML(div.innerHTML);
-  };
+  const removeAppendixFromHTML = (html: string, appendixId: string) =>
+    removeAppendixFromHTMLLib(html, appendixId, sanitizeAuxiliaryHTML);
 
   const removeAppendixFromEngine = (appendixId?: string) => {
     const win = window as any;
