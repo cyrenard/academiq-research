@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { Modal } from '../ui/Modal';
 import type { AcademiqAppState, AcademiqReference } from '../../lib/app-state';
+import { formatDate, formatAge, asRecord, statusText } from '../../lib/modal-helpers';
+import { ReferenceEditModal } from './modals/ReferenceEditModal';
 
 type FeatureModal = 'settings' | 'recovery' | 'history' | 'browserCapture' | 'referenceEdit' | null;
 
@@ -15,34 +17,6 @@ type FeatureModalsProps = {
   onDeleteReference: (referenceId: string) => void;
   onRestoreState: () => void;
 };
-
-function formatDate(value: unknown) {
-  const stamp = Number(value || 0);
-  if (!stamp) return '-';
-  try { return new Date(stamp).toLocaleString('tr-TR'); } catch (_error) { return String(value); }
-}
-
-function formatAge(value: unknown) {
-  const stamp = Number(value || 0);
-  if (!stamp) return '-';
-  const diff = Date.now() - stamp;
-  const minute = 60 * 1000;
-  const hour = 60 * minute;
-  const day = 24 * hour;
-  if (diff < minute) return 'az önce';
-  if (diff < hour) return `${Math.max(1, Math.round(diff / minute))} dk önce`;
-  if (diff < day) return `${Math.max(1, Math.round(diff / hour))} sa önce`;
-  return `${Math.max(1, Math.round(diff / day))} gün önce`;
-}
-
-function asRecord(value: unknown): Record<string, any> {
-  return value && typeof value === 'object' ? value as Record<string, any> : {};
-}
-
-function statusText(value: unknown) {
-  const record = asRecord(value);
-  return String(record.lifecycle || record.lifecycleState || record.state || record.status || (record.ok === false ? 'hata' : record.ok === true ? 'ok' : '-'));
-}
 
 export function FeatureModals({
   active,
@@ -59,8 +33,7 @@ export function FeatureModals({
   const [syncInfo, setSyncInfo] = useState<unknown>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [browserStatus, setBrowserStatus] = useState<unknown>(null);
-  const [settingsTab, setSettingsTab] = useState<'recovery' | 'history' | 'capture' | 'institutional' | 'sync' | 'updates' | 'about'>('recovery');
-  const [refDraft, setRefDraft] = useState<Record<string, string>>({});
+  const [settingsTab, setSettingsTab] = useState<'recovery' | 'history' | 'capture' | 'institutional' | 'matrixAssistant' | 'sync' | 'storage' | 'updates' | 'about'>('recovery');
   const [updateUrl, setUpdateUrl] = useState('');
   const [loadingAction, setLoadingAction] = useState('');
 
@@ -92,37 +65,77 @@ export function FeatureModals({
     }
   }, [active, onStatus, state.curDoc]);
 
-  useEffect(() => {
-    if (active !== 'referenceEdit' || !selectedReference) return;
-    setRefDraft({
-      title: String(selectedReference.title || ''),
-      authors: Array.isArray(selectedReference.authors) ? selectedReference.authors.join('; ') : String(selectedReference.authors || ''),
-      year: String(selectedReference.year || ''),
-      doi: String(selectedReference.doi || ''),
-      url: String(selectedReference.url || ''),
-      journal: String(selectedReference.journal || ''),
-      abstract: String(selectedReference.abstract || '')
-    });
-  }, [active, selectedReference]);
-
-  const saveReference = () => {
-    if (!selectedReference) return;
-    onUpdateReference(selectedReference.id, {
-      title: refDraft.title,
-      authors: refDraft.authors.split(';').map((item) => item.trim()).filter(Boolean),
-      year: refDraft.year,
-      doi: refDraft.doi,
-      url: refDraft.url,
-      journal: refDraft.journal,
-      abstract: refDraft.abstract
-    });
-    onClose();
-  };
-
   const refreshCaptureStatus = () => window.electronAPI.getBrowserCaptureStatus()
     .then(setBrowserStatus)
     .catch(() => onStatus('Capture durumu alınamadı'));
 
+  const runBackupCreate = () => {
+    setLoadingAction('backup-create');
+    window.electronAPI.createBackup()
+      .then((result: any) => {
+        if (result?.canceled) {
+          onStatus('Backup iptal edildi');
+          return;
+        }
+        if (!result?.ok) {
+          onStatus(`Backup oluşturulamadı${result?.error ? `: ${String(result.error)}` : ''}`);
+          return;
+        }
+        setInfo((current: unknown) => Object.assign({}, asRecord(current), { lastBackup: result }));
+        const mb = Number(result.totalBytes || 0) / (1024 * 1024);
+        onStatus(`Backup oluşturuldu · ${mb.toFixed(1)} MB`);
+      })
+      .catch(() => onStatus('Backup oluşturulamadı'))
+      .finally(() => setLoadingAction(''));
+  };
+
+  const runBackupRestore = () => {
+    if (!window.confirm('Backup yüklendiğinde mevcut yerel veriler, notlar, workspace kayıtları ve PDF klasörleri seçilen backup ile değiştirilecek. Devam edilsin mi?')) return;
+    (window as any).__aqBackupRestoreInProgress = true;
+    setLoadingAction('backup-restore');
+    window.electronAPI.restoreBackup()
+      .then((result: any) => {
+        if (result?.canceled) {
+          (window as any).__aqBackupRestoreInProgress = false;
+          onStatus('Backup yükleme iptal edildi');
+          return;
+        }
+        if (!result?.ok) {
+          (window as any).__aqBackupRestoreInProgress = false;
+          onStatus(`Backup yüklenemedi${result?.error ? `: ${String(result.error)}` : ''}`);
+          return;
+        }
+        onStatus('Backup yüklendi');
+        onRestoreState();
+        window.setTimeout(() => {
+          window.location.reload();
+        }, 350);
+      })
+      .catch(() => {
+        (window as any).__aqBackupRestoreInProgress = false;
+        onStatus('Backup yüklenemedi');
+      })
+      .finally(() => setLoadingAction(''));
+  };
+  const updateMatrixAssistant = (patch: Record<string, unknown>) => {
+    const current = asRecord((state as any).localMatrixAssistant);
+    const next = Object.assign({}, current, patch, {
+      updatedAt: Date.now()
+    });
+    (state as any).localMatrixAssistant = next;
+    const win = window as any;
+    if (win.S && typeof win.S === 'object') win.S.localMatrixAssistant = next;
+    window.electronAPI.saveData(JSON.stringify(state))
+      .then(() => {
+        onStatus(next.enabled ? 'Yerel Matrix yardımcısı açıldı' : 'Yerel Matrix yardımcısı kapatıldı');
+        if (next.enabled && win.AQLiteratureMatrix && typeof win.AQLiteratureMatrix.rerunLocalAssistantAutoFill === 'function') {
+          win.AQLiteratureMatrix.rerunLocalAssistantAutoFill();
+        } else if (win.AQLiteratureMatrix && typeof win.AQLiteratureMatrix.render === 'function') {
+          win.AQLiteratureMatrix.render();
+        }
+      })
+      .catch(() => onStatus('Yerel Matrix yardımcısı kaydedilemedi'));
+  };
   const runCaptureAction = (action: string, success: string, failure: string) => {
     setLoadingAction(action);
     window.electronAPI.runBrowserCaptureAction(action)
@@ -159,6 +172,7 @@ export function FeatureModals({
   const updateAvailable = update.available === true;
   const latestSnapshot = history[0] || null;
   const currentDoc = state.docs.find((doc) => doc.id === state.curDoc);
+  const captureUpdateAvailable = capture.lifecycleState === 'update_available' || capture.updateAvailable === true;
 
   return (
     <>
@@ -263,7 +277,9 @@ export function FeatureModals({
               ['history', 'Belge geçmişi'],
               ['capture', 'Capture agent'],
               ['institutional', 'Kurumsal indirme'],
+              ['matrixAssistant', 'Matrix yardımcısı'],
               ['sync', 'Sync'],
+              ['storage', 'Storage / Backup'],
               ['updates', 'Updates'],
               ['about', 'About']
             ].map(([id, label]) => (
@@ -345,6 +361,20 @@ export function FeatureModals({
                     <div className="rounded-md bg-white p-3"><b>Extension</b><br />{String(capture.installedExtensionVersion || '-')}</div>
                     <div className="rounded-md bg-white p-3"><b>Son bağlantı</b><br />{formatDate(capture.lastConnectedAt || capture.lastHelloAt)}</div>
                   </div>
+                  {captureUpdateAvailable ? (
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                      <div className="font-semibold">Capture extension güncellemesi hazır.</div>
+                      <div className="mt-1 text-amber-800">Dosyalar yenilenir, agent yeniden başlatılır ve yönetilen tarayıcı oturumu tekrar açılır.</div>
+                      <button
+                        type="button"
+                        className="mt-3 rounded-md bg-aq-navy px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={loadingAction === 'update'}
+                        onClick={() => runCaptureAction('update', 'Capture extension güncellendi', 'Capture extension güncellenemedi')}
+                      >
+                        {loadingAction === 'update' ? 'Güncelleniyor...' : 'Güncellemeyi uygula'}
+                      </button>
+                    </div>
+                  ) : null}
                   <div className="mt-3 grid grid-cols-3 gap-2">
                     <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureAction('install', 'Capture kurulumu hazırlandı', 'Capture kurulumu hazırlanamadı')}>{loadingAction === 'install' ? 'Hazırlanıyor...' : 'Kurulumu hazırla'}</button>
                     <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureAction('repair', 'Capture kurulumu onarıldı', 'Capture onarılamadı')}>Onar</button>
@@ -413,6 +443,58 @@ export function FeatureModals({
               </div>
             ) : null}
 
+            {settingsTab === 'matrixAssistant' ? (
+              <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Yerel Matrix yardımcısı</div>
+                  <span className="rounded-full border border-aq-line bg-white px-2 py-0.5 text-xs">
+                    {asRecord((state as any).localMatrixAssistant).enabled ? 'Açık' : 'Kapalı'}
+                  </span>
+                </div>
+                <p className="text-xs leading-5 text-aq-muted">
+                  Bu katman yalnızca Literatür Matrisi için çalışır. Aday metinleri yerel olarak puanlar ve istersen
+                  hücrelere yazılacak kısa Purpose/Method/Sample/Findings metinlerini yerel olarak oluşturur. Yazı
+                  editörüne dokunmaz, dış servise veri göndermez.
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-md bg-white p-3"><b>Kapsam</b><br />Sadece Literature Matrix auto-fill</div>
+                  <div className="rounded-md bg-white p-3"><b>Gizlilik</b><br />PDF/metin verisi cihaz dışına çıkmaz</div>
+                  <div className="rounded-md bg-white p-3"><b>Performans</b><br />Kapalıyken sıfır ek maliyet, açıkken aday listesiyle sınırlı</div>
+                  <div className="rounded-md bg-white p-3"><b>Yazım</b><br />Sadece matrix hücreleri; makale metni değil</div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    className="rounded-md bg-aq-navy px-3 py-2 text-left text-xs font-semibold text-white"
+                    onClick={() => {
+                      const enabled = !asRecord((state as any).localMatrixAssistant).enabled;
+                      updateMatrixAssistant({ enabled, composeCells: enabled ? true : asRecord((state as any).localMatrixAssistant).composeCells });
+                    }}
+                  >
+                    {asRecord((state as any).localMatrixAssistant).enabled ? 'Yardımcıyı kapat' : 'Yardımcıyı aç'}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold"
+                    onClick={() => updateMatrixAssistant({ composeCells: !asRecord((state as any).localMatrixAssistant).composeCells })}
+                  >
+                    Hücre yazımı: {asRecord((state as any).localMatrixAssistant).composeCells ? 'açık' : 'kapalı'}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold"
+                    onClick={() => updateMatrixAssistant({ allowModelProvider: !asRecord((state as any).localMatrixAssistant).allowModelProvider })}
+                  >
+                    Yerel model sağlayıcı: {asRecord((state as any).localMatrixAssistant).allowModelProvider ? 'açık' : 'kapalı'}
+                  </button>
+                </div>
+                <div className="mt-3 rounded-md bg-white p-3 text-xs text-aq-muted">
+                  Hücre yazımı açıkken sistem mevcut PDF/özet/not adaylarından kısa matrix hücresi üretir. Yerel model sağlayıcı yoksa
+                  güvenli extractive composer kullanılır; gerçek model paketi eklenirse yine yalnızca bu matrix akışında çalışır.
+                </div>
+              </section>
+            ) : null}
+
             {settingsTab === 'sync' ? (
               <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
                 <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Sync</div>
@@ -429,6 +511,44 @@ export function FeatureModals({
               </section>
             ) : null}
 
+            {settingsTab === 'storage' ? (
+              <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Storage / Backup</div>
+                <p className="mb-3 text-xs leading-5 text-aq-muted">
+                  Tek bir AcademiQ backup dosyası; workspace’leri, belgeleri, notları, kaynakları, belge geçmişini, ayarları ve PDF klasörlerini taşır.
+                  PDF’ler binary olarak saklanır, base64 kullanılmadığı için dosya gereksiz şişmez.
+                </p>
+                <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-md bg-white p-3"><b>Veri</b><br />Workspace, editor içeriği, notlar, kaynaklar, matrix</div>
+                  <div className="rounded-md bg-white p-3"><b>Dosyalar</b><br />Workspace PDF klasörleri ve eski PDF cache</div>
+                  <div className="rounded-md bg-white p-3"><b>Geçmiş</b><br />Belge snapshotları ve recovery dosyaları</div>
+                  <div className="rounded-md bg-white p-3"><b>Taşıma</b><br />Restore sonrası sync yolu sıfırlanır, veri yerel açılır</div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={loadingAction === 'backup-create'}
+                    onClick={runBackupCreate}
+                  >
+                    {loadingAction === 'backup-create' ? 'Backup hazırlanıyor...' : 'Backup oluştur'}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md bg-aq-navy px-3 py-2 text-left text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={loadingAction === 'backup-restore'}
+                    onClick={runBackupRestore}
+                  >
+                    {loadingAction === 'backup-restore' ? 'Backup yükleniyor...' : 'Backup yükle / restore et'}
+                  </button>
+                </div>
+                <div className="mt-3 rounded-md bg-white p-3 text-xs text-aq-muted">
+                  App data: {String(asRecord(info).appDir || '-')}<br />
+                  PDF cache: {String(asRecord(info).pdfDir || '-')}<br />
+                  PDF sayısı: {String(asRecord(info).pdfCount || 0)}
+                </div>
+              </section>
+            ) : null}
             {settingsTab === 'updates' ? (
               <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
                 <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Güncelleme</div>
@@ -567,35 +687,17 @@ export function FeatureModals({
         </div>
       </Modal>
 
-      <Modal title="Kaynak Detayı" open={active === 'referenceEdit'} onClose={onClose}>
-        {selectedReference ? (
-          <div className="space-y-3 text-sm">
-            {[
-              ['title', 'Başlık'],
-              ['authors', 'Yazarlar (; ile ayır)'],
-              ['year', 'Yıl'],
-              ['doi', 'DOI'],
-              ['url', 'URL'],
-              ['journal', 'Dergi']
-            ].map(([key, label]) => (
-              <label key={key} className="block text-xs font-semibold text-aq-muted">
-                {label}
-                <input value={refDraft[key] || ''} onChange={(event) => setRefDraft((draft) => ({ ...draft, [key]: event.target.value }))} className="mt-1 h-9 w-full rounded-md border border-aq-line bg-white px-3 text-sm font-normal text-aq-ink outline-none" />
-              </label>
-            ))}
-            <label className="block text-xs font-semibold text-aq-muted">
-              Abstract
-              <textarea value={refDraft.abstract || ''} onChange={(event) => setRefDraft((draft) => ({ ...draft, abstract: event.target.value }))} className="mt-1 h-24 w-full resize-none rounded-md border border-aq-line bg-white px-3 py-2 text-sm font-normal text-aq-ink outline-none" />
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              <button className="rounded-md bg-aq-navy px-3 py-2 text-xs font-semibold text-white" onClick={saveReference}>Kaydet</button>
-              <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-xs font-semibold text-red-700" onClick={() => onDeleteReference(selectedReference.id)}>Sil</button>
-            </div>
-          </div>
-        ) : <div className="text-sm text-aq-muted">Kaynak seçilmedi.</div>}
-      </Modal>
+      <ReferenceEditModal
+        open={active === 'referenceEdit'}
+        reference={selectedReference || null}
+        onClose={onClose}
+        onUpdate={onUpdateReference}
+        onDelete={onDeleteReference}
+      />
     </>
   );
 }
 
 export type { FeatureModal };
+
+
