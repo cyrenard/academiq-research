@@ -859,6 +859,7 @@ function createBrowserCaptureBridge(options) {
 module.exports = {
   DEFAULT_CAPTURE_PORT,
   BROWSER_CAPTURE_PROTOCOL_VERSION,
+  normalizeDoi,
   browserFromProgId,
   parseWindowsDefaultBrowserRegOutput,
   parseBrowserOpenCommandOutput,
