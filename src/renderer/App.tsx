@@ -34,6 +34,31 @@ import { DocumentTabs } from './components/shell/DocumentTabs';
 import type { CommandItem } from './components/shell/CommandPalette';
 import type { FeatureModal } from './components/shell/FeatureModals';
 import { callLegacy } from './lib/legacy-feature-adapter';
+import {
+  normalizeDoiInput,
+  normalizeIsbnInput,
+  fetchLegacyReference,
+  hasSameReference,
+  referenceImportKey,
+  isPlaceholderReferenceTitle,
+  mergeReferenceRecords,
+  hasUsableReferenceMetadata,
+  normalizeReferenceList,
+  normalizeReferenceState,
+  upsertReferenceInWorkspace,
+  patchReferenceInWorkspace,
+  yearFromCrossrefDate,
+  mapCrossrefWorkToReference,
+  fetchDoiReference,
+  resolveOpenAccessPdfUrl,
+  collectOpenAccessPdfCandidates,
+  countDownloadedPdfCandidates
+} from './lib/reference-import';
+import {
+  noteTextForInsert,
+  buildNoteInsertHTML,
+  collectReferenceIdsFromHTML
+} from './lib/note-insert';
 
 const CommandPalette = lazy(() => import('./components/shell/CommandPalette').then((module) => ({ default: module.CommandPalette })));
 const FeatureModals = lazy(() => import('./components/shell/FeatureModals').then((module) => ({ default: module.FeatureModals })));
@@ -64,391 +89,6 @@ function uid(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function normalizeDoiInput(value: string) {
-  const api = (window as any).AQReferenceParse;
-  if (api && typeof api.normalizeDoi === 'function') {
-    try {
-      const normalized = String(api.normalizeDoi(value) || '');
-      if (normalized) return normalized;
-    } catch (_error) {}
-  }
-  let candidate = value.trim();
-  if (/^0\.\d{4,9}\//i.test(candidate)) candidate = `1${candidate}`;
-  const match = candidate.match(/10\.\d{4,9}\/[^\s"'<>]+/i);
-  const doi = match ? match[0] : '';
-  return doi
-    .replace(/[),.;]+$/, '')
-    .replace(/(?:\/|\.)(BIBTEX|RIS|ABSTRACT|FULLTEXT|FULL|PDF|XML|HTML|EPUB)$/i, '')
-    .replace(/\/[A-Za-z]$/, '')
-    .trim()
-    .toLowerCase();
-}
-
-function escapeHTML(value: unknown) {
-  return String(value == null ? '' : value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function noteTextForInsert(note: AcademiqNote) {
-  return String(note.txt || note.q || note.comment || note.sourceExcerpt || '').trim();
-}
-
-function buildNoteInsertHTML(note: AcademiqNote) {
-  const text = noteTextForInsert(note);
-  if (!text) return '';
-  const noteId = escapeHTML(note.id);
-  const attrs = [
-    `data-note-id="${noteId}"`,
-    note.rid ? `data-note-ref="${escapeHTML(note.rid)}"` : '',
-    note.sourcePage || note.tag ? `data-note-page="${escapeHTML(note.sourcePage || note.tag)}"` : '',
-    note.noteType || note.type ? `data-note-type="${escapeHTML(note.noteType || note.type)}"` : ''
-  ].filter(Boolean).join(' ');
-  const paragraphs = text
-    .replace(/\r\n?/g, '\n')
-    .split(/\n{2,}/)
-    .map((part) => part.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
-    .map((part, index) => `<p${index === 0 ? ' class="ni"' : ''}>${escapeHTML(part)}</p>`)
-    .join('');
-  const isQuote = note.noteType === 'direct_quote' || note.type === 'hl' || Boolean(note.q);
-  const body = isQuote ? `<blockquote>${paragraphs}</blockquote>` : paragraphs;
-  return `<span class="aq-note-link" ${attrs}>${body}</span>`;
-}
-
-function collectReferenceIdsFromHTML(html: string) {
-  const ids = new Set<string>();
-  const source = String(html || '');
-  const addIds = (raw: string) => {
-    raw.split(',').map((id) => id.trim()).filter(Boolean).forEach((id) => ids.add(id));
-  };
-  source.replace(/\b(?:data-ref|data-aq-ref)\s*=\s*(['"])(.*?)\1/gi, (_match, _quote, raw) => {
-    addIds(String(raw || ''));
-    return _match;
-  });
-  source.replace(/\b(?:ref|id)\s*:\s*(['"]?)([A-Za-z0-9_:-]+)\1/gi, (_match, _quote, raw) => {
-    addIds(String(raw || ''));
-    return _match;
-  });
-  return ids;
-}
-
-function normalizeIsbnInput(value: string) {
-  const api = (window as any).AQReferenceParse;
-  if (api && typeof api.normalizeIsbn === 'function') {
-    try {
-      return String(api.normalizeIsbn(value) || '');
-    } catch (_error) {}
-  }
-  const compact = value.replace(/[^0-9Xx]/g, '').toUpperCase();
-  return compact.length === 10 || compact.length === 13 ? compact : '';
-}
-
-function fetchLegacyReference(functionName: 'fetchCR' | 'fetchISBN', value: string) {
-  const fetcher = (window as any)[functionName] as LegacyReferenceFetcher | undefined;
-  if (typeof fetcher !== 'function') return Promise.resolve<AcademiqReference | null>(null);
-  return new Promise<AcademiqReference | null>((resolve) => {
-    try {
-      fetcher(value, (error, reference) => resolve(error || !reference ? null : reference));
-    } catch (_error) {
-      resolve(null);
-    }
-  });
-}
-
-function hasSameReference(reference: AcademiqReference, input: { doi?: string; isbn?: string; url?: string }) {
-  const doi = String(input.doi || '').toLowerCase();
-  const isbn = String(input.isbn || '').replace(/[^0-9Xx]/g, '').toUpperCase();
-  const url = String(input.url || '').toLowerCase();
-  if (doi && String(reference.doi || '').toLowerCase() === doi) return true;
-  if (isbn && String(reference.isbn || '').replace(/[^0-9Xx]/g, '').toUpperCase() === isbn) return true;
-  if (url && String(reference.url || '').toLowerCase() === url) return true;
-  return false;
-}
-
-function referenceImportKey(reference: AcademiqReference) {
-  const doi = String(reference.doi || '').trim().toLowerCase();
-  if (doi) return `doi:${doi}`;
-  const isbn = String(reference.isbn || '').replace(/[^0-9Xx]/g, '').toUpperCase();
-  if (isbn) return `isbn:${isbn}`;
-  const url = String(reference.url || '').trim().toLowerCase();
-  if (url) return `url:${url}`;
-  const title = String(reference.title || '').trim().toLowerCase();
-  const year = String(reference.year || '').trim();
-  const author = Array.isArray(reference.authors) ? String(reference.authors[0] || '').trim().toLowerCase() : '';
-  return title ? `title:${title}|${year}|${author}` : '';
-}
-
-function isPlaceholderReferenceTitle(title: unknown, reference: AcademiqReference) {
-  const normalizedTitle = String(title || '').trim().toLowerCase();
-  if (!normalizedTitle) return true;
-  const titleAsDoi = normalizeDoiInput(normalizedTitle);
-  return [reference.doi, reference.isbn, reference.url]
-    .map((value) => String(value || '').trim().toLowerCase())
-    .filter(Boolean)
-    .some((value) => {
-      const valueAsDoi = normalizeDoiInput(value);
-      return normalizedTitle === value
-        || normalizedTitle.endsWith(value)
-        || (!!titleAsDoi && titleAsDoi === value)
-        || (!!titleAsDoi && !!valueAsDoi && titleAsDoi === valueAsDoi);
-    });
-}
-
-function mergeReferenceRecords(target: AcademiqReference, source: AcademiqReference) {
-  const merged: AcademiqReference = { ...target };
-  Object.entries(source).forEach(([key, value]) => {
-    if (key === 'id' || value == null || value === '') return;
-    if (key === 'title') {
-      if (!merged.title || isPlaceholderReferenceTitle(merged.title, merged)) merged.title = String(value || merged.title || '');
-      return;
-    }
-    if (Array.isArray(value)) {
-      const existing = Array.isArray(merged[key]) ? merged[key] as unknown[] : [];
-      if (!existing.length) merged[key] = value;
-      else if (key === 'labels' || key === 'collectionIds') merged[key] = Array.from(new Set([...existing, ...value]));
-      return;
-    }
-    if (!merged[key]) merged[key] = value;
-  });
-  return merged;
-}
-
-function hasUsableReferenceMetadata(reference: Record<string, any>, query: string) {
-  const probe: AcademiqReference = {
-    id: 'metadata-probe',
-    title: String(reference.title || reference.detectedTitle || ''),
-    doi: String(reference.doi || normalizeDoiInput(query) || ''),
-    isbn: String(reference.isbn || normalizeIsbnInput(query) || ''),
-    url: String(reference.url || (/^https?:\/\//i.test(query) ? query : ''))
-  };
-  const title = String(reference.title || reference.detectedTitle || '').trim();
-  return !!(
-    (title && !isPlaceholderReferenceTitle(title, probe))
-    || String(reference.doi || '').trim()
-    || String(reference.isbn || '').trim()
-    || (Array.isArray(reference.authors) && reference.authors.length && reference.year)
-  );
-}
-
-function normalizeReferenceList(references: AcademiqReference[]) {
-  const byKey = new Map<string, AcademiqReference>();
-  const output: AcademiqReference[] = [];
-  references.forEach((reference) => {
-    const key = referenceImportKey(reference);
-    if (!key) {
-      output.push(reference);
-      return;
-    }
-    const existing = byKey.get(key);
-    if (!existing) {
-      byKey.set(key, reference);
-      output.push(reference);
-      return;
-    }
-    const merged = mergeReferenceRecords(existing, reference);
-    byKey.set(key, merged);
-    const index = output.findIndex((item) => item.id === existing.id);
-    if (index >= 0) output[index] = merged;
-  });
-  return output;
-}
-
-function normalizeReferenceState(state: AcademiqAppState): AcademiqAppState {
-  return {
-    ...state,
-    wss: state.wss.map((workspace) => ({
-      ...workspace,
-      lib: normalizeReferenceList(Array.isArray(workspace.lib) ? workspace.lib : [])
-    }))
-  };
-}
-
-function upsertReferenceInWorkspace(state: AcademiqAppState, reference: AcademiqReference, rawQuery = '') {
-  const workspace = getActiveWorkspace(state);
-  const key = referenceImportKey(reference);
-  const normalizedQuery = rawQuery.trim().toLowerCase();
-  let activeId = reference.id;
-  let inserted = false;
-  const nextLib = (workspace.lib || []).reduce<AcademiqReference[]>((items, item) => {
-    const itemKey = referenceImportKey(item);
-    const itemTitle = String(item.title || '').trim().toLowerCase();
-    const same = (key && itemKey === key)
-      || (!!normalizedQuery && itemTitle === normalizedQuery)
-      || (!!reference.doi && itemTitle === reference.doi)
-      || (!!reference.doi && itemTitle === reference.doi.replace(/^10\./, '0.'));
-    if (same) {
-      const merged = mergeReferenceRecords(item, reference);
-      activeId = merged.id;
-      inserted = true;
-      const previousIndex = items.findIndex((existing) => referenceImportKey(existing) === referenceImportKey(merged));
-      if (previousIndex >= 0) items[previousIndex] = mergeReferenceRecords(items[previousIndex], merged);
-      else items.push(merged);
-      return items;
-    }
-    items.push(item);
-    return items;
-  }, []);
-  if (!inserted) nextLib.unshift(reference);
-  return {
-    state: {
-      ...state,
-      wss: state.wss.map((item) => item.id === workspace.id ? { ...item, lib: normalizeReferenceList(nextLib) } : item)
-    },
-    referenceId: activeId
-  };
-}
-
-function yearFromCrossrefDate(value: any) {
-  const parts = value?.['date-parts'];
-  const year = Array.isArray(parts) && Array.isArray(parts[0]) ? parts[0][0] : '';
-  return year ? String(year) : '';
-}
-
-function mapCrossrefWorkToReference(work: any, doi: string): AcademiqReference {
-  const authors = Array.isArray(work?.author)
-    ? work.author.map((author: any) => author?.family && author?.given ? `${author.family}, ${author.given}` : String(author?.family || author?.name || '')).filter(Boolean)
-    : [];
-  const published = work?.['published-print'] || work?.['published-online'] || work?.published || work?.created;
-  const pages = String(work?.page || '');
-  const pageParts = pages.includes('-') ? pages.split('-') : [pages, ''];
-  return {
-    id: `ref_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
-    title: String(Array.isArray(work?.title) ? work.title[0] : work?.title || doi),
-    authors,
-    year: yearFromCrossrefDate(published),
-    journal: String(Array.isArray(work?.['container-title']) ? work['container-title'][0] : work?.['container-title'] || ''),
-    volume: String(work?.volume || ''),
-    issue: String(work?.issue || ''),
-    fp: String(pageParts[0] || ''),
-    lp: String(pageParts.slice(1).join('-') || ''),
-    doi,
-    url: String(work?.URL || `https://doi.org/${doi}`),
-    pdfUrl: '',
-    labels: [],
-    referenceType: 'article'
-  };
-}
-
-async function fetchDoiReference(doi: string) {
-  const crossref = await window.electronAPI?.netFetchJSON?.(
-    `https://api.crossref.org/works/${encodeURIComponent(doi)}?mailto=academiq@example.com`,
-    { timeoutMs: 12000 }
-  ) as any;
-  if (!crossref?.ok) throw new Error(String(crossref?.error || 'CrossRef yanit vermedi'));
-  const ref = mapCrossrefWorkToReference(crossref.data?.message || {}, doi);
-  try {
-    const unpaywall = await window.electronAPI?.netFetchJSON?.(
-      `https://api.unpaywall.org/v2/${encodeURIComponent(doi)}?email=academiq@example.com`,
-      { timeoutMs: 12000 }
-    ) as any;
-    const data = unpaywall?.ok ? unpaywall.data : null;
-    const locations = [
-      data?.best_oa_location,
-      ...(Array.isArray(data?.oa_locations) ? data.oa_locations : [])
-    ].filter(Boolean);
-    const pdfUrl = locations.map((item: any) => String(item?.url_for_pdf || item?.url || '')).find(Boolean);
-    if (pdfUrl) ref.pdfUrl = pdfUrl;
-  } catch (_error) {}
-  return ref;
-}
-
-async function resolveOpenAccessPdfUrl(doi: string) {
-  const cleanDoi = normalizeDoiInput(doi);
-  if (!cleanDoi) return '';
-  const win = window as any;
-  if (typeof win.fetchOAUrls === 'function') {
-    try {
-      const urls = await win.fetchOAUrls(cleanDoi);
-      if (Array.isArray(urls)) {
-        const url = urls.map((item) => String(item || '').trim()).find(Boolean);
-        if (url) return url;
-      }
-    } catch (_error) {}
-  }
-  const [openAlex, unpaywall] = await Promise.allSettled([
-    window.electronAPI?.netFetchJSON?.(
-      `https://api.openalex.org/works/doi:${encodeURIComponent(cleanDoi)}`,
-      { timeoutMs: 9000, allowAnyHost: true }
-    ),
-    window.electronAPI?.netFetchJSON?.(
-      `https://api.unpaywall.org/v2/${encodeURIComponent(cleanDoi)}?email=academiq@example.com`,
-      { timeoutMs: 9000, allowAnyHost: true }
-    )
-  ]);
-  const candidates: string[] = [];
-  if (openAlex.status === 'fulfilled') {
-    const result = openAlex.value as any;
-    const data = result?.ok ? result.data : null;
-    const locations = Array.isArray(data?.locations) ? data.locations : [];
-    candidates.push(
-      String(data?.open_access?.oa_url || ''),
-      ...locations.flatMap((item: any) => [
-        String(item?.pdf_url || ''),
-        String(item?.landing_page_url || '')
-      ])
-    );
-  }
-  if (unpaywall.status === 'fulfilled') {
-    const result = unpaywall.value as any;
-    const data = result?.ok ? result.data : null;
-    const locations = [
-      data?.best_oa_location,
-      ...(Array.isArray(data?.oa_locations) ? data.oa_locations : [])
-    ].filter(Boolean);
-    candidates.push(...locations.flatMap((item: any) => [
-      String(item?.url_for_pdf || ''),
-      String(item?.url || '')
-    ]));
-  }
-  const unique = Array.from(new Set(candidates.map((item) => item.trim()).filter(Boolean)));
-  return unique.find((item) => /\.pdf($|[?#])|\/pdf(\/|$|[?#])|pdfdirect|epdf/i.test(item)) || unique[0] || '';
-}
-
-function patchReferenceInWorkspace(state: AcademiqAppState, workspaceId: string, referenceId: string, patch: Record<string, unknown>) {
-  return {
-    ...state,
-    wss: state.wss.map((workspace) => workspace.id === workspaceId
-      ? {
-          ...workspace,
-          lib: (workspace.lib || []).map((reference) => reference.id === referenceId ? { ...reference, ...patch } : reference)
-        }
-      : workspace)
-  };
-}
-
-function collectOpenAccessPdfCandidates(state: AcademiqAppState) {
-  return state.wss.flatMap((workspace) => (workspace.lib || [])
-    .filter((reference) => {
-      if (!reference || !reference.id) return false;
-      if (reference.pdfAttached || reference.pdfData || reference.pdfPath) return false;
-      return Boolean(String(reference.pdfUrl || '').trim() || normalizeDoiInput(String(reference.doi || '')));
-    })
-    .map((reference) => ({ workspaceId: workspace.id, workspaceName: workspace.name, reference })));
-}
-
-async function countDownloadedPdfCandidates(
-  state: AcademiqAppState,
-  candidates: Array<{ workspaceId: string; workspaceName: string; reference: AcademiqReference }>
-) {
-  let count = 0;
-  for (const candidate of candidates) {
-    const workspace = state.wss.find((item) => item.id === candidate.workspaceId);
-    const reference = (workspace?.lib || []).find((item) => item.id === candidate.reference.id) || candidate.reference;
-    if (reference.pdfAttached || reference.pdfData || reference.pdfPath) {
-      count++;
-      continue;
-    }
-    try {
-      const result = await window.electronAPI?.pdfExists?.(reference.id, { id: candidate.workspaceId, name: candidate.workspaceName }) as any;
-      if (result === true || result?.exists === true || result?.found === true) count++;
-    } catch (_error) {}
-  }
-  return count;
-}
 
 export default function App() {
   const [appState, setAppState] = useState<AcademiqAppState>(() => createBlankState());
@@ -583,6 +223,7 @@ export default function App() {
   };
 
   const persistState = useCallback(async (nextState: AcademiqAppState, draft = false) => {
+    if ((window as any).__aqBackupRestoreInProgress) return;
     appStateRef.current = nextState;
     setAppState(nextState);
     const payload = JSON.stringify(nextState);
@@ -591,6 +232,7 @@ export default function App() {
   }, []);
 
   const persistEditorDraft = useCallback(async (nextState: AcademiqAppState) => {
+    if ((window as any).__aqBackupRestoreInProgress) return;
     appStateRef.current = nextState;
     const win = window as any;
     win.S = { ...(win.S || {}), ...nextState };
@@ -634,6 +276,7 @@ export default function App() {
   }, []);
 
   const flushEditorToState = useCallback(async () => {
+    if ((window as any).__aqBackupRestoreInProgress) return appStateRef.current;
     const currentHTML = editorRef.current?.getHTML?.();
     const nextState = currentHTML ? updateActiveDocumentHTML(appStateRef.current, currentHTML) : appStateRef.current;
     appStateRef.current = nextState;
@@ -851,7 +494,14 @@ export default function App() {
     }
     if (!window.confirm(`${current.name} silinsin mi?`)) return;
     const next = deleteWorkspace(appStateRef.current, current.id);
-    persistState(next).then(() => flashStatus('Workspace silindi')).catch(() => flashStatus('Workspace silinemedi'));
+    const workspacePdfContext = { id: current.id, name: current.name };
+    persistState(next)
+      .then(() => window.electronAPI.deleteWorkspacePdfFolder(workspacePdfContext).catch(() => null))
+      .then((pdfResult: any) => {
+        const removedCount = Array.isArray(pdfResult?.removed) ? pdfResult.removed.length : 0;
+        flashStatus(removedCount ? 'Workspace ve PDF klasörü silindi' : 'Workspace silindi');
+      })
+      .catch(() => flashStatus('Workspace silinemedi'));
     setActiveReferenceId(getActiveWorkspace(next).lib[0]?.id || '');
   };
 
@@ -922,6 +572,8 @@ export default function App() {
     if (doi && ref.pdfUrl) {
       try {
         const result = await window.electronAPI?.downloadPDFfromURL?.(String(ref.pdfUrl), referenceId, {
+          ws: { id: next.cur, name: getActiveWorkspace(next).name, title: ref.title },
+          title: ref.title,
           expectedDoi: doi,
           expectedTitle: ref.title,
           expectedAuthors: ref.authors,
@@ -1021,12 +673,13 @@ export default function App() {
       for (const file of files) {
         const refId = `pdf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
         const name = String(file.name || 'PDF');
+        const title = name.replace(/\.pdf$/i, '');
         try {
-          if (file.buffer) await window.electronAPI?.savePDF?.(refId, file.buffer, { id: next.cur, name: getActiveWorkspace(next).name });
+          if (file.buffer) await window.electronAPI?.savePDF?.(refId, file.buffer, { id: next.cur, name: getActiveWorkspace(next).name, title });
         } catch (_error) {}
         next = addReferenceToActiveWorkspace(next, {
           id: refId,
-          title: name.replace(/\.pdf$/i, ''),
+          title,
           year: '',
           authors: [],
           labels: ['PDF'],
@@ -1423,7 +1076,7 @@ export default function App() {
           doi: ref.doi,
           pdfUrl: ref.pdfUrl,
           url: ref.url || url,
-          ws: { id: workspace.id, name: workspace.name }
+          ws: { id: workspace.id, name: workspace.name, title: ref.title }
         }) as any;
         flashStatus(result?.ok ? 'Kurumsal pencere açıldı · PDF indirirsen kaynağa bağlanacak' : `Kurumsal pencere açılamadı: ${String(result?.error || '')}`);
       }
@@ -1456,7 +1109,8 @@ export default function App() {
           return;
         }
         const result = await window.electronAPI?.downloadPDFfromURL?.(url, referenceId, {
-          ws: { id: workspace.id, name: workspace.name },
+          ws: { id: workspace.id, name: workspace.name, title: ref.title },
+          title: ref.title,
           expectedDoi: ref.doi,
           expectedTitle: ref.title,
           expectedAuthors: ref.authors,
@@ -1690,7 +1344,8 @@ export default function App() {
       try {
         const attemptedUrl = url;
         const result = await window.electronAPI?.downloadPDFfromURL?.(url, reference.id, {
-          ws: { id: candidate.workspaceId, name: candidate.workspaceName },
+          ws: { id: candidate.workspaceId, name: candidate.workspaceName, title: reference.title },
+          title: reference.title,
           expectedDoi: reference.doi,
           expectedTitle: reference.title,
           expectedAuthors: reference.authors,
