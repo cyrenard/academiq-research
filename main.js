@@ -33,6 +33,7 @@ const { createCaptureAgentManager } = require('./src/main-process-capture-agent-
 const { createCaptureQueueDispatcher } = require('./src/main-process-capture-queue-dispatcher.js');
 const { createCaptureStatusBuilder } = require('./src/main-process-capture-status-builder.js');
 const { createCaptureQueuePoller } = require('./src/main-process-capture-queue-poller.js');
+const { createBrowserCaptureLifecycle } = require('./src/main-process-capture-lifecycle.js');
 const {
   normalizeCaptureReferenceType,
   normalizeCaptureReference,
@@ -365,6 +366,38 @@ const captureQueuePoller = createCaptureQueuePoller({
 const processCaptureQueueFromApp = (reason) => captureQueuePoller.processNow(reason);
 const startCaptureQueuePolling = () => captureQueuePoller.start();
 const stopCaptureQueuePolling = () => captureQueuePoller.stop();
+
+// Lifecycle controller — owns prepare/launch/runLifecycle/startBridge/openExtensionManager.
+// Built with lazy callbacks so all referenced functions are resolved at call time
+// (works regardless of declaration order: function decls hoist; const arrows don't).
+const captureLifecycle = createBrowserCaptureLifecycle({
+  storage,
+  getSettings: () => browserCaptureStore.getSettings(),
+  buildStatus: (extra) => captureStatusBuilder.buildStatus(extra),
+  agentManager: captureAgentManager,
+  queueDispatcher: captureQueueDispatcher,
+  runtime: browserCaptureRuntime,
+  shell,
+  appDir: APP_DIR,
+  sourceDir: BROWSER_CAPTURE_SOURCE_DIR,
+  managedProfileDir: BROWSER_CAPTURE_MANAGED_PROFILE_DIR,
+  getCaptureTargets: () => captureStatusBuilder.getCaptureTargets(),
+  buildLookup: (payload) => buildCaptureLookup(payload),
+  createWorkspace: (name) => createWorkspaceFromMain(name),
+  importCapture: (payload) => importBrowserCaptureIntoState(payload),
+  detectDefaultBrowser: () => detectDefaultBrowser(),
+  detectBrowserOpenCommand: (progId) => detectBrowserOpenCommand(progId)
+});
+const refreshBrowserCaptureSettings = () => captureLifecycle.refreshSettings();
+const ensureManagedBrowserCaptureDirs = () => captureLifecycle.ensureManagedDirs();
+const buildBrowserCaptureStartUrl = (settings) => captureLifecycle.buildStartUrl(settings);
+const openBrowserCaptureExtensionManager = (status) => captureLifecycle.openExtensionManager(status);
+const prepareBrowserCaptureSetup = () => captureLifecycle.prepareSetup();
+const launchManagedBrowserCaptureSession = (reason) => captureLifecycle.launchManagedSession(reason);
+const runBrowserCaptureLifecycle = (action) => captureLifecycle.runLifecycle(action);
+const startBrowserCaptureBridge = () => captureLifecycle.startBridge({
+  hydratePending: hydratePendingCaptureRuntime
+});
 
 // Reference utility wrappers — pure logic lives in main-process-capture-reference-utils.js.
 // These thin wrappers inject the deps (uid factory, AQWebRelatedPapers, AQLiteratureMatrixState).
@@ -784,58 +817,6 @@ async function detectBrowserOpenCommand(progId) {
   return '';
 }
 
-async function refreshBrowserCaptureSettings() {
-  const detected = await detectDefaultBrowser();
-  const browserOpenCommand = await detectBrowserOpenCommand(detected && detected.progId ? detected.progId : '');
-  const browserExecutablePath = extractExecutableFromCommand(browserOpenCommand);
-  const next = getBrowserCaptureSettings();
-  const loginItemState = getCaptureAgentLoginItemState();
-  const bundledInfo = readExtensionManifestInfo(BROWSER_CAPTURE_SOURCE_DIR, detected && detected.browser ? detected.browser.family : 'chromium');
-  const patch = {
-    defaultBrowserLabel: detected && detected.browser ? detected.browser.label : 'Bilinmiyor',
-    defaultBrowserProgId: detected && detected.progId ? detected.progId : '',
-    browserFamily: detected && detected.browser ? detected.browser.family : 'unknown',
-    browserOpenCommand,
-    browserExecutablePath,
-    agentAutoStartSupported: !!loginItemState.supported,
-    agentAutoStart: loginItemState.supported ? !!loginItemState.enabled : (next.agentAutoStart !== false),
-    bundledExtensionVersion: bundledInfo.version,
-    bridgeProtocolVersion: BROWSER_CAPTURE_PROTOCOL_VERSION
-  };
-  if (storage.setBrowserCaptureSettings) storage.setBrowserCaptureSettings(patch);
-  return Object.assign({}, next, patch);
-}
-
-function ensureManagedBrowserCaptureDirs() {
-  try { fs.mkdirSync(BROWSER_CAPTURE_MANAGED_PROFILE_DIR, { recursive: true }); } catch (_e) {}
-}
-
-function buildBrowserCaptureStartUrl(settings) {
-  const token = encodeURIComponent(String(settings && settings.token ? settings.token : ''));
-  const port = Number(settings && settings.port ? settings.port : DEFAULT_CAPTURE_PORT) || DEFAULT_CAPTURE_PORT;
-  return 'http://127.0.0.1:' + port + '/status?token=' + token;
-}
-
-async function openBrowserCaptureExtensionManager(status) {
-  const source = status && typeof status === 'object' ? status : buildBrowserCaptureStatus();
-  const managerUrl = String(source.extensionManagerUrl || getBrowserExtensionManagerUrl(source) || '').trim();
-  const executablePath = String(source.browserExecutablePath || '').trim();
-  if (!managerUrl) return { ok: false, error: 'Extension manager adresi bulunamadi.' };
-  if (executablePath && fs.existsSync(executablePath)) {
-    try {
-      const child = execFile(executablePath, [managerUrl], { windowsHide: false }, function () {});
-      if (child && typeof child.unref === 'function') child.unref();
-      return { ok: true, managerUrl };
-    } catch (_error) {}
-  }
-  try {
-    await shell.openExternal(managerUrl);
-    return { ok: true, managerUrl };
-  } catch (error) {
-    return { ok: false, managerUrl, error: error && error.message ? error.message : 'Extension manager acilamadi.' };
-  }
-}
-
 // Capture agent process lifecycle — extracted to main-process-capture-agent-manager.js.
 // Thin aliases preserve existing callers/IPC handlers.
 const buildCaptureAgentSpawnArgs = () => captureAgentManager.buildSpawnArgs();
@@ -848,250 +829,6 @@ const refreshCaptureAgentStatusSnapshot = () => captureAgentManager.refreshStatu
 const ensureCaptureAgentRunning = () => captureAgentManager.ensureRunning();
 const stopCaptureAgent = () => captureAgentManager.stop();
 
-async function prepareBrowserCaptureSetup() {
-  const settings = await refreshBrowserCaptureSettings();
-  ensureManagedBrowserCaptureDirs();
-  const prepared = prepareExtensionBundle({
-    sourceRoot: BROWSER_CAPTURE_SOURCE_DIR,
-    appDir: APP_DIR,
-    browserFamily: settings.browserFamily === 'firefox' ? 'firefox' : 'chromium',
-    browserLabel: settings.defaultBrowserLabel,
-    config: {
-      token: settings.token,
-      port: settings.port || DEFAULT_CAPTURE_PORT
-    }
-  });
-  const installStrategy = determineBrowserInstallStrategy(Object.assign({}, settings, { installDir: prepared.installDir }));
-  const managedGuidePath = path.join(prepared.installDir, 'MANAGED_SETUP.txt');
-  fs.writeFileSync(managedGuidePath, buildManagedSessionGuide(settings.defaultBrowserLabel, prepared.installDir), 'utf8');
-  const patch = {
-    installDir: prepared.installDir,
-    guidePath: installStrategy.supported ? managedGuidePath : prepared.guidePath,
-    managedProfileDir: installStrategy.supported ? path.join(BROWSER_CAPTURE_MANAGED_PROFILE_DIR, settings.browserFamily === 'firefox' ? 'firefox' : 'chromium') : '',
-    agentAutoStart: settings.agentAutoStart !== false,
-    agentAutoStartSupported: !!settings.agentAutoStartSupported,
-    lastPreparedAt: Date.now(),
-    setupPromptSeen: true,
-    lifecycleState: installStrategy.supported ? 'installing' : 'unsupported_browser',
-    compatibilityState: installStrategy.supported ? 'preparing' : 'unsupported_browser',
-    lastLifecycleAction: 'prepare',
-    lastError: installStrategy.supported ? '' : 'Bu tarayici icin tam uygulama-yonetimli kurulum desteklenmiyor.'
-  };
-  if (storage.setBrowserCaptureSettings) storage.setBrowserCaptureSettings(patch);
-  return Object.assign(buildBrowserCaptureStatus(patch), {
-    ok: true,
-    installDir: prepared.installDir,
-    guidePath: patch.guidePath,
-    managedProfileDir: patch.managedProfileDir,
-    deepLinkExample: buildCaptureDeepLink({
-      detectedTitle: '�rnek Makale',
-      selectedWorkspaceId: getCaptureTargets().activeWorkspaceId || '',
-      browserSource: settings.defaultBrowserLabel || ''
-    }),
-    installStrategy
-  });
-}
-
-async function launchManagedBrowserCaptureSession(reason) {
-  const prepared = await prepareBrowserCaptureSetup();
-  const status = buildBrowserCaptureStatus(prepared);
-  const strategy = status.installStrategy || determineBrowserInstallStrategy(status);
-  if (!strategy.supported || strategy.id !== 'managed_chromium_session') {
-    const patch = {
-      lifecycleState: 'unsupported_browser',
-      compatibilityState: 'unsupported_browser',
-      lastLifecycleAction: reason || 'install',
-      lastError: 'Bu tarayici icin uygulama-yonetimli kurulum desteklenmiyor.'
-    };
-    if (storage.setBrowserCaptureSettings) storage.setBrowserCaptureSettings(patch);
-    return Object.assign({ ok: false, error: patch.lastError }, buildBrowserCaptureStatus(patch));
-  }
-  const executablePath = status.browserExecutablePath;
-  if (!executablePath || !fs.existsSync(executablePath)) {
-    const patch = {
-      lifecycleState: 'failed',
-      compatibilityState: 'missing_browser_path',
-      lastLifecycleAction: reason || 'install',
-      lastError: 'Varsayilan tarayici calistiricisi bulunamadi.'
-    };
-    if (storage.setBrowserCaptureSettings) storage.setBrowserCaptureSettings(patch);
-    return Object.assign({ ok: false, error: patch.lastError }, buildBrowserCaptureStatus(patch));
-  }
-  ensureManagedBrowserCaptureDirs();
-  const managedProfileDir = status.managedProfileDir || path.join(BROWSER_CAPTURE_MANAGED_PROFILE_DIR, 'chromium');
-  try { fs.mkdirSync(managedProfileDir, { recursive: true }); } catch (_e) {}
-  const args = buildManagedChromiumLaunchArgs({
-    profileDir: managedProfileDir,
-    extensionDir: status.installDir,
-    startUrl: buildBrowserCaptureStartUrl(status)
-  });
-  await new Promise(function (resolve, reject) {
-    try {
-      const child = execFile(executablePath, args, { windowsHide: false }, function (error) {
-        if (error) reject(error);
-      });
-      if (child && typeof child.unref === 'function') child.unref();
-      setTimeout(resolve, 350);
-    } catch (error) {
-      reject(error);
-    }
-  });
-  const patch = {
-    enabled: true,
-    managedProfileDir,
-    lifecycleState: 'installed_not_verified',
-    compatibilityState: 'pending_verification',
-    lastLifecycleAction: reason || 'install',
-    lastError: '',
-    updatePending: false
-  };
-  if (storage.setBrowserCaptureSettings) storage.setBrowserCaptureSettings(patch);
-  return Object.assign({ ok: true, launched: true }, buildBrowserCaptureStatus(patch));
-}
-
-async function runBrowserCaptureLifecycle(action) {
-  const normalizedAction = String(action || 'install').trim().toLowerCase();
-  if (normalizedAction === 'test') {
-    const live = await refreshCaptureAgentStatusSnapshot();
-    const info = buildBrowserCaptureStatus(live && typeof live === 'object' ? live : {});
-    const ok = !!(live && live.ok);
-    const patch = {
-      lastVerificationAt: Date.now(),
-      lifecycleState: ok ? 'ready' : (info.installDir ? 'repair_needed' : 'not_installed'),
-      compatibilityState: ok ? 'compatible' : info.compatibilityState,
-      lastLifecycleAction: 'test',
-      lastError: ok ? '' : 'Capture agent veya uzanti ile aktif baglanti dogrulanamadi.'
-    };
-    if (storage.setBrowserCaptureSettings) storage.setBrowserCaptureSettings(patch);
-    return Object.assign({ ok, action: 'test', message: ok ? 'Browser Capture hazir.' : patch.lastError }, buildBrowserCaptureStatus(patch));
-  }
-  if (normalizedAction === 'stop_agent') {
-    try {
-      browserCaptureRuntime.stopAgentRequested = true;
-      await stopCaptureAgent();
-      await refreshCaptureAgentStatusSnapshot();
-      return Object.assign({ ok: true, action: normalizedAction, message: 'Capture agent durduruldu.' }, buildBrowserCaptureStatus());
-    } catch (error) {
-      return Object.assign({ ok: false, action: normalizedAction, error: error && error.message ? error.message : 'Capture agent durdurulamadi.' }, buildBrowserCaptureStatus());
-    }
-  }
-  if (normalizedAction === 'restart_agent') {
-    browserCaptureRuntime.stopAgentRequested = false;
-    try { await stopCaptureAgent(); } catch (_e) {}
-    await ensureCaptureAgentRunning();
-    return Object.assign({ ok: true, action: normalizedAction, message: 'Capture agent yeniden baslatildi.' }, buildBrowserCaptureStatus());
-  }
-  if (normalizedAction === 'update' || normalizedAction === 'repair' || normalizedAction === 'install') {
-    const prepared = await prepareBrowserCaptureSetup();
-    const loginItemState = syncCaptureAgentLoginItem(prepared.agentAutoStart !== false);
-    if (storage.setBrowserCaptureSettings) {
-      storage.setBrowserCaptureSettings({
-        agentAutoStartSupported: !!loginItemState.supported,
-        agentAutoStart: loginItemState.supported ? !!loginItemState.enabled : (prepared.agentAutoStart !== false)
-      });
-    }
-    browserCaptureRuntime.stopAgentRequested = false;
-    await ensureCaptureAgentRunning();
-    const strategy = prepared.installStrategy || determineBrowserInstallStrategy(prepared);
-    if (strategy && strategy.supported && strategy.id === 'managed_chromium_session') {
-      return launchManagedBrowserCaptureSession(normalizedAction);
-    }
-    const patch = {
-      enabled: true,
-      lifecycleState: 'installed_not_verified',
-      compatibilityState: 'pending_verification',
-      lastLifecycleAction: normalizedAction,
-      lastError: ''
-    };
-    if (storage.setBrowserCaptureSettings) storage.setBrowserCaptureSettings(Object.assign({}, patch, { updatePending: false }));
-    const statusAfterPatch = buildBrowserCaptureStatus(patch);
-    const manager = await openBrowserCaptureExtensionManager(statusAfterPatch);
-    if (!manager.ok) {
-      try { await shell.openPath(prepared.installDir); } catch (_e) {}
-    }
-    return Object.assign({
-      ok: true,
-      action: normalizedAction,
-      installDir: prepared.installDir,
-      guidePath: prepared.guidePath,
-      managerOpened: !!manager.ok,
-      managerUrl: manager.managerUrl || statusAfterPatch.extensionManagerUrl || '',
-      message: manager.ok
-        ? 'Extension dosyalari guncellendi. Acilan uzantilar sayfasinda AcademiQ Browser Capture icin Reload/Yenile tusuna basin.'
-        : 'Extension dosyalari guncellendi. Klasor acildi; tarayicida uzantiyi reload edin veya klasoru tekrar yukleyin.'
-    }, buildBrowserCaptureStatus(Object.assign({}, patch, { updatePending: false })));
-  }
-  return Object.assign({ ok: false, error: 'Bilinmeyen Browser Capture aksiyonu.' }, buildBrowserCaptureStatus());
-}
-
-async function startBrowserCaptureBridge() {
-  const settings = getBrowserCaptureSettings();
-  hydratePendingCaptureRuntime();
-  if (browserCaptureRuntime.bridge) {
-    await browserCaptureRuntime.bridge.close();
-    browserCaptureRuntime.bridge = null;
-  }
-  const candidatePorts = [settings.port || DEFAULT_CAPTURE_PORT];
-  for (let offset = 1; offset <= 6; offset += 1) candidatePorts.push((settings.port || DEFAULT_CAPTURE_PORT) + offset);
-  let lastError = null;
-  for (let index = 0; index < candidatePorts.length; index += 1) {
-    const bridge = createBrowserCaptureBridge({
-      host: '127.0.0.1',
-      port: candidatePorts[index],
-      token: settings.token,
-      onGetTargets: function () { return getCaptureTargets(); },
-      onGetStatus: function () { return browserCaptureStatus(); },
-      onLookup: function (payload) { return buildCaptureLookup(payload); },
-      onCreateWorkspace: function (name) { return createWorkspaceFromMain(name); },
-      onRequestSeen: function () {
-        browserCaptureRuntime.lastBridgeEventAt = Date.now();
-        if (storage.setBrowserCaptureSettings) storage.setBrowserCaptureSettings({ lastConnectedAt: browserCaptureRuntime.lastBridgeEventAt });
-      },
-      onHello: function (payload) {
-        browserCaptureRuntime.lastHelloAt = Date.now();
-        browserCaptureRuntime.lastHelloPayload = payload || {};
-        browserCaptureRuntime.lastBridgeEventAt = browserCaptureRuntime.lastHelloAt;
-        const patch = {
-          lastConnectedAt: browserCaptureRuntime.lastHelloAt,
-          lastVerificationAt: browserCaptureRuntime.lastHelloAt,
-          installedExtensionVersion: payload && payload.extensionVersion ? String(payload.extensionVersion) : '',
-          installedProtocolVersion: payload && payload.protocolVersion ? Number(payload.protocolVersion) : 0,
-          lifecycleState: 'ready',
-          compatibilityState: 'compatible',
-          lastLifecycleAction: 'verify',
-          lastError: '',
-          updatePending: false
-        };
-        if (storage.setBrowserCaptureSettings) storage.setBrowserCaptureSettings(patch);
-        return Object.assign({ acknowledged: true }, browserCaptureStatus(patch));
-      },
-      onCapture: async function (payload) {
-        const imported = await importBrowserCaptureIntoState(payload);
-        if (imported && imported.ok) {
-          return {
-            ok: true,
-            queued: false,
-            imported: true,
-            workspaceId: imported.workspace && imported.workspace.id ? imported.workspace.id : '',
-            refId: imported.ref && imported.ref.id ? imported.ref.id : '',
-            message: buildBrowserCaptureImportMessage(imported)
-          };
-        }
-        return queueBrowserCapturePayload(payload);
-      }
-    });
-    try {
-      const bound = await bridge.listen();
-      browserCaptureRuntime.bridge = bridge;
-      if (storage.setBrowserCaptureSettings) storage.setBrowserCaptureSettings({ port: bound.port });
-      return bound;
-    } catch (error) {
-      lastError = error;
-      try { await bridge.close(); } catch (_e) {}
-    }
-  }
-  throw lastError || new Error('Bridge baslatilamadi');
-}
 
 function normalizeRefId(refId) {
   const value = String(refId || '').trim();
