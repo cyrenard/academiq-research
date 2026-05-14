@@ -685,13 +685,18 @@ test('AQ Engine appendix headings expose hover delete controls', () => {
 });
 
 test('React Word import persists imported document through legacy storage', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'components', 'shell', 'LegacyCompatibilityHost.tsx'), 'utf8');
-  assert.match(source, /function persistImportedWordDocument/);
-  assert.match(source, /__aqBuildPersistedStateJSON/);
-  assert.match(source, /electronAPI\?\.saveEditorDraft/);
-  assert.match(source, /electronAPI\?\.saveData/);
-  assert.match(source, /scheduleImportedWordPersist\(onStatus\)/);
-  assert.match(source, /const source = normalized \|\| html/);
+  // Word-import flow was extracted from LegacyCompatibilityHost.tsx to
+  // src/renderer/lib/file-import.ts in the audit-followthrough refactor.
+  const fileImport = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'lib', 'file-import.ts'), 'utf8');
+  const host = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'components', 'shell', 'LegacyCompatibilityHost.tsx'), 'utf8');
+  assert.match(fileImport, /function persistImportedWordDocument/);
+  assert.match(fileImport, /__aqBuildPersistedStateJSON/);
+  assert.match(fileImport, /electronAPI\?\.saveEditorDraft/);
+  assert.match(fileImport, /electronAPI\?\.saveData/);
+  assert.match(fileImport, /scheduleImportedWordPersist\(onStatus\)/);
+  assert.match(fileImport, /const source = normalized \|\| html/);
+  // Verify the host imports the public Word-import API
+  assert.match(host, /importWordFileDirect/);
 });
 
 test('React shell scopes notes by workspace and hydrates auxiliary document pages', () => {
