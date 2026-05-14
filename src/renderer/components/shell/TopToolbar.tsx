@@ -27,6 +27,7 @@ import {
   buildTOCPageHTML,
   buildCoverPageHTML,
   buildBilingualAbstractPageHTML,
+  parseBilingualAbstractHTML,
   turkishToday,
   getAppendixCount,
   buildAppendixBlockHTML,
@@ -403,36 +404,11 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
 
   const openAbstractDialog = () => {
     const doc = getActiveDocRecord();
-    const existing = String(doc?.abstractHTML || '').trim();
-    if (existing) {
-      const holder = document.createElement('div');
-      holder.innerHTML = existing;
-      holder.querySelector('.abstract-remove-btn')?.remove();
-      const readSection = (section: HTMLElement | null, keywordPattern: RegExp) => {
-        if (!section) return { text: '', keywords: '' };
-        const clone = section.cloneNode(true) as HTMLElement;
-        const keywordNode = Array.from(clone.querySelectorAll('p')).find((node) => keywordPattern.test(node.textContent || ''));
-        const keywords = keywordNode ? String(keywordNode.textContent || '').replace(keywordPattern, '').trim() : '';
-        keywordNode?.remove();
-        clone.querySelector('h1')?.remove();
-        return {
-          text: String(clone.textContent || '').replace(/\s+/g, ' ').trim(),
-          keywords
-        };
-      };
-      const sections = Array.from(holder.querySelectorAll('[data-aq-abstract-section]')) as HTMLElement[];
-      const tr = readSection(sections.find((section) => section.getAttribute('data-aq-abstract-section') === 'tr') || holder, /anahtar kelimeler\s*:/i);
-      const en = readSection(sections.find((section) => section.getAttribute('data-aq-abstract-section') === 'en') || null, /keywords\s*:/i);
-      setAbstractText(tr.text);
-      setAbstractKeywords(tr.keywords);
-      setAbstractEnglishText(en.text);
-      setAbstractEnglishKeywords(en.keywords);
-    } else {
-      setAbstractText('');
-      setAbstractKeywords('');
-      setAbstractEnglishText('');
-      setAbstractEnglishKeywords('');
-    }
+    const parsed = parseBilingualAbstractHTML(String(doc?.abstractHTML || ''));
+    setAbstractText(parsed.turkish.text);
+    setAbstractKeywords(parsed.turkish.keywords);
+    setAbstractEnglishText(parsed.english.text);
+    setAbstractEnglishKeywords(parsed.english.keywords);
     setAbstractOpen(true);
   };
 

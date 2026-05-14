@@ -4,6 +4,7 @@ import {
   buildCoverPageHTML,
   buildAbstractPageHTML,
   buildBilingualAbstractPageHTML,
+  parseBilingualAbstractHTML,
   turkishToday,
   getAppendixCount,
   buildAppendixBlockHTML,
@@ -169,6 +170,58 @@ describe('buildBilingualAbstractPageHTML', () => {
     expect(html).not.toContain('<script>en</script>');
     expect(html).toContain('&lt;script&gt;tr');
     expect(html).toContain('&lt;script&gt;en');
+  });
+});
+
+// ─── parseBilingualAbstractHTML (round-trip with builder) ───────────────────
+
+describe('parseBilingualAbstractHTML', () => {
+  it('returns blank fields for empty input', () => {
+    const r = parseBilingualAbstractHTML('');
+    expect(r.turkish).toEqual({ text: '', keywords: '' });
+    expect(r.english).toEqual({ text: '', keywords: '' });
+  });
+
+  it('returns blank fields for whitespace-only input', () => {
+    const r = parseBilingualAbstractHTML('   ');
+    expect(r.turkish.text).toBe('');
+  });
+
+  it('round-trips Turkish-only payload', () => {
+    const built = buildBilingualAbstractPageHTML({
+      turkish: { text: 'Bu çalışma X yi inceler.', keywords: 'a, b, c' },
+      english: { text: '', keywords: '' }
+    });
+    const parsed = parseBilingualAbstractHTML(built);
+    expect(parsed.turkish.text).toContain('Bu çalışma');
+    expect(parsed.turkish.keywords).toBe('a, b, c');
+    expect(parsed.english.text).toBe('');
+    expect(parsed.english.keywords).toBe('');
+  });
+
+  it('round-trips bilingual payload', () => {
+    const built = buildBilingualAbstractPageHTML({
+      turkish: { text: 'Türkçe metin', keywords: 'a' },
+      english: { text: 'English text', keywords: 'b, c' }
+    });
+    const parsed = parseBilingualAbstractHTML(built);
+    expect(parsed.turkish.text).toContain('Türkçe');
+    expect(parsed.turkish.keywords).toBe('a');
+    expect(parsed.english.text).toContain('English');
+    expect(parsed.english.keywords).toBe('b, c');
+  });
+
+  it('strips .abstract-remove-btn before parsing', () => {
+    const html = `
+      <div data-aq-abstract="1">
+        <button class="abstract-remove-btn">Sil</button>
+        <h1>Öz</h1>
+        <p>Body text</p>
+      </div>
+    `;
+    const parsed = parseBilingualAbstractHTML(html);
+    expect(parsed.turkish.text).toContain('Body text');
+    expect(parsed.turkish.text).not.toContain('Sil');
   });
 });
 

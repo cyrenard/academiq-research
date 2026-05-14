@@ -162,6 +162,47 @@ export function buildBilingualAbstractPageHTML(payload: BilingualAbstractPayload
   ].join('');
 }
 
+/**
+ * Inverse of buildBilingualAbstractPageHTML — parse an existing abstract
+ * HTML snippet (typically `doc.abstractHTML`) back into the two-language
+ * payload structure so the React form can pre-populate when "edit
+ * abstract" is opened on a doc that already has one.
+ *
+ * Returns blank fields when input is empty.
+ */
+export function parseBilingualAbstractHTML(existing: string): BilingualAbstractPayload {
+  const text = String(existing || '').trim();
+  if (!text || typeof document === 'undefined') {
+    return { turkish: { text: '', keywords: '' }, english: { text: '', keywords: '' } };
+  }
+  const holder = document.createElement('div');
+  holder.innerHTML = text;
+  // Drop the hover "Özü sil" button if present so it doesn't bleed into body
+  holder.querySelector('.abstract-remove-btn')?.remove();
+  const readSection = (section: HTMLElement | null, keywordPattern: RegExp) => {
+    if (!section) return { text: '', keywords: '' };
+    const clone = section.cloneNode(true) as HTMLElement;
+    const keywordNode = Array.from(clone.querySelectorAll('p'))
+      .find((node) => keywordPattern.test(node.textContent || ''));
+    const keywords = keywordNode
+      ? String(keywordNode.textContent || '').replace(keywordPattern, '').trim()
+      : '';
+    keywordNode?.remove();
+    clone.querySelector('h1')?.remove();
+    return {
+      text: String(clone.textContent || '').replace(/\s+/g, ' ').trim(),
+      keywords
+    };
+  };
+  const sections = Array.from(holder.querySelectorAll('[data-aq-abstract-section]')) as HTMLElement[];
+  const trSection = sections.find((section) => section.getAttribute('data-aq-abstract-section') === 'tr') || holder;
+  const enSection = sections.find((section) => section.getAttribute('data-aq-abstract-section') === 'en') || null;
+  return {
+    turkish: readSection(trSection, /anahtar kelimeler\s*:/i),
+    english: readSection(enSection, /keywords\s*:/i)
+  };
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Appendices
 // ───────────────────────────────────────────────────────────────────────────
