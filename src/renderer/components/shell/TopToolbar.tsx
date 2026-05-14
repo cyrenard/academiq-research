@@ -33,6 +33,13 @@ import {
   normalizeAppendicesHTML as normalizeAppendicesHTMLLib,
   removeAppendixFromHTML as removeAppendixFromHTMLLib
 } from '../../lib/auxiliary-page-html';
+import {
+  applyAppendicesToEngine as applyAppendicesToEngineLib,
+  removeAppendixFromEngine as removeAppendixFromEngineLib,
+  scrollToLatestAppendix as scrollToLatestAppendixLib,
+  installAppendixDeleteButtons as installAppendixDeleteButtonsLib,
+  resolveAppendixIdFromButton
+} from '../../lib/appendix-engine';
 
 type TopToolbarProps = {
   selectedReferenceId?: string;
@@ -519,69 +526,14 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
   const normalizeAppendicesHTML = (html: string) =>
     normalizeAppendicesHTMLLib(html, sanitizeAuxiliaryHTML);
 
-  const applyAppendicesToEngine = (appendicesHTML: string) => {
-    const win = window as any;
-    const activeEditor = typeof win.getActiveEditorInstance === 'function'
-      ? win.getActiveEditorInstance()
-      : (win.editor || null);
-    if (activeEditor?._aqEngine && typeof win.updateAQEngineAppendices === 'function') {
-      return !!win.updateAQEngineAppendices(activeEditor, appendicesHTML);
-    }
-    if (activeEditor?._aqEngine && activeEditor?._docModel?.get && activeEditor?._docModel?.replace) {
-      const docModel = activeEditor._docModel;
-      const blocks = Array.isArray(docModel.get()?.blocks) ? docModel.get().blocks.slice() : [];
-      const nextIndex = Math.max(1, getAppendixCount(appendicesHTML));
-      docModel.replace(blocks.concat([
-        {
-          type: 'heading',
-          level: 1,
-          pageBreak: true,
-          align: 'center',
-          _isAppendixHeading: true,
-          _appendixId: `appendix-${nextIndex}`,
-          runs: [{ text: `EK-${nextIndex}`, bold: true }]
-        },
-        {
-          type: 'paragraph',
-          _isAppendixEntry: true,
-          _appendixId: `appendix-${nextIndex}`,
-          runs: [{ text: 'Ek içeriği...' }]
-        }
-      ]));
-      activeEditor._reflow?.();
-      activeEditor.emit?.('update');
-      return true;
-    }
-    return false;
-  };
+  const applyAppendicesToEngine = (appendicesHTML: string) =>
+    applyAppendicesToEngineLib(appendicesHTML, getAppendixCount);
 
   const removeAppendixFromHTML = (html: string, appendixId: string) =>
     removeAppendixFromHTMLLib(html, appendixId, sanitizeAuxiliaryHTML);
 
-  const removeAppendixFromEngine = (appendixId?: string) => {
-    const win = window as any;
-    const activeEditor = typeof win.getActiveEditorInstance === 'function'
-      ? win.getActiveEditorInstance()
-      : (win.editor || null);
-    const docModel = activeEditor?._docModel;
-    const blocks = docModel?.get?.()?.blocks;
-    if (!activeEditor?._aqEngine || !docModel?.replace || !Array.isArray(blocks)) return false;
-    const start = blocks.findIndex((block: any) => block?._isAppendixHeading && (!appendixId || block._appendixId === appendixId));
-    if (start < 0) return false;
-    let end = blocks.length;
-    if (appendixId) {
-      for (let index = start + 1; index < blocks.length; index += 1) {
-        if (blocks[index]?._isAppendixHeading) {
-          end = index;
-          break;
-        }
-      }
-    }
-    docModel.replace(blocks.slice(0, start).concat(blocks.slice(end)));
-    activeEditor._reflow?.();
-    activeEditor.emit?.('update');
-    return true;
-  };
+  const removeAppendixFromEngine = (appendixId?: string) =>
+    removeAppendixFromEngineLib(appendixId);
 
   const deleteAppendix = (appendixId: string, blockIndex = -1) => {
     const doc = getActiveDocRecord();
@@ -609,73 +561,12 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     return removed;
   };
 
-  const installAppendixDeleteButtons = () => {
-    const win = window as any;
-    const activeEditor = typeof win.getActiveEditorInstance === 'function'
-      ? win.getActiveEditorInstance()
-      : (win.editor || null);
-    const blocks = activeEditor?._docModel?.get?.()?.blocks;
-    if (Array.isArray(blocks)) {
-      blocks.forEach((block: any, index: number) => {
-        if (!block?._isAppendixHeading) return;
-        const appendixId = String(block._appendixId || `appendix-${index + 1}`);
-        const line = document.querySelector(`.aq-engine-line[data-block-index="${index}"]`) as HTMLElement | null;
-        if (!line || line.querySelector('.appendix-remove-btn')) return;
-        line.classList.add('aq-appendix-heading-line');
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'appendix-remove-btn aq-appendix-delete-btn';
-        button.dataset.appendixId = appendixId;
-        button.dataset.blockIndex = String(index);
-        button.textContent = 'Eki sil';
-        button.addEventListener('mousedown', (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-        });
-        button.addEventListener('click', (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          deleteAppendix(appendixId, index);
-        });
-        line.appendChild(button);
-      });
-    }
-
-    document.querySelectorAll<HTMLElement>('#appendixbody .appendix-block').forEach((block) => {
-      if (block.querySelector('.appendix-remove-btn')) return;
-      const appendixId = block.dataset.appendixId || '';
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'appendix-remove-btn';
-      button.dataset.appendixId = appendixId;
-      button.textContent = 'Eki sil';
-      button.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        deleteAppendix(appendixId);
-      });
-      block.appendChild(button);
-    });
-  };
+  const installAppendixDeleteButtons = () =>
+    installAppendixDeleteButtonsLib((appendixId, blockIndex) =>
+      deleteAppendix(appendixId, blockIndex >= 0 ? blockIndex : -1)
+    );
 
   useEffect(() => {
-    const resolveAppendixId = (button: HTMLElement) => {
-      const direct = button.dataset.appendixId || button.getAttribute('data-appendix-id') || '';
-      if (direct) return direct;
-      const block = button.closest('.appendix-block') as HTMLElement | null;
-      if (block?.dataset.appendixId) return block.dataset.appendixId;
-      const line = button.closest('.aq-engine-line') as HTMLElement | null;
-      const blockIndex = Number(line?.dataset.blockIndex);
-      const win = window as any;
-      const editor = typeof win.getActiveEditorInstance === 'function'
-        ? win.getActiveEditorInstance()
-        : win.editor;
-      const blocks = editor?._docModel?.get?.()?.blocks;
-      if (Array.isArray(blocks) && Number.isFinite(blockIndex)) {
-        return String(blocks[blockIndex]?._appendixId || '');
-      }
-      return '';
-    };
     const onPointerDown = (event: Event) => {
       const target = event.target as HTMLElement | null;
       const button = target?.closest?.('.appendix-remove-btn') as HTMLElement | null;
@@ -689,7 +580,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
       if (!button) return;
       event.preventDefault();
       event.stopPropagation();
-      const appendixId = resolveAppendixId(button);
+      const appendixId = resolveAppendixIdFromButton(button);
       const blockIndex = Number(button.dataset.blockIndex || button.closest<HTMLElement>('.aq-engine-line')?.dataset.blockIndex || -1);
       if (appendixId || blockIndex >= 0) deleteAppendix(appendixId, blockIndex);
     };
@@ -701,35 +592,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     };
   });
 
-  const scrollToLatestAppendix = () => {
-    const win = window as any;
-    const activeEditor = typeof win.getActiveEditorInstance === 'function'
-      ? win.getActiveEditorInstance()
-      : (win.editor || null);
-    const blocks = activeEditor?._docModel?.get?.()?.blocks;
-    if (Array.isArray(blocks)) {
-      let appendixIndex = -1;
-      for (let index = blocks.length - 1; index >= 0; index -= 1) {
-        if (blocks[index]?._isAppendixHeading) {
-          appendixIndex = index;
-          break;
-        }
-      }
-      if (appendixIndex >= 0) {
-        const line = document.querySelector(`.aq-engine-line[data-block-index="${appendixIndex}"]`) as HTMLElement | null;
-        if (line) {
-          line.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-          return true;
-        }
-      }
-    }
-    const appendixPage = document.getElementById('appendixpage');
-    if (appendixPage && window.getComputedStyle(appendixPage).display !== 'none') {
-      appendixPage.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      return true;
-    }
-    return false;
-  };
+  const scrollToLatestAppendix = () => scrollToLatestAppendixLib();
 
   const insertAppendixPage = () => {
     commitEditorHTMLToLegacyState();
