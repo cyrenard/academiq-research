@@ -31,6 +31,7 @@ const captureRefUtils = require('./src/main-process-capture-reference-utils.js')
 const { createBrowserCaptureStore } = require('./src/main-process-browser-capture-store.js');
 const { createCaptureAgentManager } = require('./src/main-process-capture-agent-manager.js');
 const { createCaptureQueueDispatcher } = require('./src/main-process-capture-queue-dispatcher.js');
+const { createCaptureStatusBuilder } = require('./src/main-process-capture-status-builder.js');
 const {
   normalizeCaptureReferenceType,
   normalizeCaptureReference,
@@ -134,6 +135,15 @@ const captureQueueDispatcher = createCaptureQueueDispatcher({
   runtime: browserCaptureRuntime,
   getMainWindow: () => mainWindow,
   store: browserCaptureStore
+});
+const captureStatusBuilder = createCaptureStatusBuilder({
+  getSettings: () => browserCaptureStore.getSettings(),
+  getMainWindow: () => mainWindow,
+  storage,
+  runtime: browserCaptureRuntime,
+  sourceDir: BROWSER_CAPTURE_SOURCE_DIR,
+  appVersion: APP_VERSION,
+  getLatestStateJSON: () => latestStateJSON
 });
 const UPDATE_ALLOWED_HOSTS = [
   /^api\.github\.com$/i,
@@ -303,17 +313,11 @@ function acknowledgePendingCapture(queueId) {
   return { ok: true };
 }
 
-function getCaptureTargets() {
-  const targets = buildTargetsFromDataJSON(latestStateJSON || '');
-  const settings = getBrowserCaptureSettings();
-  targets.preferredWorkspaceId = settings.lastUsedWorkspaceId || '';
-  targets.preferredComparisonId = settings.lastUsedComparisonId || '';
-  return targets;
-}
-
-function browserCaptureStatus(extra) {
-  return buildBrowserCaptureStatus(extra);
-}
+// Status / target / notify wrappers — implementation in main-process-capture-status-builder.js
+const getCaptureTargets = () => captureStatusBuilder.getCaptureTargets();
+const browserCaptureStatus = (extra) => captureStatusBuilder.buildStatus(extra);
+const buildBrowserCaptureStatus = (extra) => captureStatusBuilder.buildStatus(extra);
+const notifyBrowserCaptureStateChanged = (detail) => captureStatusBuilder.notifyStateChanged(detail);
 
 function sanitizeDocHTMLForMain(html) {
   return String(html || '<p></p>');
@@ -346,13 +350,6 @@ function saveMainState(state) {
     if (storage.saveCaptureTargets) storage.saveCaptureTargets(getCaptureTargets());
   } catch (_e) {}
   return persisted;
-}
-
-function notifyBrowserCaptureStateChanged(detail) {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  try {
-    mainWindow.webContents.send('browserCapture:stateChanged', detail && typeof detail === 'object' ? detail : {});
-  } catch (_e) {}
 }
 
 async function processCaptureQueueFromApp(reason) {
@@ -801,73 +798,6 @@ async function detectBrowserOpenCommand(progId) {
     if (command) return command;
   }
   return '';
-}
-
-function buildBrowserCaptureStatus(extra) {
-  const settings = getBrowserCaptureSettings();
-  const agentState = storage.loadCaptureAgentState ? storage.loadCaptureAgentState() : {};
-  const queueState = storage.loadCaptureQueue ? storage.loadCaptureQueue() : { items: [] };
-  const queueItems = Array.isArray(queueState.items) ? queueState.items : [];
-  const queueStats = buildCaptureQueueStats(queueItems);
-  const queuedItems = queueItems.filter((item) => item && item.status === 'queued');
-  const recentQueueItems = buildCaptureQueueActivity(queueItems);
-  const bundledInfo = readExtensionManifestInfo(BROWSER_CAPTURE_SOURCE_DIR, settings.browserFamily);
-  const runtimeInfo = browserCaptureRuntime.lastHelloPayload && typeof browserCaptureRuntime.lastHelloPayload === 'object'
-    ? browserCaptureRuntime.lastHelloPayload
-    : {};
-  const status = Object.assign({
-    enabled: !!settings.enabled,
-    agentAutoStart: settings.agentAutoStart !== false,
-    agentAutoStartSupported: !!settings.agentAutoStartSupported,
-    port: settings.port || DEFAULT_CAPTURE_PORT,
-    tokenReady: !!settings.token,
-    browserFamily: settings.browserFamily || 'unknown',
-    defaultBrowserLabel: settings.defaultBrowserLabel || 'Bilinmiyor',
-    defaultBrowserProgId: settings.defaultBrowserProgId || '',
-    browserExecutablePath: settings.browserExecutablePath || '',
-    browserOpenCommand: settings.browserOpenCommand || '',
-    installDir: settings.installDir || '',
-    guidePath: settings.guidePath || '',
-    managedProfileDir: settings.managedProfileDir || '',
-    lastPreparedAt: settings.lastPreparedAt || 0,
-    lastConnectedAt: settings.lastConnectedAt || 0,
-    lastVerificationAt: settings.lastVerificationAt || 0,
-    autoAttachPdfUrl: settings.autoAttachPdfUrl !== false,
-    focusImportedWorkspace: !!settings.focusImportedWorkspace,
-    bridgeConnected: !!agentState.running,
-    bridgeReady: !!agentState.running,
-    browserCaptureProtocolVersion: BROWSER_CAPTURE_PROTOCOL_VERSION,
-    bundledExtensionVersion: bundledInfo.version,
-    installedExtensionVersion: settings.installedExtensionVersion || agentState.extensionVersion || (runtimeInfo.extensionVersion || ''),
-    installedProtocolVersion: settings.installedProtocolVersion || Number(agentState.protocolVersion || runtimeInfo.protocolVersion || 0),
-    lastHelloAt: Number(agentState.lastHelloAt || browserCaptureRuntime.lastHelloAt || 0),
-    lastError: settings.lastError || '',
-    updatePending: !!settings.updatePending,
-    lastLifecycleAction: settings.lastLifecycleAction || '',
-    extensionManagerUrl: getBrowserExtensionManagerUrl(settings),
-    agentRunning: !!agentState.running,
-    agentPid: Number(agentState.pid || 0),
-    agentPort: Number(agentState.port || settings.port || DEFAULT_CAPTURE_PORT),
-    agentVersion: String(agentState.agentVersion || APP_VERSION),
-    queueLength: queuedItems.length,
-    queueStats,
-    recentQueueItems,
-    lastCaptureReceivedAt: Number(agentState.lastCaptureReceivedAt || 0)
-  }, extra || {});
-  status.installStrategy = determineBrowserInstallStrategy(status);
-  const lifecycle = evaluateBrowserCaptureLifecycle({
-    browserFamily: status.browserFamily,
-    installDir: status.installDir,
-    lastConnectedAt: status.lastConnectedAt,
-    bridgeConnected: status.bridgeConnected,
-    bundledExtensionVersion: status.bundledExtensionVersion,
-    installedExtensionVersion: status.installedExtensionVersion,
-    bridgeProtocolVersion: status.browserCaptureProtocolVersion,
-    installedProtocolVersion: status.installedProtocolVersion
-  });
-  return Object.assign(status, lifecycle, {
-    setupState: deriveSetupState(status)
-  });
 }
 
 async function refreshBrowserCaptureSettings() {
