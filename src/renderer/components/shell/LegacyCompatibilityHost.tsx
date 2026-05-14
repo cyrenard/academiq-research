@@ -1666,11 +1666,11 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     const win = window as any;
     if (typeof win.togglePdfRegionCaptureMode === 'function') return;
     win.togglePdfRegionCaptureMode = () => {
-      onStatus('PDF bölge seçimi için eski runtime fonksiyonu bulunamadı');
+      onStatus('PDF bölge yakalama henüz aktif değil — yakında eklenecek');
       return false;
     };
     return () => {
-      if (win.togglePdfRegionCaptureMode && String(win.togglePdfRegionCaptureMode).includes('PDF bölge seçimi')) {
+      if (win.togglePdfRegionCaptureMode && String(win.togglePdfRegionCaptureMode).includes('PDF bölge yakalama henüz aktif')) {
         delete win.togglePdfRegionCaptureMode;
       }
     };
@@ -2666,15 +2666,30 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       return note;
     };
 
-    const sendHighlightToMatrix = (selection: FallbackSelection) => {
+    const MATRIX_CONTEXT_COLUMNS = [
+      { key: 'purpose', label: 'Purpose' },
+      { key: 'method', label: 'Method' },
+      { key: 'sample', label: 'Sample' },
+      { key: 'findings', label: 'Findings' },
+      { key: 'limitations', label: 'Limitations' },
+      { key: 'myNotes', label: 'My Notes' }
+    ];
+
+    const sendPdfSelectionToMatrixColumn = (selection: FallbackSelection, columnKey = 'myNotes') => {
       const win = window as any;
       const ref = win.__aqCurrentPdfReference || null;
       const matrixApi = win.AQLiteratureMatrixState;
-      if (!ref?.id || !win.S?.cur || !matrixApi?.ensureRowForReference || !matrixApi?.appendNoteToCell) {
+      const column = MATRIX_CONTEXT_COLUMNS.some((item) => item.key === columnKey) ? columnKey : 'myNotes';
+      const label = MATRIX_CONTEXT_COLUMNS.find((item) => item.key === column)?.label || 'My Notes';
+      const selectedText = String(selection?.text || '').trim();
+      if (!selectedText) {
+        onStatus('Matrise göndermek için önce PDF metni seçin');
+        return false;
+      }
+      if (!ref?.id || !win.S?.cur || !matrixApi?.ensureRowForReference) {
         onStatus('Matrise aktarım için seçili kaynak gerekli');
         return false;
       }
-      const note = pushHighlightToNotes(selection, selection.color || getCurrentColor());
       const ensured = matrixApi.ensureRowForReference(win.S, win.S.cur, ref, {
         uid: () => `mxr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
       });
@@ -2683,21 +2698,49 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         onStatus('Matrix satırı oluşturulamadı');
         return false;
       }
-      const column = typeof matrixApi.inferColumnFromNoteType === 'function'
-        ? matrixApi.inferColumnFromNoteType(note?.noteType || 'direct_quote')
-        : 'myNotes';
-      matrixApi.appendNoteToCell(win.S, win.S.cur, row.id, column || 'myNotes', note?.id || '', selection.text || '', {
-        sourcePage: `s.${selection.page}`,
-        sourceSnippet: selection.text || '',
-        joiner: '\n'
-      });
+      const source = {
+        page: selection.page ? String(selection.page) : '',
+        snippet: selectedText.slice(0, 2000),
+        section: '',
+        extractionType: 'pdf-selection-context-menu',
+        confidence: 1,
+        updatedAt: Date.now()
+      };
+      if (typeof matrixApi.appendTextToCell === 'function') {
+        matrixApi.appendTextToCell(win.S, win.S.cur, row.id, column, selectedText, {
+          source,
+          status: 'user_confirmed',
+          mode: 'append'
+        });
+      } else if (typeof matrixApi.appendNoteToCell === 'function') {
+        matrixApi.appendNoteToCell(win.S, win.S.cur, row.id, column, '', selectedText, {
+          sourcePage: source.page,
+          sourceSnippet: source.snippet,
+          extractionType: source.extractionType,
+          confidence: 1,
+          status: 'user_confirmed',
+          joiner: '\n\n'
+        });
+      } else {
+        onStatus('Matrix hücre güncelleme API bulunamadı');
+        return false;
+      }
       try { win.AQLiteratureMatrix?.render?.(); } catch (_error) {}
       try { win.openLiteratureMatrix?.(); } catch (_error) {}
       saveLegacyState();
-      onStatus('Highlight matrise aktarıldı');
+      onStatus(`Seçili metin ${label} hücresine gönderildi`);
       return true;
     };
 
+    const sendHighlightToMatrix = (selection: FallbackSelection) => {
+      const win = window as any;
+      const noteType = String((selection as any)?.noteType || 'direct_quote');
+      const matrixApi = win.AQLiteratureMatrixState;
+      const column = typeof matrixApi?.inferColumnFromNoteType === 'function'
+        ? matrixApi.inferColumnFromNoteType(noteType)
+        : 'myNotes';
+      return sendPdfSelectionToMatrixColumn(selection, column || 'myNotes');
+    };
     const collectFallbackAnnots = () => Array.from(document.querySelectorAll<HTMLElement>('.pdf-page-wrap .pdf-annot')).map((el) => {
       const body = el.querySelector<HTMLElement>('.pdf-annot-body');
       return {
@@ -2893,6 +2936,11 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         if (!handled) paintFallbackHighlight(selection, true);
         return;
       }
+      if (action === 'matrix' && selection) {
+        sendPdfSelectionToMatrixColumn(selection, String(button.dataset.matrixColumn || 'myNotes'));
+        document.getElementById('pdfctxmenu')?.classList.remove('show');
+        return;
+      }
       if (action === 'annots') {
         const panel = document.getElementById('pdfannots');
         if (panel) {
@@ -2919,6 +2967,8 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     };
 
     const onMouseUp = (event: Event) => {
+      const pointerEvent = event as globalThis.MouseEvent;
+      if (pointerEvent.button === 2) return;
       const target = event.target as HTMLElement | null;
       const hit = target?.closest?.('.pdf-fallback-highlight-hit') as HTMLElement | null;
       if (hit) {
@@ -2932,13 +2982,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
           rects: Array.isArray(rects) ? rects : []
         };
         focusFallbackHighlight(selection, { showTip: false });
-        const tip = document.getElementById('hltip');
-        const pointer = event as globalThis.MouseEvent;
-        if (tip) {
-          tip.style.left = `${Math.max(8, Math.min(pointer.clientX, window.innerWidth - 220))}px`;
-          tip.style.top = `${Math.min(pointer.clientY + 8, window.innerHeight - 120)}px`;
-          tip.classList.add('show');
-        }
+        hideFallbackTip();
         return;
       }
       const pointer = event as globalThis.MouseEvent;
@@ -2960,7 +3004,8 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
           ))
         ));
         if (selected) {
-          focusFallbackHighlight(selected, { showTip: true });
+          focusFallbackHighlight(selected, { showTip: false });
+          hideFallbackTip();
           event.preventDefault();
           event.stopPropagation();
           return;
@@ -2968,19 +3013,12 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       }
       window.setTimeout(() => {
         const selection = getFallbackSelection();
-        const tip = document.getElementById('hltip');
-        if (!selection || !tip) {
+        if (!selection) {
           hideFallbackTip();
           return;
         }
-        const range = window.getSelection()?.rangeCount ? window.getSelection()?.getRangeAt(0) : null;
-        const rect = range?.getBoundingClientRect();
         (window as any).__aqPdfFallbackSelection = selection;
-        if (rect) {
-          tip.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 220))}px`;
-          tip.style.top = `${Math.min(rect.bottom + 8, window.innerHeight - 120)}px`;
-          tip.classList.add('show');
-        }
+        hideFallbackTip();
       }, 60);
     };
 
@@ -3093,6 +3131,8 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     };
 
     const onDocumentPointerDown = (event: Event) => {
+      const pointer = event as PointerEvent;
+      if (pointer.button === 2) return;
       const target = event.target as HTMLElement | null;
       if (!target) return;
       if (target.closest('#hltip, #pdfctxmenu, .pdf-fallback-highlight-hit')) return;
@@ -3471,6 +3511,17 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         <button type="button" data-pdf-context-action="highlight" data-needs-selection="true">Highlight</button>
         <button type="button" data-pdf-context-action="note" data-needs-selection="true">Nota kaydet</button>
         <button type="button" data-pdf-context-action="copy" data-needs-selection="true">Seçimi kopyala</button>
+        <div className="aq-pdf-context-submenu" role="none">
+          <button type="button" data-pdf-context-action="matrix-menu" data-needs-selection="true">Matrise gönder ›</button>
+          <div className="aq-pdf-context-submenu-panel" role="menu">
+            <button type="button" data-pdf-context-action="matrix" data-matrix-column="purpose" data-needs-selection="true">Purpose</button>
+            <button type="button" data-pdf-context-action="matrix" data-matrix-column="method" data-needs-selection="true">Method</button>
+            <button type="button" data-pdf-context-action="matrix" data-matrix-column="sample" data-needs-selection="true">Sample</button>
+            <button type="button" data-pdf-context-action="matrix" data-matrix-column="findings" data-needs-selection="true">Findings</button>
+            <button type="button" data-pdf-context-action="matrix" data-matrix-column="limitations" data-needs-selection="true">Limitations</button>
+            <button type="button" data-pdf-context-action="matrix" data-matrix-column="myNotes" data-needs-selection="true">My Notes</button>
+          </div>
+        </div>
         <button type="button" data-pdf-context-action="delete">Seçili highlight'ı sil</button>
         <button type="button" data-pdf-context-action="annots">Highlight / not paneli</button>
         <button type="button" data-pdf-context-action="close">Kapat</button>
@@ -3773,8 +3824,10 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
           <input id="matrixSearchInp" type="text" placeholder="Kaynak veya hucre icinde ara..." />
           <button id="matrixAddCurrentRefBtn" data-matrix-action="add-current-ref" type="button">Seçili Kaynağı Ekle</button>
           <button id="matrixFullscreenBtn" data-matrix-action="toggle-fullscreen" type="button" onClick={() => (window as any).AQLiteratureMatrix?.toggleFullscreen?.()}>Tam Ekran</button>
+          <button id="matrixExportBtn" data-matrix-action="export-excel" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); (window as any).AQLiteratureMatrix?.exportExcel?.(); }}>Dışarı Aktar</button>
           <button id="matrixCloseBtn" data-matrix-action="close" type="button" onClick={() => (window as any).closeLiteratureMatrix?.()}>Kapat</button>
         </div>
+        <div id="matrixFilterPanel" />
         <div id="matrixTableWrap">
           <table id="matrixTable" />
           <div id="matrixEmptyState" />
@@ -3783,3 +3836,4 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     </>
   );
 }
+
