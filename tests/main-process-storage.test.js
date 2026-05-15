@@ -99,6 +99,100 @@ test('storage service saves and loads pdf buffers', () => {
   assert.equal(storage.pdfExists('ref1'), true);
 });
 
+test('storage service names workspace pdfs from the reference title', () => {
+  const appDir = makeTempDir();
+  const storage = createStorageService({ appDir });
+  const pdf = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF', 'ascii');
+  const buf = pdf.buffer.slice(pdf.byteOffset, pdf.byteOffset + pdf.byteLength);
+
+  storage.savePDF('ref-title-1', buf, {
+    id: 'ws1',
+    name: 'Workspace',
+    title: 'Artificial intelligence addiction in universities'
+  });
+
+  const folder = storage.buildWorkspaceFolderName({ id: 'ws1', name: 'Workspace' });
+  const pdfDir = path.join(appDir, 'workspaces', folder, 'pdfs');
+  const files = fs.readdirSync(pdfDir);
+
+  assert.equal(files.length, 1);
+  assert.match(files[0], /^Artificial intelligence__[a-f0-9]{10}\.pdf$/);
+  assert.equal(storage.pdfExists('ref-title-1', { id: 'ws1', name: 'Workspace', title: 'Artificial intelligence addiction in universities' }), true);
+});
+
+test('storage service keeps title-named pdfs loadable after title changes', () => {
+  const appDir = makeTempDir();
+  const storage = createStorageService({ appDir });
+  const pdf = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF', 'ascii');
+  const buf = pdf.buffer.slice(pdf.byteOffset, pdf.byteOffset + pdf.byteLength);
+
+  storage.savePDF('ref-title-2', buf, { id: 'ws1', name: 'Workspace', title: 'Old article title' });
+  const loaded = storage.loadPDF('ref-title-2', { id: 'ws1', name: 'Workspace', title: 'New article title' });
+
+  assert.equal(loaded.ok, true);
+  assert.ok(Buffer.from(loaded.buffer).length > 20);
+});
+
+test('storage service deletes all renamed workspace pdf folders and legacy ref pdfs', () => {
+  const appDir = makeTempDir();
+  const storage = createStorageService({ appDir });
+  const pdf = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF', 'ascii');
+  const buf = pdf.buffer.slice(pdf.byteOffset, pdf.byteOffset + pdf.byteLength);
+  const wsOld = { id: 'ws-delete', name: 'Old Workspace', title: 'Old title' };
+  const wsNew = { id: 'ws-delete', name: 'New Workspace', title: 'New title' };
+
+  storage.savePDF('ref-delete-1', buf, wsOld);
+  storage.savePDF('ref-delete-2', buf, wsNew);
+  storage.savePDF('ref-delete-legacy', buf);
+
+  const oldFolder = storage.buildWorkspaceFolderName(wsOld);
+  const newFolder = storage.buildWorkspaceFolderName(wsNew);
+  assert.ok(fs.existsSync(path.join(appDir, 'workspaces', oldFolder)));
+  assert.ok(fs.existsSync(path.join(appDir, 'workspaces', newFolder)));
+  assert.equal(storage.pdfExists('ref-delete-legacy'), true);
+
+  const result = storage.deleteWorkspacePdfFolder({
+    id: 'ws-delete',
+    name: 'New Workspace',
+    referenceIds: ['ref-delete-legacy']
+  });
+
+  assert.equal(result.ok, true);
+  assert.ok(result.removed.length >= 2);
+  assert.equal(fs.existsSync(path.join(appDir, 'workspaces', oldFolder)), false);
+  assert.equal(fs.existsSync(path.join(appDir, 'workspaces', newFolder)), false);
+  assert.equal(storage.pdfExists('ref-delete-legacy'), false);
+});
+
+test('storage service creates and restores full app backup packages', () => {
+  const sourceDir = makeTempDir();
+  const restoreDir = makeTempDir();
+  const backupPath = path.join(makeTempDir(), 'academiq.aqbackup');
+  const source = createStorageService({ appDir: sourceDir });
+  const pdf = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF', 'ascii');
+  const buf = pdf.buffer.slice(pdf.byteOffset, pdf.byteOffset + pdf.byteLength);
+  const state = {
+    wss: [{ id: 'ws1', name: 'Workspace', docId: 'doc1', lib: [{ id: 'ref1', title: 'Readable PDF title', wsId: 'ws1' }] }],
+    cur: 'ws1',
+    docs: [{ id: 'doc1', name: 'Belge 1', content: '<p>Backup text.</p>' }],
+    curDoc: 'doc1',
+    notes: [{ id: 'note1', wsId: 'ws1', text: 'Backup note' }]
+  };
+
+  source.saveData(JSON.stringify(state));
+  source.savePDF('ref1', buf, { id: 'ws1', name: 'Workspace', title: 'Readable PDF title' });
+  source.createBackup(backupPath);
+
+  const restored = createStorageService({ appDir: restoreDir });
+  const result = restored.restoreBackup(backupPath);
+  const loaded = JSON.parse(restored.loadData().data);
+
+  assert.equal(result.ok, true);
+  assert.equal(loaded.docs[0].content, '<p>Backup text.</p>');
+  assert.equal(loaded.notes[0].text, 'Backup note');
+  assert.equal(restored.pdfExists('ref1', { id: 'ws1', name: 'Workspace', title: 'Readable PDF title' }), true);
+});
+
 test('storage service rejects zero-byte cached pdf files on load', () => {
   const appDir = makeTempDir();
   const storage = createStorageService({ appDir });

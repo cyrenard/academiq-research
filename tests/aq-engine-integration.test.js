@@ -716,7 +716,10 @@ test('React shell scopes notes by workspace and hydrates auxiliary document page
 
 test('React shell deletes workspace PDF folders when a workspace is removed', () => {
   const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'App.tsx'), 'utf8');
-  assert.match(app, /const workspacePdfContext = \{ id: current\.id, name: current\.name \}/);
+  assert.match(app, /const workspacePdfContext = \{/);
+  assert.match(app, /id: current\.id/);
+  assert.match(app, /name: current\.name/);
+  assert.match(app, /referenceIds: current\.lib\.map/);
   assert.match(app, /electronAPI\.deleteWorkspacePdfFolder\(workspacePdfContext\)/);
 });
 

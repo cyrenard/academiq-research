@@ -197,25 +197,57 @@
     function normalizeCellText(value){
       return String(value == null ? '' : value).replace(/\r\n?/g, '\n').trim();
     }
+    function normalizeSource(value){
+      var source = value && typeof value === 'object' ? value : {};
+      return {
+        page: normalizeText(source.page || ''),
+        snippet: normalizeCellText(source.snippet || ''),
+        section: normalizeText(source.section || ''),
+        extractionType: normalizeText(source.extractionType || ''),
+        confidence: Number(source.confidence) > 0 ? Math.min(1, Number(source.confidence)) : 0,
+        updatedAt: Number(source.updatedAt) > 0 ? Number(source.updatedAt) : 0
+      };
+    }
     if(typeof cell === 'string'){
       return {
         text: normalizeCellText(cell),
         noteIds: [],
-        source: { page: '', snippet: '', updatedAt: 0 }
+        source: { page: '', snippet: '', section: '', extractionType: '', confidence: 0, updatedAt: 0 },
+        sources: [],
+        status: normalizeCellText(cell) ? 'user_edited' : 'empty',
+        candidates: []
       };
     }
     cell = cell && typeof cell === 'object' ? cell : {};
-    var source = cell.source && typeof cell.source === 'object' ? cell.source : {};
+    var status = normalizeText(cell.status || '');
+    if(['empty','auto_suggested','user_confirmed','user_edited','low_confidence','needs_review'].indexOf(status) < 0){
+      status = normalizeCellText(cell.text || '') ? 'user_edited' : 'empty';
+    }
     return {
       text: normalizeCellText(cell.text || ''),
       noteIds: (Array.isArray(cell.noteIds) ? cell.noteIds : [])
         .map(function(noteId){ return normalizeText(noteId); })
         .filter(Boolean),
-      source: {
-        page: normalizeText(source.page || ''),
-        snippet: normalizeCellText(source.snippet || ''),
-        updatedAt: Number(source.updatedAt) > 0 ? Number(source.updatedAt) : 0
-      }
+      source: normalizeSource(cell.source),
+      sources: (Array.isArray(cell.sources) ? cell.sources : [])
+        .map(normalizeSource)
+        .filter(function(source){ return source.page || source.snippet || source.section || source.extractionType; })
+        .slice(-12),
+      status: status,
+      candidates: (Array.isArray(cell.candidates) ? cell.candidates : [])
+        .filter(function(candidate){ return candidate && typeof candidate === 'object'; })
+        .map(function(candidate){
+          return {
+            columnKey: normalizeText(candidate.columnKey || ''),
+            text: normalizeCellText(candidate.text || '').slice(0, 2000),
+            score: Number(candidate.score || 0),
+            confidence: Number(candidate.confidence) > 0 ? Math.min(1, Number(candidate.confidence)) : 0,
+            source: normalizeSource(candidate.source),
+            reasons: (Array.isArray(candidate.reasons) ? candidate.reasons : []).map(normalizeText).filter(Boolean).slice(0, 12)
+          };
+        })
+        .filter(function(candidate){ return candidate.columnKey && candidate.text; })
+        .slice(0, 6)
     };
   }
 
@@ -307,6 +339,20 @@
       };
     });
     return scoped;
+  }
+
+  function normalizeLocalMatrixAssistant(value){
+    var source = value && typeof value === 'object' ? value : {};
+    return {
+      enabled: source.enabled === true,
+      provider: normalizeText(source.provider || 'rule-guard'),
+      allowModelProvider: source.allowModelProvider === true,
+      composeCells: source.composeCells === true,
+      maxCandidatesPerColumn: Math.max(1, Math.min(8, Number(source.maxCandidatesPerColumn || 4))),
+      maxSnippetChars: Math.max(240, Math.min(2000, Number(source.maxSnippetChars || 1200))),
+      minConfidence: Number(source.minConfidence) >= 0 ? Math.max(0, Math.min(1, Number(source.minConfidence))) : 0.5,
+      updatedAt: Number(source.updatedAt) > 0 ? Number(source.updatedAt) : 0
+    };
   }
 
   function linkWorkspaceDocs(state, sanitize){
@@ -404,7 +450,8 @@
       curDoc: state.curDoc,
       showPageNumbers: !!state.showPageNumbers,
       customLabels: clone(state.customLabels || []),
-      literatureMatrix: scopeLiteratureMatrixToWorkspaces(state)
+      literatureMatrix: scopeLiteratureMatrixToWorkspaces(state),
+      localMatrixAssistant: normalizeLocalMatrixAssistant(state.localMatrixAssistant || state.matrixAssistant)
     };
   }
 
@@ -425,6 +472,7 @@
     if(typeof state.showPageNumbers === 'undefined') state.showPageNumbers = false;
     if(!Array.isArray(state.customLabels)) state.customLabels = [];
     state.literatureMatrix = scopeLiteratureMatrixToWorkspaces(state);
+    state.localMatrixAssistant = normalizeLocalMatrixAssistant(state.localMatrixAssistant || state.matrixAssistant);
     state.schemaVersion = state.schemaVersion || 0;
     return state;
   }

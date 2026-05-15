@@ -17,9 +17,6 @@ declare global {
       deleteWorkspacePdfFolder: (ws?: unknown) => IpcResult<unknown>;
       downloadPDFfromURL: (url: string, refId: string, options?: unknown) => IpcResult<unknown>;
       openExternalUrl: (url: string) => IpcResult<unknown>;
-      openInstitutionalAccess: (payload: unknown) => IpcResult<unknown>;
-      clearInstitutionalAccessSession: () => IpcResult<unknown>;
-      onInstitutionalAccessPdfSaved: (callback: BrowserCaptureListener) => () => void;
       netFetchJSON: (url: string, options?: unknown) => IpcResult<unknown>;
       netFetchText: (url: string, options?: unknown) => IpcResult<unknown>;
       pdfSyncAll: () => IpcResult<unknown>;
@@ -31,6 +28,11 @@ declare global {
       getSyncSettings: () => IpcResult<unknown>;
       setSyncDir: () => IpcResult<unknown>;
       clearSyncDir: () => IpcResult<unknown>;
+      createBackup: () => IpcResult<unknown>;
+      restoreBackup: () => IpcResult<unknown>;
+      getLocalMatrixAssistantStatus: (settings?: unknown) => IpcResult<unknown>;
+      rankLocalMatrixCandidates: (payload: unknown) => IpcResult<unknown>;
+      composeLocalMatrixCells: (payload: unknown) => IpcResult<unknown>;
       getAppInfo: () => IpcResult<unknown>;
       getDocumentHistory: (docId: string, limit?: number) => IpcResult<unknown>;
       restoreDocumentHistorySnapshot: (docId: string, snapshotId: string) => IpcResult<unknown>;

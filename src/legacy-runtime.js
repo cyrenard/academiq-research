@@ -1,4 +1,4 @@
-window.__aqLegacyRuntimePhase='start';
+﻿window.__aqLegacyRuntimePhase='start';
 if(typeof pdfjsLib!=='undefined'&&pdfjsLib&&pdfjsLib.GlobalWorkerOptions){
   (function(){
     var workerSrc='./vendor/pdf.worker.min.js';
@@ -2179,7 +2179,7 @@ function showPdfDownloadFallback(ref,failure){
   box.appendChild(controls);
   var hint=document.createElement('div');
   hint.style.cssText='font-size:10px;color:var(--txt3);line-height:1.7;max-width:360px;';
-  hint.textContent='Bu tür linkler bazen kurumsal erişim, oturum veya çerez gerektirir. Referans ve PDF bağlantısı korunur.';
+  hint.textContent='Bu tür linkler bazen oturum veya çerez gerektirir. Tarayıcıda açıp erişim verdikten sonra PDF’i manuel yükleyebilirsiniz.';
   box.appendChild(hint);
   sc.appendChild(box);
 }
@@ -14690,3 +14690,4 @@ updatePageHeight=function(){
     '[data-theme="dark"] #noteta::placeholder,[data-theme="dark"] #notetag::placeholder{color:#8c7860!important;}';
   document.head.appendChild(st);
 })();
+

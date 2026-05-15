@@ -270,3 +270,40 @@ test('hydrate scopes literature matrix rows to workspace references and preserve
   assert.equal(ws1Rows[0].cells.findings.source.page, '12');
   assert.equal(ws1Rows[0].cells.findings.source.snippet, 'x');
 });
+
+test('hydrate preserves literature matrix assistant and candidate metadata', () => {
+  const hydrated = stateSchema.hydrate(
+    {
+      wss: [{ id: 'ws1', name: 'WS', docId: 'doc1', lib: [{ id: 'r1', title: 'Paper' }] }],
+      docs: [{ id: 'doc1', name: 'WS', content: '<p></p>' }],
+      cur: 'ws1',
+      literatureMatrix: {
+        ws1: {
+          rows: [{
+            id: 'row1',
+            referenceId: 'r1',
+            cells: {
+              sample: {
+                text: 'N=412',
+                status: 'auto_suggested',
+                source: { page: '3', snippet: 'The sample consisted of 412 students.', section: 'sample', extractionType: 'rule-section-sentence', confidence: 0.9, updatedAt: 1 },
+                sources: [{ page: '3', snippet: 'The sample consisted of 412 students.', section: 'sample', extractionType: 'rule-section-sentence', confidence: 0.9, updatedAt: 1 }],
+                candidates: [{ columnKey: 'sample', text: 'The sample consisted of 412 students.', score: 14, confidence: 0.9, source: { page: '3' }, reasons: ['assistant:sample-evidence'] }]
+              }
+            }
+          }]
+        }
+      },
+      localMatrixAssistant: { enabled: true, allowModelProvider: true, provider: 'rule-guard' }
+    },
+    { sanitize }
+  );
+  const cell = hydrated.literatureMatrix.ws1.rows[0].cells.sample;
+  assert.equal(cell.status, 'auto_suggested');
+  assert.equal(cell.source.extractionType, 'rule-section-sentence');
+  assert.equal(cell.sources.length, 1);
+  assert.equal(cell.candidates.length, 1);
+  assert.equal(cell.candidates[0].reasons[0], 'assistant:sample-evidence');
+  assert.equal(hydrated.localMatrixAssistant.enabled, true);
+  assert.equal(hydrated.localMatrixAssistant.allowModelProvider, true);
+});

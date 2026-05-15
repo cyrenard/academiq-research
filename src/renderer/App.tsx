@@ -355,44 +355,10 @@ export default function App() {
       }
       flashStatus('Browser capture durumu güncellendi');
     });
-    const offInstitutional = window.electronAPI?.onInstitutionalAccessPdfSaved?.((payload: any) => {
-      const refId = String(payload?.refId || '');
-      if (!refId) return;
-      if (payload?.pending) {
-        flashStatus('Kurumsal PDF indiriliyor...');
-        return;
-      }
-      if (!payload?.ok) {
-        flashStatus(`Kurumsal PDF bağlanamadı: ${String(payload?.error || 'bilinmeyen hata')}`);
-        return;
-      }
-      const current = appStateRef.current;
-      const workspace = getActiveWorkspace(current);
-      const ref = workspace.lib.find((item) => item.id === refId);
-      if (!ref) {
-        flashStatus('Kurumsal PDF indirildi, kaynak yenileniyor');
-        reloadStateFromDisk().catch(() => undefined);
-        return;
-      }
-      const labels = Array.from(new Set([...(Array.isArray(ref.labels) ? ref.labels : []), 'PDF']));
-      const next = updateReferenceInActiveWorkspace(current, refId, {
-        labels,
-        pdfAttached: true,
-        browserCaptureMeta: {
-          ...((ref.browserCaptureMeta && typeof ref.browserCaptureMeta === 'object') ? ref.browserCaptureMeta : {}),
-          institutionalAccess: true,
-          institutionalCapturedAt: Date.now()
-        }
-      });
-      persistState(next)
-        .then(() => flashStatus('Kurumsal PDF kaynağa bağlandı'))
-        .catch(() => flashStatus('Kurumsal PDF bağlandı, kayıt güncellenemedi'));
-    });
     return () => {
       offIncoming?.();
       offWorkspace?.();
       offState?.();
-      offInstitutional?.();
     };
   }, [persistState, reloadStateFromDisk]);
 
@@ -494,7 +460,11 @@ export default function App() {
     }
     if (!window.confirm(`${current.name} silinsin mi?`)) return;
     const next = deleteWorkspace(appStateRef.current, current.id);
-    const workspacePdfContext = { id: current.id, name: current.name };
+    const workspacePdfContext = {
+      id: current.id,
+      name: current.name,
+      referenceIds: current.lib.map((ref) => ref.id).filter(Boolean)
+    };
     persistState(next)
       .then(() => window.electronAPI.deleteWorkspacePdfFolder(workspacePdfContext).catch(() => null))
       .then((pdfResult: any) => {
@@ -954,7 +924,7 @@ export default function App() {
     };
   }, []);
 
-  const handleReferencePdfAction = async (action: 'open' | 'show' | 'delete' | 'download' | 'browser' | 'institutional', referenceId: string) => {
+  const handleReferencePdfAction = async (action: 'open' | 'show' | 'delete' | 'download' | 'browser', referenceId: string) => {
     const workspace = getActiveWorkspace(appStateRef.current);
     const ref = workspace.lib.find((item) => item.id === referenceId);
     try {
@@ -1045,40 +1015,6 @@ export default function App() {
         }
         const result = await window.electronAPI?.openExternalUrl?.(url) as any;
         flashStatus(result?.ok ? 'Tarayıcıda açıldı' : 'Tarayıcıda açılamadı');
-      }
-      if (action === 'institutional') {
-        if (!ref) {
-          flashStatus('Kaynak seçilmedi');
-          return;
-        }
-        const doiUrl = ref.doi ? `https://doi.org/${String(ref.doi).replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '').replace(/^doi:\s*/i, '').trim()}` : '';
-        const url = String(ref.pdfUrl || ref.url || doiUrl || '').trim();
-        if (!url) {
-          flashStatus('Kurumsal erişim için URL/DOI yok');
-          return;
-        }
-        const isScienceDirect = [ref.pdfUrl, ref.url, doiUrl].some((value) => {
-          try {
-            const host = new URL(String(value || '')).hostname.toLowerCase();
-            return host === 'sciencedirect.com' || host.endsWith('.sciencedirect.com');
-          } catch (_error) {
-            return false;
-          }
-        });
-        if (isScienceDirect) {
-          const result = await window.electronAPI?.openExternalUrl?.(url) as any;
-          flashStatus(result?.ok ? 'ScienceDirect varsayılan tarayıcıda açıldı · PDF için Browser Capture kullan' : 'ScienceDirect açılamadı');
-          return;
-        }
-        const result = await window.electronAPI?.openInstitutionalAccess?.({
-          refId: referenceId,
-          title: ref.title,
-          doi: ref.doi,
-          pdfUrl: ref.pdfUrl,
-          url: ref.url || url,
-          ws: { id: workspace.id, name: workspace.name, title: ref.title }
-        }) as any;
-        flashStatus(result?.ok ? 'Kurumsal pencere açıldı · PDF indirirsen kaynağa bağlanacak' : `Kurumsal pencere açılamadı: ${String(result?.error || '')}`);
       }
       if (action === 'download') {
         if (!ref) {
@@ -1796,4 +1732,3 @@ export default function App() {
     </EditorContext.Provider>
   );
 }
-

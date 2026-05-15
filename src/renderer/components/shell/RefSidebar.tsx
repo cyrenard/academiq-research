@@ -33,7 +33,7 @@ type RefSidebarProps = {
   onDeleteCollection: (collectionId: string) => void;
   onMoveReferenceToCollection: (referenceId: string, collectionId: string) => void;
   onToggleReferenceCollection: (referenceId: string, collectionId: string) => void;
-  onReferencePdfAction: (action: 'open' | 'show' | 'delete' | 'download' | 'browser' | 'institutional', referenceId: string) => void;
+  onReferencePdfAction: (action: 'open' | 'show' | 'delete' | 'download' | 'browser', referenceId: string) => void;
   onBatchOADownload: () => void;
   onShowReferenceInExplorer: (referenceId: string) => void;
   onOpenRelatedPapers: (reference: AcademiqReference) => void;
@@ -486,9 +486,6 @@ export function RefSidebar({
             </button>
             <button type="button" disabled={!Boolean(activeMenuReference.doi || activeMenuReference.url || activeMenuReference.pdfUrl)} title={Boolean(activeMenuReference.doi || activeMenuReference.url || activeMenuReference.pdfUrl) ? 'Varsayılan tarayıcıda aç' : 'Bu kaynakta URL/DOI yok'} className="block w-full rounded-md px-2.5 py-2 text-left font-medium text-aq-ink hover:bg-aq-panel disabled:cursor-not-allowed disabled:text-aq-muted disabled:hover:bg-transparent" onClick={() => { onReferencePdfAction('browser', activeMenuReference.id); closeReferenceMenu(); }}>
               Tarayıcıda aç
-            </button>
-            <button type="button" disabled={!Boolean(activeMenuReference.doi || activeMenuReference.url || activeMenuReference.pdfUrl)} title={Boolean(activeMenuReference.doi || activeMenuReference.url || activeMenuReference.pdfUrl) ? 'Kurumsal oturum penceresinde aç' : 'Bu kaynakta URL/DOI yok'} className="block w-full rounded-md px-2.5 py-2 text-left font-medium text-aq-ink hover:bg-aq-panel disabled:cursor-not-allowed disabled:text-aq-muted disabled:hover:bg-transparent" onClick={() => { onReferencePdfAction('institutional', activeMenuReference.id); closeReferenceMenu(); }}>
-              Kurumsal erişimle aç
             </button>
             <button type="button" disabled={!Boolean(activeMenuReference.pdfAttached || activeMenuReference.pdfData || activeMenuReference.pdfPath)} title={Boolean(activeMenuReference.pdfAttached || activeMenuReference.pdfData || activeMenuReference.pdfPath) ? 'PDF dosyasını göster' : 'Bu kaynağa bağlı PDF yok'} className="block w-full rounded-md px-2.5 py-2 text-left font-medium text-aq-ink hover:bg-aq-panel disabled:cursor-not-allowed disabled:text-aq-muted disabled:hover:bg-transparent" onClick={() => { onShowReferenceInExplorer(activeMenuReference.id); closeReferenceMenu(); }}>
               Dosya gezgininde aç

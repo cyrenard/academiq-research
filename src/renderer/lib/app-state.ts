@@ -149,7 +149,17 @@ export function createBlankState(): AcademiqAppState {
     notes: [],
     notebooks: [{ id: 'ws1:nb1', wsId: 'ws1', name: 'Genel Notlar' }],
     curNb: 'ws1:nb1',
-    cm: 'apa7'
+    cm: 'apa7',
+    localMatrixAssistant: {
+      enabled: false,
+      provider: 'rule-guard',
+      allowModelProvider: false,
+      composeCells: false,
+      maxCandidatesPerColumn: 4,
+      maxSnippetChars: 1200,
+      minConfidence: 0.5,
+      updatedAt: 0
+    }
   };
 }
 
@@ -230,7 +240,11 @@ export function hydrateAppState(raw: unknown): AcademiqAppState {
     }) : [],
     notebooks,
     curNb: notebookIds.has(String(source.curNb || '')) ? String(source.curNb) : activeNotebook?.id || fallback.curNb,
-    cm: source.cm || 'apa7'
+    cm: source.cm || 'apa7',
+    localMatrixAssistant: {
+      ...((fallback.localMatrixAssistant && typeof fallback.localMatrixAssistant === 'object') ? fallback.localMatrixAssistant as Record<string, unknown> : {}),
+      ...((source.localMatrixAssistant && typeof source.localMatrixAssistant === 'object') ? source.localMatrixAssistant as Record<string, unknown> : {})
+    }
   };
 }
 

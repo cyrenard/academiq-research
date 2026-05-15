@@ -51,6 +51,7 @@ const {
 } = require('./src/capture-agent.js');
 const AQWebRelatedPapers = require('./src/web-related-papers.js');
 const AQLiteratureMatrixState = require('./src/literature-matrix-state.js');
+const { createLocalMatrixAssistantService } = require('./src/main-process-local-matrix-assistant.js');
 const AQDocTabsState = require('./src/doc-tabs-state.js');
 const AQStateSchema = require('./src/state-schema.js');
 const {
@@ -97,9 +98,8 @@ const captureAgentManager = createCaptureAgentManager({
   startDelayMs: 1200
 });
 const localOcr = createLocalOcr({ appDir: APP_DIR });
+const localMatrixAssistant = createLocalMatrixAssistantService();
 const BROWSER_CAPTURE_SOURCE_DIR = path.join(__dirname, 'browser-capture-extension');
-const INSTITUTIONAL_ACCESS_PARTITION = 'persist:academiq-institutional-access';
-const INSTITUTIONAL_DOWNLOAD_DIR = path.join(APP_DIR, 'institutional-downloads');
 const APP_USER_MODEL_ID = 'com.academiq.research';
 const RENDERER_DEV_SERVER_URL = process.env.ACADEMIQ_RENDERER_URL || process.env.VITE_DEV_SERVER_URL || '';
 const CAPTURE_AGENT_ARG = '--capture-agent';
@@ -1545,211 +1545,15 @@ function sanitizeWsContext(ws) {
   const id = String(ws.id || '').trim();
   if (!id) return null;
   if (id.length > 128) return null;
-  return { id, name: String(ws.name || '').slice(0, 256), title: String(ws.title || ws.referenceTitle || '').slice(0, 240) };
-}
-const institutionalTargets = new Map();
-let institutionalDownloadHooked = false;
-
-function sanitizeInstitutionalAccessPayload(payload) {
-  const src = payload && typeof payload === 'object' ? payload : {};
-  const refId = String(src.refId || '').trim();
-  if (!refId) throw new Error('Gecersiz referans kimligi');
-  normalizeRefId(refId);
-  const doi = String(src.doi || '').replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '').replace(/^doi:\s*/i, '').trim();
-  const doiUrl = doi ? `https://doi.org/${encodeURIComponent(doi).replace(/%2F/gi, '/')}` : '';
-  const candidates = [src.pdfUrl, src.url, doiUrl].map((value) => String(value || '').trim()).filter(Boolean);
-  const url = candidates.find((candidate) => isSafeHttpURL(candidate, { httpsOnly: false })) || '';
-  if (!url) throw new Error('Kurumsal erisim icin guvenli URL gerekli');
-  return {
-    refId,
-    url,
-    urls: Array.from(new Set(candidates.filter((candidate) => isSafeHttpURL(candidate, { httpsOnly: false })))),
-    title: String(src.title || src.name || doi || 'Kurumsal erisim').slice(0, 240),
-    doi,
-    ws: sanitizeWsContext(src.ws)
-  };
-}
-
-function sendInstitutionalPdfSaved(payload) {
-  try {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('institutionalAccess:pdfSaved', payload && typeof payload === 'object' ? payload : {});
-    }
-  } catch (_e) {}
-}
-
-function ensureInstitutionalDownloadHook() {
-  const ses = session.fromPartition(INSTITUTIONAL_ACCESS_PARTITION);
-  if (institutionalDownloadHooked) return ses;
-  institutionalDownloadHooked = true;
-  try { ses.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false)); } catch (_e) {}
-  ses.on('will-download', (_event, item, webContents) => {
-    const target = institutionalTargets.get(webContents && webContents.id);
-    if (!target || !target.refId) return;
-    fs.mkdirSync(INSTITUTIONAL_DOWNLOAD_DIR, { recursive: true });
-    const rawName = typeof item.getFilename === 'function' ? item.getFilename() : '';
-    const safeName = String(rawName || `${target.refId}.pdf`).replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').slice(0, 180) || `${target.refId}.pdf`;
-    const tempPath = path.join(INSTITUTIONAL_DOWNLOAD_DIR, `${Date.now()}-${safeName}`);
-    try { item.setSavePath(tempPath); } catch (_e) {}
-    sendInstitutionalPdfSaved({ ok: true, pending: true, refId: target.refId, title: target.title });
-    item.once('done', (_downloadEvent, state) => {
-      if (state !== 'completed') {
-        sendInstitutionalPdfSaved({ ok: false, refId: target.refId, title: target.title, error: 'PDF indirme tamamlanamadi' });
-        return;
-      }
-      try {
-        const pdfBuffer = sanitizePDFBuffer(fs.readFileSync(tempPath));
-        if (pdfBuffer.length > 150 * 1024 * 1024) throw new Error('PDF dosyasi cok buyuk');
-        const result = storage.savePDF(target.refId, pdfBuffer, Object.assign({}, target.ws || {}, { title: target.title }));
-        try { fs.unlinkSync(tempPath); } catch (_e) {}
-        sendInstitutionalPdfSaved({ ok: true, refId: target.refId, title: target.title, result });
-      } catch (error) {
-        sendInstitutionalPdfSaved({ ok: false, refId: target.refId, title: target.title, error: error && error.message ? error.message : 'PDF kaydedilemedi' });
-      }
-    });
-  });
-  return ses;
-}
-
-function isLikelyInstitutionalPdfUrl(url) {
-  const value = String(url || '');
-  return /^https?:\/\//i.test(value) && (/\.pdf(?:$|[?#])/i.test(value) || /\/pdf(?:\/|$|[?#])/i.test(value));
-}
-
-function attachInstitutionalPdfFromWindow(win) {
-  if (!win || win.isDestroyed()) return;
-  const target = institutionalTargets.get(win.webContents.id);
-  if (!target) return;
-  const currentUrl = win.webContents.getURL();
-  if (!isLikelyInstitutionalPdfUrl(currentUrl)) {
-    sendInstitutionalPdfSaved({ ok: false, refId: target.refId, title: target.title, error: 'Bu sekme dogrudan PDF gibi gorunmuyor. PDF indirme dugmesini kullanin.' });
-    return;
+  const out = { id, name: String(ws.name || '').slice(0, 256), title: String(ws.title || ws.referenceTitle || '').slice(0, 240) };
+  if (Array.isArray(ws.referenceIds)) {
+    out.referenceIds = ws.referenceIds
+      .map((item) => String(item || '').trim())
+      .filter((item) => item && item.length <= 320)
+      .slice(0, 5000);
   }
-  try {
-    win.webContents.downloadURL(currentUrl);
-  } catch (error) {
-    sendInstitutionalPdfSaved({ ok: false, refId: target.refId, title: target.title, error: error && error.message ? error.message : 'PDF indirilemedi' });
-  }
+  return out;
 }
-
-function escapeInstitutionalHtml(value) {
-  return String(value || '').replace(/[&<>\"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch] || ch));
-}
-
-function renderInstitutionalAccessStatus(win, title, message, detail) {
-  if (!win || win.isDestroyed()) return;
-  try {
-    const target = institutionalTargets.get(win.webContents.id);
-    if (target) {
-      target.allowStatusDataUrl = true;
-      setTimeout(() => {
-        try { if (target) target.allowStatusDataUrl = false; } catch (_e) {}
-      }, 1500);
-    }
-  } catch (_e) {}
-  const safeTitle = escapeInstitutionalHtml(title || 'AcademiQ Kurumsal Erisim');
-  const safeMessage = escapeInstitutionalHtml(message || '');
-  const safeDetail = escapeInstitutionalHtml(detail || '');
-  const html = '<!doctype html><meta charset="utf-8"><title>' + safeTitle + '</title>' +
-    '<style>body{margin:0;background:#fbfaf7;color:#1f2933;font:14px system-ui,-apple-system,Segoe UI,sans-serif}.wrap{height:100vh;display:grid;place-items:center}.card{width:min(520px,calc(100vw - 64px));border:1px solid #ded8cc;border-radius:14px;background:white;box-shadow:0 24px 80px rgba(31,41,51,.14);padding:24px}h1{margin:0 0 8px;font-size:16px}.msg{margin:0;color:#506070;line-height:1.5}.detail{margin-top:14px;color:#748294;font:12px ui-monospace,Consolas,monospace;word-break:break-all}</style>' +
-    '<div class="wrap"><div class="card"><h1>' + safeTitle + '</h1><p class="msg">' + safeMessage + '</p>' + (safeDetail ? '<div class="detail">' + safeDetail + '</div>' : '') + '</div></div>';
-  try { win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html)); } catch (_e) {}
-}
-
-function openInstitutionalAccessWindow(payload) {
-  const target = sanitizeInstitutionalAccessPayload(payload);
-  ensureInstitutionalDownloadHook();
-  const win = new BrowserWindow({
-    width: 1120,
-    height: 820,
-    minWidth: 900,
-    minHeight: 640,
-    title: 'AcademiQ Kurumsal Erisim',
-    icon: path.join(__dirname, 'icon.ico'),
-    backgroundColor: '#fbfaf7',
-    webPreferences: {
-      partition: INSTITUTIONAL_ACCESS_PARTITION,
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true,
-      allowRunningInsecureContent: false,
-      webviewTag: false
-    }
-  });
-  target.closing = false;
-  const winWebContentsId = win.webContents.id;
-  institutionalTargets.set(winWebContentsId, target);
-  const attachCurrentPdf = () => attachInstitutionalPdfFromWindow(win);
-  win.setMenu(Menu.buildFromTemplate([
-    { label: 'AcademiQ', submenu: [
-      { label: "Bu PDF'i kaynaga bagla", accelerator: 'CommandOrControl+S', click: attachCurrentPdf },
-      { type: 'separator' },
-      { label: 'Kapat', role: 'close' }
-    ] }
-  ]));
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (isSafeHttpURL(url, { httpsOnly: false })) {
-      try { win.loadURL(url); } catch (_e) {}
-    }
-    return { action: 'deny' };
-  });
-  win.webContents.on('will-navigate', (event, url) => {
-    const value = String(url || '');
-    if (value.startsWith('data:text/html')) {
-      const currentTarget = institutionalTargets.get(win.webContents.id);
-      if (currentTarget && currentTarget.allowStatusDataUrl) return;
-      event.preventDefault();
-      return;
-    }
-    if (!isSafeHttpURL(url, { httpsOnly: false })) event.preventDefault();
-  });
-  win.webContents.on('context-menu', (_event, params) => {
-    const menu = Menu.buildFromTemplate([
-      { label: "Bu PDF'i AcademiQ'ye bagla", click: attachCurrentPdf },
-      { type: 'separator' },
-      { label: 'Geri', enabled: win.webContents.canGoBack(), click: () => win.webContents.goBack() },
-      { label: 'Ileri', enabled: win.webContents.canGoForward(), click: () => win.webContents.goForward() },
-      { label: 'Yenile', role: 'reload' },
-      { type: 'separator' },
-      { label: 'Baglantiyi kopyala', enabled: Boolean(params && params.linkURL), click: () => { try { require('electron').clipboard.writeText(params.linkURL); } catch (_e) {} } }
-    ]);
-    menu.popup({ window: win });
-  });
-  win.on('close', () => { target.closing = true; });
-  win.on('closed', () => institutionalTargets.delete(winWebContentsId));
-  win.webContents.on('did-start-loading', () => { try { win.setTitle('AcademiQ Kurumsal Erisim - Yukleniyor'); } catch (_e) {} });
-  win.webContents.on('did-finish-load', () => { try { win.setTitle('AcademiQ Kurumsal Erisim'); } catch (_e) {} });
-  const chromeVersion = String(process.versions.chrome || '120.0.0.0');
-  const chromeUA = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeVersion} Safari/537.36`;
-  const urls = Array.isArray(target.urls) && target.urls.length ? target.urls : [target.url];
-  let loadIndex = 0;
-  const loadCandidate = (index, previousError) => {
-    if (win.isDestroyed()) return;
-    loadIndex = index;
-    const nextUrl = urls[index];
-    if (!nextUrl) {
-      const message = previousError || 'Sayfa yuklenemedi';
-      if (target.closing || win.isDestroyed()) return;
-      renderInstitutionalAccessStatus(win, 'Kurumsal erisim acilamadi', message, urls.join(' | '));
-      sendInstitutionalPdfSaved({ ok: false, refId: target.refId, title: target.title, error: message });
-      return;
-    }
-    win.loadURL(nextUrl, { userAgent: chromeUA, extraHeaders: 'Accept-Language: tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7\n' }).catch((error) => {
-      loadCandidate(index + 1, error && error.message ? error.message : 'Kurumsal pencere acilamadi');
-    });
-  };
-  win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
-    if (target.closing || win.isDestroyed() || !isMainFrame || errorCode === -3) return;
-    const value = String(validatedURL || '');
-    if (value.startsWith('data:text/html')) return;
-    loadCandidate(loadIndex + 1, errorDescription || 'Sayfa yuklenemedi');
-  });
-  try { win.webContents.setUserAgent(chromeUA); } catch (_e) {}
-  loadCandidate(0, '');
-  return { ok: true, refId: target.refId, url: target.url };
-}
-
 ipcMain.handle('pdf:save', async (_ev, refId, buffer, ws) => {
   try {
     normalizeRefId(refId);
@@ -1813,18 +1617,6 @@ ipcMain.handle('app:openExternalUrl', async (_ev, url) => {
   }
 });
 
-ipcMain.handle('institutionalAccess:open', async (_ev, payload) => {
-  try { return openInstitutionalAccessWindow(payload); }
-  catch (e) { return { ok: false, error: e && e.message ? e.message : 'Kurumsal erisim acilamadi' }; }
-});
-
-ipcMain.handle('institutionalAccess:clearSession', async () => {
-  try {
-    const ses = session.fromPartition(INSTITUTIONAL_ACCESS_PARTITION);
-    await ses.clearStorageData({ storages: ['cookies', 'localstorage', 'indexdb', 'serviceworkers', 'cachestorage'] });
-    return { ok: true };
-  } catch (e) { return { ok: false, error: e && e.message ? e.message : 'Oturum temizlenemedi' }; }
-});
 async function downloadPDFfromURLMain(url, refId, options = {}) {
   if (!isSafeHttpURL(url)) return { ok: false, error: 'Ge�ersiz veya g�venli olmayan URL' };
   try { normalizeRefId(refId); } catch (e) { return { ok: false, error: e.message }; }
@@ -2322,6 +2114,38 @@ ipcMain.handle('backup:restore', async () => {
 });
 
 // ── IPC: BROWSER CAPTURE ──────────────────────────────
+ipcMain.handle('localMatrixAssistant:getStatus', async (_ev, settings = {}) => {
+  try {
+    return localMatrixAssistant.getStatus(settings);
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : 'Yerel matrix yardimcisi durumu alinamadi' };
+  }
+});
+
+ipcMain.handle('localMatrixAssistant:rankCandidates', async (_ev, payload = {}) => {
+  try {
+    return localMatrixAssistant.rankCandidates(payload);
+  } catch (e) {
+    return {
+      ok: false,
+      error: e && e.message ? e.message : 'Yerel matrix adaylari puanlanamadi',
+      candidates: []
+    };
+  }
+});
+
+ipcMain.handle('localMatrixAssistant:composeCells', async (_ev, payload = {}) => {
+  try {
+    return localMatrixAssistant.composeCells(payload);
+  } catch (e) {
+    return {
+      ok: false,
+      error: e && e.message ? e.message : 'Yerel matrix hucreleri yazilamadi',
+      candidates: []
+    };
+  }
+});
+
 ipcMain.handle('browserCapture:getStatus', async () => {
   await refreshBrowserCaptureSettings();
   await refreshCaptureAgentStatusSnapshot();
@@ -2526,5 +2350,3 @@ ipcMain.handle('ocr:recognize', async (_ev, payload) => {
 app.on('will-quit', () => {
   try { if (localOcr && typeof localOcr.dispose === 'function') localOcr.dispose(); } catch (_e) {}
 });
-
-

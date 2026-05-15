@@ -5,6 +5,7 @@
   var autoFillPassByWorkspace = {};
   var autoSeedPassByWorkspace = {};
   var autoSeedStatusTokenByWorkspace = {};
+  var localAssistantPassByWorkspace = {};
   var matrixFullscreen = false;
   var onlineAbstractCache = {};
 
@@ -75,6 +76,10 @@
     return window.AQLiteratureMatrixState || null;
   }
 
+  function getFilterApi(){
+    return window.AQLiteratureMatrixFilters || null;
+  }
+
   function getCurrentWorkspaceId(){
     return state() && state().cur ? state().cur : '';
   }
@@ -91,6 +96,32 @@
     return ws && Array.isArray(ws.lib) ? ws.lib : [];
   }
 
+  function getMatrixFilterState(wsId){
+    var api = getFilterApi();
+    var st = state();
+    var safeWsId = text(wsId || getCurrentWorkspaceId());
+    var bucket = st && st.literatureMatrixFilters && typeof st.literatureMatrixFilters === 'object'
+      ? st.literatureMatrixFilters
+      : {};
+    var raw = safeWsId && bucket[safeWsId] ? bucket[safeWsId] : {};
+    return api && typeof api.normalizeMatrixFilterState === 'function'
+      ? api.normalizeMatrixFilterState(raw)
+      : { search: getMatrixSearchQuery(), sort: { key: 'year', direction: 'desc' } };
+  }
+
+  function setMatrixFilterState(nextState){
+    var api = getFilterApi();
+    var st = state();
+    var wsId = getCurrentWorkspaceId();
+    if(!(api && st && wsId)) return null;
+    if(!st.literatureMatrixFilters || typeof st.literatureMatrixFilters !== 'object'){
+      st.literatureMatrixFilters = {};
+    }
+    st.literatureMatrixFilters[wsId] = api.normalizeMatrixFilterState(nextState);
+    saveSoon();
+    return st.literatureMatrixFilters[wsId];
+  }
+
   function getTopMatrixButton(){
     return document.getElementById('tbMatrixBtn');
   }
@@ -99,6 +130,27 @@
     var pageOne = document.querySelector('#etb .etb-page[data-page="1"]');
     if(!pageOne) return null;
     return pageOne.querySelector('.tbgrp-matrix');
+  }
+
+  function ensureMatrixFilterStyles(){
+    if(document.getElementById('aq-matrix-filter-styles')) return;
+    var style = document.createElement('style');
+    style.id = 'aq-matrix-filter-styles';
+    style.textContent = ''
+      + '#matrixFilterPanel{border-bottom:1px solid rgba(153,171,182,.24);background:rgba(255,255,255,.58);padding:7px 10px}'
+      + '.mx-filter-head{display:flex;align-items:center;gap:7px}'
+      + '.mx-filter-toggle,.mx-filter-clear,.mx-filter-preset,.mx-filter-chip{border:1px solid rgba(153,171,182,.38);border-radius:8px;background:rgba(255,255,255,.9);color:#263746;font-family:var(--fm,system-ui);font-size:10px;font-weight:700;height:26px;padding:0 8px;cursor:pointer}'
+      + '.mx-filter-toggle{background:#1f3a63;border-color:#1f3a63;color:#fff}.mx-filter-count{color:#617587;font-size:10px;font-weight:700}.mx-filter-clear{margin-left:auto}'
+      + '.mx-filter-assistant{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(153,171,182,.36);border-radius:999px;background:transparent;color:#617587;font-family:var(--fm,system-ui);font-size:10px;font-weight:700;height:20px;line-height:18px;padding:0 8px;white-space:nowrap}.mx-filter-assistant::after{content:"";width:6px;height:6px;border-radius:999px;background:#c24135;box-shadow:0 0 0 2px rgba(194,65,53,.1)}.mx-filter-assistant.on{border-color:rgba(27,94,65,.34);background:transparent;color:#617587}.mx-filter-assistant.on::after{background:#168a4f;box-shadow:0 0 0 2px rgba(22,138,79,.1)}'
+      + '.mx-filter-chips,.mx-filter-presets{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}.mx-filter-chip{height:22px;border-radius:999px;background:#f6fbfd;color:#315873;font-family:var(--fm,system-ui);font-size:9px}'
+      + '.mx-filter-empty{color:#8193a2;font-size:10px}.mx-filter-body{margin-top:7px;border:1px solid rgba(153,171,182,.28);border-radius:12px;background:rgba(251,250,247,.78);padding:8px}'
+      + '.mx-filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:7px;margin-top:7px}.mx-filter-field{display:flex;flex-direction:column;gap:3px;min-width:0}'
+      + '.mx-filter-field span{color:#789;font-family:var(--fm,system-ui);font-size:8px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}'
+      + '.mx-filter-field input,.mx-filter-field select{min-width:0;border:1px solid rgba(153,171,182,.38);border-radius:8px;background:#fff;color:#263746;font-family:var(--fm,system-ui);font-size:10px;padding:5px 7px;outline:none}'
+      + '.mx-filter-menu{position:relative;min-width:0}.mx-filter-menu summary{display:flex;align-items:center;justify-content:space-between;gap:8px;height:30px;border:1px solid rgba(153,171,182,.38);border-radius:8px;background:#fff;color:#263746;font-family:var(--fm,system-ui);font-size:10px;font-weight:700;padding:0 8px;cursor:pointer;list-style:none}.mx-filter-menu summary::-webkit-details-marker{display:none}'
+      + '.mx-filter-menu summary span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mx-filter-menu summary b{color:#718497;font-size:9px;font-weight:800;white-space:nowrap}.mx-filter-menu-panel{position:absolute;z-index:55;top:calc(100% + 6px);left:0;right:0;max-height:230px;overflow:auto;border:1px solid rgba(153,171,182,.38);border-radius:10px;background:rgba(255,255,255,.98);box-shadow:0 18px 46px rgba(31,42,68,.16);padding:6px}.mx-filter-check{display:flex;align-items:center;gap:7px;border-radius:7px;padding:5px 6px;color:#263746;font-family:var(--fm,system-ui);font-size:10px;line-height:1.25}.mx-filter-check:hover{background:#f4f8fb}.mx-filter-check input{width:13px;height:13px;accent-color:#1f3a63}'
+      + '#matrixExportBtn{border-color:rgba(95,124,147,.42);background:#fff;color:#244761}';
+    (document.head || document.documentElement).appendChild(style);
   }
 
   function findReferenceInWorkspace(referenceId){
@@ -617,6 +669,7 @@
   function ensureMatrixShell(){
     var ctr = document.getElementById('ctr');
     if(!ctr) return;
+    ensureMatrixFilterStyles();
 
     var oldBar = document.getElementById('workspaceViewBar');
     if(oldBar) oldBar.style.display = 'none';
@@ -633,8 +686,10 @@
         + '  <input id="matrixSearchInp" type="text" placeholder="Kaynak veya hücre içinde ara..."/>'
         + '  <button id="matrixAddCurrentRefBtn" data-matrix-action="add-current-ref" type="button">Seçili Kaynağı Ekle</button>'
         + '  <button id="matrixFullscreenBtn" data-matrix-action="toggle-fullscreen" type="button">Tam Ekran</button>'
+        + '  <button id="matrixExportBtn" data-matrix-action="export-excel" type="button">Dışarı Aktar</button>'
         + '  <button id="matrixCloseBtn" data-matrix-action="close" type="button">Kapat</button>'
         + '</div>'
+        + '<div id="matrixFilterPanel"></div>'
         + '<div id="matrixTableWrap">'
         + '  <table id="matrixTable"></table>'
         + '  <div id="matrixEmptyState"></div>'
@@ -649,6 +704,14 @@
       }else{
         ctr.appendChild(matrixView);
       }
+    }
+
+    var toolbar = document.getElementById('matrixToolbar');
+    if(toolbar && !document.getElementById('matrixFilterPanel')){
+      var filterPanel = document.createElement('div');
+      filterPanel.id = 'matrixFilterPanel';
+      if(toolbar.nextSibling) toolbar.parentElement.insertBefore(filterPanel, toolbar.nextSibling);
+      else toolbar.parentElement.appendChild(filterPanel);
     }
 
     var quick = document.getElementById('matrixQuickGrp');
@@ -716,6 +779,109 @@
     });
   }
 
+  function applyAutoFillForReference(st, wsId, api, row, ref, extraText){
+    if(!(st && wsId && api && row && ref)) return null;
+    var assistantSettings = st.localMatrixAssistant || st.matrixAssistant || null;
+    var options = {
+      notes: Array.isArray(st.notes) ? st.notes : [],
+      extraText: extraText || '',
+      localMatrixAssistant: assistantSettings
+    };
+    if(assistantSettings && assistantSettings.enabled === true && assistantSettings.composeCells === true){
+      return null;
+    }
+    if(typeof api.inferAutoCandidatesFromReference === 'function' && typeof api.applyAutoCandidatesToRow === 'function'){
+      var candidates = api.inferAutoCandidatesFromReference(ref, options);
+      if(candidates && candidates.length){
+        return api.applyAutoCandidatesToRow(st, wsId, row.id, candidates, { overwrite: false });
+      }
+    }
+    var autoCells = api.inferAutoCellsFromReference(ref, options);
+    return api.applyAutoCellsToRow(st, wsId, row.id, autoCells, { overwrite: false, status: 'auto_suggested' });
+  }
+
+  function runLocalAssistantAutoFill(st, wsId, api, items){
+    var settings = st && st.localMatrixAssistant && typeof st.localMatrixAssistant === 'object'
+      ? st.localMatrixAssistant
+      : null;
+    if(!(settings && settings.enabled === true)) return;
+    if(!(window.electronAPI && typeof window.electronAPI.rankLocalMatrixCandidates === 'function')) return;
+    var token = String(wsId) + ':' + String((items || []).map(function(item){
+      return String(item.row && item.row.id || '') + ':' + String(item.row && item.row.updatedAt || 0);
+    }).join('|')) + ':' + String(settings.updatedAt || 0);
+    if(localAssistantPassByWorkspace[wsId] === token) return;
+    localAssistantPassByWorkspace[wsId] = token;
+    var queue = (items || []).filter(function(item){
+      return item && item.row && item.ref && isAutoFillCandidate(item.row, api);
+    }).slice(0, 24);
+    if(!queue.length) return;
+    Promise.all(queue.map(function(item){
+      var candidates = typeof api.inferAutoCandidatesFromReference === 'function'
+        ? api.inferAutoCandidatesFromReference(item.ref, {
+          notes: Array.isArray(st.notes) ? st.notes : [],
+          localMatrixAssistant: { enabled: false }
+        })
+        : [];
+      if(!candidates || !candidates.length) return false;
+      var payload = {
+        settings: settings,
+        reference: {
+          id: item.ref.id,
+          title: item.ref.title,
+          year: item.ref.year,
+          doi: item.ref.doi
+        },
+        candidates: candidates
+      };
+      return window.electronAPI.rankLocalMatrixCandidates(payload).then(function(result){
+        if(!(result && result.ok && Array.isArray(result.candidates) && result.candidates.length)) return false;
+        if(settings.composeCells === true && window.electronAPI && typeof window.electronAPI.composeLocalMatrixCells === 'function'){
+          return window.electronAPI.composeLocalMatrixCells(Object.assign({}, payload, {
+            candidates: result.candidates
+          })).then(function(composeResult){
+            if(composeResult && composeResult.ok && Array.isArray(composeResult.candidates) && composeResult.candidates.length){
+              return composeResult.candidates;
+            }
+            return result.candidates;
+          }).catch(function(){
+            return result.candidates;
+          });
+        }
+        return result.candidates;
+      }).then(function(finalCandidates){
+        if(!(Array.isArray(finalCandidates) && finalCandidates.length)) return false;
+        var before = Number(item.row.updatedAt || 0);
+        api.applyAutoCandidatesToRow(st, wsId, item.row.id, finalCandidates, { overwrite: false });
+        return Number(item.row.updatedAt || 0) !== before;
+      }).catch(function(){ return false; });
+    })).then(function(results){
+      if(results.some(Boolean)){
+        saveSoon();
+        renderMatrix();
+      }else{
+        renderMatrix();
+      }
+    }).catch(function(){});
+  }
+
+  function rerunLocalAssistantAutoFill(){
+    var api = getMatrixApi();
+    var st = state();
+    var wsId = getCurrentWorkspaceId();
+    if(!(api && st && wsId)) return false;
+    var wsState = api.ensureWorkspaceMatrix(st, wsId);
+    if(!wsState) return false;
+    var items = [];
+    (wsState.rows || []).forEach(function(row){
+      var ref = findReferenceInWorkspace(row.referenceId);
+      if(ref) items.push({ row: row, ref: ref });
+    });
+    localAssistantPassByWorkspace[wsId] = '';
+    autoFillPassByWorkspace[wsId] = '';
+    runLocalAssistantAutoFill(st, wsId, api, items);
+    return true;
+  }
+
   function runWorkspaceAutoFill(st, wsId, wsState, api){
     if(!(st && wsId && wsState && api)) return false;
     var token = String(wsState.updatedAt || 0) + ':' + String((wsState.rows || []).length);
@@ -737,11 +903,7 @@
       var pdfText = typeof window.getPdfFullTextForRef === 'function'
         ? window.getPdfFullTextForRef(item.row.referenceId)
         : '';
-      var autoCells = api.inferAutoCellsFromReference(item.ref, {
-        notes: Array.isArray(st.notes) ? st.notes : [],
-        extraText: pdfText
-      });
-      api.applyAutoCellsToRow(st, wsId, item.row.id, autoCells, { overwrite: false });
+      applyAutoFillForReference(st, wsId, api, item.row, item.ref, pdfText);
       if(Number(item.row.updatedAt || 0) !== before){
         changed = true;
       }
@@ -749,6 +911,7 @@
     if(changed){
       saveSoon();
     }
+    runLocalAssistantAutoFill(st, wsId, api, candidates);
     // Second pass: async fetch online abstracts for rows still needing fill
     var needOnline = candidates.filter(function(item){
       return isAutoFillCandidate(item.row, api) && text(item.ref.doi);
@@ -770,11 +933,7 @@
           : '';
         var extraText = [pdfText, onlineText].filter(Boolean).join('\n');
         var before = Number(item.row.updatedAt || 0);
-        var autoCells = api.inferAutoCellsFromReference(item.ref, {
-          notes: Array.isArray(st.notes) ? st.notes : [],
-          extraText: extraText
-        });
-        api.applyAutoCellsToRow(st, wsId, item.row.id, autoCells, { overwrite: false });
+        applyAutoFillForReference(st, wsId, api, item.row, item.ref, extraText);
         return Number(item.row.updatedAt || 0) !== before;
       }).catch(function(){ return false; });
     });
@@ -848,6 +1007,322 @@
     return changed;
   }
 
+  function formatEvidenceDate(value){
+    var ts = Number(value || 0);
+    if(!ts) return '';
+    try{
+      return new Date(ts).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' });
+    }catch(_e){
+      return '';
+    }
+  }
+
+  function buildEvidenceItems(cell){
+    var items = [];
+    var source = cell && cell.source && typeof cell.source === 'object' ? cell.source : null;
+    var sources = Array.isArray(cell && cell.sources) ? cell.sources : [];
+    var candidates = Array.isArray(cell && cell.candidates) ? cell.candidates : [];
+    sources.forEach(function(item){
+      if(item && (text(item.snippet) || text(item.page) || text(item.section))){
+        items.push({ type: 'Kanıt', source: item });
+      }
+    });
+    if(source && (text(source.snippet) || text(source.page) || text(source.section)) && !items.length){
+      items.push({ type: 'Kanıt', source: source });
+    }
+    candidates.forEach(function(candidate){
+      var candidateSource = candidate && candidate.source ? candidate.source : {};
+      if(text(candidate && candidate.text) || text(candidateSource.snippet)){
+        items.push({
+          type: Number(candidate.confidence || 0) >= 0.8 ? 'Otomatik' : 'İncele',
+          source: candidateSource,
+          text: candidate.text,
+          confidence: candidate.confidence,
+          reasons: Array.isArray(candidate.reasons) ? candidate.reasons : []
+        });
+      }
+    });
+    if(!items.length && text(cell && cell.text)){
+      items.push({
+        type: cell.status === 'auto_suggested' ? 'Otomatik' : 'Hücre',
+        source: {
+          snippet: text(cell.text),
+          extractionType: text(cell.status || 'manual-cell'),
+          confidence: cell.status === 'auto_suggested' ? 0.8 : 0,
+          updatedAt: cell.updatedAt || 0
+        },
+        text: text(cell.text),
+        confidence: cell.status === 'auto_suggested' ? 0.8 : 0,
+        reasons: cell.status ? ['status:' + text(cell.status)] : []
+      });
+    }
+    return items.slice(0, 8);
+  }
+
+  function renderEvidenceControl(cell){
+    var items = buildEvidenceItems(cell);
+    var statusLabel = text(cell && cell.status);
+    if(!items.length && !statusLabel) return '';
+    var count = items.length;
+    var title = statusLabel === 'auto_suggested' ? 'Otomatik öneri'
+      : statusLabel === 'needs_review' ? 'İnceleme gerekli'
+      : statusLabel === 'user_confirmed' ? 'Kullanıcı onaylı'
+      : 'Kanıt';
+    var body = items.length ? items.map(function(item){
+      var src = item.source || {};
+      var confidence = item.confidence != null ? item.confidence : src.confidence;
+      var meta = [
+        item.type,
+        text(src.extractionType),
+        text(src.section),
+        text(src.page) ? ('s. ' + text(src.page)) : '',
+        confidence ? ('%' + Math.round(Number(confidence || 0) * 100)) : '',
+        formatEvidenceDate(src.updatedAt)
+      ].filter(Boolean).join(' · ');
+      var snippet = text(src.snippet || item.text || '').slice(0, 700);
+      var reasons = item.reasons && item.reasons.length ? '<div class="mx-evidence-reasons">' + escHTML(item.reasons.slice(0, 4).join(' · ')) + '</div>' : '';
+      return '<div class="mx-evidence-item">'
+        + '<div class="mx-evidence-meta">' + escHTML(meta || item.type) + '</div>'
+        + '<div class="mx-evidence-snippet">' + escHTML(snippet || 'Snippet yok') + '</div>'
+        + reasons
+        + '</div>';
+    }).join('') : '<div class="mx-evidence-empty">' + escHTML(title) + '</div>';
+    return '<details class="mx-evidence" data-evidence-count="' + count + '">'
+      + '<summary title="Kanıt ve otomatik doldurma kaynağı">' + escHTML(count ? ('Kanıt ' + count) : title) + '</summary>'
+      + '<div class="mx-evidence-popover">' + body + '</div>'
+      + '</details>';
+  }
+
+  function referenceHasPdf(ref){
+    if(!ref || typeof ref !== 'object') return false;
+    if(ref.hasPdf === true || ref.pdfSaved === true || ref.pdfAttached === true) return true;
+    if(text(ref.pdfPath || ref.pdfFile || ref.pdfFileName || ref.pdfFilename || ref.pdfLocalPath || ref.localPdfPath)) return true;
+    if(ref.pdf && typeof ref.pdf === 'object' && text(ref.pdf.path || ref.pdf.fileName || ref.pdf.filename || ref.pdf.localPath)) return true;
+    if(text(ref.pdfUrl || ref.oaPdfUrl || ref.openAccessPdfUrl)) return true;
+    return false;
+  }
+
+  function referenceHasAbstract(ref){
+    if(!ref || typeof ref !== 'object') return false;
+    return !!text(ref.abstract || ref.summary || ref.description || ref.browserCaptureMeta && ref.browserCaptureMeta.abstract);
+  }
+
+  function getBestCellCandidate(cell){
+    var candidates = Array.isArray(cell && cell.candidates) ? cell.candidates : [];
+    var best = null;
+    candidates.forEach(function(candidate){
+      if(!candidate) return;
+      if(!best || Number(candidate.confidence || 0) > Number(best.confidence || 0)){
+        best = candidate;
+      }
+    });
+    return best;
+  }
+
+  function getEmptyCellHint(cell, columnKey, ref){
+    if(text(cell && cell.text)) return null;
+    if(columnKey === 'myNotes'){
+      return { tone: 'manual', label: 'Kullanici notu', detail: 'Elle doldurulur' };
+    }
+    var best = getBestCellCandidate(cell);
+    if(best){
+      var confidence = Number(best.confidence || 0);
+      return {
+        tone: confidence >= 0.5 ? 'review' : 'low',
+        label: confidence >= 0.5 ? 'Incele' : 'Dusuk guven',
+        detail: '%' + Math.round(confidence * 100) + ' aday'
+      };
+    }
+    if(referenceHasPdf(ref)){
+      return { tone: 'muted', label: 'PDF tarandi', detail: 'Kanit bulunamadi' };
+    }
+    if(referenceHasAbstract(ref)){
+      return { tone: 'muted', label: 'Abstract ile sinirli', detail: 'PDF yok' };
+    }
+    if(text(ref && (ref.doi || ref.url || ref.title))){
+      return { tone: 'empty', label: 'Metadata sinirli', detail: 'PDF/abstract yok' };
+    }
+    return { tone: 'empty', label: 'Kaynak metni yok', detail: '' };
+  }
+
+  function renderEmptyCellHint(cell, columnKey, ref){
+    var hint = getEmptyCellHint(cell, columnKey, ref);
+    if(!hint) return '';
+    return '<div class="mx-cell-hint ' + escHTML(hint.tone || 'muted') + '">'
+      + '<span>' + escHTML(hint.label) + '</span>'
+      + (hint.detail ? '<small>' + escHTML(hint.detail) + '</small>' : '')
+      + '</div>';
+  }
+
+  function renderMatrixFilterPanel(result, rows, references){
+    var filterApi = getFilterApi();
+    var panel = document.getElementById('matrixFilterPanel');
+    if(!(filterApi && panel)) return;
+    var st = state();
+    var filterState = result && result.state ? result.state : getMatrixFilterState();
+    var chips = filterApi.buildActiveFilterChips(filterState);
+    var countText = String(result ? result.filtered : 0) + ' / ' + String(result ? result.total : 0) + ' kaynak gosteriliyor';
+    var presetButtons = [
+      ['review-needed','Review Needed'],
+      ['recent-evidence','Recent Evidence'],
+      ['incomplete-matrix','Incomplete Matrix'],
+      ['user-confirmed-evidence','User Confirmed'],
+      ['method-gap-finder','Method Gap'],
+      ['sample-gap-finder','Sample Gap'],
+      ['limitation-based-gap','Limitation Gap']
+    ].map(function(item){
+      return '<button type="button" class="mx-filter-preset" data-matrix-filter-preset="' + escHTML(item[0]) + '">' + escHTML(item[1]) + '</button>';
+    }).join('');
+    var chipHtml = chips.length ? chips.map(function(chip){
+      return '<button type="button" class="mx-filter-chip" data-matrix-filter-remove="' + escHTML(chip.id) + '">' + escHTML(chip.label) + ' x</button>';
+    }).join('') : '<span class="mx-filter-empty">Aktif filtre yok.</span>';
+    function option(value, label){
+      return '<option value="' + escHTML(value) + '">' + escHTML(label || value) + '</option>';
+    }
+    function multiselect(id, label, selected, options){
+      var selectedMap = {};
+      (selected || []).forEach(function(value){ selectedMap[String(value)] = true; });
+      var selectedCount = Object.keys(selectedMap).length;
+      var summary = selectedCount ? (selectedCount + ' secili') : 'Tümü';
+      return '<label class="mx-filter-field mx-filter-field-menu"><span>' + escHTML(label) + '</span>'
+        + '<details class="mx-filter-menu" data-matrix-filter-menu="' + escHTML(id) + '">'
+        + '<summary><span>' + escHTML(label) + '</span><b>' + escHTML(summary) + '</b></summary>'
+        + '<div class="mx-filter-menu-panel">'
+        + options.map(function(item){
+          var value = Array.isArray(item) ? item[0] : item;
+          var textValue = Array.isArray(item) ? item[1] : item;
+          return '<label class="mx-filter-check"><input type="checkbox" data-matrix-filter-check="' + escHTML(id) + '" value="' + escHTML(value) + '"' + (selectedMap[String(value)] ? ' checked' : '') + '/><span>' + escHTML(textValue) + '</span></label>';
+        }).join('')
+        + '</div></details></label>';
+    }
+    var methodOptions = [
+      ['quantitative','Quantitative / Nicel'],
+      ['qualitative','Qualitative / Nitel'],
+      ['mixed','Mixed / Karma'],
+      ['review','Review']
+    ];
+    var designOptions = [
+      ['cross-sectional','Cross-sectional'],
+      ['longitudinal','Longitudinal'],
+      ['experimental','Experimental'],
+      ['quasi-experimental','Quasi-experimental'],
+      ['phenomenology','Phenomenology / Fenomenoloji'],
+      ['case study','Case study'],
+      ['correlational','Correlational / Iliskisel']
+    ];
+    var sampleOptions = [
+      ['undergraduate students','Universite ogrencileri'],
+      ['adolescents','Ergenler'],
+      ['teachers','Ogretmenler'],
+      ['preservice teachers','Ogretmen adaylari'],
+      ['counselors','Psikolojik danismanlar'],
+      ['parents','Ebeveynler'],
+      ['clinical sample','Klinik orneklem'],
+      ['adult sample','Yetiskin orneklem'],
+      ['Turkish sample','Turkiye orneklemi'],
+      ['international sample','International sample']
+    ];
+    var analysisOptions = [
+      ['regression','Regresyon'],
+      ['correlation','Korelasyon'],
+      ['SEM','Yapisal esitlik modeli'],
+      ['ANOVA','ANOVA'],
+      ['t-test','t-test'],
+      ['mediation','Aracilik'],
+      ['moderation','Duzenleyicilik'],
+      ['thematic analysis','Tematik analiz'],
+      ['content analysis','Icerik analizi'],
+      ['descriptive analysis','Betimsel analiz']
+    ];
+    var findingOptions = [
+      ['positive','Positive'],
+      ['negative','Negative'],
+      ['mixed','Mixed'],
+      ['nonsignificant','No significant'],
+      ['unclear','Unclear']
+    ];
+    var limitationOptions = [
+      ['cross-sectional','Cross-sectional limitation'],
+      ['self-report','Self-report limitation'],
+      ['small sample','Small sample'],
+      ['convenience sample','Convenience sample'],
+      ['single country','Single country / culture'],
+      ['generalizability','Generalizability'],
+      ['causality','Causality'],
+      ['measurement limitation','Measurement'],
+      ['future research','Future research']
+    ];
+    var bodyOpen = panel.classList.contains('open');
+    var assistantSettings = st && st.localMatrixAssistant && typeof st.localMatrixAssistant === 'object'
+      ? st.localMatrixAssistant
+      : {};
+    var assistantOn = assistantSettings.enabled === true;
+    var assistantLabel = assistantOn ? 'Yardımcı: Açık' : 'Yardımcı: Kapalı';
+    panel.innerHTML = ''
+      + '<div class="mx-filter-head">'
+      + '  <button type="button" class="mx-filter-toggle" data-matrix-filter-action="toggle">' + (bodyOpen ? 'Filtreleri Gizle' : 'Filtreler') + '</button>'
+      + '  <span class="mx-filter-count">' + escHTML(countText) + '</span>'
+      + '  <span class="mx-filter-assistant ' + (assistantOn ? 'on' : '') + '" title="' + (assistantOn ? 'Yerel Matrix yardımcısı açık' : 'Yerel Matrix yardımcısı kapalı') + '">' + escHTML(assistantLabel) + '</span>'
+      + '  <button type="button" class="mx-filter-clear" data-matrix-filter-action="clear">Tum filtreleri temizle</button>'
+      + '</div>'
+      + '<div class="mx-filter-chips">' + chipHtml + '</div>'
+      + '<div class="mx-filter-body"' + (bodyOpen ? '' : ' hidden') + '>'
+      + '  <div class="mx-filter-presets">' + presetButtons + '</div>'
+      + '  <div class="mx-filter-grid">'
+      + '    <label class="mx-filter-field"><span>Arama kapsami</span><select data-matrix-filter-field="searchScope">'
+      + option('all','Tum matrix') + option('titleAuthor','Baslik / yazar') + option('cells','Hucreler') + option('purpose','Purpose') + option('method','Method') + option('sample','Sample') + option('findings','Findings') + option('limitations','Limitations')
+      + '    </select></label>'
+      + '    <label class="mx-filter-field"><span>Yil baslangic</span><input type="number" data-matrix-filter-field="yearFrom" value="' + escHTML(filterState.yearRange.from) + '" placeholder="2018"/></label>'
+      + '    <label class="mx-filter-field"><span>Yil bitis</span><input type="number" data-matrix-filter-field="yearTo" value="' + escHTML(filterState.yearRange.to) + '" placeholder="2026"/></label>'
+      + '    <label class="mx-filter-field"><span>DOI</span><select data-matrix-filter-field="hasDoi">' + option('','Farketmez') + option('true','DOI var') + option('false','DOI yok') + '</select></label>'
+      + '    <label class="mx-filter-field"><span>PDF</span><select data-matrix-filter-field="hasPdf">' + option('','Farketmez') + option('true','PDF var') + option('false','PDF yok') + '</select></label>'
+      + '    <label class="mx-filter-field"><span>Siralama</span><select data-matrix-filter-field="sortKey">' + option('year','Yil') + option('author','Yazar') + option('confidence','Confidence') + option('metadataHealth','Metadata Health') + option('missing','En eksik') + option('filled','En dolu') + option('updatedAt','Son guncellenen') + '</select></label>'
+      + '    <label class="mx-filter-field"><span>Yon</span><select data-matrix-filter-field="sortDirection">' + option('desc','Azalan') + option('asc','Artan') + '</select></label>'
+      + multiselect('metadataHealth','Metadata Health', filterState.metadata.metadataHealth, [['good','Iyi'],['medium','Orta'],['weak','Zayif']])
+      + multiselect('cellStatus','Hucre durumu', filterState.cellStatus, [['incomplete','Eksik matrix'],['auto_suggested','Auto-suggested'],['user_confirmed','User-confirmed'],['needs_review','Needs-review'],['low_confidence','Low-confidence'],['purpose:empty','Purpose bos'],['method:empty','Method bos'],['sample:empty','Sample bos'],['findings:empty','Findings bos'],['limitations:empty','Limitations bos']])
+      + multiselect('sourceTypes','Kaynak / Kanit', filterState.sourceTypes, [['pdf_selection','PDF selection'],['auto','Otomatik yakalama'],['user_edited','Kullanici duzenledi'],['source_snippet','Source snippet'],['page_number','Page number']])
+      + multiselect('methodTypes','Yontem', filterState.methodTypes, methodOptions)
+      + multiselect('designs','Desen', filterState.designs, designOptions)
+      + multiselect('sampleGroups','Orneklem', filterState.sampleGroups, sampleOptions)
+      + multiselect('analysisTypes','Analiz', filterState.analysisTypes, analysisOptions)
+      + multiselect('findingDirections','Bulgular', filterState.findingDirections, findingOptions)
+      + multiselect('limitationTags','Sinirliliklar', filterState.limitationTags, limitationOptions)
+      + '    <label class="mx-filter-field"><span>Confidence min</span><input type="number" min="0" max="1" step="0.05" data-matrix-filter-field="confidenceMin" value="' + escHTML(filterState.confidence.min == null ? '' : filterState.confidence.min) + '" placeholder="0.80"/></label>'
+      + '    <label class="mx-filter-field"><span>Confidence max</span><input type="number" min="0" max="1" step="0.05" data-matrix-filter-field="confidenceMax" value="' + escHTML(filterState.confidence.max == null ? '' : filterState.confidence.max) + '" placeholder="1"/></label>'
+      + '  </div>'
+      + '</div>';
+    var fields = panel.querySelectorAll('[data-matrix-filter-field]');
+    fields.forEach(function(field){
+      var key = field.getAttribute('data-matrix-filter-field');
+      if(key === 'searchScope') field.value = filterState.searchScope;
+      if(key === 'hasDoi') field.value = filterState.metadata.hasDoi === null ? '' : String(filterState.metadata.hasDoi);
+      if(key === 'hasPdf') field.value = filterState.metadata.hasPdf === null ? '' : String(filterState.metadata.hasPdf);
+      if(key === 'sortKey') field.value = filterState.sort.key;
+      if(key === 'sortDirection') field.value = filterState.sort.direction;
+      field.onchange = function(event){
+        updateMatrixFilterFromControl(event.currentTarget || field);
+      };
+      field.oninput = function(event){
+        updateMatrixFilterFromControl(event.currentTarget || field);
+      };
+    });
+    var lists = panel.querySelectorAll('[data-matrix-filter-list]');
+    lists.forEach(function(list){
+      list.onchange = function(event){
+        updateMatrixFilterFromControl(event.currentTarget || list);
+      };
+      list.oninput = function(event){
+        updateMatrixFilterFromControl(event.currentTarget || list);
+      };
+    });
+    var checks = panel.querySelectorAll('[data-matrix-filter-check]');
+    checks.forEach(function(check){
+      check.onchange = function(event){
+        updateMatrixFilterFromControl(event.currentTarget || check);
+      };
+    });
+  }
+
   function renderMatrix(){
     var api = getMatrixApi();
     var st = state();
@@ -879,11 +1354,22 @@
         }
       }
     }
-    var query = getMatrixSearchQuery();
-    var filteredRows = rows.filter(function(row){
+    var references = getWorkspaceReferences();
+    var filterApi = getFilterApi();
+    var filterState = getMatrixFilterState(wsId);
+    var searchEl = document.getElementById('matrixSearchInp');
+    if(searchEl && !text(searchEl.value) && filterState.search){
+      searchEl.value = filterState.search;
+    }
+    filterState.search = getMatrixSearchQuery();
+    var filterResult = filterApi && typeof filterApi.applyMatrixFilters === 'function'
+      ? filterApi.applyMatrixFilters(rows, references, filterState)
+      : null;
+    var filteredRows = filterResult ? filterResult.rows : rows.filter(function(row){
       var ref = findReferenceInWorkspace(row.referenceId);
-      return rowMatchesQuery(row, ref, query, api);
+      return rowMatchesQuery(row, ref, filterState.search, api);
     });
+    renderMatrixFilterPanel(filterResult || { rows: filteredRows, total: rows.length, filtered: filteredRows.length, state: filterState }, rows, references);
 
     if(!filteredRows.length){
       table.innerHTML = '';
@@ -917,9 +1403,12 @@
       var otherCells = api.EDITABLE_COLUMN_KEYS.map(function(columnKey){
         var cell = row.cells && row.cells[columnKey] ? row.cells[columnKey] : { text: '', noteIds: [] };
         var noteCount = Array.isArray(cell.noteIds) ? cell.noteIds.length : 0;
+        var evidenceControl = renderEvidenceControl(cell);
+        var emptyHint = renderEmptyCellHint(cell, columnKey, ref);
         return '<td class="mx-cell" data-row-id="' + escHTML(row.id) + '" data-col-id="' + escHTML(columnKey) + '">'
           + (noteCount ? '<span class="mx-note-count">' + noteCount + ' not</span>' : '')
-          + '<div class="mx-cell-actions"><button type="button" class="mx-cell-btn" data-matrix-action="show-in-pdf" data-row-id="' + escHTML(row.id) + '" data-col-id="' + escHTML(columnKey) + '">PDFte Goster</button></div>'
+          + '<div class="mx-cell-actions">' + evidenceControl + '<button type="button" class="mx-cell-btn" data-matrix-action="show-in-pdf" data-row-id="' + escHTML(row.id) + '" data-col-id="' + escHTML(columnKey) + '">PDFte Goster</button></div>'
+          + emptyHint
           + '<textarea class="mx-cell-input" data-row-id="' + escHTML(row.id) + '" data-col-id="' + escHTML(columnKey) + '" placeholder="Yaz..." spellcheck="true">'
           + escHTML(cell.text || '')
           + '</textarea>'
@@ -956,11 +1445,7 @@
     var pdfText = typeof window.getPdfFullTextForRef === 'function'
       ? window.getPdfFullTextForRef(text(ref.id))
       : '';
-    var autoCells = api.inferAutoCellsFromReference(ref, {
-      notes: Array.isArray(st.notes) ? st.notes : [],
-      extraText: pdfText
-    });
-    api.applyAutoCellsToRow(st, wsId, result.row.id, autoCells, { overwrite: false });
+    applyAutoFillForReference(st, wsId, api, result.row, ref, pdfText);
     if(typeof api.undismissReference === 'function'){
       api.undismissReference(st, wsId, refId);
     }
@@ -1029,11 +1514,7 @@
       var pdfText = typeof window.getPdfFullTextForRef === 'function'
         ? window.getPdfFullTextForRef(text(ref.id))
         : '';
-      var autoCells = api.inferAutoCellsFromReference(ref, {
-        notes: Array.isArray(st.notes) ? st.notes : [],
-        extraText: pdfText
-      });
-      api.applyAutoCellsToRow(st, wsId, ensured.row.id, autoCells, { overwrite: false });
+      applyAutoFillForReference(st, wsId, api, ensured.row, ref, pdfText);
     }
     var columnKey = text(options.columnKey) || api.inferColumnFromNoteType(note.noteType);
     var payload = noteTextForMatrix(note);
@@ -1091,9 +1572,209 @@
     }
   }
 
+  function readSelectedOptions(select){
+    return Array.from(select && select.options ? select.options : []).filter(function(opt){ return opt.selected; }).map(function(opt){ return text(opt.value); }).filter(Boolean);
+  }
+
+  function readCheckedFilterValues(name){
+    if(!name) return [];
+    var panel = document.getElementById('matrixFilterPanel');
+    if(!panel) return [];
+    return Array.from(panel.querySelectorAll('[data-matrix-filter-check]:checked'))
+      .filter(function(input){ return input.getAttribute('data-matrix-filter-check') === name; })
+      .map(function(input){ return text(input.value); })
+      .filter(Boolean);
+  }
+
+  function updateMatrixFilterFromControl(target){
+    var filterApi = getFilterApi();
+    var st = state();
+    var wsId = getCurrentWorkspaceId();
+    if(!(filterApi && st && wsId && target)) return false;
+    var field = target.getAttribute && target.getAttribute('data-matrix-filter-field');
+    var list = target.getAttribute && target.getAttribute('data-matrix-filter-list');
+    var check = target.getAttribute && target.getAttribute('data-matrix-filter-check');
+    if(!(field || list || check)) return false;
+    var next = getMatrixFilterState(wsId);
+    if(field === 'yearFrom') next.yearRange.from = text(target.value);
+    else if(field === 'yearTo') next.yearRange.to = text(target.value);
+    else if(field === 'searchScope') next.searchScope = text(target.value) || 'all';
+    else if(field === 'hasDoi') next.metadata.hasDoi = target.value === '' ? null : target.value === 'true';
+    else if(field === 'hasPdf') next.metadata.hasPdf = target.value === '' ? null : target.value === 'true';
+    else if(field === 'sortKey') next.sort.key = text(target.value) || 'year';
+    else if(field === 'sortDirection') next.sort.direction = text(target.value) === 'asc' ? 'asc' : 'desc';
+    else if(field === 'confidenceMin') next.confidence.min = target.value === '' ? null : Number(target.value);
+    else if(field === 'confidenceMax') next.confidence.max = target.value === '' ? null : Number(target.value);
+    else if(list === 'metadataHealth') next.metadata.metadataHealth = readSelectedOptions(target);
+    else if(list === 'cellStatus') next.cellStatus = readSelectedOptions(target);
+    else if(list === 'sourceTypes') next.sourceTypes = readSelectedOptions(target);
+    else if(list && Array.isArray(next[list])) next[list] = readSelectedOptions(target);
+    else if(check === 'metadataHealth') next.metadata.metadataHealth = readCheckedFilterValues(check);
+    else if(check === 'cellStatus') next.cellStatus = readCheckedFilterValues(check);
+    else if(check === 'sourceTypes') next.sourceTypes = readCheckedFilterValues(check);
+    else if(check && Array.isArray(next[check])) next[check] = readCheckedFilterValues(check);
+    setMatrixFilterState(next);
+    renderMatrix();
+    return true;
+  }
+
+  function excelEscape(value){
+    return escHTML(value).replace(/\r?\n/g, '<br>');
+  }
+
+  function safeExcelFileName(value){
+    return text(value || 'matrix')
+      .replace(/[\\/:*?"<>|]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 70) || 'matrix';
+  }
+
+  function getReferenceYear(ref){
+    var year = ref && (ref.year || ref.publishedDate || ref.date) ? String(ref.year || ref.publishedDate || ref.date) : '';
+    var match = year.match(/\b(19|20)\d{2}\b/);
+    return match ? match[0] : year;
+  }
+
+  function getVisibleMatrixRows(){
+    var api = getMatrixApi();
+    var st = state();
+    var wsId = getCurrentWorkspaceId();
+    if(!(api && st && wsId)) return { rows: [], allRows: [], references: [], filterState: null };
+    var wsState = api.ensureWorkspaceMatrix(st, wsId);
+    var rows = wsState && Array.isArray(wsState.rows) ? wsState.rows : [];
+    var references = getWorkspaceReferences();
+    var filterApi = getFilterApi();
+    var filterState = getMatrixFilterState(wsId);
+    var searchEl = document.getElementById('matrixSearchInp');
+    if(searchEl) filterState.search = text(searchEl.value);
+    var filterResult = filterApi && typeof filterApi.applyMatrixFilters === 'function'
+      ? filterApi.applyMatrixFilters(rows, references, filterState)
+      : null;
+    return {
+      rows: filterResult ? filterResult.rows : rows,
+      allRows: rows,
+      references: references,
+      filterState: filterState
+    };
+  }
+
+  function exportMatrixToExcel(){
+    var api = getMatrixApi();
+    var st = state();
+    var wsId = getCurrentWorkspaceId();
+    if(!(api && st && wsId)){
+      status('Matrix dışa aktarılamadı.', 'er');
+      return false;
+    }
+    var visible = getVisibleMatrixRows();
+    var rows = visible.rows || [];
+    if(!rows.length){
+      status('Dışa aktarılacak matrix satırı yok.', 'er');
+      return false;
+    }
+    var ws = Array.isArray(st.wss) ? st.wss.find(function(item){ return String(item && item.id || '') === String(wsId); }) : null;
+    var headers = ['Author-Year', 'Başlık', 'Yıl', 'DOI', 'PDF', 'Purpose', 'Method', 'Sample', 'Findings', 'Limitations', 'My Notes'];
+    var editable = ['purpose', 'method', 'sample', 'findings', 'limitations', 'myNotes'];
+    var rowHtml = rows.map(function(row){
+      var ref = findReferenceInWorkspace(row.referenceId) || {};
+      var cells = row.cells || {};
+      var values = [
+        getAuthorYear(ref),
+        ref.title || '',
+        getReferenceYear(ref),
+        ref.doi || '',
+        ref.hasPdf || ref.pdfPath || ref.pdfUrl ? 'Var' : 'Yok'
+      ];
+      editable.forEach(function(key){
+        values.push(cells[key] && cells[key].text ? cells[key].text : '');
+      });
+      return '<tr>' + values.map(function(value){ return '<td>' + excelEscape(value) + '</td>'; }).join('') + '</tr>';
+    }).join('');
+    var workbook = '\ufeff<html><head><meta charset="utf-8">'
+      + '<style>table{border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:11pt}th{background:#1e3a5f;color:white;font-weight:700}td,th{border:1px solid #d9d9d9;padding:6px;vertical-align:top;mso-number-format:"\\@";white-space:normal}</style>'
+      + '</head><body><table><thead><tr>'
+      + headers.map(function(label){ return '<th>' + excelEscape(label) + '</th>'; }).join('')
+      + '</tr></thead><tbody>' + rowHtml + '</tbody></table></body></html>';
+    var blob = new Blob([workbook], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    var date = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = 'AcademiQ-Matrix-' + safeExcelFileName(ws && ws.name ? ws.name : wsId) + '-' + date + '.xls';
+    document.body.appendChild(a);
+    a.click();
+    window.setTimeout(function(){
+      try{ URL.revokeObjectURL(url); }catch(_e){}
+      if(a && a.parentElement) a.parentElement.removeChild(a);
+    }, 1000);
+    status('Literatür matrisi Excel dosyası olarak dışa aktarıldı.', 'ok');
+    return true;
+  }
+
   function onMatrixClick(event){
     var target = event && event.target ? event.target : null;
     if(!target) return;
+
+    var filterAction = target.closest('[data-matrix-filter-action]');
+    if(filterAction){
+      event.preventDefault();
+      event.stopPropagation();
+      var action = filterAction.getAttribute('data-matrix-filter-action');
+      var panel = document.getElementById('matrixFilterPanel');
+      if(action === 'toggle' && panel){
+        panel.classList.toggle('open');
+        renderMatrix();
+      }else if(action === 'clear'){
+        var apiClear = getFilterApi();
+        var emptyState = apiClear && typeof apiClear.resetFilterState === 'function' ? apiClear.resetFilterState() : {};
+        var searchInput = document.getElementById('matrixSearchInp');
+        if(searchInput) searchInput.value = '';
+        setMatrixFilterState(emptyState);
+        renderMatrix();
+      }
+      return;
+    }
+
+    var removeFilterBtn = target.closest('[data-matrix-filter-remove]');
+    if(removeFilterBtn){
+      event.preventDefault();
+      event.stopPropagation();
+      var apiRemove = getFilterApi();
+      var nextRemoved = apiRemove && typeof apiRemove.removeFilterChip === 'function'
+        ? apiRemove.removeFilterChip(getMatrixFilterState(), removeFilterBtn.getAttribute('data-matrix-filter-remove'))
+        : getMatrixFilterState();
+      if(removeFilterBtn.getAttribute('data-matrix-filter-remove') === 'search'){
+        var searchEl = document.getElementById('matrixSearchInp');
+        if(searchEl) searchEl.value = '';
+      }
+      setMatrixFilterState(nextRemoved);
+      renderMatrix();
+      return;
+    }
+
+    var presetBtn = target.closest('[data-matrix-filter-preset]');
+    if(presetBtn){
+      event.preventDefault();
+      event.stopPropagation();
+      var apiPreset = getFilterApi();
+      if(apiPreset && typeof apiPreset.buildPresetFilter === 'function'){
+        var nextPreset = apiPreset.buildPresetFilter(presetBtn.getAttribute('data-matrix-filter-preset'));
+        var currentSearch = document.getElementById('matrixSearchInp');
+        if(currentSearch) currentSearch.value = '';
+        setMatrixFilterState(nextPreset);
+        renderMatrix();
+      }
+      return;
+    }
+
+    var exportBtn = target.closest('[data-matrix-action="export-excel"]');
+    if(exportBtn){
+      event.preventDefault();
+      event.stopPropagation();
+      exportMatrixToExcel();
+      return;
+    }
 
     var addCurrentBtn = target.closest('[data-matrix-action="add-current-ref"]');
     if(addCurrentBtn){
@@ -1186,6 +1867,14 @@
   }
 
   function onMatrixInput(event){
+    var target = event && event.target ? event.target : null;
+    if(target && target.id === 'matrixSearchInp'){
+      var next = getMatrixFilterState();
+      next.search = text(target.value);
+      setMatrixFilterState(next);
+      return;
+    }
+    if(target && updateMatrixFilterFromControl(target)) return;
     var api = getMatrixApi();
     var st = state();
     var wsId = getCurrentWorkspaceId();
@@ -1299,6 +1988,13 @@
 
     if(matrixView){
       matrixView.addEventListener('input', onMatrixInput);
+      matrixView.addEventListener('change', function(event){
+        var target = event && event.target ? event.target : null;
+        if(target && updateMatrixFilterFromControl(target)){
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      });
       matrixView.addEventListener('focusin', onMatrixFocusIn);
     }
     document.addEventListener('click', function(event){
@@ -1328,10 +2024,12 @@
   window.AQLiteratureMatrix = {
     init: init,
     render: renderMatrix,
+    rerunLocalAssistantAutoFill: rerunLocalAssistantAutoFill,
     setView: setView,
     toggleView: function(){ setView(currentView === 'matrix' ? 'writing' : 'matrix'); },
     setFullscreen: setMatrixFullscreen,
     toggleFullscreen: toggleMatrixFullscreen,
+    exportExcel: exportMatrixToExcel,
     addReferenceToMatrix: addReferenceToMatrix,
     sendNoteToMatrix: sendNoteToMatrix
   };

@@ -21,6 +21,40 @@
     .filter(function(column){ return column.editable; })
     .map(function(column){ return column.key; });
 
+  var ExtractionApi = null;
+  try {
+    if(typeof require === 'function'){
+      ExtractionApi = require('./literature-matrix-extraction.js');
+    }
+  } catch(_error) {}
+
+  function getExtractionApi(){
+    if(ExtractionApi) return ExtractionApi;
+    try {
+      if(typeof globalThis !== 'undefined' && globalThis.AQLiteratureMatrixExtraction){
+        return globalThis.AQLiteratureMatrixExtraction;
+      }
+    } catch(_error) {}
+    return null;
+  }
+
+  var LocalAssistantApi = null;
+  try {
+    if(typeof require === 'function'){
+      LocalAssistantApi = require('./literature-matrix-local-assistant.js');
+    }
+  } catch(_error) {}
+
+  function getLocalAssistantApi(){
+    if(LocalAssistantApi) return LocalAssistantApi;
+    try {
+      if(typeof globalThis !== 'undefined' && globalThis.AQLocalMatrixAssistant){
+        return globalThis.AQLocalMatrixAssistant;
+      }
+    } catch(_error) {}
+    return null;
+  }
+
   var AUTO_FILL_PATTERNS = {
     purpose: [
       'this study aims to',
@@ -374,7 +408,10 @@
     return {
       text: '',
       noteIds: [],
-      source: { page: '', snippet: '', updatedAt: 0 }
+      source: { page: '', snippet: '', section: '', extractionType: '', confidence: 0, updatedAt: 0 },
+      sources: [],
+      status: 'empty',
+      candidates: []
     };
   }
 
@@ -397,19 +434,44 @@
       return {
         text: value,
         noteIds: [],
-        source: { page: '', snippet: '', updatedAt: 0 }
+        source: { page: '', snippet: '', section: '', extractionType: '', confidence: 0, updatedAt: 0 },
+        sources: [],
+        status: text(value) ? 'user_edited' : 'empty',
+        candidates: []
       };
     }
     var cell = value && typeof value === 'object' ? value : {};
     var source = cell.source && typeof cell.source === 'object' ? cell.source : {};
+    var normalizedSource = {
+      page: text(source.page || ''),
+      snippet: text(source.snippet || ''),
+      section: text(source.section || ''),
+      extractionType: text(source.extractionType || ''),
+      confidence: Number(source.confidence) > 0 ? Math.min(1, Number(source.confidence)) : 0,
+      updatedAt: Number(source.updatedAt) > 0 ? Number(source.updatedAt) : 0
+    };
+    var sources = cloneArray(cell.sources).map(function(item){
+      var src = item && typeof item === 'object' ? item : {};
+      return {
+        page: text(src.page || ''),
+        snippet: text(src.snippet || '').slice(0, 2000),
+        section: text(src.section || ''),
+        extractionType: text(src.extractionType || ''),
+        confidence: Number(src.confidence) > 0 ? Math.min(1, Number(src.confidence)) : 0,
+        updatedAt: Number(src.updatedAt) > 0 ? Number(src.updatedAt) : 0
+      };
+    }).filter(function(item){ return item.snippet || item.page || item.section; });
+    var status = text(cell.status || '');
+    if(['empty','auto_suggested','user_confirmed','user_edited','low_confidence','needs_review'].indexOf(status) < 0){
+      status = text(cell.text || '') ? 'user_edited' : 'empty';
+    }
     return {
       text: text(cell.text || ''),
       noteIds: normalizeNoteIds(cell.noteIds),
-      source: {
-        page: text(source.page || ''),
-        snippet: text(source.snippet || ''),
-        updatedAt: Number(source.updatedAt) > 0 ? Number(source.updatedAt) : 0
-      }
+      source: normalizedSource,
+      sources: sources,
+      status: status,
+      candidates: cloneArray(cell.candidates).slice(0, 6)
     };
   }
 
@@ -746,7 +808,34 @@
       }
       if(hit) out[columnKey] = hit;
     });
+    var extraction = getExtractionApi();
+    if(extraction && typeof extraction.bestCandidatesByColumn === 'function'){
+      var best = extraction.bestCandidatesByColumn(corpus);
+      Object.keys(best || {}).forEach(function(columnKey){
+        if(out[columnKey]) return;
+        var candidate = best[columnKey];
+        if(candidate && Number(candidate.confidence || 0) >= 0.8){
+          out[columnKey] = text(candidate.text || '');
+        }
+      });
+    }
     return out;
+  }
+
+  function inferAutoCandidatesFromReference(reference, options){
+    var extraction = getExtractionApi();
+    if(!extraction || typeof extraction.extractCandidates !== 'function') return [];
+    var corpus = buildReferenceTextCorpus(reference, options);
+    if(!corpus) return [];
+    var candidates = extraction.extractCandidates(corpus, options || {});
+    var assistant = getLocalAssistantApi();
+    if(assistant && typeof assistant.rankCandidates === 'function'){
+      candidates = assistant.rankCandidates(candidates, {
+        reference: reference || null,
+        corpus: corpus
+      }, options && options.localMatrixAssistant);
+    }
+    return candidates;
   }
 
   function normalizeCells(cells){
@@ -930,6 +1019,59 @@
     if(!row) return null;
     var cell = normalizeCell(row.cells[column]);
     cell.text = text(nextText);
+    cell.status = options.status || (cell.text ? 'user_edited' : 'empty');
+    row.cells[column] = cell;
+    row.updatedAt = Date.now();
+    var ws = ensureWorkspaceMatrix(state, workspaceId, options);
+    if(ws) ws.updatedAt = row.updatedAt;
+    return row;
+  }
+
+  function normalizeMatrixSource(source, fallback){
+    var src = source && typeof source === 'object' ? source : {};
+    fallback = fallback && typeof fallback === 'object' ? fallback : {};
+    return {
+      page: text(src.page || fallback.page || ''),
+      snippet: text(src.snippet || fallback.snippet || '').slice(0, 2000),
+      section: text(src.section || fallback.section || ''),
+      extractionType: text(src.extractionType || fallback.extractionType || ''),
+      confidence: Number(src.confidence || fallback.confidence) > 0 ? Math.min(1, Number(src.confidence || fallback.confidence)) : 0,
+      updatedAt: Number(src.updatedAt || fallback.updatedAt) > 0 ? Number(src.updatedAt || fallback.updatedAt) : Date.now()
+    };
+  }
+
+  function appendTextToCell(state, workspaceId, rowId, columnKey, payload, options){
+    options = options || {};
+    var column = text(columnKey);
+    if(EDITABLE_COLUMN_KEYS.indexOf(column) < 0) return null;
+    var row = findRowById(state, workspaceId, rowId, options);
+    if(!row) return null;
+    var nextText = text(payload).slice(0, Number(options.maxText) > 0 ? Number(options.maxText) : 2000);
+    if(!nextText) return row;
+    var cell = normalizeCell(row.cells[column]);
+    var mode = text(options.mode || 'append');
+    if(!cell.text || mode === 'replace'){
+      cell.text = nextText;
+    }else if(mode === 'sourceOnly'){
+      // Keep user text untouched; evidence is appended to sources below.
+    }else if(cell.text.indexOf(nextText) < 0){
+      cell.text += '\n\n' + nextText;
+    }
+    var source = normalizeMatrixSource(options.source, {
+      page: options.sourcePage,
+      snippet: options.sourceSnippet || nextText,
+      section: options.section,
+      extractionType: options.extractionType,
+      confidence: options.confidence,
+      updatedAt: Date.now()
+    });
+    if(source.snippet || source.page || source.section){
+      cell.source = source;
+      cell.sources = cloneArray(cell.sources);
+      cell.sources.push(source);
+      if(cell.sources.length > 12) cell.sources = cell.sources.slice(cell.sources.length - 12);
+    }
+    cell.status = text(options.status || '') || 'user_confirmed';
     row.cells[column] = cell;
     row.updatedAt = Date.now();
     var ws = ensureWorkspaceMatrix(state, workspaceId, options);
@@ -960,6 +1102,17 @@
       cell.source.snippet = sourceSnippet;
       cell.source.updatedAt = Date.now();
     }
+    if(sourcePage || sourceSnippet){
+      var src = normalizeMatrixSource({
+        page: sourcePage,
+        snippet: sourceSnippet,
+        extractionType: options.extractionType || 'note-link',
+        confidence: options.confidence || 1
+      });
+      cell.sources = cloneArray(cell.sources);
+      cell.sources.push(src);
+      if(cell.sources.length > 12) cell.sources = cell.sources.slice(cell.sources.length - 12);
+    }
     var payload = text(noteText);
     if(payload){
       if(!cell.text){
@@ -969,6 +1122,7 @@
         cell.text += joiner + payload;
       }
     }
+    cell.status = options.status || (nextNoteId ? 'user_confirmed' : (cell.text ? 'user_edited' : 'empty'));
     row.cells[column] = cell;
     row.updatedAt = Date.now();
     var ws = ensureWorkspaceMatrix(state, workspaceId, options);
@@ -1035,6 +1189,69 @@
       if(!overwrite && text(cell.text)) return;
       if(text(cell.text) === nextText) return;
       cell.text = nextText;
+      cell.status = options.status || 'auto_suggested';
+      row.cells[columnKey] = cell;
+      changed = true;
+    });
+    if(changed){
+      row.updatedAt = Date.now();
+      var ws = ensureWorkspaceMatrix(state, workspaceId, options);
+      if(ws) ws.updatedAt = row.updatedAt;
+    }
+    return row;
+  }
+
+  function applyAutoCandidatesToRow(state, workspaceId, rowId, candidates, options){
+    options = options || {};
+    var row = findRowById(state, workspaceId, rowId, options);
+    if(!row) return null;
+    var list = cloneArray(candidates);
+    var byColumn = {};
+    list.forEach(function(candidate){
+      var column = text(candidate && candidate.columnKey);
+      if(EDITABLE_COLUMN_KEYS.indexOf(column) < 0) return;
+      if(!byColumn[column] || Number(candidate.score || 0) > Number(byColumn[column].score || 0)){
+        byColumn[column] = candidate;
+      }
+    });
+    var changed = false;
+    EDITABLE_COLUMN_KEYS.forEach(function(columnKey){
+      var candidate = byColumn[columnKey];
+      if(!candidate) return;
+      var candidateText = text(candidate.text || '');
+      if(!candidateText) return;
+      var confidence = Number(candidate.confidence || 0);
+      var cell = normalizeCell(row.cells[columnKey]);
+      cell.candidates = cloneArray(cell.candidates);
+      cell.candidates.unshift({
+        columnKey: columnKey,
+        text: candidateText.slice(0, 2000),
+        score: Number(candidate.score || 0),
+        confidence: confidence,
+        source: normalizeMatrixSource(candidate.source, {
+          snippet: candidateText,
+          extractionType: 'rule-section-sentence',
+          confidence: confidence,
+          updatedAt: Date.now()
+        }),
+        reasons: cloneArray(candidate.reasons).slice(0, 8)
+      });
+      cell.candidates = cell.candidates.slice(0, 6);
+      if(!text(cell.text) && confidence >= 0.8){
+        cell.text = candidateText;
+        cell.status = 'auto_suggested';
+        cell.source = normalizeMatrixSource(candidate.source, {
+          snippet: candidateText,
+          extractionType: 'rule-section-sentence',
+          confidence: confidence,
+          updatedAt: Date.now()
+        });
+        cell.sources = cloneArray(cell.sources);
+        cell.sources.push(cell.source);
+        if(cell.sources.length > 12) cell.sources = cell.sources.slice(cell.sources.length - 12);
+      }else if(!text(cell.text) && confidence >= 0.5){
+        cell.status = 'needs_review';
+      }
       row.cells[columnKey] = cell;
       changed = true;
     });
@@ -1095,12 +1312,15 @@
     ensureRowForReference: ensureRowForReference,
     setCellText: setCellText,
     appendNoteToCell: appendNoteToCell,
+    appendTextToCell: appendTextToCell,
     setSelectedCell: setSelectedCell,
     getSelectedCell: getSelectedCell,
     getCellLinkedNoteIds: getCellLinkedNoteIds,
     inferColumnFromNoteType: inferColumnFromNoteType,
     inferAutoCellsFromReference: inferAutoCellsFromReference,
+    inferAutoCandidatesFromReference: inferAutoCandidatesFromReference,
     applyAutoCellsToRow: applyAutoCellsToRow,
+    applyAutoCandidatesToRow: applyAutoCandidatesToRow,
     removeLinkedNoteFromRows: removeLinkedNoteFromRows,
     dismissReference: dismissReference,
     undismissReference: undismissReference,

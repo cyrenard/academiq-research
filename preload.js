@@ -99,7 +99,11 @@ function pickWsContext(ws) {
   if (!ws || typeof ws !== 'object') return null;
   const id = asString(ws.id, 128).trim();
   if (!id) return null;
-  return { id, name: asString(ws.name, 256) };
+  const out = { id, name: asString(ws.name, 256), title: asString(ws.title || ws.referenceTitle, 240) };
+  if (Array.isArray(ws.referenceIds)) {
+    out.referenceIds = ws.referenceIds.map((item) => asRefId(item)).filter(Boolean).slice(0, 5000);
+  }
+  return out;
 }
 
 function pickDownloadOptions(options) {
@@ -172,9 +176,6 @@ const electronAPI = {
   // PDF download (CORS-free, Node.js redirect following)
   downloadPDFfromURL: (url, refId, options) => invoke('pdf:download', asURL(url), asRefId(refId), pickDownloadOptions(options)),
   openExternalUrl: (url) => invoke('app:openExternalUrl', asURL(url)),
-  openInstitutionalAccess: (payload) => invoke('institutionalAccess:open', payload && typeof payload === 'object' ? payload : {}),
-  clearInstitutionalAccessSession: () => invoke('institutionalAccess:clearSession'),
-  onInstitutionalAccessPdfSaved: (callback) => listen('institutionalAccess:pdfSaved', callback),
   netFetchJSON:      (url, options) => invoke('net:fetch-json', asURL(url), pickNetFetchOptions(options)),
   netFetchText:      (url, options) => invoke('net:fetch-text', asURL(url), pickNetFetchOptions(options)),
 
@@ -192,6 +193,15 @@ const electronAPI = {
   getSyncSettings: ()         => invoke('sync:getSettings'),
   setSyncDir:      ()         => invoke('sync:setSyncDir'),
   clearSyncDir:    ()         => invoke('sync:clearSyncDir'),
+
+  // Backup / restore
+  createBackup:    ()         => invoke('backup:create'),
+  restoreBackup:   ()         => invoke('backup:restore'),
+
+  // Local Matrix assistant (main/worker side, local only)
+  getLocalMatrixAssistantStatus: (settings) => invoke('localMatrixAssistant:getStatus', settings && typeof settings === 'object' ? settings : {}),
+  rankLocalMatrixCandidates: (payload) => invoke('localMatrixAssistant:rankCandidates', payload && typeof payload === 'object' ? payload : {}),
+  composeLocalMatrixCells: (payload) => invoke('localMatrixAssistant:composeCells', payload && typeof payload === 'object' ? payload : {}),
 
   // App info
   getAppInfo:      ()         => invoke('app:getInfo'),

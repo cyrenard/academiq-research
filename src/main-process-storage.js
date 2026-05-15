@@ -7,6 +7,7 @@ const MAX_PDF_BYTES = 120 * 1024 * 1024;
 const MAX_DOC_HISTORY_ENTRIES = 30;
 const DOC_HISTORY_INTERVAL_MS = 90 * 1000;
 const DOC_HISTORY_MIN_CHAR_DELTA = 120;
+const BACKUP_MAGIC = Buffer.from('AQBACKUP1\n', 'ascii');
 
 function createStorageService(options) {
   const appDir = options.appDir;
@@ -32,15 +33,41 @@ function createStorageService(options) {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   }
 
-  function buildPdfFileName(refId) {
-    const raw = normalizeRefId(refId);
-    const base = (raw || 'ref')
-      .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+  function sanitizePdfNamePart(value) {
+    return String(value || '')
+      .replace(/[<>:"/\\|?*\x00-\x1F]/g, ' ')
+      .replace(/\.\.+/g, ' ')
       .replace(/\s+/g, ' ')
-      .trim() || 'ref';
+      .trim();
+  }
+
+  function buildPdfTitlePrefix(title) {
+    const words = sanitizePdfNamePart(title)
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2);
+    return words.join(' ').slice(0, 64).trim();
+  }
+
+  function buildPdfFileName(refId, title) {
+    const raw = normalizeRefId(refId);
+    const titlePrefix = buildPdfTitlePrefix(title);
+    const base = titlePrefix || sanitizePdfNamePart(raw) || 'ref';
     const trimmed = base.length > 80 ? base.slice(0, 80) : base;
     const hash = crypto.createHash('sha1').update(raw).digest('hex').slice(0, 10);
     return `${trimmed}__${hash}.pdf`;
+  }
+
+  function findPdfByHash(dir, refId) {
+    const raw = normalizeRefId(refId);
+    const hash = crypto.createHash('sha1').update(raw).digest('hex').slice(0, 10);
+    try {
+      const files = fs.readdirSync(dir);
+      const matched = files.find((file) => file.toLowerCase().endsWith(`__${hash}.pdf`));
+      return matched ? path.join(dir, matched) : null;
+    } catch (_e) {
+      return null;
+    }
   }
 
   // ── Workspace-scoped PDF directory ─────────────────────────────────────
@@ -97,7 +124,7 @@ function createStorageService(options) {
       lib.forEach((ref) => {
         if (!ref || !ref.id) return;
         const wsInfo = wsById[String(ref.wsId || ws.id)] || wsById[String(ws.id)];
-        if (wsInfo) next[String(ref.id)] = { id: wsInfo.id, name: wsInfo.name };
+        if (wsInfo) next[String(ref.id)] = { id: wsInfo.id, name: wsInfo.name, title: String(ref.title || '') };
       });
     });
     refWsIndex = next;
@@ -118,7 +145,7 @@ function createStorageService(options) {
     if (!key) return null;
     ensureRefWsIndex();
     const entry = refWsIndex[key];
-    if (entry) return { id: entry.id, name: entry.name };
+    if (entry) return { id: entry.id, name: entry.name, title: entry.title || '' };
     return null;
   }
 
@@ -126,16 +153,23 @@ function createStorageService(options) {
     if (!ws || typeof ws !== 'object') return null;
     const id = String(ws.id || '').trim();
     if (!id) return null;
-    return { id, name: String(ws.name || '') };
+    const out = { id, name: String(ws.name || ''), title: String(ws.title || ws.referenceTitle || '') };
+    if (Array.isArray(ws.referenceIds)) {
+      out.referenceIds = ws.referenceIds
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+        .slice(0, 5000);
+    }
+    return out;
   }
 
   function resolveWsContext(ws, refId) {
     return normalizeWsContext(ws) || resolveWsForRef(refId);
   }
 
-  function resolvePdfPaths(dir, refId) {
+  function resolvePdfPaths(dir, refId, title) {
     const normalizedRefId = normalizeRefId(refId);
-    const safeName = buildPdfFileName(refId);
+    const safeName = buildPdfFileName(refId, title);
     const legacySafe = normalizedRefId.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').replace(/\.\.+/g, '_') || 'ref';
     const legacyName = legacySafe + '.pdf';
     const safeResolved = path.resolve(path.join(dir, safeName));
@@ -143,7 +177,8 @@ function createStorageService(options) {
     const dirResolved = path.resolve(dir);
     return {
       safe: safeResolved.startsWith(dirResolved) ? safeResolved : path.join(dir, 'ref__invalid.pdf'),
-      legacy: legacyResolved.startsWith(dirResolved) ? legacyResolved : path.join(dir, 'ref__invalid_legacy.pdf')
+      legacy: legacyResolved.startsWith(dirResolved) ? legacyResolved : path.join(dir, 'ref__invalid_legacy.pdf'),
+      hashed: findPdfByHash(dir, refId)
     };
   }
 
@@ -216,6 +251,59 @@ function createStorageService(options) {
     } catch (_e) {
       return '';
     }
+  }
+
+  function normalizeBackupRel(value) {
+    const rel = String(value || '').replace(/\\/g, '/').replace(/^\/+/, '');
+    if (!rel || rel.includes('\0') || rel.split('/').includes('..')) return '';
+    return rel;
+  }
+
+  function backupRelToTarget(rel) {
+    const safe = normalizeBackupRel(rel);
+    if (!safe) return null;
+    if (safe === 'data/academiq-data.json') return path.join(appDir, 'academiq-data.json');
+    if (safe === 'data/academiq-data.json.bak') return path.join(appDir, 'academiq-data.json.bak');
+    if (safe === 'data/academiq-data.json.recovery.json') return path.join(appDir, 'academiq-data.json.recovery.json');
+    if (safe === 'data/document-history.json') return path.join(appDir, 'document-history.json');
+    if (safe === 'config/settings.json') return settingsFile;
+    if (safe === 'session/session-state.json') return sessionStateFile;
+    if (safe === 'session/editor-draft.json') return editorDraftFile;
+    if (safe === 'capture/capture-queue.json') return captureQueueFile;
+    if (safe === 'capture/capture-targets.json') return captureTargetsFile;
+    if (safe === 'capture/capture-agent-state.json') return captureAgentStateFile;
+    if (safe.startsWith('pdfs/')) return path.join(localPdfDir, safe.slice('pdfs/'.length));
+    if (safe.startsWith('workspaces/')) return path.join(workspacesRoot, safe.slice('workspaces/'.length));
+    return null;
+  }
+
+  function addBackupFile(files, absPath, rel) {
+    const safeRel = normalizeBackupRel(rel);
+    if (!safeRel || !absPath || !fs.existsSync(absPath)) return;
+    const stat = fs.statSync(absPath);
+    if (!stat.isFile()) return;
+    files.push({
+      path: safeRel,
+      source: absPath,
+      size: stat.size,
+      mtimeMs: Math.round(stat.mtimeMs || 0),
+      sha1: crypto.createHash('sha1').update(fs.readFileSync(absPath)).digest('hex')
+    });
+  }
+
+  function collectBackupDir(files, dir, relPrefix) {
+    if (!dir || !fs.existsSync(dir)) return;
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    entries.forEach((entry) => {
+      const abs = path.join(dir, entry.name);
+      const rel = normalizeBackupRel(`${relPrefix}/${entry.name}`);
+      if (!rel) return;
+      if (entry.isDirectory()) {
+        collectBackupDir(files, abs, rel);
+      } else if (entry.isFile()) {
+        addBackupFile(files, abs, rel);
+      }
+    });
   }
 
   function isValidJsonText(text) {
@@ -758,14 +846,18 @@ function createStorageService(options) {
       const wsDir = getWorkspacePdfDir(wsCtx, { ensure: true });
       if (wsDir) { primaryDir = wsDir; primaryTier = 'ws'; }
     }
-    const primaryPaths = resolvePdfPaths(primaryDir, refId);
+    const primaryPaths = resolvePdfPaths(primaryDir, refId, wsCtx && wsCtx.title);
     fs.writeFileSync(primaryPaths.safe, buf);
+    if (primaryPaths.hashed && primaryPaths.hashed !== primaryPaths.safe) {
+      try { fs.unlinkSync(primaryPaths.hashed); } catch (_e) {}
+    }
     // Remove any stale copy in the flat legacy dir once we've written into a workspace folder
     if (primaryTier === 'ws') {
       try {
-        const legacyPaths = resolvePdfPaths(localPdfDir, refId);
+        const legacyPaths = resolvePdfPaths(localPdfDir, refId, wsCtx && wsCtx.title);
         if (fs.existsSync(legacyPaths.safe)) fs.unlinkSync(legacyPaths.safe);
         if (fs.existsSync(legacyPaths.legacy)) fs.unlinkSync(legacyPaths.legacy);
+        if (legacyPaths.hashed) fs.unlinkSync(legacyPaths.hashed);
       } catch (_e) {}
     }
     // Sync: mirror into workspace sync dir when possible, fall back to legacy sync
@@ -774,8 +866,11 @@ function createStorageService(options) {
         let syncDir = null;
         if (wsCtx) syncDir = getWorkspaceSyncPdfDir(wsCtx, { ensure: true });
         if (!syncDir) syncDir = getSyncPDFDir();
-        const syncPaths = resolvePdfPaths(syncDir, refId);
+        const syncPaths = resolvePdfPaths(syncDir, refId, wsCtx && wsCtx.title);
         fs.writeFileSync(syncPaths.safe, buf);
+        if (syncPaths.hashed && syncPaths.hashed !== syncPaths.safe) {
+          try { fs.unlinkSync(syncPaths.hashed); } catch (_e) {}
+        }
       } catch (e) { console.warn('Sync PDF write failed:', e.message); }
     }
     return { ok: true };
@@ -787,8 +882,8 @@ function createStorageService(options) {
     const candidates = pdfCandidateDirs(wsCtx, refId, 'read');
     let sawInvalid = false;
     for (const cand of candidates) {
-      const paths = resolvePdfPaths(cand.dir, refId);
-      const fp = fs.existsSync(paths.safe) ? paths.safe : (fs.existsSync(paths.legacy) ? paths.legacy : null);
+      const paths = resolvePdfPaths(cand.dir, refId, wsCtx && wsCtx.title);
+      const fp = fs.existsSync(paths.safe) ? paths.safe : (paths.hashed || (fs.existsSync(paths.legacy) ? paths.legacy : null));
       if (!fp) continue;
       try {
         const buf = ensurePDFBuffer(fs.readFileSync(fp));
@@ -797,7 +892,7 @@ function createStorageService(options) {
           try {
             const wsDir = getWorkspacePdfDir(wsCtx, { ensure: true });
             if (wsDir) {
-              const wsPaths = resolvePdfPaths(wsDir, refId);
+              const wsPaths = resolvePdfPaths(wsDir, refId, wsCtx && wsCtx.title);
               if (!fs.existsSync(wsPaths.safe)) fs.writeFileSync(wsPaths.safe, buf);
               // Clean up flat legacy copy after successful migration
               if (cand.tier === 'legacy-local') {
@@ -820,8 +915,8 @@ function createStorageService(options) {
     const wsCtx = resolveWsContext(ws, refId);
     const candidates = pdfCandidateDirs(wsCtx, refId, 'read');
     for (const cand of candidates) {
-      const paths = resolvePdfPaths(cand.dir, refId);
-      if (fs.existsSync(paths.safe) || fs.existsSync(paths.legacy)) return true;
+      const paths = resolvePdfPaths(cand.dir, refId, wsCtx && wsCtx.title);
+      if (fs.existsSync(paths.safe) || paths.hashed || fs.existsSync(paths.legacy)) return true;
     }
     return false;
   }
@@ -831,8 +926,9 @@ function createStorageService(options) {
     const wsCtx = resolveWsContext(ws, refId);
     const candidates = pdfCandidateDirs(wsCtx, refId, 'read');
     for (const cand of candidates) {
-      const paths = resolvePdfPaths(cand.dir, refId);
+      const paths = resolvePdfPaths(cand.dir, refId, wsCtx && wsCtx.title);
       try { if (fs.existsSync(paths.safe)) fs.unlinkSync(paths.safe); } catch (_e) {}
+      try { if (paths.hashed) fs.unlinkSync(paths.hashed); } catch (_e) {}
       try { if (fs.existsSync(paths.legacy)) fs.unlinkSync(paths.legacy); } catch (_e) {}
     }
     return { ok: true };
@@ -845,8 +941,9 @@ function createStorageService(options) {
     const wsCtx = resolveWsContext(ws, refId);
     const candidates = pdfCandidateDirs(wsCtx, refId, 'read');
     for (const cand of candidates) {
-      const paths = resolvePdfPaths(cand.dir, refId);
+      const paths = resolvePdfPaths(cand.dir, refId, wsCtx && wsCtx.title);
       if (fs.existsSync(paths.safe)) return paths.safe;
+      if (paths.hashed) return paths.hashed;
       if (fs.existsSync(paths.legacy)) return paths.legacy;
     }
     return null;
@@ -888,7 +985,7 @@ function createStorageService(options) {
       try {
         const wsDir = getWorkspacePdfDir(matchedWs, { ensure: true });
         if (!wsDir) { skipped++; continue; }
-        const targetPaths = resolvePdfPaths(wsDir, matchedRefId);
+        const targetPaths = resolvePdfPaths(wsDir, matchedRefId, matchedWs && matchedWs.title);
         // Don't overwrite if target already exists with same content — just drop the legacy one
         if (fs.existsSync(targetPaths.safe)) {
           try { fs.unlinkSync(srcPath); } catch (_e) {}
@@ -917,25 +1014,41 @@ function createStorageService(options) {
     const wsCtx = normalizeWsContext(ws);
     if (!wsCtx) return { ok: false, error: 'invalid workspace' };
     const removed = [];
-    const folder = buildWorkspaceFolderName(wsCtx);
-    if (!folder) return { ok: false, error: 'invalid folder' };
-    const localWsRoot = path.join(workspacesRoot, folder);
-    try {
-      if (fs.existsSync(localWsRoot)) {
-        fs.rmSync(localWsRoot, { recursive: true, force: true });
-        removed.push(localWsRoot);
-      }
-    } catch (e) { console.warn('Workspace PDF folder delete failed (local):', e.message); }
-    if (settings.syncDir) {
-      const syncWsRoot = path.join(settings.syncDir, 'AcademiQ', 'workspaces', folder);
-      try {
-        if (fs.existsSync(syncWsRoot)) {
-          fs.rmSync(syncWsRoot, { recursive: true, force: true });
-          removed.push(syncWsRoot);
+    const removedRefs = [];
+    const shortId = crypto.createHash('sha1').update(String(wsCtx.id)).digest('hex').slice(0, 6);
+
+    function removeWorkspaceRoots(rootDir) {
+      const rootResolved = path.resolve(rootDir);
+      let entries = [];
+      try { entries = fs.existsSync(rootDir) ? fs.readdirSync(rootDir, { withFileTypes: true }) : []; } catch (_e) { return; }
+      entries.forEach((entry) => {
+        if (!entry || !entry.isDirectory() || !entry.name.startsWith('AcademiQ-') || !entry.name.endsWith(`-${shortId}`)) return;
+        const target = path.resolve(path.join(rootDir, entry.name));
+        if (!(target === rootResolved || target.startsWith(rootResolved + path.sep))) return;
+        try {
+          fs.rmSync(target, { recursive: true, force: true });
+          removed.push(target);
+        } catch (e) {
+          console.warn('Workspace PDF folder delete failed:', e.message);
         }
-      } catch (e) { console.warn('Workspace PDF folder delete failed (sync):', e.message); }
+      });
     }
-    return { ok: true, removed };
+
+    removeWorkspaceRoots(workspacesRoot);
+    if (settings.syncDir) {
+      removeWorkspaceRoots(path.join(settings.syncDir, 'AcademiQ', 'workspaces'));
+    }
+
+    if (Array.isArray(wsCtx.referenceIds)) {
+      wsCtx.referenceIds.forEach((refId) => {
+        try {
+          deletePDF(refId, wsCtx);
+          removedRefs.push(refId);
+        } catch (_e) {}
+      });
+    }
+
+    return { ok: true, removed, removedRefs };
   }
 
   function syncAllPDFs() {
@@ -1035,6 +1148,159 @@ function createStorageService(options) {
     };
   }
 
+  function getBackupCandidateFiles() {
+    const paths = getDataPaths();
+    const files = [];
+    addBackupFile(files, paths.dataFile, 'data/academiq-data.json');
+    addBackupFile(files, paths.backupFile, 'data/academiq-data.json.bak');
+    addBackupFile(files, paths.recoveryFile, 'data/academiq-data.json.recovery.json');
+    addBackupFile(files, getDocumentHistoryPath(), 'data/document-history.json');
+    addBackupFile(files, settingsFile, 'config/settings.json');
+    addBackupFile(files, sessionStateFile, 'session/session-state.json');
+    addBackupFile(files, editorDraftFile, 'session/editor-draft.json');
+    addBackupFile(files, captureQueueFile, 'capture/capture-queue.json');
+    addBackupFile(files, captureTargetsFile, 'capture/capture-targets.json');
+    addBackupFile(files, captureAgentStateFile, 'capture/capture-agent-state.json');
+    collectBackupDir(files, localPdfDir, 'pdfs');
+    collectBackupDir(files, workspacesRoot, 'workspaces');
+    return files.sort((a, b) => String(a.path).localeCompare(String(b.path)));
+  }
+
+  function writeBufferToFd(fd, buffer) {
+    let offset = 0;
+    while (offset < buffer.length) {
+      offset += fs.writeSync(fd, buffer, offset, buffer.length - offset);
+    }
+  }
+
+  function copyFileToFd(fd, filePath) {
+    const input = fs.openSync(filePath, 'r');
+    const chunk = Buffer.allocUnsafe(1024 * 1024);
+    try {
+      for (;;) {
+        const read = fs.readSync(input, chunk, 0, chunk.length, null);
+        if (!read) break;
+        writeBufferToFd(fd, chunk.subarray(0, read));
+      }
+    } finally {
+      fs.closeSync(input);
+    }
+  }
+
+  function readExactFromFd(fd, size) {
+    const buffer = Buffer.alloc(size);
+    let offset = 0;
+    while (offset < size) {
+      const read = fs.readSync(fd, buffer, offset, size - offset, null);
+      if (!read) throw new Error('Backup dosyası beklenenden kısa');
+      offset += read;
+    }
+    return buffer;
+  }
+
+  function copyFdToFile(fd, targetPath, size) {
+    const targetResolved = path.resolve(targetPath);
+    const appResolved = path.resolve(appDir);
+    if (!targetResolved.startsWith(appResolved)) throw new Error('Güvensiz backup yolu');
+    ensureDir(path.dirname(targetResolved));
+    const output = fs.openSync(targetResolved, 'w');
+    const chunkSize = 1024 * 1024;
+    let remaining = Number(size) || 0;
+    try {
+      while (remaining > 0) {
+        const readSize = Math.min(chunkSize, remaining);
+        const buffer = readExactFromFd(fd, readSize);
+        fs.writeSync(output, buffer, 0, buffer.length);
+        remaining -= buffer.length;
+      }
+    } finally {
+      fs.closeSync(output);
+    }
+  }
+
+  function createBackup(filePath) {
+    const target = path.resolve(String(filePath || '').trim());
+    if (!target) throw new Error('Geçersiz backup dosyası');
+    ensureDir(path.dirname(target));
+    const files = getBackupCandidateFiles();
+    const totalBytes = files.reduce((sum, file) => sum + Number(file.size || 0), 0);
+    const manifest = {
+      format: 'academiq-backup',
+      version: 1,
+      createdAt: Date.now(),
+      fileCount: files.length,
+      totalBytes,
+      files: files.map(({ path: rel, size, mtimeMs, sha1 }) => ({ path: rel, size, mtimeMs, sha1 }))
+    };
+    const manifestBuffer = Buffer.from(JSON.stringify(manifest), 'utf8');
+    const len = Buffer.alloc(8);
+    len.writeBigUInt64BE(BigInt(manifestBuffer.length));
+    const tmp = target + '.tmp';
+    const fd = fs.openSync(tmp, 'w');
+    try {
+      writeBufferToFd(fd, BACKUP_MAGIC);
+      writeBufferToFd(fd, len);
+      writeBufferToFd(fd, manifestBuffer);
+      files.forEach((file) => copyFileToFd(fd, file.source));
+    } finally {
+      fs.closeSync(fd);
+    }
+    fs.renameSync(tmp, target);
+    return { ok: true, path: target, fileCount: files.length, totalBytes };
+  }
+
+  function restoreBackup(filePath) {
+    const source = path.resolve(String(filePath || '').trim());
+    if (!source || !fs.existsSync(source)) throw new Error('Backup dosyası bulunamadı');
+    const fd = fs.openSync(source, 'r');
+    let manifest;
+    try {
+      const magic = readExactFromFd(fd, BACKUP_MAGIC.length);
+      if (!magic.equals(BACKUP_MAGIC)) throw new Error('Geçersiz AcademiQ backup dosyası');
+      const lenBuffer = readExactFromFd(fd, 8);
+      const manifestLength = Number(lenBuffer.readBigUInt64BE());
+      if (!manifestLength || manifestLength > 10 * 1024 * 1024) throw new Error('Backup manifesti geçersiz');
+      manifest = JSON.parse(readExactFromFd(fd, manifestLength).toString('utf8'));
+      const files = Array.isArray(manifest.files) ? manifest.files : [];
+      try { if (fs.existsSync(workspacesRoot)) fs.rmSync(workspacesRoot, { recursive: true, force: true }); } catch (_e) {}
+      try { if (fs.existsSync(localPdfDir)) fs.rmSync(localPdfDir, { recursive: true, force: true }); } catch (_e) {}
+      ensureDir(workspacesRoot);
+      ensureDir(localPdfDir);
+      files.forEach((file) => {
+        const rel = normalizeBackupRel(file && file.path);
+        const size = Number(file && file.size);
+        if (!rel || !Number.isFinite(size) || size < 0) throw new Error('Backup içeriği geçersiz');
+        const target = backupRelToTarget(rel);
+        if (!target) {
+          readExactFromFd(fd, size);
+          return;
+        }
+        copyFdToFile(fd, target, size);
+      });
+    } finally {
+      fs.closeSync(fd);
+    }
+    try {
+      const restoredSettings = readJsonFileSafe(settingsFile, {});
+      if (restoredSettings && typeof restoredSettings === 'object') {
+        restoredSettings.syncDir = '';
+        if (!restoredSettings.browserCapture || typeof restoredSettings.browserCapture !== 'object') restoredSettings.browserCapture = {};
+        writeJsonAtomic(settingsFile, restoredSettings);
+      }
+      loadSettings();
+    } catch (_e) {}
+    try {
+      const loaded = loadData();
+      if (loaded && loaded.data && isValidJsonText(loaded.data)) rebuildRefWsIndex(JSON.parse(loaded.data));
+    } catch (_e) {}
+    return {
+      ok: true,
+      restoredAt: Date.now(),
+      fileCount: Number(manifest && manifest.fileCount) || (Array.isArray(manifest && manifest.files) ? manifest.files.length : 0),
+      totalBytes: Number(manifest && manifest.totalBytes) || 0
+    };
+  }
+
   function loadCaptureQueue() {
     const data = readJsonFileSafe(captureQueueFile, { items: [] });
     return data && Array.isArray(data.items) ? data : { items: [] };
@@ -1118,6 +1384,8 @@ function createStorageService(options) {
     getBrowserCaptureSettings,
     setBrowserCaptureSettings,
     getAppInfo,
+    createBackup,
+    restoreBackup,
     loadSessionState,
     saveSessionState,
     markSessionOpen,
