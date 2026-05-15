@@ -111,7 +111,7 @@ button:disabled {
   inset: 56px calc(var(--aq-right-sidebar-visible-width, 280px) + 10px) 32px auto;
   z-index: 960;
   display: none;
-  width: min(700px, calc(100vw - var(--aq-left-sidebar-visible-width, 280px) - var(--aq-right-sidebar-visible-width, 280px) - 36px));
+  width: min(560px, calc(100vw - var(--aq-left-sidebar-visible-width, 280px) - var(--aq-right-sidebar-visible-width, 280px) - 36px));
   max-width: calc(100vw - var(--aq-left-sidebar-visible-width, 280px) - var(--aq-right-sidebar-visible-width, 280px) - 36px) !important;
   min-width: 380px;
   overflow: hidden;
@@ -127,15 +127,16 @@ button:disabled {
 }
 
 .aq-legacy-pdf-panel.fullscreen {
-  inset: 8px;
+  inset: 8px !important;
   z-index: 980;
-  width: auto;
+  width: auto !important;
+  max-width: none !important;
   min-width: 0;
 }
 
 body.aq-matrix-open .aq-legacy-pdf-panel.open {
   z-index: 980;
-  width: min(680px, calc(100vw - var(--aq-left-sidebar-visible-width, 280px) - var(--aq-right-sidebar-visible-width, 280px) - 36px));
+  width: min(540px, calc(100vw - var(--aq-left-sidebar-visible-width, 280px) - var(--aq-right-sidebar-visible-width, 280px) - 36px));
   max-width: calc(100vw - var(--aq-left-sidebar-visible-width, 280px) - var(--aq-right-sidebar-visible-width, 280px) - 36px) !important;
 }
 
@@ -294,12 +295,69 @@ body.aq-matrix-fullscreen .aq-legacy-pdf-panel.open {
 
 .aq-legacy-pdf-tabs {
   display: flex;
-  min-height: 30px;
-  gap: 3px;
+  align-items: center;
+  min-height: 32px;
+  gap: 4px;
   overflow-x: auto;
   border-bottom: 1px solid #ddd7cc;
   background: #f2efe9;
-  padding: 4px 6px;
+  padding: 5px 8px;
+  scrollbar-width: thin;
+}
+.aq-legacy-pdf-tabs::-webkit-scrollbar { height: 4px; }
+.aq-legacy-pdf-tabs::-webkit-scrollbar-thumb { background: #ddd7cc; border-radius: 2px; }
+
+.aq-legacy-pdf-tabs .pdftab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  max-width: 180px;
+  height: 24px;
+  padding: 0 8px 0 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #5b5648;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+.aq-legacy-pdf-tabs .pdftab:hover {
+  background: rgba(255,255,255,0.6);
+  color: #1f2328;
+}
+.aq-legacy-pdf-tabs .pdftab.on {
+  background: #ffffff;
+  color: #1f2328;
+  border-color: #ddd7cc;
+  box-shadow: 0 1px 2px rgba(22,27,34,0.04);
+}
+.aq-legacy-pdf-tabs .pdftab > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.aq-legacy-pdf-tabs .pdftab .tabclose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1;
+  color: #8a8474;
+  flex-shrink: 0;
+  transition: background 100ms, color 100ms;
+}
+.aq-legacy-pdf-tabs .pdftab .tabclose:hover {
+  background: #ddd7cc;
+  color: #1f2328;
 }
 
 .aq-legacy-pdf-search {
@@ -2217,7 +2275,7 @@ body.aq-matrix-fullscreen #matrixView {
 /* PDF viewer polish: keep the legacy behavior, make the shell feel native. */
 .aq-legacy-pdf-panel {
   inset: 54px calc(var(--aq-right-sidebar-visible-width, 280px) + 10px) 30px auto;
-  width: min(700px, calc(100vw - var(--aq-left-sidebar-visible-width, 280px) - var(--aq-right-sidebar-visible-width, 280px) - 36px));
+  width: min(560px, calc(100vw - var(--aq-left-sidebar-visible-width, 280px) - var(--aq-right-sidebar-visible-width, 280px) - 36px));
   max-width: calc(100vw - var(--aq-left-sidebar-visible-width, 280px) - var(--aq-right-sidebar-visible-width, 280px) - 36px) !important;
   min-width: min(420px, calc(100vw - var(--aq-left-sidebar-visible-width, 280px) - var(--aq-right-sidebar-visible-width, 280px) - 36px));
   border: 1px solid rgba(221, 215, 204, 0.9);
@@ -2228,7 +2286,10 @@ body.aq-matrix-fullscreen #matrixView {
 }
 
 .aq-legacy-pdf-panel.fullscreen {
-  inset: 12px;
+  inset: 12px !important;
+  width: auto !important;
+  max-width: none !important;
+  min-width: 0;
   border-radius: 16px;
 }
 
