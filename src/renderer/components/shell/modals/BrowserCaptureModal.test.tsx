@@ -9,7 +9,6 @@ let originalElectronAPI: any;
 beforeEach(() => {
   ipcCalls.length = 0;
   originalElectronAPI = (window as any).electronAPI;
-  // Override the test-setup stub with vi-trackable mocks
   (window as any).electronAPI = {
     getBrowserCaptureStatus: vi.fn(async () => {
       ipcCalls.push({ fn: 'getBrowserCaptureStatus', args: [] });
@@ -19,8 +18,7 @@ beforeEach(() => {
     openBrowserCaptureInstallDir: vi.fn(async () => { ipcCalls.push({ fn: 'openInstallDir', args: [] }); return { ok: true }; }),
     openBrowserCaptureGuide: vi.fn(async () => { ipcCalls.push({ fn: 'openGuide', args: [] }); return { ok: true }; }),
     testBrowserCaptureConnection: vi.fn(async () => { ipcCalls.push({ fn: 'test', args: [] }); return { ok: true, lifecycleState: 'ready', port: 27183 }; }),
-    updateBrowserCapturePrefs: vi.fn(async (prefs) => { ipcCalls.push({ fn: 'updatePrefs', args: [prefs] }); return { ok: true, ...prefs }; }),
-    clearInstitutionalAccessSession: vi.fn(async () => { ipcCalls.push({ fn: 'clearInst', args: [] }); return { ok: true }; })
+    updateBrowserCapturePrefs: vi.fn(async (prefs) => { ipcCalls.push({ fn: 'updatePrefs', args: [prefs] }); return { ok: true, ...prefs }; })
   };
 });
 
@@ -52,14 +50,13 @@ describe('BrowserCaptureModal', () => {
     });
   });
 
-  it('renders all 6 action buttons', async () => {
+  it('renders all capture action buttons', async () => {
     render(<BrowserCaptureModal open onClose={() => {}} onStatus={() => {}} />);
     expect(screen.getByRole('button', { name: 'Kurulumu hazırla' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Kurulum klasörünü aç' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Rehberi aç' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Bağlantıyı test et' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Capture aktif et' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Kurumsal oturumu temizle' })).toBeInTheDocument();
   });
 
   it('"Kurulumu hazırla" calls prepareBrowserCaptureSetup + reports success', async () => {
@@ -80,7 +77,6 @@ describe('BrowserCaptureModal', () => {
       expect((window as any).electronAPI.testBrowserCaptureConnection).toHaveBeenCalled();
       expect(onStatus).toHaveBeenCalledWith('Capture test edildi');
     });
-    // The pre block JSON includes the new test result
     await waitFor(() => {
       const pre = document.querySelector('pre');
       expect(pre?.textContent).toContain('27183');
@@ -93,25 +89,6 @@ describe('BrowserCaptureModal', () => {
     await waitFor(() => {
       const call = ((window as any).electronAPI.updateBrowserCapturePrefs as any).mock.calls[0];
       expect(call[0]).toEqual({ enabled: true });
-    });
-  });
-
-  it('"Kurumsal oturumu temizle" status differs by ok flag', async () => {
-    const onStatus = vi.fn();
-    render(<BrowserCaptureModal open onClose={() => {}} onStatus={onStatus} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Kurumsal oturumu temizle' }));
-    await waitFor(() => {
-      expect(onStatus).toHaveBeenCalledWith('Kurumsal oturum temizlendi');
-    });
-  });
-
-  it('reports failure status when clearInstitutionalAccessSession returns ok=false', async () => {
-    (window as any).electronAPI.clearInstitutionalAccessSession = vi.fn(async () => ({ ok: false }));
-    const onStatus = vi.fn();
-    render(<BrowserCaptureModal open onClose={() => {}} onStatus={onStatus} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Kurumsal oturumu temizle' }));
-    await waitFor(() => {
-      expect(onStatus).toHaveBeenCalledWith('Kurumsal oturum temizlenemedi');
     });
   });
 

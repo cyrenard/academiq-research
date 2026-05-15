@@ -7,17 +7,6 @@ type BrowserCaptureModalProps = {
   onStatus: (message: string) => void;
 };
 
-/**
- * Browser Capture configuration + diagnostic modal.
- *
- * Owns its own browserStatus state and IPC fetch lifecycle. Loads
- * fresh status when opened. Each setup/preferences/institutional
- * action wires through window.electronAPI and updates the displayed
- * status JSON.
- *
- * Extracted from FeatureModals.tsx so the parent stays focused on
- * its other modals.
- */
 export function BrowserCaptureModal({ open, onClose, onStatus }: BrowserCaptureModalProps) {
   const [browserStatus, setBrowserStatus] = useState<unknown>(null);
 
@@ -59,11 +48,6 @@ export function BrowserCaptureModal({ open, onClose, onStatus }: BrowserCaptureM
       })
       .catch(() => onStatus('Capture tercihleri güncellenemedi'));
 
-  const clearInstitutionalSession = () =>
-    window.electronAPI.clearInstitutionalAccessSession()
-      .then((result: any) => onStatus(result?.ok ? 'Kurumsal oturum temizlendi' : 'Kurumsal oturum temizlenemedi'))
-      .catch(() => onStatus('Kurumsal oturum temizlenemedi'));
-
   return (
     <Modal title="Browser Capture" open={open} onClose={onClose}>
       <div className="space-y-3 text-sm">
@@ -89,19 +73,6 @@ export function BrowserCaptureModal({ open, onClose, onStatus }: BrowserCaptureM
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Preferences</div>
           <button className="w-full rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={enableCapture}>
             Capture aktif et
-          </button>
-        </section>
-
-        <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Kurumsal Erişim</div>
-          <p className="mb-2 text-xs text-aq-muted">
-            Kaynak menüsünden kurumsal pencerede aç. O pencerede PDF indirildiğinde dosya otomatik olarak seçili kaynağa bağlanır.
-          </p>
-          <button
-            className="w-full rounded-md border border-aq-line bg-white px-3 py-2 text-left"
-            onClick={clearInstitutionalSession}
-          >
-            Kurumsal oturumu temizle
           </button>
         </section>
 

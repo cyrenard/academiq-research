@@ -140,6 +140,26 @@ test('buildStatus accepts and merges extra overrides', () => {
   assert.equal(s.lastError, 'override');
 });
 
+test('buildStatus prefers live extension hello over stale persisted version', () => {
+  const builder = makeBuilder({
+    getSettings: () => baseSettings({
+      installDir: 'C:/AcademiQ/browser-capture-extension/chromium',
+      installedExtensionVersion: '1.0.0',
+      installedProtocolVersion: BROWSER_CAPTURE_PROTOCOL_VERSION
+    }),
+    runtime: {
+      lastHelloPayload: {
+        extensionVersion: '1.0.1',
+        protocolVersion: BROWSER_CAPTURE_PROTOCOL_VERSION
+      },
+      lastHelloAt: Date.now()
+    }
+  });
+  const s = builder.buildStatus();
+  assert.equal(s.installedExtensionVersion, '1.0.1');
+  assert.equal(s.updateAvailable, false);
+});
+
 test('buildStatus tolerates storage without optional methods', () => {
   const builder = makeBuilder({ storage: {} });
   const s = builder.buildStatus();

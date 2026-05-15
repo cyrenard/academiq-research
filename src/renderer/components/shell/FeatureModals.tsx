@@ -4,6 +4,7 @@ import type { AcademiqAppState, AcademiqReference } from '../../lib/app-state';
 import { formatDate, formatAge, asRecord, statusText } from '../../lib/modal-helpers';
 import { ReferenceEditModal } from './modals/ReferenceEditModal';
 import { BrowserCaptureModal } from './modals/BrowserCaptureModal';
+import { HistoryModal } from './modals/HistoryModal';
 
 type FeatureModal = 'settings' | 'recovery' | 'history' | 'browserCapture' | 'referenceEdit' | null;
 
@@ -34,7 +35,7 @@ export function FeatureModals({
   const [syncInfo, setSyncInfo] = useState<unknown>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [browserStatus, setBrowserStatus] = useState<unknown>(null);
-  const [settingsTab, setSettingsTab] = useState<'recovery' | 'history' | 'capture' | 'institutional' | 'matrixAssistant' | 'sync' | 'storage' | 'updates' | 'about'>('recovery');
+  const [settingsTab, setSettingsTab] = useState<'recovery' | 'history' | 'capture' | 'matrixAssistant' | 'sync' | 'storage' | 'updates' | 'about'>('recovery');
   const [updateUrl, setUpdateUrl] = useState('');
   const [loadingAction, setLoadingAction] = useState('');
 
@@ -277,7 +278,6 @@ export function FeatureModals({
               ['recovery', 'Recovery / Autosave'],
               ['history', 'Belge geçmişi'],
               ['capture', 'Capture agent'],
-              ['institutional', 'Kurumsal indirme'],
               ['matrixAssistant', 'Matrix yardımcısı'],
               ['sync', 'Sync'],
               ['storage', 'Storage / Backup'],
@@ -392,53 +392,6 @@ export function FeatureModals({
                     <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => window.electronAPI.updateBrowserCapturePrefs({ autoAttachPdfUrl: capture.autoAttachPdfUrl === false }).then((result) => { setBrowserStatus(result); onStatus('PDF URL tercihi güncellendi'); }).catch(() => onStatus('Tercih güncellenemedi'))}>PDF URL auto attach: {capture.autoAttachPdfUrl === false ? 'kapalı' : 'açık'}</button>
                     <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => window.electronAPI.updateBrowserCapturePrefs({ focusImportedWorkspace: !capture.focusImportedWorkspace }).then((result) => { setBrowserStatus(result); onStatus('Workspace odak tercihi güncellendi'); }).catch(() => onStatus('Tercih güncellenemedi'))}>İçeri aktarılan workspace odağı: {capture.focusImportedWorkspace ? 'açık' : 'kapalı'}</button>
                     <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureAction('update', 'Extension dosyaları güncellendi', 'Capture extension güncellenemedi')}>{loadingAction === 'update' ? 'Güncelleniyor...' : 'Extension güncelle'}</button>
-                  </div>
-                </section>
-              </div>
-            ) : null}
-
-            {settingsTab === 'institutional' ? (
-              <div className="space-y-3">
-                <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Kurumsal hesap ile indirme</div>
-                    <span className="rounded-full border border-aq-line bg-white px-2 py-0.5 text-xs">Güvenli pencere</span>
-                  </div>
-                  <p className="text-xs leading-5 text-aq-muted">
-                    Kaynak kartına sağ tıklayıp <b>Kurumsal erişimle aç</b> dediğinde ayrı bir Electron penceresi açılır.
-                    O pencerede kurum hesabınla giriş yapıp PDF indirirsen dosya seçili kaynağa otomatik bağlanır.
-                  </p>
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                    <div className="rounded-md bg-white p-3">
-                      <b>Oturum</b><br />
-                      Cookie ve site verileri özel kurumsal profilde saklanır.
-                    </div>
-                    <div className="rounded-md bg-white p-3">
-                      <b>ScienceDirect</b><br />
-                      Embedded pencereyi reddettiği için varsayılan tarayıcıya yönlenir.
-                    </div>
-                    <div className="rounded-md bg-white p-3">
-                      <b>Popup</b><br />
-                      Yeni pencere açma kapalı; güvenli linkler aynı pencerede açılır.
-                    </div>
-                    <div className="rounded-md bg-white p-3">
-                      <b>Güvenlik</b><br />
-                      Node erişimi kapalı, preload kullanılmaz, sandbox açıktır.
-                    </div>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <button
-                      className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold"
-                      onClick={() => window.electronAPI.clearInstitutionalAccessSession().then((result: any) => onStatus(result?.ok ? 'Kurumsal oturum temizlendi' : 'Kurumsal oturum temizlenemedi')).catch(() => onStatus('Kurumsal oturum temizlenemedi'))}
-                    >
-                      Kurumsal oturumu temizle
-                    </button>
-                    <button
-                      className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold"
-                      onClick={() => onStatus('Kaynak kartına sağ tıkla → Kurumsal erişimle aç')}
-                    >
-                      Kullanım yolunu göster
-                    </button>
                   </div>
                 </section>
               </div>
@@ -626,33 +579,13 @@ export function FeatureModals({
         </div>
       </Modal>
 
-      <Modal title="Belge Geçmişi" open={active === 'history'} onClose={onClose} wide>
-        <div className="space-y-2">
-          {history.map((item, index) => (
-            <div key={String(item.id || item.snapshotId || index)} className="flex items-center justify-between rounded-md border border-aq-line bg-white p-3 text-sm">
-              <div>
-                <div className="font-semibold">{String(item.createdAt || item.date || item.id || `Snapshot ${index + 1}`)}</div>
-                <div className="text-xs text-aq-muted">{String(item.size || item.reason || '')}</div>
-              </div>
-              <button
-                className="rounded-md bg-aq-navy px-3 py-1.5 text-xs font-semibold text-white"
-                onClick={() => {
-                  const id = String(item.id || item.snapshotId || '');
-                  if (!id) return;
-                  window.electronAPI.restoreDocumentHistorySnapshot(state.curDoc, id).then(() => {
-                    onStatus('Snapshot geri yüklendi');
-                    onRestoreState();
-                    onClose();
-                  });
-                }}
-              >
-                Geri Yükle
-              </button>
-            </div>
-          ))}
-          {!history.length ? <div className="p-8 text-center text-sm text-aq-muted">Snapshot bulunamadı.</div> : null}
-        </div>
-      </Modal>
+      <HistoryModal
+        open={active === 'history'}
+        docId={state.curDoc}
+        onClose={onClose}
+        onStatus={onStatus}
+        onRestoreState={onRestoreState}
+      />
 
       <BrowserCaptureModal
         open={active === 'browserCapture'}
@@ -672,5 +605,4 @@ export function FeatureModals({
 }
 
 export type { FeatureModal };
-
 
