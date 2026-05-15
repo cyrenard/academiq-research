@@ -4,6 +4,19 @@
    All colour values, spacing, and selectors are original to this file.
    --------------------------------------------------------------------------
    Activated when document.documentElement[data-aq-skin="minimal"].
+   --------------------------------------------------------------------------
+   ⚠ HEAVY !important USAGE BELOW (~900 declarations)
+   This is intentional, not laziness. The legacy DOM (src/legacy-runtime.js,
+   src/literature-matrix-view.js, etc.) writes inline styles directly via
+   `element.style.X = Y` in dozens of places, which beats normal CSS
+   specificity. Until those inline writes are migrated to class toggles,
+   theme overrides MUST use !important to win.
+
+   When adding a new theme, copy the structure of this file but DO NOT try
+   to "clean up" the !important markers without first auditing whether the
+   element it targets is still mutated inline. A grep like
+   `grep -n "\\.style\\.background\\|\\.style\\.color" src/legacy-runtime.js`
+   reveals the contract you have to fight.
    ========================================================================== */
 
 :root[data-aq-skin="minimal"] {

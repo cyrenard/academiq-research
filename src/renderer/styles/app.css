@@ -1,6 +1,28 @@
 @import "tailwindcss";
 @config "../../../tailwind.config.js";
 
+/* ============================================================================
+ * Z-INDEX HIERARCHY — single source of truth
+ * ----------------------------------------------------------------------------
+ * Use these tiers when adding new overlays/panels. Picking a value outside
+ * the tier ranges below means *something will eventually overlap you*.
+ *
+ *    1 –   10   Base content (matrix cells, inline editor decorations)
+ *   55 –   80   In-view popovers (matrix filter menu)
+ *  120 –  230   Sticky shell chrome (toolbar, status bar, tab bars)
+ *  420 –  900   Sidebars and the legacy editor mode panel
+ *  960 –  980   Floating major panels (PDF reader; matrix overlay)
+ * 1000 – 1200   Standard modals (Settings, Reference Edit, History)
+ * 4900 – 5600   Heads-up toasts and pdf annotation tooltips
+ *10000 –10020   Command palette / keyboard shortcut overlays
+ *
+ * The legacy minimal theme (src/themes/minimal.css) heavily uses !important
+ * to defeat inline `element.style.X` writes from src/legacy-runtime.js. Do
+ * NOT add !important to new rules in this file — fix the inline write at
+ * the source instead. New panels should pick a z-index from the table above
+ * and document why if they pick a value outside it.
+ * ========================================================================== */
+
 * {
   box-sizing: border-box;
   scrollbar-width: thin;
