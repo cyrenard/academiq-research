@@ -8,6 +8,32 @@
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AcademiQ Research</title>
+    <!--
+      ============================================================================
+      LEGACY SCRIPT LOADING ORDER  (~80 tags below)
+      ----------------------------------------------------------------------------
+      These scripts are loaded synchronously in dependency order, NOT through
+      the Vite bundle. Reordering or removing entries breaks the app.
+      Groups (top → bottom):
+        1. tiptap-bundle      — ProseMirror runtime (loaded first; everything
+                                 below depends on `window.tiptap`)
+        2. experiments/aq-engine/* — AQ Engine canvas editor
+                                 (LIVE, NOT experimental despite the path —
+                                  exports __aqEngineActive, getActiveEditorInstance,
+                                  used in 30+ src/ files)
+        3. vendor/*           — third-party libs (pdf.js, mammoth, html2pdf)
+        4. src/*-export.js    — export pipelines (bib, pdf, docx, word)
+        5. src/*-state.js     — global state singletons (citation, library, …)
+        6. src/tiptap-word-*  — editor extensions and toolbar
+        7. src/literature-*   — matrix view + helpers
+        8. src/legacy-runtime.js (~14600 lines, last) — ties everything together;
+                                 must load AFTER all helpers above are present.
+
+      Performance note: every script here is a separate HTTP request even in
+      Electron renderer. Bundling them through Vite is a refactor (large), not
+      a polish — see TOC inside src/legacy-runtime.js for the planned splits.
+      ============================================================================
+    -->
     <script src="/tiptap-bundle.js"></script>
     <script src="/experiments/aq-engine/engine.js"></script>
     <script src="/experiments/aq-engine/document.js"></script>
