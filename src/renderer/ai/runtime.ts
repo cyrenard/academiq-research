@@ -89,11 +89,17 @@ export interface AIRuntimeOptions {
 /**
  * Default factory — used in production. In tests, callers pass a
  * MockWorker instead.
+ *
+ * Vite's `new Worker(new URL(..., import.meta.url), { type: 'module' })`
+ * pattern bundles the worker as a separate chunk and yields a Worker
+ * URL the browser can spawn. The `type: 'module'` ensures the worker
+ * scope is a DedicatedWorkerGlobalScope (no `window`/`document`).
  */
 function defaultWorkerFactory(): Worker {
-  // The actual worker module ships in the next phase. Throwing here
-  // keeps the API stable while flagging "not yet wired" clearly.
-  throw new Error('AI worker module not yet bundled — pass workerFactory in tests');
+  return new Worker(new URL('./worker.ts', import.meta.url), {
+    type: 'module',
+    name: 'aq-ai-worker'
+  });
 }
 
 export function createAIRuntime(options: AIRuntimeOptions = {}): AIRuntime {

@@ -81,9 +81,14 @@ describe('createAIRuntime', () => {
     runtime.dispose();
   });
 
-  it('default factory throws clearly when not overridden', () => {
-    const runtime = createAIRuntime();
+  it('cancel is a no-op when worker has not yet been spawned (default factory not exercised)', () => {
+    // We can't construct the real Vite worker URL in jsdom, so we only
+    // verify the no-worker code path. The factory is exercised at runtime
+    // by Vite's bundling pipeline.
+    const factory = vi.fn(() => new MockWorker() as unknown as Worker);
+    const runtime = createAIRuntime({ workerFactory: factory });
     expect(() => runtime.cancel('x')).not.toThrow();  // no-op when no worker
+    expect(factory).not.toHaveBeenCalled();
     runtime.dispose();
   });
 });

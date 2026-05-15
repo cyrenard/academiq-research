@@ -21,6 +21,7 @@
     "build:dir": "node scripts/build-win.js --dir"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "pdf-lib": "^1.17.1",
     "tesseract.js": "^7.0.0"
   },
