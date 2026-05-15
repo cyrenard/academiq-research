@@ -29,6 +29,10 @@
   scrollbar-color: rgba(31, 42, 68, 0.26) transparent;
 }
 
+/* Universal hide utility — replaces inline `el.style.display = 'none'`
+ * writes from legacy-runtime.js so the theme cascade can do its job. */
+.aq-hidden { display: none !important; }
+
 html,
 body,
 #root {

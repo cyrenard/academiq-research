@@ -306,7 +306,7 @@ function resetTransientChrome(){
       el.classList.remove('show');
       if(el.style){
         if(id==='ctxmenu' || id==='ctxlabelpanel' || id==='trig' || id==='hltip'){
-          el.style.display='none';
+          el.classList.add('aq-hidden');
         }
       }
     });
@@ -1376,7 +1376,7 @@ function formatRef(ref,options){
 // ¦¦ WORKSPACES ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
 function rWS(){
   var bar=document.getElementById('wsbar');
-  if(bar)bar.style.display='none';
+  if(bar)bar.classList.add('aq-hidden');
   var row=document.getElementById('wsrow');
   if(row)row.innerHTML='';
 }
@@ -1479,8 +1479,8 @@ function rNB(){
       var del=document.createElement('span');
       del.textContent='×';del.title='Sil';
       del.style.cssText='font-size:12px;color:var(--txt3);cursor:pointer;padding:0 2px;display:none;';
-      btn.addEventListener('mouseenter',function(){del.style.display='inline';});
-      btn.addEventListener('mouseleave',function(){del.style.display='none';});
+      btn.addEventListener('mouseenter',function(){del.classList.remove('aq-hidden');});
+      btn.addEventListener('mouseleave',function(){del.classList.add('aq-hidden');});
       del.onclick=function(e){
         e.stopPropagation();
         if(!confirm('"'+nb.name+'" silinsin?'))return;
@@ -4115,8 +4115,8 @@ function ensurePdfCompareHost(){
 function setPdfCompareVisibility(open){
   var sc=document.getElementById('pdfscroll');
   var host=ensurePdfCompareHost();
-  if(sc)sc.style.display=open?'none':'';
-  if(host)host.style.display=open?'flex':'none';
+  if(sc)sc.classList.toggle('aq-hidden', !!open);
+  if(host)host.classList.toggle('aq-hidden', !open);
 }
 
 function stopPdfCompareSyncLoop(){
@@ -4879,8 +4879,8 @@ function renderPdfTabs(){
   if(!bar)return;
   bar.innerHTML='';
   var wsTabs=getWsTabs();
-  if(wsTabs.length<=1){bar.style.display='none';return;}
-  bar.style.display='flex';
+  if(wsTabs.length<=1){bar.classList.add('aq-hidden');return;}
+  bar.classList.remove('aq-hidden');
   wsTabs.forEach(function(tab){
     var el=document.createElement('div');
     el.className='pdftab'+(tab.id===activeTabId?' on':'');
@@ -5378,7 +5378,7 @@ function togglePdfFullscreen(){
   var fullBtn=document.getElementById('pdffullbtn');
   if(fullBtn)fullBtn.innerHTML=p.classList.contains('fullscreen')?'&#x2716;':'&#x26F6;';
   var resizeHandle=document.getElementById('pdfresize');
-  if(resizeHandle)resizeHandle.style.display=p.classList.contains('fullscreen')?'none':'';
+  if(resizeHandle)resizeHandle.classList.toggle('aq-hidden', p.classList.contains('fullscreen'));
   if(pdfCompareMode){
     renderPdfCompareView();
     return;
@@ -5710,7 +5710,7 @@ function toggleFindBar(){
 }
 function closeFindBar(){
   var bar=document.getElementById('findbar');
-  if(bar)bar.style.display='none';
+  if(bar)bar.classList.add('aq-hidden');
   hideM('findReplaceQuickMenuModal');
   clearFindHL();
   findState.matches=[];findState.index=-1;
@@ -8545,7 +8545,7 @@ function cdd(){
   document.querySelectorAll('.ddm').forEach(function(m){
     m.classList.remove('open');
     if(m.style){
-      m.style.display='';
+      m.classList.remove('aq-hidden');
       m.style.pointerEvents='';
     }
   });
@@ -8970,11 +8970,11 @@ async function checkForUpdate(){
         '<br/><span style="color:var(--txt3)">Mevcut: v'+res.current+'</span>'+
         (res.notes?'<br/><span style="color:var(--txt2);font-size:10px;">'+res.notes.substring(0,200)+'</span>':'')+
         (res.publishedAt?'<br/><span style="color:var(--txt3);font-size:9px;">'+res.publishedAt.substring(0,10)+'</span>':'');
-      document.getElementById('btnDoUpdate').style.display='inline-block';
+      document.getElementById('btnDoUpdate').classList.remove('aq-hidden');
     } else {
       document.getElementById('updatestatus').innerHTML=
         '<span style="color:var(--green)">Guncel! v'+res.current+'</span>';
-      document.getElementById('btnDoUpdate').style.display='none';
+      document.getElementById('btnDoUpdate').classList.add('aq-hidden');
     }
   }catch(e){
     document.getElementById('updatestatus').innerHTML='<span style="color:var(--red)">Kontrol hatasi: '+e.message+'</span>';
@@ -8990,7 +8990,7 @@ async function doUpdate(){
       document.getElementById('updatestatus').innerHTML=
         '<span style="color:var(--green);font-weight:600;">Guncelleme indirildi!</span>'+
         '<br/><span style="color:var(--txt2)">Uygulama yeniden baslatilacak.</span>';
-      document.getElementById('btnDoUpdate').style.display='none';
+      document.getElementById('btnDoUpdate').classList.add('aq-hidden');
       // 2 saniye sonra yeniden baslat
       setTimeout(function(){
         window.electronAPI.restartApp();
@@ -9744,8 +9744,8 @@ try{
 
 function toggleThumbs(){
   var el=document.getElementById('pdfthumbs');
-  var vis=el.style.display==='none';
-  el.style.display=vis?'block':'none';
+  var vis=el.classList.contains('aq-hidden');
+  el.classList.toggle('aq-hidden', !vis);
   if(vis&&pdfDoc)renderThumbnails();
   updatePdfToolState();
 }
@@ -9791,15 +9791,15 @@ function updateThumbHL(){
 // ¦¦ OUTLINE / TOC ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
 function toggleOutline(){
   var el=document.getElementById('pdfoutline');
-  el.style.display=el.style.display==='none'?'block':'none';
+  el.classList.toggle('aq-hidden');
   updatePdfToolState();
 }
 
 function togglePdfAnnotations(){
   var el=document.getElementById('pdfannots');
   if(!el)return;
-  var vis=el.style.display==='none';
-  el.style.display=vis?'block':'none';
+  var vis=el.classList.contains('aq-hidden');
+  el.classList.toggle('aq-hidden', !vis);
   if(vis)renderPdfAnnotationPanel();
   updatePdfToolState();
 }
@@ -9840,8 +9840,8 @@ function renderPdfRelatedPanel(){
 function togglePdfRelated(forceOpen){
   var el=document.getElementById('pdfrelated');
   if(!el)return;
-  var vis=(forceOpen===true)?true:(el.style.display==='none');
-  el.style.display=vis?'block':'none';
+  var vis=(forceOpen===true)?true:(el.classList.contains('aq-hidden'));
+  el.classList.toggle('aq-hidden', !vis);
   if(vis)renderPdfRelatedPanel();
   updatePdfToolState();
 }
@@ -10875,7 +10875,7 @@ function importExternalReferenceDoi(){
 function updateThemeButton(){
   var btn=document.getElementById('themebtn');
   if(!btn)return;
-  btn.style.display='none';
+  btn.classList.add('aq-hidden');
   btn.disabled=true;
   btn.textContent='Açık';
   btn.title='Koyu tema devre dışı';
@@ -11213,7 +11213,7 @@ function fixTOCDots(container){
       var available=pageRect.left-lastRect.right-4;
       var count=Math.max(3,Math.floor(available/dotW));
       dotsSpan.style.left=dotsLeft+'px';
-      dotsSpan.style.display='block';
+      dotsSpan.classList.remove('aq-hidden');
       dotsSpan.textContent=new Array(count+1).join('.');
     });
   }catch(e){}
@@ -11944,9 +11944,9 @@ function syncAuxiliaryPages(){
     tocHTML='';
   }
   if(coverBody)coverBody.innerHTML=coverHTML||'';
-  if(coverPage)coverPage.style.display=coverHTML?'block':'none';
+  if(coverPage)coverPage.classList.toggle('aq-hidden', !coverHTML);
   if(tocBody){tocBody.innerHTML=tocHTML||'';if(tocHTML)setTimeout(function(){fixTOCDots(tocBody);},0);}
-  if(tocPage)tocPage.style.display=tocHTML?'block':'none';
+  if(tocPage)tocPage.classList.toggle('aq-hidden', !tocHTML);
   if(abstractBody){
     abstractBody.innerHTML=abstractHTML||'';
     if(abstractHTML&&!abstractBody.querySelector('.abstract-remove-btn')){
@@ -11962,16 +11962,16 @@ function syncAuxiliaryPages(){
       abstractBody.appendChild(abstractRemove);
     }
   }
-  if(abstractPage)abstractPage.style.display=abstractHTML?'block':'none';
+  if(abstractPage)abstractPage.classList.toggle('aq-hidden', !abstractHTML);
   if(activeEditor&&activeEditor._aqEngine){
     if(appendixBody)appendixBody.innerHTML='';
-    if(appendixPage)appendixPage.style.display='none';
+    if(appendixPage)appendixPage.classList.add('aq-hidden');
     if(appendicesHTML){
       updateAQEngineAppendices(activeEditor, appendicesHTML);
     }
   }else{
     if(appendixBody)appendixBody.innerHTML=appendicesHTML||'';
-    if(appendixPage)appendixPage.style.display=appendicesHTML?'block':'none';
+    if(appendixPage)appendixPage.classList.toggle('aq-hidden', !appendicesHTML);
   }
 }
 function getCurrentWorkspaceRecord(){
@@ -12362,10 +12362,10 @@ function updateRefSection(forceAuto){
     var showManualOnly=!!(doc&&doc.bibliographyManual&&persistedHTML);
     if(showManualOnly){
       bibBody.innerHTML=persistedHTML;
-      bibPage.style.display='block';
+      bibPage.classList.remove('aq-hidden');
     }else{
       bibBody.innerHTML='';
-      bibPage.style.display='none';
+      bibPage.classList.add('aq-hidden');
       if(doc){
         doc.bibliographyHTML='';
         doc.bibliographyManual=false;
@@ -12373,7 +12373,7 @@ function updateRefSection(forceAuto){
     }
   }else{
     bibBody.innerHTML=manualHTML||generatedHTML;
-    bibPage.style.display='block';
+    bibPage.classList.remove('aq-hidden');
     if(doc&&(!doc.bibliographyManual||forceAuto)){
       doc.bibliographyHTML=generatedHTML;
       doc.bibliographyManual=false;
@@ -12392,11 +12392,11 @@ function renderRelatedPapers(){
   var list=document.getElementById('relatedList');
   if(!panel||!list)return;
   if(!curRef){
-    panel.style.display='none';
+    panel.classList.add('aq-hidden');
     list.innerHTML='<div class="rmeta">Bir kaynak seçildiğinde benzer çalışmalar burada görünür.</div>';
     return;
   }
-  panel.style.display='block';
+  panel.classList.remove('aq-hidden');
   var ws=S.wss.find(function(x){return x&&x.id===S.cur;});
   var refs=(ws&&ws.lib)||[];
   var recApi=window.AQReferenceRecommendation||null;
@@ -12430,7 +12430,7 @@ renderRelatedPapers=function(){
     toggleBtn.title=relatedPanelCollapsed?'Goster':'Kucult';
     toggleBtn.setAttribute('aria-expanded',relatedPanelCollapsed?'false':'true');
   }
-  panel.style.display='block';
+  panel.classList.remove('aq-hidden');
   if(!curRef){
     list.innerHTML='<div class="rmeta">Bir kaynak secildiginde benzer makaleler burada gorunur.</div>';
     return;
@@ -12487,7 +12487,7 @@ renderRelatedPapers=function(){
   var list=document.getElementById('relatedList');
   var toggleBtn=document.getElementById('relatedToggleBtn');
   if(!panel||!list)return;
-  panel.style.display='block';
+  panel.classList.remove('aq-hidden');
   panel.classList.toggle('collapsed',!!relatedPanelCollapsed);
   if(toggleBtn){
     toggleBtn.textContent=relatedPanelCollapsed?'+':'-';
@@ -14293,7 +14293,7 @@ __bindSprint1PanelEvents();
     var list=document.getElementById('relatedList');
     var toggleBtn=document.getElementById('relatedToggleBtn');
     if(!panel||!list)return;
-    panel.style.display='block';
+    panel.classList.remove('aq-hidden');
     panel.classList.toggle('collapsed',!!relatedPanelCollapsed);
     if(toggleBtn){
       toggleBtn.textContent=relatedPanelCollapsed?'+':'-';

@@ -511,9 +511,9 @@
     if(!hint) return;
     if(message){
       hint.textContent = message;
-      hint.style.display = 'block';
+      hint.classList.remove('aq-hidden');
     }else{
-      hint.style.display = 'none';
+      hint.classList.add('aq-hidden');
       hint.textContent = '';
     }
   }
@@ -672,7 +672,7 @@
     ensureMatrixFilterStyles();
 
     var oldBar = document.getElementById('workspaceViewBar');
-    if(oldBar) oldBar.style.display = 'none';
+    if(oldBar) oldBar.classList.add('aq-hidden');
 
     ensureTopToolbarButton();
     bindTopMatrixButton();
@@ -715,7 +715,7 @@
     }
 
     var quick = document.getElementById('matrixQuickGrp');
-    if(quick) quick.style.display = 'none';
+    if(quick) quick.classList.add('aq-hidden');
     ensureMatrixFullscreenButton();
   }
 
@@ -1333,7 +1333,7 @@
     if(!wsId){
       table.innerHTML = '';
       if(empty){
-        empty.style.display = 'block';
+        empty.classList.remove('aq-hidden');
         empty.textContent = 'Önce bir çalışma alanı seçin.';
       }
       return;
@@ -1374,14 +1374,14 @@
     if(!filteredRows.length){
       table.innerHTML = '';
       if(empty){
-        empty.style.display = 'block';
+        empty.classList.remove('aq-hidden');
         empty.textContent = rows.length
           ? 'Filtreye uyan satir bulunamadi.'
           : 'Henüz kaynak eklenmedi. Sol panelde bir kaynağa sağ tık yapıp "Literatür Matrisine Ekle" seçebilirsiniz.';
       }
       return;
     }
-    if(empty) empty.style.display = 'none';
+    if(empty) empty.classList.add('aq-hidden');
 
     var head = '<thead><tr>' + api.MATRIX_COLUMNS.map(function(column){
       return '<th>' + escHTML(column.label) + '</th>';
@@ -1547,10 +1547,10 @@
     var matrixBtn = getTopMatrixButton();
     var writing = next === 'writing';
 
-    if(escroll) escroll.style.display = '';
-    if(matrixView) matrixView.style.display = writing ? 'none' : 'flex';
-    if(zoomBar) zoomBar.style.display = writing ? '' : 'none';
-    if(findbar && !writing) findbar.style.display = 'none';
+    if(escroll) escroll.classList.remove('aq-hidden');
+    if(matrixView) matrixView.classList.toggle('aq-hidden', !!writing);
+    if(zoomBar) zoomBar.classList.toggle('aq-hidden', !writing);
+    if(findbar && !writing) findbar.classList.add('aq-hidden');
     if(matrixBtn){
       matrixBtn.classList.toggle('on', !writing);
       matrixBtn.textContent = writing ? 'Literatür Matrisi' : 'Yazıya Dön';
