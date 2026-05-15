@@ -221,7 +221,11 @@ export function RefSidebar({
         }}
         onClick={() => {
           onSelectReference(ref.id);
-          if (hasPdf) onReferencePdfAction('open', ref.id);
+          // Always open the PDF panel — even when there's no local PDF.
+          // The legacy `showNoPDF` fallback now renders the article's
+          // abstract (from ref.abstract or fetched on demand) so users
+          // get a useful reading view regardless of PDF availability.
+          onReferencePdfAction('open', ref.id);
         }}
         onContextMenu={(event) => openReferenceMenu(event, ref.id)}
         className={[

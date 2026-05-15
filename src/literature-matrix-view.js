@@ -2034,6 +2034,12 @@
     sendNoteToMatrix: sendNoteToMatrix
   };
 
+  // Expose abstract fetcher so the PDF panel ("no-PDF" fallback in
+  // legacy-runtime.js showNoPDF) can pull a Crossref/OpenAlex/S2
+  // abstract on demand without re-implementing the cache + dual-source
+  // logic. Returns Promise<string>; '' when nothing found.
+  window.__aqFetchAbstract = fetchOnlineAbstract;
+
   window.openLiteratureMatrix = function(){ setView('matrix'); };
   window.closeLiteratureMatrix = function(){ setView('writing'); };
   window.toggleLiteratureMatrix = function(){ setView(currentView === 'matrix' ? 'writing' : 'matrix'); };

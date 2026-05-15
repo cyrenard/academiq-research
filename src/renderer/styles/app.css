@@ -102,11 +102,16 @@ button:disabled {
 
 .aq-legacy-pdf-panel {
   position: fixed;
+  /* Reserve ~320px on the left for the RefSidebar so users can flip
+     between references without the panel covering it. The max-width is
+     !important so any inline width applied by the JS resize handle (or
+     persisted from a previous drag) cannot exceed it. */
   inset: 56px 12px 32px auto;
   z-index: 960;
   display: none;
-  width: min(720px, calc(100vw - 48px));
-  min-width: 420px;
+  width: min(720px, calc(100vw - 320px - 24px));
+  max-width: calc(100vw - 320px - 24px) !important;
+  min-width: 380px;
   overflow: hidden;
   border: 1px solid #ddd7cc;
   border-radius: 8px;
@@ -128,7 +133,7 @@ button:disabled {
 
 body.aq-matrix-open .aq-legacy-pdf-panel.open {
   z-index: 980;
-  width: min(680px, calc(100vw - 48px));
+  width: min(680px, calc(100vw - 320px - 24px));
 }
 
 body.aq-matrix-fullscreen .aq-legacy-pdf-panel.open {

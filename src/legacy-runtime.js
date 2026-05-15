@@ -5187,61 +5187,112 @@ function showNoPDF(ref){
   clearPDFView();
   var sc=document.getElementById('pdfscroll');
   var doi=(ref&&ref.doi)||'';var oaUrl=(ref&&ref.pdfUrl)||'';var title=(ref&&ref.title)||'';
-  var d=document.createElement('div');
-  d.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:10px;text-align:center;width:100%;';
-  var icon=document.createElement('div');
-  icon.style.cssText='font-size:28px';
-  icon.textContent='PDF';
-  d.appendChild(icon);
+  var year=(ref&&ref.year)?String(ref.year):'';
+  var authors='';
+  if(ref&&Array.isArray(ref.authors)&&ref.authors.length){
+    authors=ref.authors.slice(0,4).map(function(a){
+      if(typeof a==='string')return a;
+      return [a.family||a.lastName||'',a.given||a.firstName||''].filter(Boolean).join(', ');
+    }).filter(Boolean).join(' · ');
+    if(ref.authors.length>4)authors+=' et al.';
+  }else if(ref&&typeof ref.authors==='string'){
+    authors=ref.authors;
+  }
+
+  var page=document.createElement('div');
+  page.style.cssText='max-width:720px;margin:0 auto;padding:36px 28px 28px;width:100%;box-sizing:border-box;';
+
+  // Header — title, authors, year, doi
   if(title){
-    var titleEl=document.createElement('div');
-    titleEl.style.cssText='font-size:11px;color:var(--txt2);max-width:360px;line-height:1.5';
-    titleEl.textContent=String(title).substring(0,80);
-    d.appendChild(titleEl);
+    var titleEl=document.createElement('h2');
+    titleEl.style.cssText='font-size:18px;font-weight:600;line-height:1.35;color:var(--txt);margin:0 0 8px 0;';
+    titleEl.textContent=String(title);
+    page.appendChild(titleEl);
+  }
+  var meta=[];
+  if(authors)meta.push(authors);
+  if(year)meta.push(year);
+  if(meta.length){
+    var metaEl=document.createElement('div');
+    metaEl.style.cssText='font-size:12px;color:var(--txt2);margin-bottom:6px;';
+    metaEl.textContent=meta.join(' · ');
+    page.appendChild(metaEl);
   }
   if(doi){
-    var doiEl=document.createElement('div');
-    doiEl.style.cssText='font-family:var(--fm);font-size:10px;color:var(--txt3)';
-    doiEl.textContent='DOI: '+doi;
-    d.appendChild(doiEl);
+    var doiEl=document.createElement('a');
+    doiEl.href='https://doi.org/'+doi;
+    doiEl.target='_blank';
+    doiEl.rel='noreferrer noopener';
+    doiEl.style.cssText='font-family:var(--fm);font-size:11px;color:var(--blue);text-decoration:none;display:inline-block;margin-bottom:16px;';
+    doiEl.textContent='doi:'+doi;
+    page.appendChild(doiEl);
   }
-  var controls=document.createElement('div');
-  controls.style.cssText='width:100%;max-width:320px;display:flex;flex-direction:column;gap:7px;margin-top:8px;';
+
+  // Abstract — primary content
+  var abstractBox=document.createElement('section');
+  abstractBox.style.cssText='margin-top:8px;padding:18px 20px;border:1px solid var(--b);border-radius:10px;background:var(--bg2);';
+  var abstractHeader=document.createElement('div');
+  abstractHeader.style.cssText='font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--txt3);margin-bottom:10px;';
+  abstractHeader.textContent='Özet';
+  abstractBox.appendChild(abstractHeader);
+  var abstractBody=document.createElement('div');
+  abstractBody.style.cssText='font-size:13.5px;color:var(--txt);line-height:1.7;white-space:pre-wrap;';
+  abstractBox.appendChild(abstractBody);
+  page.appendChild(abstractBox);
+
+  function setAbstract(text, tone){
+    abstractBody.textContent=String(text||'');
+    abstractBody.style.color = tone === 'muted' ? 'var(--txt3)' : 'var(--txt)';
+    abstractBody.style.fontStyle = tone === 'muted' ? 'italic' : 'normal';
+    abstractBody.style.fontSize = tone === 'muted' ? '12px' : '13.5px';
+  }
+
+  var inlineAbstract = String(
+    (ref&&ref.abstract) || (ref&&ref.summary) || (ref&&ref.description) ||
+    (ref&&ref.browserCaptureMeta&&ref.browserCaptureMeta.abstract) || ''
+  ).trim();
+  if(inlineAbstract){
+    setAbstract(inlineAbstract);
+  }else if(doi && typeof window.__aqFetchAbstract === 'function'){
+    setAbstract('Özet aranıyor…', 'muted');
+    try{
+      window.__aqFetchAbstract(doi).then(function(found){
+        if(!found){
+          setAbstract('Bu kaynak için açık bir özet bulunamadı.', 'muted');
+          return;
+        }
+        setAbstract(found);
+      }).catch(function(){
+        setAbstract('Özet alınamadı.', 'muted');
+      });
+    }catch(_e){
+      setAbstract('Özet alınamadı.', 'muted');
+    }
+  }else{
+    setAbstract('Bu kaynak için özet kayıtlı değil.', 'muted');
+  }
+
+  // Secondary actions — small toolbar at the bottom
+  var actions=document.createElement('div');
+  actions.style.cssText='margin-top:18px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:11px;color:var(--txt3);';
   var uploadBtn=document.createElement('button');
-  uploadBtn.style.cssText='background:var(--acc);color:#0d1117;border:none;border-radius:6px;padding:10px;cursor:pointer;font-size:12px;font-weight:600;font-family:var(--f);';
-  uploadBtn.textContent='+ PDF Dosyası Yükle';
+  uploadBtn.style.cssText='background:transparent;color:var(--txt2);border:1px solid var(--b);border-radius:6px;padding:6px 12px;cursor:pointer;font-size:11px;font-family:var(--f);';
+  uploadBtn.textContent='+ PDF Yükle';
   uploadBtn.addEventListener('click',function(){
     var input=document.getElementById('lfinp');
     if(input&&typeof input.click==='function')input.click();
   });
-  controls.appendChild(uploadBtn);
+  actions.appendChild(uploadBtn);
   if(oaUrl){
     var oaBtn=document.createElement('button');
-    oaBtn.style.cssText='background:var(--bg3);color:var(--blue);border:1px solid var(--b);border-radius:6px;padding:9px;font-size:11px;cursor:pointer;font-family:var(--f);display:block;width:100%;';
-    oaBtn.textContent='OA PDF Otomatik İndir';
+    oaBtn.style.cssText='background:transparent;color:var(--blue);border:1px solid var(--b);border-radius:6px;padding:6px 12px;cursor:pointer;font-size:11px;font-family:var(--f);';
+    oaBtn.textContent='OA PDF İndir';
     oaBtn.addEventListener('click',function(){downloadPDF(((ref&&ref.id)||''),oaUrl);});
-    controls.appendChild(oaBtn);
-  }else{
-    var noOA=document.createElement('div');
-    noOA.style.cssText='font-size:11px;color:var(--txt3)';
-    noOA.textContent='Açık erişim PDF yok';
-    controls.appendChild(noOA);
+    actions.appendChild(oaBtn);
   }
-  if(doi){
-    var doiLink=document.createElement('a');
-    doiLink.href='https://doi.org/'+doi;
-    doiLink.target='_blank';
-    doiLink.rel='noreferrer noopener';
-    doiLink.style.cssText='color:var(--txt3);font-size:11px;text-decoration:none;';
-    doiLink.textContent='Yayıncı sayfası ?';
-    controls.appendChild(doiLink);
-  }
-  d.appendChild(controls);
-  var hint=document.createElement('div');
-  hint.style.cssText='font-size:10px;color:var(--txt3);margin-top:6px;line-height:1.7';
-  hint.textContent='PDF indirip "PDF Yükle" butonuna tıklayın.';
-  d.appendChild(hint);
-  sc.appendChild(d);
+  page.appendChild(actions);
+
+  sc.appendChild(page);
 }
 
 function pPrev(){if(pdfPg>1){pdfPg--;scrollToPage(pdfPg);}}
