@@ -539,8 +539,8 @@ export function RefSidebar({
                     );
                   }) : <div className="px-2.5 py-2 text-aq-muted">Kullanici etiketi yok</div>}
                   <form className="mt-1 flex gap-1 px-1" onSubmit={(event) => { event.preventDefault(); const name = newLabelName.trim(); if (!name) return; onCreateLabel(name); if (activeMenuReference && !referenceHasLabel(activeMenuReference, name)) onToggleReferenceLabel(activeMenuReference.id, { name, color: '#9aa' }); setNewLabelName(''); }}>
-                    <input value={newLabelName} onChange={(event) => setNewLabelName(event.target.value)} className="h-7 min-w-0 flex-1 rounded-md border border-aq-line bg-white px-2 text-[11px] outline-none focus:border-aq-navy" placeholder="Yeni etiket..." />
-                    <button type="submit" className="h-7 rounded-md border border-aq-line px-2 font-semibold hover:bg-aq-panel">+</button>
+                    <input value={newLabelName} onChange={(event) => setNewLabelName(event.target.value)} className="h-7 min-w-0 flex-1 rounded-md border border-aq-line bg-white px-2 text-[11px] outline-none focus:border-aq-navy" placeholder="Yeni etiket..." aria-label="Yeni etiket adı" />
+                    <button type="submit" className="h-7 rounded-md border border-aq-line px-2 font-semibold hover:bg-aq-panel" aria-label="Etiket ekle">+</button>
                   </form>
                 </>
               ) : (
@@ -556,8 +556,8 @@ export function RefSidebar({
                     );
                   }) : <div className="px-2.5 py-2 text-aq-muted">Klasör yok</div>}
                   <form className="mt-1 flex gap-1 px-1" onSubmit={(event) => { event.preventDefault(); const name = newCollectionName.trim(); if (!name) return; onCreateCollection(name); setNewCollectionName(''); }}>
-                    <input value={newCollectionName} onChange={(event) => setNewCollectionName(event.target.value)} className="h-7 min-w-0 flex-1 rounded-md border border-aq-line bg-white px-2 text-[11px] outline-none focus:border-aq-navy" placeholder="Yeni klasör..." />
-                    <button type="submit" className="h-7 rounded-md border border-aq-line px-2 font-semibold hover:bg-aq-panel">+</button>
+                    <input value={newCollectionName} onChange={(event) => setNewCollectionName(event.target.value)} className="h-7 min-w-0 flex-1 rounded-md border border-aq-line bg-white px-2 text-[11px] outline-none focus:border-aq-navy" placeholder="Yeni klasör..." aria-label="Yeni klasör adı" />
+                    <button type="submit" className="h-7 rounded-md border border-aq-line px-2 font-semibold hover:bg-aq-panel" aria-label="Klasör ekle">+</button>
                   </form>
                   <button type="button" className="mt-1 block w-full rounded-md px-2.5 py-2 text-left font-medium text-aq-ink hover:bg-aq-panel" onClick={() => { onOpenCollections(); closeReferenceMenu(); }}>
                     Klasörleri Yönet

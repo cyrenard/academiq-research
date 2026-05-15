@@ -2072,19 +2072,19 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
             <span id="pdftitle" className="aq-legacy-pdf-title">-- kaynak seç --</span>
           </div>
           <div className="pdf-toolbar-group compact" aria-label="Sayfa gezinme">
-            <button className="ppb" id="pdfPrevBtn" type="button" title="Önceki sayfa" onClick={() => (window as any).pPrev?.()}>◀</button>
-            <span id="pdfpg" role="button" tabIndex={0} title="Sayfaya git" onClick={() => (window as any).goToPage?.()}>--</span>
-            <button className="ppb" id="pdfNextBtn" type="button" title="Sonraki sayfa" onClick={() => (window as any).pNext?.()}>▶</button>
+            <button className="ppb" id="pdfPrevBtn" type="button" title="Önceki sayfa" aria-label="Önceki sayfa" onClick={() => (window as any).pPrev?.()}>◀</button>
+            <span id="pdfpg" role="button" tabIndex={0} title="Sayfaya git" aria-label="Sayfa numarasına git" onClick={() => (window as any).goToPage?.()}>--</span>
+            <button className="ppb" id="pdfNextBtn" type="button" title="Sonraki sayfa" aria-label="Sonraki sayfa" onClick={() => (window as any).pNext?.()}>▶</button>
           </div>
-          <div className="pdf-toolbar-group compact" aria-label="Zoom">
-            <button className="ppb" id="pdfZoomOutBtn" type="button" title="Uzaklaştır" onClick={() => (window as any).pZO?.()}>-</button>
-            <span id="pdfzoom" role="button" tabIndex={0} title="Genişliğe sığdır" onClick={() => (window as any).pZFit?.()}>--</span>
-            <button className="ppb" id="pdfZoomInBtn" type="button" title="Yakınlaştır" onClick={() => (window as any).pZI?.()}>+</button>
+          <div className="pdf-toolbar-group compact" aria-label="Yakınlaştırma">
+            <button className="ppb" id="pdfZoomOutBtn" type="button" title="Uzaklaştır" aria-label="Uzaklaştır" onClick={() => (window as any).pZO?.()}>-</button>
+            <span id="pdfzoom" role="button" tabIndex={0} title="Genişliğe sığdır" aria-label="Genişliğe sığdır" onClick={() => (window as any).pZFit?.()}>--</span>
+            <button className="ppb" id="pdfZoomInBtn" type="button" title="Yakınlaştır" aria-label="Yakınlaştır" onClick={() => (window as any).pZI?.()}>+</button>
           </div>
           <div className="pdf-toolbar-spacer" />
           <div className="pdf-toolbar-window" aria-label="Pencere">
-            <button className="ppb" id="pdffullbtn" type="button" title="Tam ekran" onClick={() => (window as any).togglePdfFullscreen?.()}>⛶</button>
-            <button className="ppb pdf-close-btn" id="pdfclosebtn" type="button" title="Kapat" onClick={() => (window as any).togglePDF?.()}>×</button>
+            <button className="ppb" id="pdffullbtn" type="button" title="Tam ekran" aria-label="Tam ekran aç/kapat" onClick={() => (window as any).togglePdfFullscreen?.()}>⛶</button>
+            <button className="ppb pdf-close-btn" id="pdfclosebtn" type="button" title="Kapat" aria-label="PDF okuyucuyu kapat" onClick={() => (window as any).togglePDF?.()}>×</button>
           </div>
         </div>
         <div id="pdftabs" className="aq-legacy-pdf-tabs" />
