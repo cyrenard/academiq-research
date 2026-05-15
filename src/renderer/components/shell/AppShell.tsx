@@ -120,9 +120,11 @@ export function AppShell({
     resizeCleanupRef.current = onPointerUp;
   };
 
-  const gridStyle: CSSProperties = {
-    gridTemplateColumns: `${leftVisible ? leftWidth : 0}px minmax(560px, 1fr) ${rightVisible ? rightWidth : 0}px`
-  };
+  const gridStyle = {
+    gridTemplateColumns: `${leftVisible ? leftWidth : 0}px minmax(560px, 1fr) ${rightVisible ? rightWidth : 0}px`,
+    '--aq-left-sidebar-visible-width': `${leftVisible ? leftWidth : 0}px`,
+    '--aq-right-sidebar-visible-width': `${rightVisible ? rightWidth : 0}px`
+  } as CSSProperties;
 
   const navButton = (view: AppShellProps['activeView'], label: string, bordered = false) => (
     <button

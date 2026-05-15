@@ -102,15 +102,17 @@ button:disabled {
 
 .aq-legacy-pdf-panel {
   position: fixed;
-  /* Reserve ~320px on the left for the RefSidebar so users can flip
-     between references without the panel covering it. The max-width is
-     !important so any inline width applied by the JS resize handle (or
-     persisted from a previous drag) cannot exceed it. */
-  inset: 56px 12px 32px auto;
+  /* Layout has TWO sidebars: NoteSidebar on the left (~280-320px) and
+     RefSidebar on the right (~280-320px). The PDF panel sits in the
+     editor zone between them so neither sidebar gets covered. We reserve
+     320px on each side; if a sidebar is collapsed the gap is just empty
+     space, no harm done. max-width is !important so any width persisted
+     by the resize handle cannot break the layout. */
+  inset: 56px calc(var(--aq-right-sidebar-visible-width, 280px) + 10px) 32px auto;
   z-index: 960;
   display: none;
-  width: min(720px, calc(100vw - 320px - 24px));
-  max-width: calc(100vw - 320px - 24px) !important;
+  width: min(700px, calc(100vw - var(--aq-left-sidebar-visible-width, 280px) - var(--aq-right-sidebar-visible-width, 280px) - 36px));
+  max-width: calc(100vw - var(--aq-left-sidebar-visible-width, 280px) - var(--aq-right-sidebar-visible-width, 280px) - 36px) !important;
   min-width: 380px;
   overflow: hidden;
   border: 1px solid #ddd7cc;
@@ -133,7 +135,8 @@ button:disabled {
 
 body.aq-matrix-open .aq-legacy-pdf-panel.open {
   z-index: 980;
-  width: min(680px, calc(100vw - 320px - 24px));
+  width: min(680px, calc(100vw - var(--aq-left-sidebar-visible-width, 280px) - var(--aq-right-sidebar-visible-width, 280px) - 36px));
+  max-width: calc(100vw - var(--aq-left-sidebar-visible-width, 280px) - var(--aq-right-sidebar-visible-width, 280px) - 36px) !important;
 }
 
 body.aq-matrix-fullscreen .aq-legacy-pdf-panel.open {
@@ -2213,9 +2216,10 @@ body.aq-matrix-fullscreen #matrixView {
 
 /* PDF viewer polish: keep the legacy behavior, make the shell feel native. */
 .aq-legacy-pdf-panel {
-  inset: 54px 14px 30px auto;
-  width: min(760px, calc(100vw - 56px));
-  min-width: 480px;
+  inset: 54px calc(var(--aq-right-sidebar-visible-width, 280px) + 10px) 30px auto;
+  width: min(700px, calc(100vw - var(--aq-left-sidebar-visible-width, 280px) - var(--aq-right-sidebar-visible-width, 280px) - 36px));
+  max-width: calc(100vw - var(--aq-left-sidebar-visible-width, 280px) - var(--aq-right-sidebar-visible-width, 280px) - 36px) !important;
+  min-width: min(420px, calc(100vw - var(--aq-left-sidebar-visible-width, 280px) - var(--aq-right-sidebar-visible-width, 280px) - 36px));
   border: 1px solid rgba(221, 215, 204, 0.9);
   border-radius: 14px;
   background: rgba(251, 250, 247, 0.96);
