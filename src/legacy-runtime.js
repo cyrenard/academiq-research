@@ -1,6 +1,53 @@
 ﻿window.__aqLegacyRuntimePhase='start';
 
 // ============================================================================
+// FILE TABLE OF CONTENTS  (legacy-runtime.js · ~14,600 lines)
+// ----------------------------------------------------------------------------
+// This file is the historical monolith for the Electron renderer's vanilla
+// JS layer. Domains are separated by `// ¦¦ NAME ¦¦` banners; line numbers
+// drift over time but the section names are stable. Use this map to jump
+// straight to the area you're touching.
+//
+//   Boot & helpers       1 –  130   pdfjs worker config, $E() DOM helper
+//   STATE              130 – 1100   global state vars + serialization helpers
+//   DOCUMENT TABS    1100 – 1220   multi-doc tab strip
+//   APA 7            1220 – 1380   citation engine bridge
+//   WORKSPACES       1380 – 1465   workspace switching, default state
+//   NOTEBOOKS        1465 – 1530   notebook CRUD
+//   CROSSREF         1530 – 2070   metadata fetch + reference normalization
+//   CITATION COUNT   2070 – 2310   inline citation count refresh
+//   LIBRARY          2310 – 2925   library list rendering, openRef, hydrate
+//   PDF UPLOAD       2925 – 3235   file picker + URL fetch into tabs
+//   PDF RENDER       3235 – 4635   pdfjs render loop, OCR pipeline
+//   PDF TABS         4635 – 4920   tab strip render + switch
+//   PDF ANNOTATIONS  4920 – 5090   highlight + sticky-note creation
+//   PDF DRAWING      5090 – 5400   freehand draw mode
+//   PANEL RESIZE     5400 – 5455   PDF panel resize handle
+//   PDF SEARCH       5455 – 6170   in-PDF text search
+//   HIGHLIGHT PERSIST6170 – 6465   serialize/restore highlights per ref
+//   NOTES            6465 – 6605   research note CRUD
+//   REFS             6605 – 7205   reference card actions, OA download
+//   FORMATTING       7205 – 7450   editor format state, paste cleanup
+//   INSERT HELPERS   7450 – 7865   insert citation/figure/table/footnote
+//   EXPORT           7865 – 8295   PDF/DOCX/BIB export pipelines
+//   UI               8295 – 8570   modals, dropdowns, refMetaModal
+//   SYNC SETTINGS UI 8570 – 8950   sync directory picker, autosave UI
+//   UPDATE FUNCTIONS 8950 – 9010   electron auto-updater bridge
+//   PDF SYNC         9010 – 9735   PDF sync between tabs/window
+//   THUMBNAIL        9735 –10265   thumbnail sidebar
+//   COPY/TABLE/FONT 10265 –10870   PDF copy/table extract, font size apply
+//   DARK THEME      10870 –10905   theme toggle plumbing
+//   TIPTAP INIT     10905 –12205   editor mount + extension config
+//   INIT            12205 –12275   boot sequence
+//   ZEN MODE        12275 –12380   focus mode toggle
+//   (misc / save)   12380 –14660   page composition, persistence (syncSave),
+//                                  custom labels, late shims
+//
+// To add a new domain, place it next to a related section, add a banner
+// matching the existing format, and update this TOC.
+// ============================================================================
+
+// ============================================================================
 // Safe DOM helpers — null-tolerant DOM access for legacy code.
 //
 // Background: this file makes ~107 chained `getElementById('x').method(...)`
