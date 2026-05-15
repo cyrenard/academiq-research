@@ -5,6 +5,8 @@ import { formatDate, formatAge, asRecord, statusText } from '../../lib/modal-hel
 import { ReferenceEditModal } from './modals/ReferenceEditModal';
 import { BrowserCaptureModal } from './modals/BrowserCaptureModal';
 import { HistoryModal } from './modals/HistoryModal';
+import { AISettingsPanel } from './modals/AISettingsPanel';
+import { sanitizeAISettings, type AISettings } from '../../ai/settings';
 
 type FeatureModal = 'settings' | 'recovery' | 'history' | 'browserCapture' | 'referenceEdit' | null;
 
@@ -35,7 +37,7 @@ export function FeatureModals({
   const [syncInfo, setSyncInfo] = useState<unknown>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [browserStatus, setBrowserStatus] = useState<unknown>(null);
-  const [settingsTab, setSettingsTab] = useState<'recovery' | 'history' | 'capture' | 'matrixAssistant' | 'sync' | 'storage' | 'updates' | 'about'>('recovery');
+  const [settingsTab, setSettingsTab] = useState<'recovery' | 'history' | 'capture' | 'matrixAssistant' | 'ai' | 'sync' | 'storage' | 'updates' | 'about'>('recovery');
   const [updateUrl, setUpdateUrl] = useState('');
   const [loadingAction, setLoadingAction] = useState('');
 
@@ -138,6 +140,23 @@ export function FeatureModals({
       })
       .catch(() => onStatus('Yerel Matrix yardımcısı kaydedilemedi'));
   };
+  const updateAISettings = (patch: Partial<AISettings>) => {
+    const current = sanitizeAISettings((state as any).ai);
+    const next = sanitizeAISettings({ ...current, ...patch });
+    (state as any).ai = next;
+    const win = window as any;
+    if (win.S && typeof win.S === 'object') win.S.ai = next;
+    window.electronAPI.saveData(JSON.stringify(state))
+      .then(() => {
+        if (typeof patch.enabled === 'boolean') {
+          onStatus(patch.enabled ? 'AI yardımcısı açıldı' : 'AI yardımcısı kapatıldı');
+        } else {
+          onStatus('AI ayarları kaydedildi');
+        }
+      })
+      .catch(() => onStatus('AI ayarları kaydedilemedi'));
+  };
+
   const runCaptureAction = (action: string, success: string, failure: string) => {
     setLoadingAction(action);
     window.electronAPI.runBrowserCaptureAction(action)
@@ -279,6 +298,7 @@ export function FeatureModals({
               ['history', 'Belge geçmişi'],
               ['capture', 'Capture agent'],
               ['matrixAssistant', 'Matrix yardımcısı'],
+              ['ai', '🧠 AI'],
               ['sync', 'Sync'],
               ['storage', 'Storage / Backup'],
               ['updates', 'Updates'],
@@ -447,6 +467,13 @@ export function FeatureModals({
                   güvenli extractive composer kullanılır; gerçek model paketi eklenirse yine yalnızca bu matrix akışında çalışır.
                 </div>
               </section>
+            ) : null}
+
+            {settingsTab === 'ai' ? (
+              <AISettingsPanel
+                value={(state as any).ai as AISettings | undefined}
+                onChange={updateAISettings}
+              />
             ) : null}
 
             {settingsTab === 'sync' ? (

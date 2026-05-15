@@ -1,3 +1,5 @@
+import { defaultAISettings, sanitizeAISettings } from '../ai/settings';
+
 export type AcademiqReference = {
   id: string;
   title?: string;
@@ -52,6 +54,12 @@ export type AcademiqAppState = {
   notebooks?: Array<{ id: string; name: string; wsId?: string }>;
   curNb?: string;
   cm?: string;
+  /**
+   * AI matrix worker settings (model selection, install state, runtime
+   * preferences). Populated by sanitizeAISettings(); when missing the
+   * defaults from defaultAISettings() apply. Persists with main state.
+   */
+  ai?: ReturnType<typeof defaultAISettings>;
   [key: string]: unknown;
 };
 
@@ -159,7 +167,8 @@ export function createBlankState(): AcademiqAppState {
       maxSnippetChars: 1200,
       minConfidence: 0.5,
       updatedAt: 0
-    }
+    },
+    ai: defaultAISettings()
   };
 }
 
@@ -244,7 +253,8 @@ export function hydrateAppState(raw: unknown): AcademiqAppState {
     localMatrixAssistant: {
       ...((fallback.localMatrixAssistant && typeof fallback.localMatrixAssistant === 'object') ? fallback.localMatrixAssistant as Record<string, unknown> : {}),
       ...((source.localMatrixAssistant && typeof source.localMatrixAssistant === 'object') ? source.localMatrixAssistant as Record<string, unknown> : {})
-    }
+    },
+    ai: sanitizeAISettings(source.ai)
   };
 }
 
