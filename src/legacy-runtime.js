@@ -1,4 +1,44 @@
 ﻿window.__aqLegacyRuntimePhase='start';
+
+// ============================================================================
+// Safe DOM helpers — null-tolerant DOM access for legacy code.
+//
+// Background: this file makes ~107 chained `getElementById('x').method(...)`
+// calls. Most run inside event handlers where the element is guaranteed to
+// exist, but some fire during boot, after a tab close, or in keyboard
+// shortcuts whose target panel is hidden — those throw and either (a) crash
+// the boot, or (b) get swallowed by a try/catch and silently break a feature.
+//
+// USAGE
+//   $E('refMetaModal').on('keydown', handler);   // skipped if missing
+//   $E('pdftitle').text('PDF Okuyucu');           // no-op if missing
+//   $E('pdfpanel').cls('add', 'open');            // no-op if missing
+//   $E('pdfpanel').css('width', '600px');         // direct .style.X assign
+//   var el = $E('foo').el;                        // raw element or null
+//
+// Always returns a chainable wrapper, so callers don't need null checks.
+// New code should prefer these over `document.getElementById('x').foo`.
+// Existing call sites can be migrated opportunistically — there is no
+// behaviour change when the element does exist.
+// ============================================================================
+function $E(id){
+  var el=document.getElementById(id);
+  return {
+    el: el,
+    on: function(evt, fn, opts){ if(el)el.addEventListener(evt, fn, opts); return this; },
+    off: function(evt, fn, opts){ if(el)el.removeEventListener(evt, fn, opts); return this; },
+    set: function(prop, val){ if(el)el[prop]=val; return this; },
+    css: function(prop, val){ if(el)el.style[prop]=val; return this; },
+    cls: function(action, name){ if(el && el.classList)el.classList[action](name); return this; },
+    text: function(val){ if(el)el.textContent=val; return this; },
+    html: function(val){ if(el)el.innerHTML=val; return this; },
+    attr: function(name, val){ if(el){ if(val===null||val===undefined)el.removeAttribute(name); else el.setAttribute(name, val); } return this; },
+    focus: function(){ if(el && typeof el.focus==='function')el.focus(); return this; },
+    click: function(){ if(el && typeof el.click==='function')el.click(); return this; }
+  };
+}
+window.$E=$E;
+
 if(typeof pdfjsLib!=='undefined'&&pdfjsLib&&pdfjsLib.GlobalWorkerOptions){
   (function(){
     var workerSrc='./vendor/pdf.worker.min.js';
@@ -8454,15 +8494,11 @@ function closeRefMetadataModal(ok){
   if(resolve)resolve(payload);
 }
 // refMetaModal lives in a React-managed legacy host that may not be in
-// the DOM at module-load time. Guard so we don't throw on null.
-(function(){
-  var modal=document.getElementById('refMetaModal');
-  if(!modal)return;
-  modal.addEventListener('keydown',function(e){
-    if(e.key==='Escape'){e.preventDefault();closeRefMetadataModal(false);}
-    if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();closeRefMetadataModal(true);}
-  });
-})();
+// the DOM at module-load time — $E() no-ops when the element is missing.
+$E('refMetaModal').on('keydown', function(e){
+  if(e.key==='Escape'){e.preventDefault();closeRefMetadataModal(false);}
+  if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();closeRefMetadataModal(true);}
+});
 function opdd(id,btn){
   if(!editor)saveEditorSelection();
   cdd();
