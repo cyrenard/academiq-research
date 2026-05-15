@@ -8453,10 +8453,16 @@ function closeRefMetadataModal(ok){
   hideM('refMetaModal');
   if(resolve)resolve(payload);
 }
-document.getElementById('refMetaModal').addEventListener('keydown',function(e){
-  if(e.key==='Escape'){e.preventDefault();closeRefMetadataModal(false);}
-  if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();closeRefMetadataModal(true);}
-});
+// refMetaModal lives in a React-managed legacy host that may not be in
+// the DOM at module-load time. Guard so we don't throw on null.
+(function(){
+  var modal=document.getElementById('refMetaModal');
+  if(!modal)return;
+  modal.addEventListener('keydown',function(e){
+    if(e.key==='Escape'){e.preventDefault();closeRefMetadataModal(false);}
+    if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();closeRefMetadataModal(true);}
+  });
+})();
 function opdd(id,btn){
   if(!editor)saveEditorSelection();
   cdd();
@@ -14607,7 +14613,7 @@ async function saveEditorDraftNow(){
     }
   }
 }
-syncSave=async function(){
+async function syncSave(){
   if(__aqDocSwitching){
     syncDirty=true;
     setAutosaveDirty();
@@ -14652,7 +14658,7 @@ syncSave=async function(){
       return syncSave();
     }
   }
-};
+}
 deleteCustomLabel=function(name){
   var labelName=String(name||'').trim();
   if(!labelName)return;
