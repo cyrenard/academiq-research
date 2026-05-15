@@ -177,7 +177,7 @@ export function AppShell({
                 <button type="button" className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel" onClick={() => runExportAction(onExportPreview)}>PDF önizleme</button>
                 <button type="button" className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel" onClick={() => runExportAction(onExportPDF)}>PDF olarak aktar</button>
                 <button type="button" className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel" onClick={() => runExportAction(onExportDOCX)}>DOCX olarak aktar</button>
-                <button type="button" className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel" onClick={() => runExportAction(onExportAnnotatedPDF)}>Annotationlı PDF aktar</button>
+                <button type="button" className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel" onClick={() => runExportAction(onExportAnnotatedPDF)}>Vurgulu PDF aktar</button>
                 <div className="my-1 border-t border-aq-line" />
                 <button type="button" className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel" onClick={() => runExportAction(onExportBIB)}>Kaynakça BibTeX aktar</button>
                 <button type="button" className="block w-full rounded-md px-3 py-2 text-left hover:bg-aq-panel" onClick={() => runExportAction(onExportRIS)}>Kaynakça RIS aktar</button>

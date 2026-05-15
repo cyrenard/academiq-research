@@ -275,14 +275,14 @@ export function FeatureModals({
         <div className="grid min-h-[520px] grid-cols-[170px_1fr] gap-4 text-sm">
           <nav className="space-y-1 border-r border-aq-line pr-3">
             {[
-              ['recovery', 'Recovery / Autosave'],
-              ['history', 'Belge geçmişi'],
-              ['capture', 'Capture agent'],
-              ['matrixAssistant', 'Matrix yardımcısı'],
-              ['sync', 'Sync'],
-              ['storage', 'Storage / Backup'],
-              ['updates', 'Updates'],
-              ['about', 'About']
+              ['recovery', 'Kurtarma / Otomatik Kayıt'],
+              ['history', 'Belge Geçmişi'],
+              ['capture', 'Tarayıcı Yakalama'],
+              ['matrixAssistant', 'Matris Yardımcısı'],
+              ['sync', 'Eşitleme'],
+              ['storage', 'Depolama / Yedekleme'],
+              ['updates', 'Güncellemeler'],
+              ['about', 'Hakkında']
             ].map(([id, label]) => (
               <button
                 type="button"
@@ -306,7 +306,7 @@ export function FeatureModals({
                     <div className="rounded-md bg-white p-3"><b>Unclean shutdown</b><br />{meta.uncleanShutdown ? 'evet' : 'hayır'}</div>
                     <div className="rounded-md bg-white p-3"><b>Draft recovery</b><br />{meta.recoveredFromDraft ? 'drafttan yüklendi' : 'pasif'}</div>
                     <div className="rounded-md bg-white p-3"><b>Recovery file</b><br />{meta.recoveredFromRecovery ? 'recoveryden yüklendi' : 'hazır'}</div>
-                    <div className="rounded-md bg-white p-3"><b>Backup</b><br />{meta.restoredFromBackup ? 'backuptan yüklendi' : 'hazır'}</div>
+                    <div className="rounded-md bg-white p-3"><b>Yedek</b><br />{meta.restoredFromBackup ? 'yedekten yüklendi' : 'hazır'}</div>
                   </div>
                   <div className="mt-3 rounded-md bg-white p-3 text-xs">
                     Son kayıt: {formatDate(meta.lastSavedAt)}<br />
@@ -314,7 +314,7 @@ export function FeatureModals({
                   </div>
                 </section>
                 <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
-                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Autosave</div>
+                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Otomatik Kayıt</div>
                   <p className="mb-2 text-xs leading-5 text-aq-muted">Autosave mevcut editor değişikliğiyle saveData, editor draft ise saveEditorDraft IPC hattından çalışır.</p>
                   <button
                     type="button"
@@ -357,7 +357,7 @@ export function FeatureModals({
                     <span className="rounded-full border border-aq-line bg-white px-2 py-0.5 text-xs">{statusText(browserStatus)}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="rounded-md bg-white p-3"><b>Browser</b><br />{String(capture.defaultBrowserLabel || capture.browserFamily || '-')}</div>
+                    <div className="rounded-md bg-white p-3"><b>Tarayıcı</b><br />{String(capture.defaultBrowserLabel || capture.browserFamily || '-')}</div>
                     <div className="rounded-md bg-white p-3"><b>Port</b><br />{String(capture.port || capture.agentPort || '-')}</div>
                     <div className="rounded-md bg-white p-3"><b>Extension</b><br />{String(capture.installedExtensionVersion || '-')}</div>
                     <div className="rounded-md bg-white p-3"><b>Son bağlantı</b><br />{formatDate(capture.lastConnectedAt || capture.lastHelloAt)}</div>
@@ -451,7 +451,7 @@ export function FeatureModals({
 
             {settingsTab === 'sync' ? (
               <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
-                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Sync</div>
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Eşitleme</div>
                 <div className="mb-3 rounded-md bg-white p-3 text-xs">
                   Mode: {sync.syncDir ? 'Sync' : 'Yerel'}<br />
                   Klasör: {String(sync.syncDir || sync.dir || '-')}
@@ -571,7 +571,7 @@ export function FeatureModals({
 
             {settingsTab === 'about' ? (
               <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
-                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">About</div>
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Hakkında</div>
                 <pre className="max-h-80 overflow-auto rounded-md bg-white p-3 text-xs">{JSON.stringify({ app: info, sync: syncInfo, load: loadMeta }, null, 2)}</pre>
               </section>
             ) : null}

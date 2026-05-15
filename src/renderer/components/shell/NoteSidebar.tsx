@@ -220,7 +220,7 @@ export function NoteSidebar({
     <aside className="flex h-full min-h-0 w-full min-w-0 flex-col bg-[#fbfaf7] p-3">
       <div className="mb-3 flex items-start justify-between">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-aq-muted">Workspace</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-aq-muted">Çalışma Alanı</div>
           <h2 className="mt-1 text-lg font-semibold leading-none">{workspaceName || 'Genel Notlar'}</h2>
         </div>
         <div className="aq-note-sidebar-actions flex gap-1">

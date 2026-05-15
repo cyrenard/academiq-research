@@ -1162,14 +1162,14 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       });
       panel.innerHTML = `
         <div class="pdf-annots-head">
-          <span>Annotationlar</span>
-          <span>${filteredRows.length}/${rows.length} · ${highlights.length} highlight · ${notes.length} not</span>
+          <span>Açıklamalar</span>
+          <span>${filteredRows.length}/${rows.length} · ${highlights.length} vurgu · ${notes.length} not</span>
         </div>
         <div class="pdf-annots-controls">
-          <input class="pdf-annots-search" id="aqPdfAnnotPanelSearch" value="${escapeHtml(win.__aqPdfAnnotPanelQuery || '')}" placeholder="Annotationlarda ara..." />
+          <input class="pdf-annots-search" id="aqPdfAnnotPanelSearch" value="${escapeHtml(win.__aqPdfAnnotPanelQuery || '')}" placeholder="Açıklamalarda ara..." />
           <div class="pdf-annots-filter">
             <button type="button" data-fallback-annot-kind="all" class="${kindFilter === 'all' ? 'on' : ''}">Tümü</button>
-            <button type="button" data-fallback-annot-kind="highlight" class="${kindFilter === 'highlight' ? 'on' : ''}">Highlight</button>
+            <button type="button" data-fallback-annot-kind="highlight" class="${kindFilter === 'highlight' ? 'on' : ''}">Vurgu</button>
             <button type="button" data-fallback-annot-kind="note" class="${kindFilter === 'note' ? 'on' : ''}">Not</button>
           </div>
           <div class="pdf-annots-colors">
@@ -1181,7 +1181,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
             <button type="button" data-fallback-annot-bulk="notes">Tümünü Notlara Aktar</button>
             <button type="button" data-fallback-annot-bulk="doc">Belgeye Özet Ekle</button>
             <button type="button" data-fallback-annot-bulk="matrix">Matrise Aktar</button>
-            <button type="button" class="primary" data-fallback-annot-bulk="export">Annotationlı PDF</button>
+            <button type="button" class="primary" data-fallback-annot-bulk="export">Vurgulu PDF</button>
           </div>
         </div>
         ${filteredRows.length ? `<div class="pdf-annots-list">${filteredRows.map((item: any) => `
@@ -2123,13 +2123,13 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
           <div className="pdf-tools-divider" />
           <div className="pdf-tools-group" aria-label="Not ve kalem">
             <button className="ppb" id="annotbtn" type="button" title="Metin notu ekle" onClick={() => (window as any).toggleAnnotMode?.()}>✎</button>
-            <button className="ppb" id="drawbtn" type="button" title="Serbest cizim" onClick={() => (window as any).toggleDrawMode?.()}>✏</button>
+            <button className="ppb" id="drawbtn" type="button" title="Serbest çizim" onClick={() => (window as any).toggleDrawMode?.()}>✏</button>
             <input id="pdfDrawColor" className="pdf-draw-color" type="color" defaultValue="#c9453e" title="Çizim rengi" onChange={(event) => (window as any).setPdfDrawColor?.(event.target.value)} />
             <button className="ppb" id="pdfRegionBtn" type="button" title="PDF bölgesi seç" onClick={() => (window as any).togglePdfRegionCaptureMode?.()}>▢</button>
             <select id="pdfDrawWidth" className="pdf-draw-width" title="Çizim kalınlığı" defaultValue="2.5" onChange={(event) => (window as any).setPdfDrawWidth?.(event.target.value)}>
-              <option value="1.5">Ince</option>
+              <option value="1.5">İnce</option>
               <option value="2.5">Orta</option>
-              <option value="4">Kalin</option>
+              <option value="4">Kalın</option>
               <option value="7">Marker</option>
             </select>
             <button className="ppb" id="pdfDrawClearBtn" type="button" title="Bu sayfadaki çizimi temizle" onClick={() => (window as any).clearPdfDrawingPage?.()}>🗑</button>
@@ -2140,7 +2140,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         <div id="pdfreaderbar" className="aq-legacy-pdf-status">
           <div className="pdf-reader-line">
             <span id="pdfreadmeta">PDF bekleniyor</span>
-            <span id="pdfreadstats">0 highlight - 0 not</span>
+            <span id="pdfreadstats">0 vurgu · 0 not</span>
             <span id="pdfReaderStatus" />
           </div>
           <span id="pdfprogress"><i id="pdfprogressbar" /></span>
@@ -2161,14 +2161,14 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
 
       <div id="hltip" role="menu">
         <button className="htb htb-primary" id="hlToNoteBtn" type="button" onClick={() => call('doHL', true)}>Nota kaydet</button>
-        <button className="htb" id="hlOnlyBtn" type="button" onClick={() => call('doHL', false)}>Highlight</button>
+        <button className="htb" id="hlOnlyBtn" type="button" onClick={() => call('doHL', false)}>Vurgu</button>
         <button className="htb" id="hlCopyBtn" type="button">Kopyala</button>
         <button className="htb htb-danger" id="hlDeleteBtn" type="button">Sil</button>
         <button className="htb htb-ghost" id="hlCloseBtn" type="button" onClick={() => call('hideHLtip')}>Kapat</button>
       </div>
 
       <div id="pdfctxmenu" className="aq-pdf-context-menu" role="menu">
-        <button type="button" data-pdf-context-action="highlight" data-needs-selection="true">Highlight</button>
+        <button type="button" data-pdf-context-action="highlight" data-needs-selection="true">Vurgu</button>
         <button type="button" data-pdf-context-action="note" data-needs-selection="true">Nota kaydet</button>
         <button type="button" data-pdf-context-action="copy" data-needs-selection="true">Seçimi kopyala</button>
         <div className="aq-pdf-context-submenu" role="none">

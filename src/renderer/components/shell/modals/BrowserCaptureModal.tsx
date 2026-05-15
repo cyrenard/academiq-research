@@ -46,13 +46,13 @@ export function BrowserCaptureModal({ open, onClose, onStatus }: BrowserCaptureM
         setBrowserStatus(result);
         onStatus('Capture tercihleri güncellendi');
       })
-      .catch(() => onStatus('Capture tercihleri güncellenemedi'));
+      .catch(() => onStatus('Yakalama tercihleri güncellenemedi'));
 
   return (
-    <Modal title="Browser Capture" open={open} onClose={onClose}>
+    <Modal title="Tarayıcıdan Yakala" open={open} onClose={onClose}>
       <div className="space-y-3 text-sm">
         <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Setup</div>
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Kurulum</div>
           <div className="grid grid-cols-2 gap-2">
             <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={prepareSetup}>
               Kurulumu hazırla

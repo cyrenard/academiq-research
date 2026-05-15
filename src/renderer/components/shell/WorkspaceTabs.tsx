@@ -45,7 +45,7 @@ export function WorkspaceTabs({
 
   return (
     <div className="relative flex h-[38px] items-center gap-4 px-5 text-xs">
-      <span className="font-semibold uppercase tracking-[0.32em] text-aq-muted">Workspace</span>
+      <span className="font-semibold uppercase tracking-[0.32em] text-aq-muted">Çalışma Alanı</span>
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
         {workspaces.map((workspace) => {
           const active = workspace.id === activeWorkspaceId;
@@ -83,8 +83,8 @@ export function WorkspaceTabs({
           type="button"
           onClick={onAddWorkspace}
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-lg text-aq-muted hover:bg-white hover:text-aq-ink"
-          title="Yeni workspace"
-          aria-label="Yeni workspace"
+          title="Yeni çalışma alanı"
+          aria-label="Yeni çalışma alanı"
         >
           +
         </button>

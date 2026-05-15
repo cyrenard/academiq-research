@@ -248,7 +248,7 @@ export function RefSidebar({
             }
           }}
           className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-md text-aq-muted opacity-70 transition hover:bg-aq-panel hover:text-aq-ink"
-          title="Kaynak menusu"
+          title="Kaynak menüsü"
         >
           ...
         </span>
