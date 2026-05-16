@@ -19,8 +19,7 @@
     "release:baseline": "npm run gate:release && npm run build",
     "build": "node scripts/build-win.js",
     "build:dir": "node scripts/build-win.js --dir",
-    "setup:lt": "node scripts/setup-languagetool.js",
-    "setup:zemberek": "node scripts/setup-zemberek.js"
+    "setup:lt": "node scripts/setup-languagetool.js"
   },
   "dependencies": {
     "pdf-lib": "^1.17.1",

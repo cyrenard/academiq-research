@@ -1,22 +1,17 @@
 /* eslint-disable no-console */
 /**
- * Turkish spell-check server lifecycle (main process).
+ * LanguageTool server lifecycle (main process).
  *
- * NOTE on naming: this file is still called main-process-languagetool.js
- * for git history continuity, but the actual JAR we spawn is now the
- * Zemberek-based wrapper produced by scripts/setup-zemberek.js. It
- * exposes the same LanguageTool /v2/check JSON shape, so the renderer
- * client doesn't care which engine is behind it.
- *
- * Spawns `vendor/languagetool/zemberek-server.jar` using the bundled
- * JRE, health-checks it, restarts it on crash, and kills it on app
- * quit. All paths are resolved against the packaged Electron resources:
+ * Spawns a local `languagetool-server.jar` using the bundled JRE,
+ * health-checks it, restarts it on crash, and kills it on app quit.
+ * All paths are resolved against the packaged Electron resources:
  *
  *   resources/
  *     jre/
  *       bin/java(.exe)
  *     languagetool/
- *       zemberek-server.jar    (fat jar, Zemberek + wrapper)
+ *       languagetool-server.jar
+ *       (+ language models bundled with the jar's distribution zip)
  *
  * In development we look for the same layout under <repo>/vendor/.
  * If neither path exists the module reports status:'missing' and the
@@ -104,13 +99,13 @@ function resolveBinaries({ resourcesPath, devVendorPath }) {
   if (resourcesPath) {
     candidates.push({
       java: path.join(resourcesPath, 'jre', 'bin', javaName),
-      jar: path.join(resourcesPath, 'languagetool', 'zemberek-server.jar')
+      jar: path.join(resourcesPath, 'languagetool', 'languagetool-server.jar')
     });
   }
   if (devVendorPath) {
     candidates.push({
       java: path.join(devVendorPath, 'jre', 'bin', javaName),
-      jar: path.join(devVendorPath, 'languagetool', 'zemberek-server.jar')
+      jar: path.join(devVendorPath, 'languagetool', 'languagetool-server.jar')
     });
   }
   for (const c of candidates) {
@@ -167,14 +162,12 @@ function spawnServer() {
   }
   if (proc) return;
   try {
-    // The fat jar's Main-Class is academiq.zemberek.ZemberekServer
-    // (set by scripts/setup-zemberek.js). It binds 127.0.0.1:<port>
-    // and exposes the LanguageTool-compatible /v2/check endpoint.
     proc = spawn(resolvedJavaPath, [
       '-Xms256m',
       '-Xmx1g',
       '-jar', resolvedJarPath,
-      '--port', String(port)
+      '--port', String(port),
+      '--allow-origin', '*'
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
   } catch (err) {
     setState('error', err && err.message ? err.message : 'spawn failed');

@@ -1,27 +1,24 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 /**
- * Download the Adoptium Temurin 17 JRE into <repo>/vendor/jre/.
- *
- * NOTE: this script was previously named for LanguageTool, but the
- * Türkçe integration switched to Zemberek (which LT does not support).
- * What we still need from this script is the JRE — Zemberek needs Java
- * to run, but we don't want to force users to install Java themselves.
+ * Download + extract the JRE and LanguageTool server into <repo>/vendor/.
  *
  * Layout produced (consumed by src/main-process-languagetool.js):
  *   vendor/
  *     jre/
  *       bin/java(.exe)
  *       ...
+ *     languagetool/
+ *       languagetool-server.jar
+ *       org/, META-INF/, ...
  *
- * Separately, run `npm run setup:zemberek` to build the Zemberek fat
- * jar that lands under vendor/languagetool/zemberek-server.jar. That
- * one needs a JDK (not just JRE) and is a one-shot build step.
+ * Idempotent: if both subtrees already exist the script exits 0 immediately.
+ * Run via `npm run setup:lt` (developer setup) or as part of the build
+ * pipeline before electron-builder packs `extraResources`.
  *
- * Idempotent: if vendor/jre/bin/java(.exe) exists the script exits 0.
- *
- * Source:
+ * Sources:
  *   - Eclipse Adoptium Temurin 17 JRE (free, GPL-2.0 with classpath exception)
+ *   - LanguageTool standalone (LGPL 2.1+)
  */
 
 const fs = require('fs');
@@ -204,9 +201,10 @@ async function main() {
   mkdirp(TMP_DIR);
   try {
     await setupJre();
+    await setupLanguageTool();
     // Best-effort cleanup of downloaded archives.
     try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_e) {}
-    console.log('[setup-lt] JRE ready. Next: `npm run setup:zemberek` to build the spell-check jar.');
+    console.log('[setup-lt] done.');
   } catch (err) {
     console.error('[setup-lt] FAILED:', err && err.message ? err.message : err);
     console.error('  Re-run after fixing network access; partial downloads are in', TMP_DIR);
