@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { AcademiqWorkspace } from '../../lib/app-state';
+import { L } from '../../lib/labels';
 
 type WorkspaceTabsProps = {
   workspaces: AcademiqWorkspace[];
@@ -45,7 +46,7 @@ export function WorkspaceTabs({
 
   return (
     <div className="relative flex h-[38px] items-center gap-4 px-5 text-xs">
-      <span className="font-semibold uppercase tracking-[0.32em] text-aq-muted">Çalışma Alanı</span>
+      <span className="font-semibold uppercase tracking-[0.32em] text-aq-muted">{L.app.workspace}</span>
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
         {workspaces.map((workspace) => {
           const active = workspace.id === activeWorkspaceId;
@@ -67,7 +68,8 @@ export function WorkspaceTabs({
                 className={active
                   ? 'ml-1 flex h-4 w-4 shrink-0 items-center justify-center rounded text-[11px] text-white/70 opacity-0 transition hover:bg-white/15 hover:text-white group-hover:opacity-100'
                   : 'ml-1 flex h-4 w-4 shrink-0 items-center justify-center rounded text-[11px] text-aq-muted opacity-0 transition hover:bg-white hover:text-red-600 group-hover:opacity-100'}
-                title="Çalışma alanını sil"
+                title={L.app.deleteWorkspace}
+                aria-label={L.app.deleteWorkspace}
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -83,8 +85,8 @@ export function WorkspaceTabs({
           type="button"
           onClick={onAddWorkspace}
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-lg text-aq-muted hover:bg-white hover:text-aq-ink"
-          title="Yeni çalışma alanı"
-          aria-label="Yeni çalışma alanı"
+          title={L.app.newWorkspace}
+          aria-label={L.app.newWorkspace}
         >
           +
         </button>
