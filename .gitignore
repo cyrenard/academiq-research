@@ -3,11 +3,6 @@ dist/
 dist-*/
 release/
 out/
-
-# Bundled LanguageTool server + JRE (~360 MB).
-# Run `npm run setup:lt` to download into vendor/, then electron-builder
-# packages it under resources/ at install time. Not committed because of size.
-vendor/
 *.asar
 *.bak
 *.log
