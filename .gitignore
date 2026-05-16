@@ -26,3 +26,8 @@ browser-capture-extension/firefox/config.js
 .env
 .env.*
 !.env.example
+
+# Synced from node_modules/dictionary-tr/ by scripts/sync-dictionary.js
+# (runs as postinstall). Source is MIT and pinned via package.json so
+# committing the 9 MB blob would just duplicate it.
+public/dictionary/
