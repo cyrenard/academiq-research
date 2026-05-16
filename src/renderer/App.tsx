@@ -338,7 +338,7 @@ export default function App() {
     let detach: (() => void) | null = null;
     let unsubscribeController: (() => void) | null = null;
     (async () => {
-      const { subscribeSpellcheck } = await import('./lib/spellcheck-controller');
+      const { subscribeSpellcheck, scheduleRecheck } = await import('./lib/spellcheck-controller');
       if (cancelled) return;
       // Persist toggle changes — Settings panel just calls the
       // controller, so we mirror its state back into AppState here.
