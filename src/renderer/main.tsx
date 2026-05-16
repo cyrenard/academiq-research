@@ -1,4 +1,5 @@
 import ReactDOM from 'react-dom/client';
+import '../tauri-api';
 import App from './App';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import './styles/app.css';

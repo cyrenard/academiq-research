@@ -9,6 +9,8 @@
     "start": "electron .",
     "dev:renderer": "vite --host 127.0.0.1",
     "build:renderer": "node scripts/build-renderer.js",
+    "tauri:dev": "cargo tauri dev",
+    "tauri:build": "cargo tauri build",
     "postinstall": "node scripts/sync-dictionary.js",
     "setup:dictionary": "node scripts/sync-dictionary.js",
     "typecheck": "tsc --noEmit",

@@ -1,7 +1,9 @@
-import { defineConfig, type UserConfig } from 'vite';
+/// <reference types="vitest" />
+
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig(({ mode }): UserConfig => {
+export default defineConfig(({ mode }) => {
   const isProd = mode === 'production';
   return {
     plugins: [react()],
@@ -35,12 +37,19 @@ export default defineConfig(({ mode }): UserConfig => {
       ? ({
           drop: ['debugger'],
           pure: ['console.log', 'console.debug', 'console.info', 'console.trace']
-        } as unknown as UserConfig['esbuild'])
+        } as never)
       : {},
     server: {
       host: '127.0.0.1',
       port: 5173,
       strictPort: false
+    },
+    test: {
+      environment: 'jsdom',
+      globals: true,
+      setupFiles: ['./src/renderer/test/setup.ts'],
+      include: ['src/renderer/**/*.{test,spec}.{ts,tsx}'],
+      exclude: ['**/node_modules/**', '**/dist/**', '**/src-tauri/**']
     }
   };
 });

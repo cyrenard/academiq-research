@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; object-src 'none'; base-uri 'self';"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* ipc: http://ipc.localhost; worker-src 'self' blob:; object-src 'none'; base-uri 'self';"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AcademiQ Research</title>
@@ -35,8 +35,8 @@
       ============================================================================
     -->
     <script src="/tiptap-bundle.js"></script>
-    <script src="/experiments/aq-engine/engine.js"></script>
     <script src="/experiments/aq-engine/document.js"></script>
+    <script src="/experiments/aq-engine/engine.js"></script>
     <script src="/experiments/aq-engine/selection.js"></script>
     <script src="/experiments/aq-engine/input.js"></script>
     <script src="/experiments/aq-engine/tiptap-adapter.js"></script>
