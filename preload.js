@@ -234,6 +234,12 @@ const electronAPI = {
   minimizeWindow:  ()         => invoke('window:minimize'),
   toggleMaximizeWindow: ()    => invoke('window:toggleMaximize'),
   closeWindow:     ()         => invoke('window:close'),
+
+  // LanguageTool (local server lifecycle; the actual /v2/check call is
+  // a normal fetch from the renderer to the URL exposed here).
+  getLanguageToolStatus: () => invoke('languagetool:getStatus'),
+  restartLanguageTool:   () => invoke('languagetool:restart'),
+  onLanguageToolStatusChanged: (callback) => listen('languagetool:statusChanged', callback),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', Object.freeze(electronAPI));
