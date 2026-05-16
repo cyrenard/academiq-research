@@ -1512,7 +1512,9 @@ function doAddWs(){
 
 // ¦¦ NOTEBOOKS ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
 function rNB(){
-  var bar=document.getElementById('nbtabs');bar.innerHTML='';
+  var bar=document.getElementById('nbtabs');
+  if(!bar)return;
+  bar.innerHTML='';
   var notebooks=(window.AQNotebookState&&typeof window.AQNotebookState.buildNotebookViewModel==='function')
     ? window.AQNotebookState.buildNotebookViewModel({notebooks:S.notebooks,currentNotebookId:S.curNb})
     : (S.notebooks||[]).map(function(nb){return{id:nb.id,name:nb.name,active:nb.id===S.curNb,deletable:(S.notebooks||[]).length>1};});
