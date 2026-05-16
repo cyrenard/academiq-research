@@ -33,6 +33,17 @@
  * writes from legacy-runtime.js so the theme cascade can do its job. */
 .aq-hidden { display: none !important; }
 
+/* Yazım denetimi panelinden "git" basıldığında flash highlight. Yumuşak
+ * sarı bir vurgu ile kullanıcının gözü doğru yere düşer; 1.2 sn sonra
+ * controller class'ı kaldırır. */
+.aq-spell-flash {
+  animation: aq-spell-flash 1200ms ease-out;
+}
+@keyframes aq-spell-flash {
+  0% { background-color: rgba(255, 213, 79, 0.85); }
+  100% { background-color: transparent; }
+}
+
 /* Türkçe yazım hatası — nspell + dictionary-tr eşleşmesi olmayan token.
  * Class spellcheck-controller.ts tarafından AQ Engine'in render ettiği
  * <span data-offset-start>...</span> elemanlarına tagleniyor. Wavy

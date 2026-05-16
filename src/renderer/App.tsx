@@ -7,6 +7,7 @@ import { RefSidebar } from './components/shell/RefSidebar';
 import { NoteSidebar, type NoteSidebarTab } from './components/shell/NoteSidebar';
 import { StatusBar } from './components/shell/StatusBar';
 import { useSpellcheck } from './lib/useSpellcheck';
+import { SpellcheckPanel } from './components/shell/SpellcheckPanel';
 import { TopToolbar } from './components/shell/TopToolbar';
 import {
   addManualNote,
@@ -108,6 +109,7 @@ export default function App() {
   const [workspaceNameModal, setWorkspaceNameModal] = useState<{ mode: 'create' | 'rename'; workspaceId?: string } | null>(null);
   const [commandOpen, setCommandOpen] = useState(false);
   const [featureModal, setFeatureModal] = useState<FeatureModal>(null);
+  const [spellPanelOpen, setSpellPanelOpen] = useState(false);
   const editorRef = useRef<AcademiqEditorApi | null>(null);
   const appStateRef = useRef(appState);
   const statusTimerRef = useRef<number | null>(null);
@@ -1749,7 +1751,7 @@ export default function App() {
             pdfProgressLabel={pdfProgressLabel}
             onOpenApa={openLegacyMetadataSurface}
             onOpenIssues={openLegacyIssueSurface}
-            onOpenSpell={() => setFeatureModal('settings')}
+            onOpenSpell={() => setSpellPanelOpen(true)}
             onOpenSave={openLegacySaveSurface}
           />
         )}
@@ -1777,6 +1779,7 @@ export default function App() {
             }}
           />
         ) : null}
+        <SpellcheckPanel open={spellPanelOpen} onClose={() => setSpellPanelOpen(false)} />
         {collectionManagerOpen ? (
           <CollectionManagerModal
             open={collectionManagerOpen}
