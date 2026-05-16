@@ -6,7 +6,6 @@ const net = require('net');
 const { execFile } = require('child_process');
 const crypto = require('crypto');
 const { createStorageService } = require('./src/main-process-storage.js');
-const languageToolServer = require('./src/main-process-languagetool.js');
 const {
   DEFAULT_CAPTURE_PORT,
   BROWSER_CAPTURE_PROTOCOL_VERSION,
@@ -1433,28 +1432,6 @@ if (IS_CAPTURE_AGENT_MODE) {
     ensureCaptureAgentRunning().catch((error) => {
       console.warn('Capture agent start error:', error && error.message ? error.message : error);
     });
-    // Boot the local LanguageTool server. Picks the bundled JRE + jar
-    // when packaged (process.resourcesPath) and falls back to
-    // <repo>/vendor/ in development so `npm start` works once the
-    // setup-languagetool script has been run. Status is broadcast to
-    // any open window so the Settings panel and the renderer client
-    // can react.
-    try {
-      const ltStatus = languageToolServer.init({
-        resourcesPath: process.resourcesPath || '',
-        devVendorPath: path.join(__dirname, 'vendor')
-      });
-      console.log('[languagetool] init →', ltStatus.state, ltStatus.error || '');
-    } catch (error) {
-      console.warn('[languagetool] init failed:', error && error.message ? error.message : error);
-    }
-    languageToolServer.onStatusChange((status) => {
-      try {
-        if (mainWindow && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
-          mainWindow.webContents.send('languagetool:statusChanged', status);
-        }
-      } catch (_e) {}
-    });
     const initialProtocolUrl = extractProtocolUrlFromArgs(process.argv);
     if (initialProtocolUrl) setTimeout(() => { handleProtocolUrl(initialProtocolUrl); }, 250);
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
@@ -2372,30 +2349,4 @@ ipcMain.handle('ocr:recognize', async (_ev, payload) => {
 // Dispose OCR worker on app quit to avoid dangling native threads.
 app.on('will-quit', () => {
   try { if (localOcr && typeof localOcr.dispose === 'function') localOcr.dispose(); } catch (_e) {}
-  // Gracefully terminate the LanguageTool server so the spawned Java
-  // process doesn't outlive Electron.
-  try { languageToolServer.stop(); } catch (_e) {}
-});
-
-// IPC: LanguageTool server status — renderer's Settings panel + the
-// quality-surface chip query this to decide whether to enable inline
-// grammar marking. Cheap call, no spawn side-effects.
-ipcMain.handle('languagetool:getStatus', () => {
-  try { return languageToolServer.getStatus(); }
-  catch (e) { return { state: 'error', error: e && e.message ? e.message : 'status read failed' }; }
-});
-
-// IPC: force a restart of the LT server. Used by the Settings panel's
-// "Yeniden başlat" button when the server is in a crashed/error state.
-ipcMain.handle('languagetool:restart', () => {
-  try {
-    languageToolServer.stop();
-    const status = languageToolServer.init({
-      resourcesPath: process.resourcesPath || '',
-      devVendorPath: path.join(__dirname, 'vendor')
-    });
-    return status;
-  } catch (e) {
-    return { state: 'error', error: e && e.message ? e.message : 'restart failed' };
-  }
 });
