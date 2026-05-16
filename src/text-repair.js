@@ -124,29 +124,29 @@
     repairNode(doc.body);
   }
 
-  function observe(doc){
-    if(!doc || !doc.body || typeof MutationObserver === 'undefined') return null;
-    var observer = new MutationObserver(function(mutations){
-      mutations.forEach(function(mutation){
-        if(mutation.type === 'characterData'){
-          repairNode(mutation.target);
-          return;
-        }
-        Array.from(mutation.addedNodes || []).forEach(repairNode);
-      });
-    });
-    observer.observe(doc.body, {
-      childList: true,
-      subtree: true,
-      characterData: true
-    });
-    return observer;
-  }
-
+  // ──────────────────────────────────────────────────────────────────────
+  // init() — previously installed a MutationObserver that ran on every
+  // DOM mutation (childList + subtree + characterData) anywhere in the
+  // document. That ran *constantly* while the user typed in the editor,
+  // every render of the matrix, every PDF page event — burning CPU on a
+  // problem that shouldn't exist: the app's source is UTF-8, so labels
+  // committed to source never produce mojibake.
+  //
+  // The remaining real source of mojibake is *imported* data: pasted
+  // RTF/Word content, legacy .txt files with cp1254/Windows-1252
+  // encoding, certain Crossref/CSL payloads. Those flow through specific
+  // import handlers, which can call `AQTextRepair.repairText(value)`
+  // directly on the imported string. That is far cheaper than observing
+  // the entire DOM at runtime.
+  //
+  // To preserve safety for any historical document that already shipped
+  // with mojibake committed into its persisted HTML, `init()` still runs
+  // ONE pass over the document body on boot. After that it's done — the
+  // MutationObserver is gone.
+  // ──────────────────────────────────────────────────────────────────────
   function init(){
     if(typeof document === 'undefined') return;
     repairDocument(document);
-    observe(document);
   }
 
   return {
