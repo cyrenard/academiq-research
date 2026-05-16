@@ -5,6 +5,8 @@ import { formatDate, formatAge, asRecord, statusText } from '../../lib/modal-hel
 import { ReferenceEditModal } from './modals/ReferenceEditModal';
 import { BrowserCaptureModal } from './modals/BrowserCaptureModal';
 import { HistoryModal } from './modals/HistoryModal';
+import { useSpellcheck } from '../../lib/useSpellcheck';
+import { L, fmt } from '../../lib/labels';
 
 type FeatureModal = 'settings' | 'recovery' | 'history' | 'browserCapture' | 'referenceEdit' | null;
 
@@ -35,9 +37,10 @@ export function FeatureModals({
   const [syncInfo, setSyncInfo] = useState<unknown>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [browserStatus, setBrowserStatus] = useState<unknown>(null);
-  const [settingsTab, setSettingsTab] = useState<'recovery' | 'history' | 'capture' | 'matrixAssistant' | 'sync' | 'storage' | 'updates' | 'about'>('recovery');
+  const [settingsTab, setSettingsTab] = useState<'recovery' | 'history' | 'capture' | 'matrixAssistant' | 'spellcheck' | 'sync' | 'storage' | 'updates' | 'about'>('recovery');
   const [updateUrl, setUpdateUrl] = useState('');
   const [loadingAction, setLoadingAction] = useState('');
+  const spellcheck = useSpellcheck();
 
   const refreshHistory = () => {
     window.electronAPI.getDocumentHistory(state.curDoc, 30)
@@ -279,6 +282,7 @@ export function FeatureModals({
               ['history', 'Belge Geçmişi'],
               ['capture', 'Tarayıcı Yakalama'],
               ['matrixAssistant', 'Matris Yardımcısı'],
+              ['spellcheck', 'Yazım Denetimi'],
               ['sync', 'Eşitleme'],
               ['storage', 'Depolama / Yedekleme'],
               ['updates', 'Güncellemeler'],
@@ -446,6 +450,52 @@ export function FeatureModals({
                   Hücre yazımı açıkken sistem mevcut PDF/özet/not adaylarından kısa matrix hücresi üretir. Yerel model sağlayıcı yoksa
                   güvenli extractive composer kullanılır; gerçek model paketi eklenirse yine yalnızca bu matrix akışında çalışır.
                 </div>
+              </section>
+            ) : null}
+
+            {settingsTab === 'spellcheck' ? (
+              <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">{L.modals.settingsSpellcheck}</div>
+                <p className="mb-3 text-xs leading-5 text-aq-muted">{L.spell.description}</p>
+                <label className="mb-3 flex items-center justify-between gap-3 rounded-md bg-white p-3">
+                  <span className="text-sm font-semibold text-aq-ink">{L.spell.enable}</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={spellcheck.state.enabled}
+                    onClick={() => spellcheck.toggle()}
+                    className={['relative h-6 w-11 rounded-full transition', spellcheck.state.enabled ? 'bg-aq-navy' : 'bg-aq-line'].join(' ')}
+                  >
+                    <span
+                      className={['absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform', spellcheck.state.enabled ? 'translate-x-[22px]' : 'translate-x-0.5'].join(' ')}
+                    />
+                  </button>
+                </label>
+                <div className="mb-2 grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-md bg-white p-3">
+                    <b>Durum</b>
+                    <br />
+                    <span className={['text-[11px]', spellcheck.state.error ? 'text-red-700' : spellcheck.state.ready ? 'text-emerald-700' : spellcheck.state.loading ? 'text-amber-700' : 'text-aq-muted'].join(' ')}>
+                      {spellcheck.state.error
+                        ? `${L.spell.statusError}: ${spellcheck.state.error}`
+                        : spellcheck.state.ready
+                          ? L.spell.statusReady
+                          : spellcheck.state.loading
+                            ? L.spell.statusLoading
+                            : L.spell.statusOff}
+                    </span>
+                  </div>
+                  <div className="rounded-md bg-white p-3">
+                    <b>Bulgu</b>
+                    <br />
+                    <span className="text-[11px] text-aq-ink">
+                      {spellcheck.state.matches.length > 0
+                        ? fmt(L.spell.errorCount, { n: spellcheck.state.matches.length })
+                        : L.spell.noErrors}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-[10px] text-aq-muted">{L.spell.dictionarySource}</p>
               </section>
             ) : null}
 

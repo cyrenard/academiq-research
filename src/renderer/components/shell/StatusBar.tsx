@@ -7,11 +7,14 @@ type StatusBarProps = {
   apaTone?: 'ok' | 'warning' | 'error' | 'saving';
   issuesLabel?: string;
   issuesTone?: 'ok' | 'warning' | 'error' | 'saving';
+  spellLabel?: string;
+  spellTone?: 'ok' | 'warning' | 'error' | 'saving';
   saveLabel?: string;
   saveTone?: 'ok' | 'warning' | 'error' | 'saving';
   pdfProgressLabel?: string;
   onOpenApa?: () => void;
   onOpenIssues?: () => void;
+  onOpenSpell?: () => void;
   onOpenSave?: () => void;
 };
 
@@ -48,11 +51,14 @@ export function StatusBar({
   apaTone = 'ok',
   issuesLabel = '0 uyarı',
   issuesTone = 'ok',
+  spellLabel,
+  spellTone = 'ok',
   saveLabel,
   saveTone = 'ok',
   pdfProgressLabel = '',
   onOpenApa,
   onOpenIssues,
+  onOpenSpell,
   onOpenSave
 }: StatusBarProps) {
   return (
@@ -68,6 +74,9 @@ export function StatusBar({
         <span>{wordCount} kelime</span>
         <StatusButton tone={apaTone} onClick={onOpenApa || onOpenIssues}>{apaLabel}</StatusButton>
         <StatusButton tone={issuesTone} onClick={onOpenIssues}>{issuesLabel}</StatusButton>
+        {spellLabel ? (
+          <StatusButton tone={spellTone} onClick={onOpenSpell}>{spellLabel}</StatusButton>
+        ) : null}
         <StatusButton tone={saveTone} onClick={onOpenSave}>
           <span className="h-1.5 w-1.5 rounded-full bg-current" />
           {saveLabel || message || 'kaydedildi'}

@@ -6,6 +6,7 @@ import { AppShell } from './components/shell/AppShell';
 import { RefSidebar } from './components/shell/RefSidebar';
 import { NoteSidebar, type NoteSidebarTab } from './components/shell/NoteSidebar';
 import { StatusBar } from './components/shell/StatusBar';
+import { useSpellcheck } from './lib/useSpellcheck';
 import { TopToolbar } from './components/shell/TopToolbar';
 import {
   addManualNote,
@@ -165,6 +166,22 @@ export default function App() {
     if (/kaydediliyor|bekliyor|taslak|degisiklik|saving|pending/.test(normalized)) return 'saving';
     return 'ok';
   }, [statusMessage]);
+  // Spell-check chip — hidden when the user hasn't turned it on.
+  const spellState = useSpellcheck();
+  const spellChipLabel = spellState.state.enabled
+    ? (spellState.state.error
+      ? 'Yazım: hata'
+      : spellState.state.loading
+        ? 'Yazım: yükleniyor…'
+        : spellState.state.matches.length > 0
+          ? `${spellState.state.matches.length} yazım`
+          : '✓ yazım')
+    : '';
+  const spellChipTone: 'ok' | 'warning' | 'error' = spellState.state.error
+    ? 'error'
+    : spellState.state.matches.length > 0
+      ? 'warning'
+      : 'ok';
   const pdfProgressLabel = useMemo(() => {
     if (!pdfProgress || !pdfProgress.total) return '';
     const state = pdfProgress.active ? 'indiriliyor' : 'bitti';
@@ -305,6 +322,62 @@ export default function App() {
       });
     return () => { alive = false; };
   }, [reloadStateFromDisk]);
+
+  // Spell-check bootstrap: apply persisted enabled state, then attach
+  // a single editor update listener (debounced inside the controller)
+  // so every keystroke triggers a fresh check. We poll for the legacy
+  // editor instance because it mounts asynchronously after boot.
+  // Also wires controller → persisted-state so toggling from Settings
+  // survives an app restart.
+  useEffect(() => {
+    let cancelled = false;
+    let detach: (() => void) | null = null;
+    let unsubscribeController: (() => void) | null = null;
+    (async () => {
+      const { setSpellcheckEnabled, scheduleRecheck, subscribeSpellcheck } = await import('./lib/spellcheck-controller');
+      if (cancelled) return;
+      const persisted = (appStateRef.current as any)?.spellcheck?.enabled === true;
+      if (persisted) setSpellcheckEnabled(true);
+      // Persist toggle changes — Settings panel just calls the
+      // controller, so we mirror its state back into AppState here.
+      unsubscribeController = subscribeSpellcheck((s) => {
+        const current = appStateRef.current as any;
+        const currentEnabled = !!(current?.spellcheck?.enabled);
+        if (currentEnabled === s.enabled) return;
+        const next = { ...current, spellcheck: { ...(current?.spellcheck || {}), enabled: s.enabled } };
+        appStateRef.current = next;
+        setAppState(next);
+        window.electronAPI?.saveData?.(JSON.stringify(next)).catch(() => {});
+      });
+      // Wait up to 30s for the legacy editor to mount, then subscribe
+      // to its 'update' event so each keystroke nudges the spell pass.
+      const deadline = Date.now() + 30_000;
+      const poll = () => {
+        if (cancelled) return;
+        const win = window as any;
+        try {
+          const editor = typeof win.getActiveEditorInstance === 'function'
+            ? win.getActiveEditorInstance()
+            : null;
+          if (editor && typeof editor.on === 'function') {
+            const handler = () => scheduleRecheck();
+            editor.on('update', handler);
+            detach = () => {
+              try { editor.off?.('update', handler); } catch (_e) {}
+            };
+            return;
+          }
+        } catch (_e) {}
+        if (Date.now() < deadline) setTimeout(poll, 500);
+      };
+      poll();
+    })();
+    return () => {
+      cancelled = true;
+      if (detach) detach();
+      if (unsubscribeController) unsubscribeController();
+    };
+  }, []);
 
   useEffect(() => {
     window.electronAPI?.browserCaptureRendererReady?.()
@@ -1669,11 +1742,14 @@ export default function App() {
             apaTone={qualityStatus.apaTone}
             issuesLabel={qualityStatus.issuesLabel}
             issuesTone={qualityStatus.issuesTone}
+            spellLabel={spellChipLabel}
+            spellTone={spellChipTone}
             saveLabel={statusMessage || 'kaydedildi'}
             saveTone={saveTone}
             pdfProgressLabel={pdfProgressLabel}
             onOpenApa={openLegacyMetadataSurface}
             onOpenIssues={openLegacyIssueSurface}
+            onOpenSpell={() => setFeatureModal('settings')}
             onOpenSave={openLegacySaveSurface}
           />
         )}

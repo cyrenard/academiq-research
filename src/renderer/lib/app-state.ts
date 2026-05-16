@@ -52,6 +52,7 @@ export type AcademiqAppState = {
   notebooks?: Array<{ id: string; name: string; wsId?: string }>;
   curNb?: string;
   cm?: string;
+  spellcheck?: { enabled?: boolean; language?: string };
   [key: string]: unknown;
 };
 
@@ -159,6 +160,10 @@ export function createBlankState(): AcademiqAppState {
       maxSnippetChars: 1200,
       minConfidence: 0.5,
       updatedAt: 0
+    },
+    spellcheck: {
+      enabled: false,
+      language: 'tr-TR'
     }
   };
 }
@@ -244,6 +249,10 @@ export function hydrateAppState(raw: unknown): AcademiqAppState {
     localMatrixAssistant: {
       ...((fallback.localMatrixAssistant && typeof fallback.localMatrixAssistant === 'object') ? fallback.localMatrixAssistant as Record<string, unknown> : {}),
       ...((source.localMatrixAssistant && typeof source.localMatrixAssistant === 'object') ? source.localMatrixAssistant as Record<string, unknown> : {})
+    },
+    spellcheck: {
+      ...((fallback.spellcheck && typeof fallback.spellcheck === 'object') ? fallback.spellcheck as Record<string, unknown> : {}),
+      ...((source.spellcheck && typeof source.spellcheck === 'object') ? source.spellcheck as Record<string, unknown> : {})
     }
   };
 }

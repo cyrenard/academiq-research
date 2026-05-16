@@ -134,6 +134,7 @@ export const L = {
     settingsHistory: 'Belge Geçmişi',
     settingsCapture: 'Tarayıcı Yakalama',
     settingsMatrixAssistant: 'Matris Yardımcısı',
+    settingsSpellcheck: 'Yazım Denetimi',
     settingsSync: 'Eşitleme',
     settingsStorage: 'Depolama / Yedekleme',
     settingsUpdates: 'Güncellemeler',
@@ -142,6 +143,19 @@ export const L = {
     browserCaptureTitle: 'Tarayıcıdan Yakala',
     historyTitle: 'Belge Sürümleri',
     commandPalette: 'Komut Paleti'
+  },
+
+  /** Spellcheck-specific user-facing strings. */
+  spell: {
+    enable: 'Türkçe yazım denetimini aç',
+    description: 'Belgede yanlış yazılmış kelimelerin altına kırmızı dalga çizer; sağ tıklayınca öneri sunar. Tamamen yerel — internet kullanılmaz.',
+    statusOff: 'Kapalı',
+    statusLoading: 'Sözlük yükleniyor…',
+    statusReady: 'Hazır',
+    statusError: 'Hata',
+    errorCount: '{n} olası yazım hatası',
+    noErrors: 'Yazım hatası yok',
+    dictionarySource: 'Sözlük: dictionary-tr (MIT, Harun Reşit Zafer)'
   },
 
   /** Error / empty / status messages. */
