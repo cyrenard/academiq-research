@@ -162,7 +162,7 @@ export function createBlankState(): AcademiqAppState {
       updatedAt: 0
     },
     spellcheck: {
-      enabled: false,
+      enabled: true,
       language: 'tr-TR'
     }
   };
