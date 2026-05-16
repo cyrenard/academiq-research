@@ -467,16 +467,16 @@ export function FeatureModals({
 
             {settingsTab === 'storage' ? (
               <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
-                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Storage / Backup</div>
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Depolama / Yedekleme</div>
                 <p className="mb-3 text-xs leading-5 text-aq-muted">
-                  Tek bir AcademiQ backup dosyası; workspace’leri, belgeleri, notları, kaynakları, belge geçmişini, ayarları ve PDF klasörlerini taşır.
-                  PDF’ler binary olarak saklanır, base64 kullanılmadığı için dosya gereksiz şişmez.
+                  Tek bir AcademiQ yedek dosyası; çalışma alanlarını, belgeleri, notları, kaynakları, belge geçmişini, ayarları ve PDF klasörlerini taşır.
+                  PDF’ler ikili (binary) olarak saklanır; base64 kullanılmadığı için dosya gereksiz şişmez.
                 </p>
                 <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded-md bg-white p-3"><b>Veri</b><br />Workspace, editor içeriği, notlar, kaynaklar, matrix</div>
-                  <div className="rounded-md bg-white p-3"><b>Dosyalar</b><br />Workspace PDF klasörleri ve eski PDF cache</div>
-                  <div className="rounded-md bg-white p-3"><b>Geçmiş</b><br />Belge snapshotları ve recovery dosyaları</div>
-                  <div className="rounded-md bg-white p-3"><b>Taşıma</b><br />Restore sonrası sync yolu sıfırlanır, veri yerel açılır</div>
+                  <div className="rounded-md bg-white p-3"><b>Veri</b><br />Çalışma alanı, editör içeriği, notlar, kaynaklar, matris</div>
+                  <div className="rounded-md bg-white p-3"><b>Dosyalar</b><br />Çalışma alanı PDF klasörleri ve eski PDF önbelleği</div>
+                  <div className="rounded-md bg-white p-3"><b>Geçmiş</b><br />Belge anlık görüntüleri ve kurtarma dosyaları</div>
+                  <div className="rounded-md bg-white p-3"><b>Taşıma</b><br />Geri yüklemeden sonra eşitleme yolu sıfırlanır, veri yerel açılır</div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -485,7 +485,7 @@ export function FeatureModals({
                     disabled={loadingAction === 'backup-create'}
                     onClick={runBackupCreate}
                   >
-                    {loadingAction === 'backup-create' ? 'Backup hazırlanıyor...' : 'Backup oluştur'}
+                    {loadingAction === 'backup-create' ? 'Yedek hazırlanıyor...' : 'Yedek oluştur'}
                   </button>
                   <button
                     type="button"
@@ -493,7 +493,7 @@ export function FeatureModals({
                     disabled={loadingAction === 'backup-restore'}
                     onClick={runBackupRestore}
                   >
-                    {loadingAction === 'backup-restore' ? 'Backup yükleniyor...' : 'Backup yükle / restore et'}
+                    {loadingAction === 'backup-restore' ? 'Yedek yükleniyor...' : 'Yedek yükle / geri yükle'}
                   </button>
                 </div>
                 <div className="mt-3 rounded-md bg-white p-3 text-xs text-aq-muted">
@@ -572,7 +572,32 @@ export function FeatureModals({
             {settingsTab === 'about' ? (
               <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
                 <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Hakkında</div>
-                <pre className="max-h-80 overflow-auto rounded-md bg-white p-3 text-xs">{JSON.stringify({ app: info, sync: syncInfo, load: loadMeta }, null, 2)}</pre>
+                <div className="space-y-3 rounded-md bg-white p-4">
+                  <div>
+                    <h3 className="text-base font-semibold leading-tight">AcademiQ Research</h3>
+                    <p className="mt-0.5 text-[11px] text-aq-muted">Akademik yazım, kaynak yönetimi ve literatür sentezi için masaüstü çalışma ortamı</p>
+                  </div>
+                  <dl className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-1.5 text-xs">
+                    <dt className="font-semibold text-aq-muted">Sürüm</dt>
+                    <dd className="text-aq-ink">{String(asRecord(info).appVersion || asRecord(info).version || '—')}</dd>
+                    <dt className="font-semibold text-aq-muted">Platform</dt>
+                    <dd className="text-aq-ink">{String(asRecord(info).platform || '—')}</dd>
+                    <dt className="font-semibold text-aq-muted">Veri klasörü</dt>
+                    <dd className="break-all text-aq-ink">{String(asRecord(info).appDir || '—')}</dd>
+                    <dt className="font-semibold text-aq-muted">PDF önbelleği</dt>
+                    <dd className="break-all text-aq-ink">{String(asRecord(info).pdfDir || '—')}</dd>
+                    {asRecord(info).pdfCount !== undefined ? (
+                      <>
+                        <dt className="font-semibold text-aq-muted">PDF sayısı</dt>
+                        <dd className="text-aq-ink">{String(asRecord(info).pdfCount)}</dd>
+                      </>
+                    ) : null}
+                  </dl>
+                </div>
+                <details className="mt-3 rounded-md bg-white p-3 text-xs">
+                  <summary className="cursor-pointer text-aq-muted">Teknik ayrıntılar (tanılama için)</summary>
+                  <pre className="mt-2 max-h-72 overflow-auto text-[11px] text-aq-muted">{JSON.stringify({ app: info, sync: syncInfo, load: loadMeta }, null, 2)}</pre>
+                </details>
               </section>
             ) : null}
           </div>
