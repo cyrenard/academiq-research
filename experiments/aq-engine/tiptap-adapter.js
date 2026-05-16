@@ -261,12 +261,21 @@
         if(fontOverride) run.font = fontOverride;
         runs.push(run);
       }else if(n.type === 'hardBreak'){
-        // <br> would map to a forced line break; full break support is TODO.
-        // Emitting '\n' here corrupts later typing — the engine's tokenizer
-        // splits on '\n' so any space typed near it appears to wrap to the
-        // next line. Skip the hardBreak run entirely; trailing <p><br></p>
-        // boilerplate (eg. table insert) becomes a clean empty paragraph.
-        // (No-op.)
+        // ⚠ KNOWN GAP — Shift+Enter / <br> hard line break
+        //
+        // Importing TipTap hardBreak as '\n' corrupts later typing: the
+        // engine's tokenizer (engine.js line-breaker) splits on '\n' so a
+        // space typed near it appears to wrap to the next line. As a
+        // safe-but-lossy workaround we skip the hardBreak entirely, which
+        // makes trailing <p><br></p> boilerplate (eg. table insert) round-
+        // trip as a clean empty paragraph but discards intentional in-
+        // paragraph line breaks.
+        //
+        // Proper fix requires: (1) a Run.forcedBreak flag on the document
+        // model, (2) line-breaker support that always emits a line break
+        // at a forcedBreak boundary, (3) editor cursor + selection logic
+        // that treats forcedBreak as a single grapheme. See engine.js
+        // SYSTEM LAYOUT header for the file map. Tracked.
       }else if(n.type === 'footnoteRef'){
         // AcademiQ inline atom — display as superscript number.
         var attrs = n.attrs || {};

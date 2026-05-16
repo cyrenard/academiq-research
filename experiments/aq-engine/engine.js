@@ -1,13 +1,52 @@
-/* AQ Custom Layout Engine — experimental
+/* AQ Custom Layout Engine
+ * ════════════════════════════════════════════════════════════════════════
+ * Despite the `experiments/` path, this is LIVE production code — the
+ * canvas-based editor that replaced TipTap in AcademiQ Research. The
+ * `experiments/` name is historical and should not be removed without a
+ * coordinated load-order migration (see index.html script tags 2–7).
  *
  * Goal: Word-like pagination from scratch. We control:
- *   1. Font metrics (Canvas measureText)
- *   2. Line-breaking (greedy first-fit, word-aware)
- *   3. Page layout (APA-compliant: A4, 1in margins, double spacing)
- *   4. DOM render (absolute-positioned line boxes per page)
+ *   1. Font metrics       — Canvas measureText
+ *   2. Line-breaking      — greedy first-fit, word-aware
+ *   3. Page layout        — APA-compliant: A4, 1in margins, double spacing
+ *   4. DOM render         — absolute-positioned line boxes per page
+ *
+ * SYSTEM LAYOUT (all in experiments/aq-engine/, ~6150 lines total)
+ * ────────────────────────────────────────────────────────────────────────
+ *   engine.js          (this file, ~1040 lines)
+ *                        — pagination + font metrics + DOM render
+ *                        — exports window.AQEngine
+ *   document.js        (~900 lines)
+ *                        — document model: blocks/runs/marks
+ *                        — exports window.AQEngineDocument
+ *   selection.js       (~520 lines)
+ *                        — hit testing, caret, keyboard navigation
+ *                        — exports window.AQEngineSelection
+ *   input.js           (~1100 lines)
+ *                        — hidden textarea, IME (Turkish dead keys),
+ *                          clipboard, undo/redo bridge
+ *                        — exports window.AQEngineInput
+ *   tiptap-adapter.js  (~630 lines)
+ *                        — converts TipTap (ProseMirror) JSON → engine blocks
+ *                        — exports window.AQEngineTipTapAdapter
+ *   compat-shim.js     (~1960 lines)
+ *                        — TipTap-API drop-in so legacy code still calls
+ *                          editor.commands.*, editor.chain().*, etc.
+ *                        — exports window.AQEngineCompat
+ *
+ * KNOWN GAPS
+ * ────────────────────────────────────────────────────────────────────────
+ *   • <br> (Shift+Enter hard line break) is partially supported — the
+ *     tiptap-adapter maps <br> nodes to a forced break flag on the run,
+ *     but the line-breaker treats them as regular word boundaries
+ *     rather than guaranteed splits. See `tiptap-adapter.js` for the
+ *     existing TODO marker.
  *
  * Units: all internal math in CSS pixels (1in = 96 CSS px).
  * Inputs accept points (1pt = 96/72 px) for typography ergonomics.
+ *
+ * Test coverage: tests/aq-engine-integration.test.js (54 cases,
+ *   runs under `npm test`, not `npm run test:renderer`).
  */
 (function(root, factory){
   if(typeof module !== 'undefined' && module.exports){ module.exports = factory(); return; }
