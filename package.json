@@ -18,7 +18,8 @@
     "gate:release": "node scripts/release-gate.js",
     "release:baseline": "npm run gate:release && npm run build",
     "build": "node scripts/build-win.js",
-    "build:dir": "node scripts/build-win.js --dir"
+    "build:dir": "node scripts/build-win.js --dir",
+    "setup:lt": "node scripts/setup-languagetool.js"
   },
   "dependencies": {
     "pdf-lib": "^1.17.1",
@@ -69,7 +70,18 @@
       "package.json",
       "src/**/*"
     ],
-    "extraResources": [],
+    "extraResources": [
+      {
+        "from": "vendor/jre",
+        "to": "jre",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "vendor/languagetool",
+        "to": "languagetool",
+        "filter": ["**/*"]
+      }
+    ],
     "win": {
       "target": [
         {
