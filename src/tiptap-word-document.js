@@ -302,8 +302,8 @@
         + '.aq-export-root blockquote{margin:0;padding-left:.5in;line-height:var(--aq-line-spacing,24pt);text-indent:0;break-inside:avoid;page-break-inside:avoid;}'
         + '.aq-export-root blockquote p{text-indent:0;}'
         + '.aq-export-root .refe,.aq-export-root .aq-ref-entry{margin:0;padding-left:.5in;line-height:var(--aq-line-spacing,24pt);text-indent:-.5in;break-inside:avoid;page-break-inside:avoid;}'
-        + '.aq-export-root .aq-table-label,.aq-export-root .aq-figure-placeholder{margin:0;text-indent:0;text-align:center;font-weight:700;}'
-        + '.aq-export-root .aq-table-title,.aq-export-root .aq-figure-caption{margin:0 0 6pt 0;text-indent:0;text-align:center;font-style:italic;}';
+        + '.aq-export-root .aq-table-label,.aq-export-root .aq-figure-placeholder{margin:0;text-indent:0;text-align:left;font-weight:700;}'
+        + '.aq-export-root .aq-table-title,.aq-export-root .aq-figure-caption{margin:0 0 6pt 0;text-indent:0;text-align:left;font-style:italic;}';
     return '@page{size:A4;margin:2.54cm;}'
       + 'html,body{margin:0;padding:0;background:#fff;color:#000;font-family:"Times New Roman",Times,serif;font-size:12pt;line-height:var(--aq-line-spacing,24pt);mso-line-height-rule:exactly;}'
       + 'body{counter-reset:page 0;}'
@@ -334,8 +334,35 @@
       + '.aq-export-root .aq-cross-ref-export{color:#000;text-decoration:none;font-style:italic;}';
   }
 
+  function docxHeadingInlineStyle(level){
+    var n = Math.max(1, Math.min(5, Number(level) || 1));
+    var align = n === 1 ? 'center' : 'left';
+    var indent = n >= 4 ? '.5in' : '0';
+    var italic = n === 3 || n === 5 ? 'font-style:italic;' : '';
+    return 'font-family:&quot;Times New Roman&quot;,Times,serif;font-size:12pt;font-weight:bold;' + italic
+      + 'text-align:' + align + ';text-indent:' + indent + ';margin:0;line-height:24pt;mso-line-height-rule:exactly;'
+      + 'page-break-after:avoid;break-after:avoid-page;color:#000;';
+  }
+
+  function mergeInlineStyleAttr(tag, styleText){
+    if(/\sstyle\s*=/i.test(tag)){
+      return tag.replace(/\sstyle\s*=\s*("([^"]*)"|'([^']*)')/i, function(_all, quoted, doubleValue, singleValue){
+        var quote = quoted.charAt(0) === "'" ? "'" : '"';
+        var current = doubleValue != null ? doubleValue : (singleValue || '');
+        return ' style=' + quote + styleText + current + quote;
+      });
+    }
+    return tag.replace(/>$/, ' style="' + styleText + '">');
+  }
+
+  function applyDocxInlineApaStyles(html){
+    return String(html || '').replace(/<h([1-5])\b([^>]*)>/gi, function(tag, level){
+      return mergeInlineStyleAttr(tag, docxHeadingInlineStyle(level));
+    });
+  }
+
   function buildExportDocHTML(edHTML){
-    var cleanHTML = buildCleanExportHTML(edHTML);
+    var cleanHTML = applyDocxInlineApaStyles(buildCleanExportHTML(edHTML));
     return '<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><meta name="ProgId" content="Word.Document"><meta name="Generator" content="AcademiQ Research"><style>@page WordSection1{size:595pt 842pt;margin:72pt 72pt 72pt 72pt;}div.WordSection1{page:WordSection1;}' + buildExportBaseCSS() + '</style></head><body><div class="WordSection1"><main class="aq-export-root">' + String(cleanHTML || '') + '</main></div></body></html>';
   }
 

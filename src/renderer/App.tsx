@@ -325,21 +325,21 @@ export default function App() {
     return () => { alive = false; };
   }, [reloadStateFromDisk]);
 
-  // Spell-check bootstrap: apply persisted enabled state, then attach
-  // a single editor update listener (debounced inside the controller)
-  // so every keystroke triggers a fresh check. We poll for the legacy
-  // editor instance because it mounts asynchronously after boot.
+  // Spell-check bootstrap: attach a single editor update listener so
+  // every keystroke triggers a fresh check (debounced inside the
+  // controller). We poll for the legacy editor instance because it
+  // mounts asynchronously after boot.
   // Also wires controller → persisted-state so toggling from Settings
-  // survives an app restart.
+  // survives an app restart. The persisted-state → controller direction
+  // lives in a SEPARATE useEffect below (dependent on appState) so we
+  // catch the value AFTER reloadStateFromDisk hydrates it.
   useEffect(() => {
     let cancelled = false;
     let detach: (() => void) | null = null;
     let unsubscribeController: (() => void) | null = null;
     (async () => {
-      const { setSpellcheckEnabled, scheduleRecheck, subscribeSpellcheck } = await import('./lib/spellcheck-controller');
+      const { subscribeSpellcheck } = await import('./lib/spellcheck-controller');
       if (cancelled) return;
-      const persisted = (appStateRef.current as any)?.spellcheck?.enabled === true;
-      if (persisted) setSpellcheckEnabled(true);
       // Persist toggle changes — Settings panel just calls the
       // controller, so we mirror its state back into AppState here.
       unsubscribeController = subscribeSpellcheck((s) => {
@@ -380,6 +380,20 @@ export default function App() {
       if (unsubscribeController) unsubscribeController();
     };
   }, []);
+
+  // Persisted-state → controller. Fires once `loading` flips false
+  // (state hydrated from disk) and again any time the toggle flips
+  // somewhere else (e.g. a future workspace import). The controller is
+  // idempotent: setSpellcheckEnabled(true) when it's already true is a
+  // no-op.
+  const persistedSpellEnabled = appState.spellcheck?.enabled === true;
+  useEffect(() => {
+    if (loading) return;
+    (async () => {
+      const { setSpellcheckEnabled } = await import('./lib/spellcheck-controller');
+      setSpellcheckEnabled(persistedSpellEnabled);
+    })();
+  }, [loading, persistedSpellEnabled]);
 
   useEffect(() => {
     window.electronAPI?.browserCaptureRendererReady?.()

@@ -1162,11 +1162,11 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       });
       panel.innerHTML = `
         <div class="pdf-annots-head">
-          <span>Açıklamalar</span>
+          <span>Vurgular & Notlar</span>
           <span>${filteredRows.length}/${rows.length} · ${highlights.length} vurgu · ${notes.length} not</span>
         </div>
         <div class="pdf-annots-controls">
-          <input class="pdf-annots-search" id="aqPdfAnnotPanelSearch" value="${escapeHtml(win.__aqPdfAnnotPanelQuery || '')}" placeholder="Açıklamalarda ara..." />
+          <input class="pdf-annots-search" id="aqPdfAnnotPanelSearch" value="${escapeHtml(win.__aqPdfAnnotPanelQuery || '')}" placeholder="Vurgu ve notlarda ara..." />
           <div class="pdf-annots-filter">
             <button type="button" data-fallback-annot-kind="all" class="${kindFilter === 'all' ? 'on' : ''}">Tümü</button>
             <button type="button" data-fallback-annot-kind="highlight" class="${kindFilter === 'highlight' ? 'on' : ''}">Vurgu</button>
@@ -1194,10 +1194,10 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
             <div class="pdf-annot-card-actions">
               <button type="button" class="aq-fallback-annot-action" data-act="jump">Git</button>
               <button type="button" class="aq-fallback-annot-action" data-act="copy">Kopyala</button>
-              ${item.kind === 'highlight' ? '<button type="button" class="aq-fallback-annot-action" data-act="note">Notlara Aktar</button><button type="button" class="aq-fallback-annot-action" data-act="matrix">Matrise Gönder</button><button type="button" class="aq-fallback-annot-action" data-act="doc">Metne Aktar</button><button type="button" class="aq-fallback-annot-action danger" data-act="delete">Sil</button>' : ''}
+              ${item.kind === 'highlight' ? '<button type="button" class="aq-fallback-annot-action primary" data-act="note">Notlara Aktar</button><button type="button" class="aq-fallback-annot-action" data-act="matrix">Matrise Gönder</button><button type="button" class="aq-fallback-annot-action" data-act="doc">Metne Aktar</button><button type="button" class="aq-fallback-annot-action danger" data-act="delete">Sil</button>' : ''}
             </div>
           </article>
-        `).join('')}</div>` : '<div class="pdf-annots-empty">Bu filtrede annotation yok. PDF metni seçince highlight, alıntı notu veya serbest not burada görünür.</div>'}
+        `).join('')}</div>` : '<div class="pdf-annots-empty">Bu filtrede annotation yok. PDF metni seçince vurgu, alıntı notu veya serbest not burada görünür.</div>'}
       `;
     };
 
@@ -2168,9 +2168,10 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       </div>
 
       <div id="pdfctxmenu" className="aq-pdf-context-menu" role="menu">
-        <button type="button" data-pdf-context-action="highlight" data-needs-selection="true">Vurgu</button>
+        <button type="button" data-pdf-context-action="highlight" data-needs-selection="true">Vurgu yap</button>
         <button type="button" data-pdf-context-action="note" data-needs-selection="true">Nota kaydet</button>
         <button type="button" data-pdf-context-action="copy" data-needs-selection="true">Seçimi kopyala</button>
+        <div className="aq-pdf-context-separator" role="none" />
         <div className="aq-pdf-context-submenu" role="none">
           <button type="button" data-pdf-context-action="matrix-menu" data-needs-selection="true">Matrise gönder ›</button>
           <div className="aq-pdf-context-submenu-panel" role="menu">
@@ -2182,7 +2183,8 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
             <button type="button" data-pdf-context-action="matrix" data-matrix-column="myNotes" data-needs-selection="true">My Notes</button>
           </div>
         </div>
-        <button type="button" data-pdf-context-action="delete">Seçili highlight'ı sil</button>
+        <div className="aq-pdf-context-separator" role="none" />
+        <button type="button" className="danger" data-pdf-context-action="delete">Seçili highlight'ı sil</button>
         <button type="button" data-pdf-context-action="annots">Highlight / not paneli</button>
         <button type="button" data-pdf-context-action="close">Kapat</button>
       </div>

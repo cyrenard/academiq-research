@@ -32,7 +32,9 @@ test('APA style engine builds editor block CSS from one contract', () => {
   assert.match(css, /#root p\{[^}]*text-indent:\.5in!important/);
   assert.match(css, /#root p\.ni,#root p\[data-indent-mode="none"\]/);
   assert.match(css, /#root \.refe,#root \.aq-ref-entry\{[^}]*text-indent:-\.5in!important/);
+  assert.match(css, /#root \.aq-table-label,#root \.aq-figure-placeholder\{[^}]*text-align:left!important/);
   assert.match(css, /#root \.aq-table-title,#root \.aq-figure-caption\{[^}]*font-style:italic!important/);
+  assert.match(css, /#root \.aq-table-title,#root \.aq-figure-caption\{[^}]*text-align:left!important/);
 });
 
 test('APA style engine builds export block CSS for body and references', () => {
@@ -40,7 +42,9 @@ test('APA style engine builds export block CSS for body and references', () => {
 
   assert.match(css, /\.doc p\{[^}]*text-indent:\.5in/);
   assert.match(css, /\.doc \.refe,\.doc \.aq-ref-entry\{[^}]*text-indent:-\.5in/);
+  assert.match(css, /\.doc \.aq-table-label,\.doc \.aq-figure-placeholder\{[^}]*text-align:left/);
   assert.match(css, /\.doc \.aq-table-title,\.doc \.aq-figure-caption\{[^}]*font-style:italic/);
+  assert.match(css, /\.doc \.aq-table-title,\.doc \.aq-figure-caption\{[^}]*text-align:left/);
 });
 
 test('APA style engine exposes abstract and keywords block contracts', () => {

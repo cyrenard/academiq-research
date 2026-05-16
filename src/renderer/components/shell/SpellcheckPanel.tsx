@@ -111,12 +111,19 @@ export function SpellcheckPanel({ open, onClose }: SpellcheckPanelProps) {
   const [ignored, setIgnored] = useState<Set<string>>(() => new Set());
   const [docText, setDocText] = useState('');
 
-  // Refresh doc text when the panel opens or matches change — we need it
-  // to render the surrounding context per match.
+  // Panel açıldığında: belge metnini al + denetimi anında tetikle
+  // (debounce'u atla). Sonraki match değişikliklerinde sadece bağlam
+  // metnini tazele.
   useEffect(() => {
     if (!open) return;
     setDocText(takeEditorText());
-  }, [open, state.matches]);
+    runCheckNow();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    setDocText(takeEditorText());
+  }, [state.matches]);
 
   const visibleMatches = useMemo(
     () => state.matches.filter((m) => !ignored.has(`${m.offset}:${m.text}`)),

@@ -42,8 +42,8 @@ test('mapOpenLibraryBookToReference builds APA 7 book-compatible records', () =>
   assert.equal(ref.publisher, 'Pearson');
 
   const apa = styles.formatReference(ref, { style: 'apa7' });
-  assert.match(apa, /Russell, S\. & Norvig, P\./);
-  assert.match(apa, /<i>Artificial Intelligence: A Modern Approach<\/i>\./);
+  assert.match(apa, /Russell, S\., & Norvig, P\./);
+  assert.match(apa, /<i>Artificial intelligence: A modern approach<\/i>\./);
   assert.match(apa, /Pearson\./);
 });
 
@@ -101,7 +101,7 @@ test('mapGoogleBooksVolumeToReference builds fallback book records', () => {
 
   const apa = styles.formatReference(ref, { style: 'apa7' });
   assert.match(apa, /Selwyn, N\./);
-  assert.match(apa, /<i>Is Technology Good for Education\?<\/i>\./);
+  assert.match(apa, /<i>Is technology good for education\?<\/i>\./);
 });
 
 test('mapCrossrefIsbnWorkToReference builds fallback book records', () => {

@@ -23,10 +23,101 @@
     return String(value || '').trim();
   }
 
+  function hasTurkishLetters(value){
+    return /[ÇĞİÖŞÜçğıöşü]/.test(String(value || ''));
+  }
+
+  function lowerAcademic(value){
+    var raw = String(value || '');
+    return hasTurkishLetters(raw) ? raw.toLocaleLowerCase('tr-TR') : raw.toLocaleLowerCase('en-US');
+  }
+
+  function upperAcademic(value){
+    var raw = String(value || '');
+    return hasTurkishLetters(raw) ? raw.toLocaleUpperCase('tr-TR') : raw.toLocaleUpperCase('en-US');
+  }
+
+  function capitalizeAcademic(value){
+    var raw = String(value || '');
+    if(!raw) return '';
+    var first = raw.charAt(0);
+    return upperAcademic(first) + raw.slice(1);
+  }
+
+  function letterStats(value){
+    var letters = String(value || '').match(/[A-Za-zÇĞİÖŞÜçğıöşü]/g) || [];
+    var upper = letters.filter(function(ch){ return ch === upperAcademic(ch) && ch !== lowerAcademic(ch); }).length;
+    var lower = letters.filter(function(ch){ return ch === lowerAcademic(ch) && ch !== upperAcademic(ch); }).length;
+    return { letters: letters.length, upper: upper, lower: lower };
+  }
+
+  function isMostlyUppercase(value){
+    var stats = letterStats(value);
+    return stats.letters >= 6 && stats.upper / Math.max(1, stats.letters) >= 0.78;
+  }
+
+  function isTitleCaseish(value){
+    var words = String(value || '').split(/\s+/).filter(function(word){
+      return /[A-Za-zÇĞİÖŞÜçğıöşü]/.test(word);
+    });
+    if(words.length < 4) return false;
+    var titleWords = words.filter(function(word){
+      var clean = word.replace(/^[^A-Za-zÇĞİÖŞÜçğıöşü]+|[^A-Za-zÇĞİÖŞÜçğıöşü]+$/g, '');
+      if(clean.length < 2) return false;
+      return clean.charAt(0) === upperAcademic(clean.charAt(0)) && clean.slice(1) === lowerAcademic(clean.slice(1));
+    }).length;
+    return titleWords / words.length >= 0.65;
+  }
+
+  var PROTECTED_ACRONYMS = ['AI', 'APA', 'DOI', 'ISBN', 'PDF', 'CSL', 'RIS', 'SEM', 'ANOVA', 'MANOVA', 'SPSS', 'COVID-19', 'PTSD', 'OCD', 'ADHD', 'CBT', 'RCT', 'TAM', 'UTAUT'];
+
+  function restoreProtectedAcronyms(value){
+    var out = String(value || '');
+    PROTECTED_ACRONYMS.forEach(function(token){
+      var escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      out = out.replace(new RegExp('\\b' + escaped + '\\b', 'gi'), token);
+    });
+    return out;
+  }
+
+  function normalizeNamePart(value){
+    var raw = String(value || '').replace(/\s+/g, ' ').trim();
+    if(!raw) return '';
+    return raw.split(/(\s+|-|')/).map(function(part){
+      if(!/[A-Za-zÇĞİÖŞÜçğıöşü]/.test(part)) return part;
+      if(part.length <= 3 && part === upperAcademic(part)) return part;
+      var lowered = lowerAcademic(part);
+      return capitalizeAcademic(lowered);
+    }).join('');
+  }
+
+  function titleCaseAcademic(value){
+    var raw = String(value || '').replace(/\s+/g, ' ').trim();
+    if(!raw) return '';
+    var smallWords = {
+      a: true, an: true, and: true, as: true, at: true, but: true, by: true, for: true, from: true,
+      in: true, into: true, nor: true, of: true, on: true, or: true, the: true, to: true, with: true,
+      ve: true, veya: true, ile: true, de: true, da: true, ki: true, için: true
+    };
+    var words = lowerAcademic(raw).split(' ');
+    return restoreProtectedAcronyms(words.map(function(word, index){
+      var bare = word.replace(/^[^A-Za-zÇĞİÖŞÜçğıöşü]+|[^A-Za-zÇĞİÖŞÜçğıöşü]+$/g, '');
+      if(!bare) return word;
+      if(index > 0 && smallWords[bare]) return word;
+      return word.replace(bare, capitalizeAcademic(bare));
+    }).join(' '));
+  }
+
   function sentenceCase(text){
     var t = String(text || '').replace(/\s+/g, ' ').trim();
     if(!t) return '';
-    return t.charAt(0).toUpperCase() + t.slice(1);
+    if(isMostlyUppercase(t) || isTitleCaseish(t)){
+      t = lowerAcademic(t);
+    }
+    t = t.replace(/(^|[:.!?]\s+)([a-zçğıöşü])/g, function(match, prefix, letter){
+      return prefix + upperAcademic(letter);
+    });
+    return restoreProtectedAcronyms(capitalizeAcademic(t));
   }
 
   function normalizeReferenceType(ref){
@@ -55,10 +146,10 @@
     var txt = String(raw || '').trim();
     if(!txt) return '';
     if(txt.indexOf(',') >= 0){
-      return padSpace(txt.split(',')[0]).trim();
+      return normalizeNamePart(padSpace(txt.split(',')[0]).trim());
     }
     var parts = txt.split(/\s+/).filter(Boolean);
-    return parts.length ? parts[parts.length - 1] : '';
+    return parts.length ? normalizeNamePart(parts[parts.length - 1]) : '';
   }
 
   function authorInitialLabel(raw){
@@ -66,21 +157,33 @@
     if(!txt) return '';
     if(txt.indexOf(',') >= 0){
       var parts = txt.split(',');
-      var last = padSpace(parts[0]);
+      var last = normalizeNamePart(padSpace(parts[0]));
       var first = padSpace(parts.slice(1).join(' '));
       if(!first) return last;
       var initials = first.split(/\s+/).filter(Boolean).map(function(name){
-        return name.charAt(0).toUpperCase() + '.';
+        return upperAcademic(name.charAt(0)) + '.';
       }).join(' ');
       return last + ', ' + initials;
     }
     var names = txt.split(/\s+/).filter(Boolean);
-    if(names.length === 1) return names[0];
-    var surname = names[names.length - 1];
+    if(names.length === 1) return normalizeNamePart(names[0]);
+    var surname = normalizeNamePart(names[names.length - 1]);
     var initials2 = names.slice(0, -1).map(function(name){
-      return name.charAt(0).toUpperCase() + '.';
+      return upperAcademic(name.charAt(0)) + '.';
     }).join(' ');
     return surname + ', ' + initials2;
+  }
+
+  function formatApaAuthorList(authors){
+    var list = (Array.isArray(authors) ? authors : [])
+      .map(authorInitialLabel)
+      .filter(Boolean);
+    if(list.length > 20){
+      return list.slice(0, 19).join(', ') + ', . . . ' + list[list.length - 1];
+    }
+    if(list.length === 2) return list[0] + ', & ' + list[1];
+    if(list.length > 2) return list.slice(0, -1).join(', ') + ', & ' + list[list.length - 1];
+    return list.join(', ');
   }
 
   function joinAuthorSurnames(ref, options){
@@ -148,8 +251,29 @@
   function formatEditionLabel(value){
     var raw = textOrEmpty(value);
     if(!raw) return '';
-    if(/\bed\.?\)?$/i.test(raw) || /\bedition\b/i.test(raw)) return raw;
-    return raw + ' ed.';
+    var clean = withoutTrailingPeriod(raw)
+      .replace(/^\(+|\)+$/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if(!clean) return '';
+    var numeric = clean.match(/^(\d+)(?:st|nd|rd|th)?(?:\.?\s*(?:ed\.?|edition|bask[ıi]))?$/i);
+    if(numeric){
+      var number = Number(numeric[1]);
+      var mod100 = number % 100;
+      var suffix = 'th';
+      if(mod100 < 11 || mod100 > 13){
+        var mod10 = number % 10;
+        if(mod10 === 1) suffix = 'st';
+        else if(mod10 === 2) suffix = 'nd';
+        else if(mod10 === 3) suffix = 'rd';
+      }
+      return number + suffix + ' ed.';
+    }
+    var englishEdition = clean.match(/^(.+?)\s+edition$/i);
+    if(englishEdition) return withoutTrailingPeriod(englishEdition[1]).trim() + ' ed.';
+    if(/\bed$/i.test(clean)) return clean.replace(/\bed$/i, 'ed.');
+    if(/\bed\.$/i.test(clean)) return clean;
+    return clean + ' ed.';
   }
 
   function doiOrUrl(ref){
@@ -220,6 +344,7 @@
     var title = sentenceCase(ref && ref.title);
     var year = yearLabel(ref);
     var journal = padSpace(ref && ref.journal);
+    if(isMostlyUppercase(journal)) journal = titleCaseAcademic(journal);
     var volume = padSpace(ref && ref.volume);
     var issue = padSpace(ref && ref.issue);
     var page = pageLabel(ref, { prefix: style !== 'chicago-author-date' });
@@ -290,14 +415,13 @@
       ].filter(Boolean).join(' ').replace(/\s+,/g, ',').trim();
     }
 
-    var apaAuthor = authorInitials.length > 20
-      ? authorInitials.slice(0, 19).join(', ') + ', . . . & ' + authorInitials[authorInitials.length - 1]
-      : (authorInitials.length === 2 ? authorInitials[0] + ' & ' + authorInitials[1] : authorInitials.join(', '));
+    var apaAuthor = formatApaAuthorList(Array.isArray(ref && ref.authors) ? ref.authors : []);
     if(!apaAuthor) apaAuthor = citationLeadFallback(ref);
 
     if(referenceType === 'book'){
       var edition = formatEditionLabel(ref && ref.edition);
       var publisher = textOrEmpty(ref && ref.publisher);
+      if(isMostlyUppercase(publisher)) publisher = titleCaseAcademic(publisher);
       return [
         apaAuthor + ' (' + year + ').',
         title ? '<i>' + withoutTrailingPeriod(title) + '</i>.' : '',
@@ -309,6 +433,7 @@
 
     if(referenceType === 'website'){
       var websiteName = textOrEmpty(ref && ref.websiteName);
+      if(isMostlyUppercase(websiteName)) websiteName = titleCaseAcademic(websiteName);
       var publishedDate = textOrEmpty(ref && ref.publishedDate);
       var websiteDate = formatApaDateLabel(publishedDate || year, 'n.d.');
       var accessedDate = textOrEmpty(ref && ref.accessedDate);
@@ -316,21 +441,29 @@
       var websiteLink = textOrEmpty(ref && ref.url);
       return [
         apaAuthor + ' (' + websiteDate + ').',
-        title ? withoutTrailingPeriod(title) + '.' : '',
+        title ? '<i>' + withoutTrailingPeriod(title) + '</i>.' : '',
         websiteName ? withoutTrailingPeriod(websiteName) + '.' : '',
         websiteLink ? (retrieval + websiteLink) : ''
       ].filter(Boolean).join(' ').replace(/\s{2,}/g, ' ').trim();
     }
 
+    var journalVolume = '';
+    if(journal || volume){
+      journalVolume = '<i>' + [journal, volume].filter(Boolean).join(', ') + '</i>';
+    }
+    var articleSource = '';
+    if(journalVolume || issue || page){
+      articleSource = journalVolume;
+      if(issue) articleSource += '(' + issue + ')';
+      if(page) articleSource += ', ' + page.replace(/^pp\.\s*/i, '') + '.';
+      else articleSource += '.';
+    }
     return [
       apaAuthor + ' (' + year + ').',
       title ? title + '.' : '',
-      journal ? '<i>' + journal + '</i>' : '',
-      volume ? ', ' + volume : '',
-      issue ? '(' + issue + ')' : '',
-      page ? ', ' + page.replace(/^pp\.\s*/i, '') + '.' : '.',
+      articleSource,
       link || ''
-    ].join('').replace(/\s{2,}/g, ' ').trim();
+    ].filter(Boolean).join(' ').replace(/\s{2,}/g, ' ').trim();
   }
 
   function bibliographySortKey(ref){

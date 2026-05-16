@@ -66,6 +66,16 @@ test('buildExportDocHTML preserves composite export sections and page breaks', (
   assert.match(html, /aq-ref-entry/);
 });
 
+test('buildExportDocHTML inlines APA heading styles for Word DOCX conversion', () => {
+  const html = docmod.buildExportDocHTML(
+    '<h1>Baslik 1</h1><h3 style="color:red;">Baslik 3</h3><h4>Baslik 4</h4>'
+  );
+
+  assert.match(html, /<h1[^>]*style="[^"]*font-family:&quot;Times New Roman&quot;[^"]*font-size:12pt[^"]*text-align:center[^"]*text-indent:0[^"]*line-height:24pt/);
+  assert.match(html, /<h3[^>]*style="[^"]*font-style:italic[^"]*text-align:left[^"]*color:red/);
+  assert.match(html, /<h4[^>]*style="[^"]*text-align:left[^"]*text-indent:\.5in/);
+});
+
 test('buildCleanExportHTML passes through academic object normalization when available', () => {
   globalThis.AQAcademicObjects = {
     normalizeHTMLForExport(html) {

@@ -21,6 +21,13 @@ test('buildExportHTML wraps fragment into hardened html document', () => {
   assert.match(html, /Paragraf/);
 });
 
+test('buildExportHTML injects APA heading overrides that Word can keep', () => {
+  const html = pdfExport.buildExportHTML({ exportHTML:'<h1>Baslik</h1><h4>Alt</h4><p class="aq-table-title">Tablo basligi</p>' });
+  assert.match(html, /h1,\.aq-export-root h1\{[^}]*text-align:center!important/);
+  assert.match(html, /h4,\.aq-export-root h4\{[^}]*text-indent:\.5in!important/);
+  assert.match(html, /\.aq-export-root \.aq-table-title,\.aq-export-root \.aq-figure-caption\{[^}]*text-align:left!important/);
+});
+
 test('buildExportHTML preserves full html documents', () => {
   const source = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body><p>tam</p></body></html>';
   const html = pdfExport.buildExportHTML({ exportHTML:source });

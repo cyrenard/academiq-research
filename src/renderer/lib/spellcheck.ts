@@ -157,6 +157,160 @@ export async function checkText(text: string, options: CheckOptions & SpellLoade
   return runCheck(spell, text, options);
 }
 
+/**
+ * Tüm Türkçe + ASCII harfler. Tek-edit varyant generator burayı
+ * insertion / substitution için tarar.
+ */
+const TR_ALPHABET = 'abcçdefgğhıijklmnoöprsştuüvyzwxq';
+
+/**
+ * Bir kelimenin tüm 1-edit (insert/delete/sub/transpose) varyantlarını
+ * üretip içlerinden sözlükte bulunanları sıralı döndür. nspell.suggest()
+ * `.aff` TRY/REP rule'larıyla sınırlı — ekleme varyantlarını ("meraba" →
+ * "merhaba" gibi h-insert) çoğu zaman kaçırıyor. Bu fonksiyon o boşluğu
+ * mekanik olarak doldurur: ~33×len varyant, her birine sync `correct()`,
+ * milisaniyeler içinde biter.
+ */
+/**
+ * Edit türü — sıralama için ağırlıklandırılır.
+ * insertion + transposition kullanıcının en sık niyeti (atlanmış harf,
+ * komşu transpozisyonu); substitution ve deletion daha geniş havuz
+ * ürettiği için aynı distance'ta arkaya alınır.
+ */
+type EditKind = 'insert' | 'transpose' | 'delete' | 'substitute';
+
+interface EditCandidate {
+  word: string;
+  kind: EditKind;
+}
+
+function oneEditCandidates(spell: NSpellInstance, word: string): EditCandidate[] {
+  const lower = word.toLocaleLowerCase('tr-TR');
+  if (lower.length < 2) return [];
+  const seen = new Set<string>();
+  const candidates: EditCandidate[] = [];
+  function tryWord(w: string, kind: EditKind) {
+    if (!w || w === lower) return;
+    if (seen.has(w)) return;
+    seen.add(w);
+    if (spell.correct(w)) candidates.push({ word: w, kind });
+  }
+  // Insertion — Türkçe için en yüksek kalite kaynağı (atlanmış h, ş, ı, ğ).
+  for (let i = 0; i <= lower.length; i++) {
+    for (let k = 0; k < TR_ALPHABET.length; k++) {
+      tryWord(lower.slice(0, i) + TR_ALPHABET[k]! + lower.slice(i), 'insert');
+    }
+  }
+  for (let i = 0; i < lower.length; i++) {
+    if (i + 1 < lower.length) {
+      tryWord(lower.slice(0, i) + lower[i + 1] + lower[i] + lower.slice(i + 2), 'transpose');
+    }
+    tryWord(lower.slice(0, i) + lower.slice(i + 1), 'delete');
+    for (let k = 0; k < TR_ALPHABET.length; k++) {
+      const ch = TR_ALPHABET[k]!;
+      if (ch !== lower[i]) tryWord(lower.slice(0, i) + ch + lower.slice(i + 1), 'substitute');
+    }
+  }
+  // Restore original capitalization for sentence-initial words.
+  const capitalize = /^[A-ZÇĞİÖŞÜ]/.test(word);
+  if (capitalize) {
+    for (const c of candidates) {
+      c.word = c.word.charAt(0).toLocaleUpperCase('tr-TR') + c.word.slice(1);
+    }
+  }
+  return candidates;
+}
+
+/** Her edit türünün ranking ağırlığı — düşük = öncelikli. */
+const KIND_WEIGHT: Record<EditKind, number> = {
+  insert: 0,
+  transpose: 0,
+  delete: 1,
+  substitute: 1
+};
+
+/**
+ * Damerau-Levenshtein (transpose dahil) edit distance — küçük dizgiler
+ * için klasik DP. Önerileri benzerlik sırasına dizmek için kullanırız.
+ */
+function damerauLevenshtein(a: string, b: string): number {
+  const n = a.length;
+  const m = b.length;
+  if (n === 0) return m;
+  if (m === 0) return n;
+  const d: number[][] = [];
+  for (let i = 0; i <= n; i++) { d[i] = new Array(m + 1); d[i]![0] = i; }
+  for (let j = 0; j <= m; j++) d[0]![j] = j;
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1;
+      d[i]![j] = Math.min(
+        d[i - 1]![j]! + 1,
+        d[i]![j - 1]! + 1,
+        d[i - 1]![j - 1]! + cost
+      );
+      if (i > 1 && j > 1
+          && a.charCodeAt(i - 1) === b.charCodeAt(j - 2)
+          && a.charCodeAt(i - 2) === b.charCodeAt(j - 1)) {
+        d[i]![j] = Math.min(d[i]![j]!, d[i - 2]![j - 2]! + 1);
+      }
+    }
+  }
+  return d[n]![m]!;
+}
+
+/**
+ * nspell.suggest() çıktısını mekanik 1-edit candidate'leriyle birleştir,
+ * gerçek Damerau-Levenshtein mesafesine göre sırala, tekrarları düşür,
+ * maxSug ile kes.
+ *
+ * Saf nspell çıktısı `.aff` TRY/REP rule'larıyla sınırlı; özellikle
+ * tek-harf ekleme ("meraba" → "merhaba") önerilerini kaçırıyor. 1-edit
+ * generator o boşluğu kapatır; merge sonrası gerçek edit-distance ile
+ * sıralamak kullanıcının "en yakın doğru kelime" beklentisine uyar.
+ */
+function mergedSuggestions(spell: NSpellInstance, word: string, maxSug: number): string[] {
+  if (maxSug <= 0) return [];
+  const lowerSource = word.toLocaleLowerCase('tr-TR');
+  // Havuz: key = lowercased, value = { display, kindWeight }.
+  // Aynı kelime hem nspell.suggest()'ten hem 1-edit'ten gelirse
+  // edit-türünden gelen ağırlığı saklarız (daha düşük weight kazanır).
+  type PoolEntry = { display: string; kindWeight: number };
+  const pool = new Map<string, PoolEntry>();
+  function add(suggestion: string, kindWeight: number) {
+    if (!suggestion) return;
+    const key = suggestion.toLocaleLowerCase('tr-TR');
+    const existing = pool.get(key);
+    if (!existing) {
+      pool.set(key, { display: suggestion, kindWeight });
+    } else if (kindWeight < existing.kindWeight) {
+      pool.set(key, { display: existing.display, kindWeight });
+    }
+  }
+  // nspell çıktısı (zaten ranked) — edit-türü bilinmiyor; substitution
+  // benzeri ağırlık ver (1).
+  try { spell.suggest(word).forEach((s) => add(s, 1)); } catch (_e) {}
+  oneEditCandidates(spell, word).forEach((c) => add(c.word, KIND_WEIGHT[c.kind]));
+  if (pool.size === 0) return [];
+  // Sıralama anahtarı: önce Damerau-Levenshtein distance, sonra edit
+  // türü ağırlığı (insertion/transpose: 0, sub/delete: 1), sonra kelime
+  // uzunluğunun source'a yakınlığı, son olarak alfabetik.
+  const ranked = Array.from(pool.entries())
+    .map(([key, entry]) => ({
+      display: entry.display,
+      distance: damerauLevenshtein(lowerSource, key),
+      weight: entry.kindWeight,
+      lenDiff: Math.abs(entry.display.length - word.length)
+    }))
+    .sort((a, b) =>
+      a.distance - b.distance
+      || a.weight - b.weight
+      || a.lenDiff - b.lenDiff
+      || a.display.localeCompare(b.display, 'tr-TR')
+    );
+  return ranked.slice(0, maxSug).map((r) => r.display);
+}
+
 function runCheck(spell: NSpellInstance, text: string, options: CheckOptions): SpellMatch[] {
   if (!text) return [];
   const maxSug = Math.max(0, options.maxSuggestions ?? 5);
@@ -174,7 +328,7 @@ function runCheck(spell: NSpellInstance, text: string, options: CheckOptions): S
     // aren't in a generic dictionary. We'd rather not flag them.
     if (word === word.toUpperCase() && /[A-ZÇĞİÖŞÜ]/.test(word)) continue;
     if (spell.correct(word)) continue;
-    const suggestions = maxSug > 0 ? spell.suggest(word).slice(0, maxSug) : [];
+    const suggestions = mergedSuggestions(spell, word, maxSug);
     matches.push({
       offset: m.index,
       length: word.length,

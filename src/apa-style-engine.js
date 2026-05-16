@@ -194,8 +194,8 @@
       + root + ' blockquote{margin:0!important;padding:0!important;padding-left:.5in!important;text-indent:0!important;line-height:' + LINE_HEIGHT + '!important;}'
       + root + ' blockquote p{text-indent:0!important;}'
       + root + ' .refe,' + root + ' .aq-ref-entry{margin:0!important;padding-left:.5in!important;text-indent:-.5in!important;line-height:' + LINE_HEIGHT + '!important;}'
-      + root + ' .aq-table-label,' + root + ' .aq-figure-placeholder{margin:0!important;text-indent:0!important;text-align:center!important;font-weight:700!important;}'
-      + root + ' .aq-table-title,' + root + ' .aq-figure-caption{margin:0 0 6pt 0!important;text-indent:0!important;text-align:center!important;font-style:italic!important;}'
+      + root + ' .aq-table-label,' + root + ' .aq-figure-placeholder{margin:0!important;text-indent:0!important;text-align:left!important;font-weight:700!important;}'
+      + root + ' .aq-table-title,' + root + ' .aq-figure-caption{margin:0 0 6pt 0!important;text-indent:0!important;text-align:left!important;font-style:italic!important;}'
       + root + ' p.aq-abstract{margin:0!important;text-indent:0!important;text-align:left!important;line-height:' + LINE_HEIGHT + '!important;}'
       + root + ' p.aq-keywords{margin:0!important;text-indent:.5in!important;text-align:left!important;font-style:italic!important;line-height:' + LINE_HEIGHT + '!important;}';
   }
@@ -219,8 +219,8 @@
       + root + ' blockquote{margin:0;padding-left:.5in;line-height:' + LINE_HEIGHT + ';text-indent:0;break-inside:avoid;page-break-inside:avoid;}'
       + root + ' blockquote p{text-indent:0;}'
       + root + ' .refe,' + root + ' .aq-ref-entry{margin:0;padding-left:.5in;line-height:' + LINE_HEIGHT + ';text-indent:-.5in;break-inside:avoid;page-break-inside:avoid;}'
-      + root + ' .aq-table-label,' + root + ' .aq-figure-placeholder{margin:0;text-indent:0;text-align:center;font-weight:700;}'
-      + root + ' .aq-table-title,' + root + ' .aq-figure-caption{margin:0 0 6pt 0;text-indent:0;text-align:center;font-style:italic;}'
+      + root + ' .aq-table-label,' + root + ' .aq-figure-placeholder{margin:0;text-indent:0;text-align:left;font-weight:700;}'
+      + root + ' .aq-table-title,' + root + ' .aq-figure-caption{margin:0 0 6pt 0;text-indent:0;text-align:left;font-style:italic;}'
       + root + ' p.aq-abstract{margin:0;text-indent:0;text-align:left;line-height:' + LINE_HEIGHT + ';break-inside:avoid;page-break-inside:avoid;}'
       + root + ' p.aq-keywords{margin:0;text-indent:.5in;text-align:left;font-style:italic;line-height:' + LINE_HEIGHT + ';break-after:avoid;page-break-after:avoid;}';
   }
