@@ -205,6 +205,13 @@ electronAPI.pdf = {
   ingest: (filePath) => invokeCommand('library_ingest_pdf', { filePath: asString(filePath, 4096) })
 };
 
+electronAPI.spell = {
+  check: (text, lang = 'tr') => invokeCommand('spell_check', { text: asString(text, 500000), lang: asString(lang, 16) || 'tr' }),
+  suggest: (word, lang = 'tr') => invokeCommand('spell_suggest', { word: asString(word, 256), lang: asString(lang, 16) || 'tr' }),
+  addUserWord: (word, lang = 'tr') => invokeCommand('spell_add_user_word', { word: asString(word, 256), lang: asString(lang, 16) || 'tr' }),
+  getUserDictionary: (lang = 'tr') => invokeCommand('spell_get_user_dictionary', { lang: asString(lang, 16) || 'tr' })
+};
+
 if (typeof window !== 'undefined') {
   window.electronAPI = Object.freeze(electronAPI);
   window.ocrAPI = Object.freeze(ocrAPI);

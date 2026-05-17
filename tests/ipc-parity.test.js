@@ -142,6 +142,16 @@ test('Tauri shim preserves preload electronAPI and ocrAPI invoke parity', async 
   assert.equal(calls.at(-1).command, 'pdf_get_outline');
   await api.pdf.ingest('C:/tmp/a.pdf');
   assert.equal(calls.at(-1).command, 'library_ingest_pdf');
+
+  assert.equal(typeof api.spell.check, 'function');
+  await api.spell.check('kitap', 'tr');
+  assert.equal(calls.at(-1).command, 'spell_check');
+  await api.spell.suggest('kıtap', 'tr');
+  assert.equal(calls.at(-1).command, 'spell_suggest');
+  await api.spell.addUserWord('academiq', 'tr');
+  assert.equal(calls.at(-1).command, 'spell_add_user_word');
+  await api.spell.getUserDictionary('tr');
+  assert.equal(calls.at(-1).command, 'spell_get_user_dictionary');
 });
 
 test('event-style renderer probe bridge maps to a Tauri command', () => {
@@ -172,6 +182,14 @@ test('Rust command modules register every preload invoke target', () => {
     'library_ingest_pdf'
   ]) {
     assert.match(lib, new RegExp(`commands::pdf::${command}`), command);
+  }
+  for (const command of [
+    'spell_check',
+    'spell_suggest',
+    'spell_add_user_word',
+    'spell_get_user_dictionary'
+  ]) {
+    assert.match(lib, new RegExp(`commands::spell::${command}`), command);
   }
 });
 

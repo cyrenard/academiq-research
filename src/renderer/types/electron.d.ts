@@ -57,6 +57,12 @@ declare global {
       minimizeWindow: () => IpcResult<unknown>;
       toggleMaximizeWindow: () => IpcResult<unknown>;
       closeWindow: () => IpcResult<unknown>;
+      spell?: {
+        check: (text: string, lang?: string) => IpcResult<Array<{ offset: number; length: number; word: string; suggestions: string[] }>>;
+        suggest: (word: string, lang?: string) => IpcResult<string[]>;
+        addUserWord: (word: string, lang?: string) => IpcResult<void>;
+        getUserDictionary: (lang?: string) => IpcResult<string[]>;
+      };
     };
     ocrAPI: {
       recognize: (payload: unknown) => IpcResult<unknown>;
