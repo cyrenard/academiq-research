@@ -54,6 +54,13 @@ function call(sidecar, method, params = {}) {
   });
 }
 
+function parseExtensionConfig(installDir) {
+  const configJs = fs.readFileSync(path.join(installDir, 'config.js'), 'utf8');
+  const match = configJs.match(/AQ_CAPTURE_CONFIG=(\{[\s\S]*\});?\s*$/);
+  assert.ok(match, 'config.js contains AQ_CAPTURE_CONFIG');
+  return JSON.parse(match[1]);
+}
+
 test('capture sidecar JSON-RPC responds and emits notifications', async () => {
   const sidecar = startSidecar();
   try {
@@ -70,6 +77,71 @@ test('capture sidecar JSON-RPC responds and emits notifications', async () => {
 
     const ack = await call(sidecar, 'ackPayload', { queueId: 'cap_missing' });
     assert.equal(ack.ok, true);
+  } finally {
+    try { await call(sidecar, 'shutdown'); } catch (_e) {}
+    sidecar.child.kill();
+  }
+});
+
+test('capture sidecar prepares extension config and accepts extension HTTP capture', async () => {
+  const sidecar = startSidecar();
+  try {
+    const setup = await call(sidecar, 'prepareSetup', { browserFamily: 'chromium' });
+    assert.equal(setup.ok, true);
+    assert.equal(fs.existsSync(path.join(setup.installDir, 'manifest.json')), true);
+
+    const config = parseExtensionConfig(setup.installDir);
+    assert.equal(config.bridgeBaseUrl, `http://127.0.0.1:${config.port}`);
+    assert.equal(typeof config.token, 'string');
+
+    const headers = {
+      'content-type': 'application/json',
+      'x-aq-token': config.token,
+      origin: 'chrome-extension://academiq-test'
+    };
+    const hello = await fetch(`${config.bridgeBaseUrl}/hello`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ extensionVersion: 'test', protocolVersion: 1, browserFamily: 'chromium' })
+    }).then((res) => res.json());
+    assert.equal(hello.ok, true);
+    assert.equal(hello.compatibilityState, 'compatible');
+
+    const capture = await fetch(`${config.bridgeBaseUrl}/capture`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        title: 'Phase 6 Capture',
+        pageUrl: 'https://example.test/article',
+        doi: '10.1234/example',
+        browserSource: 'Chromium'
+      })
+    }).then((res) => res.json());
+    assert.equal(capture.ok, true);
+    assert.equal(capture.queued, true);
+    assert.ok(sidecar.lines.some((line) => line.method === 'browserCapture:incoming'));
+
+    const ack = await call(sidecar, 'ackPayload', { queueId: capture.queueId });
+    assert.equal(ack.ok, true);
+  } finally {
+    try { await call(sidecar, 'shutdown'); } catch (_e) {}
+    sidecar.child.kill();
+  }
+});
+
+test('packaged capture sidecar binary prepares extension config', async (t) => {
+  if (!fs.existsSync(sidecarBinary)) {
+    t.skip('capture-agent binary has not been built yet');
+    return;
+  }
+  const sidecar = startSidecar('binary');
+  try {
+    const setup = await call(sidecar, 'prepareSetup', { browserFamily: 'chromium' });
+    assert.equal(setup.ok, true);
+    assert.equal(fs.existsSync(path.join(setup.installDir, 'config.js')), true);
+    const config = parseExtensionConfig(setup.installDir);
+    assert.equal(typeof config.token, 'string');
+    assert.equal(config.port, setup.port);
   } finally {
     try { await call(sidecar, 'shutdown'); } catch (_e) {}
     sidecar.child.kill();

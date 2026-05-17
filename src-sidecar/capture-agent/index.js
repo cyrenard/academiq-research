@@ -9,6 +9,7 @@ const {
   DEFAULT_CAPTURE_PORT,
   BROWSER_CAPTURE_PROTOCOL_VERSION,
   normalizeBrowserCaptureSettings,
+  prepareExtensionBundle,
   sanitizeCapturePayload,
   safeId
 } = require('./main-process-browser-capture.js');
@@ -39,6 +40,29 @@ function getDataDir() {
 const dataDir = getDataDir();
 fs.mkdirSync(dataDir, { recursive: true });
 const statePath = path.join(dataDir, 'capture-sidecar-state.json');
+
+function getAppDir() {
+  return path.dirname(dataDir);
+}
+
+function findExtensionSourceRoot() {
+  const candidates = [
+    process.env.AQ_CAPTURE_EXTENSION_SOURCE,
+    path.join(process.cwd(), 'resources', 'browser-capture-extension'),
+    path.join(process.cwd(), '..', 'resources', 'browser-capture-extension'),
+    path.join(process.cwd(), 'browser-capture-extension'),
+    path.join(process.cwd(), '..', 'browser-capture-extension'),
+    path.join(__dirname, '..', '..', 'browser-capture-extension'),
+    path.join(__dirname, '..', '..', '..', 'browser-capture-extension')
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    const root = path.resolve(candidate);
+    if (fs.existsSync(path.join(root, 'common')) && fs.existsSync(path.join(root, 'chromium'))) {
+      return root;
+    }
+  }
+  return '';
+}
 
 function loadState() {
   try {
@@ -116,6 +140,49 @@ function ackPayload(queueId) {
   if (!id) return { ok: false, error: 'Geçersiz capture kimliği', id: '' };
   saveQueue(loadQueue().filter((item) => item && item.id !== id));
   return { ok: true, id };
+}
+
+function prepareSetupBundle(browserFamily) {
+  const settings = getSettings();
+  const sourceRoot = findExtensionSourceRoot();
+  if (!sourceRoot) {
+    const error = 'browser_capture_extension_source_missing';
+    patchSettings({
+      lifecycleState: 'failed',
+      compatibilityState: 'missing_extension_source',
+      lastError: error
+    });
+    return Object.assign(buildStatus({ lifecycleState: 'failed', lastError: error }), {
+      ok: false,
+      error
+    });
+  }
+  const family = browserFamily === 'firefox' ? 'firefox' : 'chromium';
+  const prepared = prepareExtensionBundle({
+    sourceRoot,
+    appDir: getAppDir(),
+    browserFamily: family,
+    browserLabel: family === 'firefox' ? 'Firefox' : 'Chromium',
+    config: { token: settings.token, port: activePort || settings.port || DEFAULT_CAPTURE_PORT }
+  });
+  const patch = {
+    installDir: prepared.installDir,
+    guidePath: prepared.guidePath,
+    browserFamily: family,
+    lastPreparedAt: now(),
+    setupPromptSeen: true,
+    lifecycleState: 'installed_not_verified',
+    compatibilityState: 'pending_verification',
+    lastError: ''
+  };
+  patchSettings(patch);
+  return Object.assign(buildStatus(patch), {
+    ok: true,
+    installDir: prepared.installDir,
+    guidePath: prepared.guidePath,
+    sourceRoot,
+    installStrategy: { id: 'manual_extension_load', supported: true }
+  });
 }
 
 let bridge = null;
@@ -202,9 +269,13 @@ async function dispatch(method, params) {
       return buildStatus();
     case 'prepareSetup':
       await ensureBridge();
-      return buildStatus({ ok: true, action: 'prepareSetup' });
+      return prepareSetupBundle(params && params.browserFamily);
     case 'runAction':
       if (params && params.action === 'stop_agent') return stopBridge();
+      if (!params || !params.action || ['install', 'repair', 'update'].includes(String(params.action).toLowerCase())) {
+        await ensureBridge();
+        return Object.assign({ action: asText(params && params.action, 64) || 'install' }, prepareSetupBundle(params && params.browserFamily));
+      }
       await ensureBridge();
       return buildStatus({ ok: true, action: asText(params && params.action, 64) || 'install' });
     case 'testConnection':
@@ -213,8 +284,9 @@ async function dispatch(method, params) {
     case 'lookup':
       return { ok: false, message: 'Lookup host import path is owned by Tauri.', payload: params && params.payload || {} };
     case 'openInstallDir':
+      return buildStatus({ ok: true, installDir: getSettings().installDir || '' });
     case 'openGuide':
-      return { ok: false, error: 'open_path_owned_by_tauri' };
+      return buildStatus({ ok: true, guidePath: getSettings().guidePath || '' });
     case 'updatePrefs':
       return Object.assign({ ok: true }, buildStatus({ settings: patchSettings(params && params.prefs || {}) }));
     case 'createWorkspace':

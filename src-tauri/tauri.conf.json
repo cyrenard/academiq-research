@@ -31,7 +31,8 @@
       "resources/dict/tr/index.aff",
       "resources/dict/tr/index.dic",
       "resources/dict/tr/LICENSE",
-      "resources/fonts/fallback/*"
+      "resources/fonts/fallback/*",
+      "resources/browser-capture-extension/**/*"
     ],
     "windows": {
       "nsis": {
