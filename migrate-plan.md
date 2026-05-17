@@ -281,7 +281,7 @@ Her faz: **Hedef → Yapılacak işler → Acceptance kriterleri → Risk**.
 
 ---
 
-### Faz 5 — Export: PDF & DOCX (2 hafta) — **YÜKSEK RİSK**
+### Faz 5 — Export: PDF & DOCX (2 hafta) — **YÜKSEK RİSK** — ✅ DONE 2026-05-17
 
 **Hedef**: Electron'un `webContents.printToPDF` API'si gitti. PDF üretimi Rust tarafında.
 
@@ -301,7 +301,8 @@ Her faz: **Hedef → Yapılacak işler → Acceptance kriterleri → Risk**.
 - (1)'i seç.
 - `src-tauri/src/commands/export.rs::export_pdf(doc_id) -> Vec<u8>`
 - aq-engine layout JSON'unu serialize et (zaten internal struct'lar var).
-- Times New Roman + Arial + Calibri TTF'lerini binary'ye bundle.
+- Times New Roman sistem fontunu runtime'da oku ve PDF'e embed et; MS TTF dosyalarını bundle'a koyma.
+- Sadece açık lisans fallback fontları bundle: Liberation Serif/Sans ve Carlito.
 - APA header/footer (running head + page number) Rust tarafında.
 
 #### 5b. DOCX Export (4 gün)

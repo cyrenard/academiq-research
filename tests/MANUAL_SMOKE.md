@@ -360,3 +360,96 @@ npm run test:renderer: 25 files pass, 482 pass, 0 fail
 npm run gate:editor: PASS
 cargo tauri build --no-bundle: PASS
 ```
+
+## Phase 5 Results - 2026-05-17
+
+PDF export Rust pipeline: PASS.
+
+- `printpdf = 0.7` and `ttf-parser = 0.21` compile on Windows MSVC.
+- No Microsoft proprietary TTF files are bundled. Bundled resources are limited to `src-tauri/resources/fonts/fallback/` with Liberation Serif/Sans, Carlito, and license files.
+- Runtime font resolution uses system Times New Roman from `%WINDIR%/Fonts/times*.ttf` first, then falls back to bundled Liberation Serif with warning metadata.
+- `export_pdf(layoutJson, options)` accepts aq-engine paginate output and draws layout JSON to PDF without duplicating aq-engine pagination.
+- APA running head and page number drawing are handled in Rust.
+- `src/renderer/lib/export-pdf.ts` serializes layout JSON and emits warning events if fallback font substitution occurs.
+- DOCX export was reviewed and remains JS/browser-side through `src/docx-export.js`.
+- `pdf-lib` npm dependency was removed; `npm ls pdf-lib` reports `(empty)`.
+
+Font metrics gate:
+
+```text
+tests/font-metrics-parity.test.js: PASS
+source: system-times-new-roman
+fontDir: C:\WINDOWS\Fonts
+max_diff: 0
+avg_diff: 0
+p99_diff: 0
+```
+
+PDF export evidence:
+
+```text
+tests/pdf-export.test.js: PASS
+tests/artifacts/phase5-50-page-apa.pdf generated
+```
+
+Automated checks:
+
+```text
+node --test tests/ipc-parity.test.js tests/tauri-smoke.test.js tests/data-migration.test.js tests/library-fts.test.js tests/pdf-rust.test.js tests/spell-rust.test.js tests/network-rust.test.js tests/font-metrics-parity.test.js tests/pdf-export.test.js tests/main-process-pdf-annotate.test.js: 33 pass, 0 fail
+npm test: 959 pass, 0 fail
+npm run test:renderer: 25 files pass, 482 pass, 0 fail
+npm run gate:editor: PASS
+cargo tauri build --no-bundle: PASS, built academiq-research-tauri.exe
+node scripts/export-quality-gate.js: PASS
+```
+
+Phase 5 fallback events:
+
+```text
+No fallback event during this run. System Times New Roman was available and embedded.
+```
+
+## Phase 5 Font Metrics - 2026-05-17T14:24:07.104Z
+
+System Times New Roman gate:
+
+```json
+{
+  "source": "system-times-new-roman",
+  "fontDir": "C:\\WINDOWS\\Fonts",
+  "max_diff": 0,
+  "avg_diff": 0,
+  "p99_diff": 0,
+  "worst": null
+}
+```
+
+## Phase 5 Font Metrics - 2026-05-17T14:32:05.187Z
+
+System Times New Roman gate:
+
+```json
+{
+  "source": "system-times-new-roman",
+  "fontDir": "C:\\WINDOWS\\Fonts",
+  "max_diff": 0,
+  "avg_diff": 0,
+  "p99_diff": 0,
+  "worst": null
+}
+```
+
+## Phase 5 Font Metrics - 2026-05-17T14:44:33.772Z
+
+System Times New Roman gate:
+
+```json
+{
+  "source": "system-times-new-roman",
+  "fontDir": "C:\\WINDOWS\\Fonts",
+  "max_diff": 0,
+  "avg_diff": 0,
+  "p99_diff": 0,
+  "worst": null
+}
+```
