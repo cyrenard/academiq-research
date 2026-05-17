@@ -7,11 +7,18 @@ const test = require('node:test');
 
 const rootDir = path.join(__dirname, '..');
 const sidecarEntry = path.join(rootDir, 'src-sidecar', 'capture-agent', 'index.js');
+const sidecarBinary = path.join(
+  rootDir,
+  'src-tauri',
+  'binaries',
+  'capture-agent-x86_64-pc-windows-msvc.exe'
+);
 
-function startSidecar() {
+function startSidecar(mode = 'node') {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'academiq-capture-sidecar-'));
-  const child = spawn(process.execPath, [sidecarEntry], {
-    cwd: path.dirname(sidecarEntry),
+  const useBinary = mode === 'binary';
+  const child = spawn(useBinary ? sidecarBinary : process.execPath, useBinary ? [] : [sidecarEntry], {
+    cwd: useBinary ? rootDir : path.dirname(sidecarEntry),
     env: { ...process.env, AQ_CAPTURE_DATA_DIR: dataDir },
     stdio: ['pipe', 'pipe', 'pipe']
   });
@@ -63,6 +70,23 @@ test('capture sidecar JSON-RPC responds and emits notifications', async () => {
 
     const ack = await call(sidecar, 'ackPayload', { queueId: 'cap_missing' });
     assert.equal(ack.ok, true);
+  } finally {
+    try { await call(sidecar, 'shutdown'); } catch (_e) {}
+    sidecar.child.kill();
+  }
+});
+
+test('packaged capture sidecar binary speaks the same JSON-RPC protocol', async (t) => {
+  if (!fs.existsSync(sidecarBinary)) {
+    t.skip('capture-agent binary has not been built yet');
+    return;
+  }
+  const sidecar = startSidecar('binary');
+  try {
+    const status = await call(sidecar, 'getStatus');
+    assert.equal(status.ok, true);
+    assert.equal(typeof status.port, 'number');
+    assert.equal(status.tokenReady, true);
   } finally {
     try { await call(sidecar, 'shutdown'); } catch (_e) {}
     sidecar.child.kill();

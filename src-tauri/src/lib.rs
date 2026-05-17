@@ -3,6 +3,8 @@ mod commands;
 mod db;
 mod pdf;
 
+use tauri::Manager;
+
 #[tauri::command]
 fn not_implemented(name: String) -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({
@@ -18,6 +20,15 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(capture::bridge::CaptureSidecarState::default())
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                let app = window.app_handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let state = app.state::<capture::bridge::CaptureSidecarState>();
+                    state.shutdown().await;
+                });
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             not_implemented,
             commands::app::app_get_info,
