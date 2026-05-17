@@ -24,6 +24,10 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "publisher": "AcademiQ",
+    "copyright": "Copyright (c) 2024 AcademiQ",
+    "shortDescription": "AcademiQ Research",
+    "longDescription": "AcademiQ Research - Akademik Yazim ve Kaynak Yonetim Uygulamasi",
     "icon": ["../icon.ico"],
     "externalBin": ["binaries/capture-agent"],
     "resources": [
@@ -38,14 +42,20 @@
       "nsis": {
         "installMode": "currentUser",
         "languages": ["Turkish", "English"],
-        "displayLanguageSelector": false
+        "displayLanguageSelector": false,
+        "installerIcon": "../icon.ico",
+        "startMenuFolder": "AcademiQ Research",
+        "compression": "lzma"
       }
     }
   },
   "plugins": {
     "updater": {
-      "pubkey": "",
-      "endpoints": []
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEEyNkI5NzhFN0I4QkFEQkYKUldTL3JZdDdqcGRyb2pjWWdJQ21tVkhFVDNGSHhiTlRoWG91T0t3b3BRdWJndGJ5TjJIWjd1cy8K",
+      "endpoints": ["https://updates.academiq.research/{{target}}/{{current_version}}"],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }
