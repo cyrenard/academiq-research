@@ -68,7 +68,7 @@ const parityCases = [
   ['pdfSyncAll', 'pdf_sync_all', []],
   ['openPDFDialog', 'dialog_open_pdf', []],
   ['wordToHtml', 'word_to_html', ['C:/tmp/a.docx']],
-  ['exportPDF', 'export_pdf', [{ defaultPath: 'a.pdf' }], 'not_implemented_phase_5'],
+  ['exportPDF', 'export_pdf', [{ layoutJson: '{"pages":[{"lines":[]}]}', defaultPath: 'a.pdf' }]],
   ['exportAnnotatedPdfNative', 'pdf_export_annotated', [{ pdfBase64: 'JVBERi0=' }], 'not_implemented_phase_5'],
   ['exportDOCX', 'export_docx', [{ defaultPath: 'a.docx' }], 'not_implemented_phase_5'],
   ['getSyncSettings', 'sync_get_settings', []],
@@ -152,6 +152,11 @@ test('Tauri shim preserves preload electronAPI and ocrAPI invoke parity', async 
   assert.equal(calls.at(-1).command, 'spell_add_user_word');
   await api.spell.getUserDictionary('tr');
   assert.equal(calls.at(-1).command, 'spell_get_user_dictionary');
+
+  assert.equal(typeof api.export.pdf, 'function');
+  await api.export.pdf({ pages: [{ lines: [] }] }, { runningHead: 'ACADEMIQ' });
+  assert.equal(calls.at(-1).command, 'export_pdf');
+  assert.equal(typeof calls.at(-1).args.layoutJson, 'string');
 });
 
 test('event-style renderer probe bridge maps to a Tauri command', () => {

@@ -144,7 +144,13 @@ const electronAPI = {
 
   openPDFDialog: () => invokeCommand('dialog_open_pdf'),
   wordToHtml: (filePath) => wordToHtmlViaMammoth(filePath),
-  exportPDF: (options) => invokeCommand('export_pdf', { options: pickObject(options) }),
+  exportPDF: (options) => {
+    const payload = pickObject(options);
+    return invokeCommand('export_pdf', {
+      layoutJson: typeof payload.layoutJson === 'string' ? payload.layoutJson : undefined,
+      options: payload
+    });
+  },
   exportAnnotatedPdfNative: (options) => invokeCommand('pdf_export_annotated', { options: pickObject(options) }),
   exportDOCX: (options) => invokeCommand('export_docx', { options: pickObject(options) }),
 
@@ -210,6 +216,13 @@ electronAPI.spell = {
   suggest: (word, lang = 'tr') => invokeCommand('spell_suggest', { word: asString(word, 256), lang: asString(lang, 16) || 'tr' }),
   addUserWord: (word, lang = 'tr') => invokeCommand('spell_add_user_word', { word: asString(word, 256), lang: asString(lang, 16) || 'tr' }),
   getUserDictionary: (lang = 'tr') => invokeCommand('spell_get_user_dictionary', { lang: asString(lang, 16) || 'tr' })
+};
+
+electronAPI.export = {
+  pdf: (layoutJson, options = {}) => invokeCommand('export_pdf', {
+    layoutJson: typeof layoutJson === 'string' ? layoutJson : JSON.stringify(layoutJson || {}),
+    options: pickObject(options)
+  })
 };
 
 if (typeof window !== 'undefined') {
