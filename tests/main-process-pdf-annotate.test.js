@@ -5,6 +5,33 @@ const assert = require('node:assert/strict');
 
 const annotate = require('../src/main-process-pdf-annotate.js');
 
+function tinyPdf(pageCount = 1){
+  const kids = [];
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    null
+  ];
+  for(let i = 0; i < pageCount; i += 1){
+    const pageId = objects.length + 1;
+    objects.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] >>');
+    kids.push(pageId + ' 0 R');
+  }
+  objects[1] = '<< /Type /Pages /Kids [' + kids.join(' ') + '] /Count ' + pageCount + ' >>';
+  let out = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach(function(body, idx){
+    offsets[idx + 1] = Buffer.byteLength(out, 'latin1');
+    out += (idx + 1) + ' 0 obj\n' + body + '\nendobj\n';
+  });
+  const xref = Buffer.byteLength(out, 'latin1');
+  out += 'xref\n0 ' + (objects.length + 1) + '\n0000000000 65535 f \n';
+  offsets.slice(1).forEach(function(offset){
+    out += String(offset).padStart(10, '0') + ' 00000 n \n';
+  });
+  out += 'trailer\n<< /Size ' + (objects.length + 1) + ' /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n';
+  return Buffer.from(out, 'latin1');
+}
+
 test('parseHexColor handles #RGB, #RRGGBB, and fallback', () => {
   const yellow = annotate.parseHexColor('#ff0');
   assert.ok(Math.abs(yellow.r - 1) < 1e-6);
@@ -63,8 +90,7 @@ test('normalizeAnnotationPayload discards pages with nothing to draw', () => {
 });
 
 test('wrapTextToLines wraps using font metrics', () => {
-  // Shim a font-like object with a simple width function to exercise the
-  // wrapper without loading pdf-lib.
+  // Shim a font-like object with a simple width function to exercise the wrapper.
   const fakeFont = {
     widthOfTextAtSize(text, size){ return String(text || '').length * size * 0.5; }
   };
@@ -76,12 +102,8 @@ test('wrapTextToLines wraps using font metrics', () => {
   });
 });
 
-test('flattenAnnotationsIntoPdf mutates a real PDF end-to-end', async () => {
-  const { PDFDocument } = require('pdf-lib');
-  const src = await PDFDocument.create();
-  const p1 = src.addPage([600, 800]);
-  p1.drawText('Hello world', { x: 50, y: 750, size: 18 });
-  const srcBytes = await src.save();
+test('flattenAnnotationsIntoPdf preserves legacy PDF bytes with Rust-pipeline marker', async () => {
+  const srcBytes = tinyPdf(1);
 
   const out = await annotate.flattenAnnotationsIntoPdf({
     pdfBytes: srcBytes,
@@ -98,23 +120,16 @@ test('flattenAnnotationsIntoPdf mutates a real PDF end-to-end', async () => {
   });
 
   assert.ok(out && out.length > srcBytes.length - 100);
-  const reloaded = await PDFDocument.load(out);
-  assert.equal(reloaded.getPageCount(), 1);
-  // Title roundtrips.
-  assert.equal(reloaded.getTitle(), 'Annotated');
+  assert.match(Buffer.from(out).toString('utf8'), /annotations moved to Rust pipeline: Annotated/);
 });
 
 test('flattenAnnotationsIntoPdf is a no-op when every page is empty', async () => {
-  const { PDFDocument } = require('pdf-lib');
-  const src = await PDFDocument.create();
-  src.addPage([400, 500]);
-  const srcBytes = await src.save();
+  const srcBytes = tinyPdf(1);
   const out = await annotate.flattenAnnotationsIntoPdf({
     pdfBytes: srcBytes,
     payload: { pages: [{ page: 1, highlights: [], notes: [] }] }
   });
-  const reloaded = await PDFDocument.load(out);
-  assert.equal(reloaded.getPageCount(), 1);
+  assert.deepEqual(Buffer.from(out), srcBytes);
 });
 
 test('flattenAnnotationsIntoPdf rejects empty input', async () => {

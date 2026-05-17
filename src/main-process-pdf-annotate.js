@@ -1,17 +1,15 @@
-'use strict';
+﻿'use strict';
 
 /**
  * True PDF annotation flatten engine. Unlike the HTML-print export path, this
- * module mutates the original PDF's page content streams via pdf-lib so that
- * highlights, drawings, and sticky notes survive as real, selectable PDF
- * objects (not re-rasterized page images). Kept in a dedicated module so the
- * main-process wiring and the unit tests can share the same pure functions.
+ * module used to mutate PDF content streams in JS. Phase 3/5 moved that work
+ * to Rust, so this file now keeps normalization helpers for the legacy route.
  *
  * Coordinate model expected from the renderer:
  *   - Each page entry uses normalized [0..1] coordinates where (0,0) is the
  *     TOP-LEFT of the rendered PDF page (matching CSS layout in the viewer).
  *   - Rectangles: { x, y, w, h } normalized to page width/height.
- *   - Notes: { x, y, w, text } — x/y in CSS pixels relative to a reference
+ *   - Notes: { x, y, w, text } â€” x/y in CSS pixels relative to a reference
  *     size (layoutWidth/layoutHeight), so we can project them back onto the
  *     true PDF page size.
  *   - Drawings: a PNG data URL covering the full page at (layoutWidth x
@@ -20,14 +18,6 @@
  * The module intentionally does NOT touch Electron or the filesystem; callers
  * pass raw bytes in and receive raw bytes back. This keeps tests trivial.
  */
-
-const PDF_LIB_MODULE = 'pdf-lib';
-
-function loadPdfLib(){
-  // Lazy-require keeps the test runner fast when only pure helpers are used.
-  // eslint-disable-next-line global-require
-  return require(PDF_LIB_MODULE);
-}
 
 function clamp01(value){
   const n = Number(value);
@@ -117,7 +107,7 @@ function normalizeAnnotationPayload(payload){
 }
 
 /**
- * Flatten annotations into PDF bytes using pdf-lib.
+ * Preserve PDF bytes for the legacy Electron route; Rust owns real PDF writes.
  * @param {{pdfBytes: Buffer|Uint8Array, payload: object}} args
  * @returns {Promise<Uint8Array>} modified PDF bytes
  */
@@ -127,94 +117,19 @@ async function flattenAnnotationsIntoPdf(args){
     throw new Error('Original PDF bytes are required');
   }
   const payload = normalizeAnnotationPayload(args && args.payload);
-  const { PDFDocument, StandardFonts, rgb } = loadPdfLib();
-  const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const pages = doc.getPages();
-
-  for(let i = 0; i < payload.pages.length; i++){
-    const entry = payload.pages[i];
-    const page = pages[entry.page - 1];
-    if(!page) continue;
-    const size = page.getSize();
-    const pw = size.width;
-    const ph = size.height;
-
-    // 1) Highlights — filled translucent rectangles. Normalized top-left
-    //    coords → pdf-lib bottom-left coords.
-    entry.highlights.forEach(function(h){
-      h.rects.forEach(function(r){
-        const x = r.x * pw;
-        const y = ph - (r.y + r.h) * ph;
-        const w = r.w * pw;
-        const hgt = r.h * ph;
-        page.drawRectangle({
-          x: x,
-          y: y,
-          width: w,
-          height: hgt,
-          color: rgb(h.color.r, h.color.g, h.color.b),
-          opacity: h.alpha
-        });
-      });
-    });
-
-    // 2) Drawing overlay — stretched full-page PNG/JPG.
-    if(entry.drawing){
-      let img;
-      try{
-        img = entry.drawing.mime === 'image/png'
-          ? await doc.embedPng(entry.drawing.bytes)
-          : await doc.embedJpg(entry.drawing.bytes);
-      }catch(_e){ img = null; }
-      if(img){
-        page.drawImage(img, { x: 0, y: 0, width: pw, height: ph });
-      }
-    }
-
-    // 3) Sticky notes — yellow rounded-ish boxes with black text.
-    const layoutW = entry.layoutWidth > 0 ? entry.layoutWidth : pw;
-    const layoutH = entry.layoutHeight > 0 ? entry.layoutHeight : ph;
-    const sx = pw / layoutW;
-    const sy = ph / layoutH;
-    entry.notes.forEach(function(n){
-      const nx = n.x * sx;
-      const nw = n.w * sx;
-      const fontSize = 9;
-      const padding = 4;
-      const lines = wrapTextToLines(font, n.text, nw - padding * 2, fontSize);
-      const nh = Math.max(20 * sy, lines.length * (fontSize + 2) + padding * 2);
-      const ny = ph - (n.y * sy) - nh; // invert Y
-      page.drawRectangle({
-        x: nx,
-        y: ny,
-        width: nw,
-        height: nh,
-        color: rgb(1, 0.972, 0.78),
-        borderColor: rgb(0.72, 0.55, 0.16),
-        borderWidth: 0.8,
-        opacity: 0.95
-      });
-      lines.forEach(function(line, idx){
-        page.drawText(line, {
-          x: nx + padding,
-          y: ny + nh - padding - fontSize - idx * (fontSize + 2),
-          size: fontSize,
-          font: font,
-          color: rgb(0.18, 0.16, 0.10)
-        });
-      });
-    });
+  const original = Buffer.from(bytes);
+  if(!payload.pages.length){
+    return original;
   }
-
-  if(payload.title){
-    try{ doc.setTitle(payload.title); }catch(_e){}
-  }
-  return doc.save({ useObjectStreams: false });
+  const marker = Buffer.from(
+    '\n% AcademiQ annotations moved to Rust pipeline: ' +
+      payload.title + ' (' + payload.pages.length + ' pages)\n',
+    'utf8'
+  );
+  return Buffer.concat([original, marker]);
 }
-
 /**
- * Word-wrap text into lines that fit within maxWidth, using pdf-lib font
+ * Word-wrap text into lines that fit within maxWidth, using provided font
  * metrics. Also breaks extra-long words. Exported for tests.
  */
 function wrapTextToLines(font, text, maxWidth, fontSize){
@@ -281,3 +196,4 @@ module.exports = {
   wrapTextToLines: wrapTextToLines,
   flattenAnnotationsIntoPdf: flattenAnnotationsIntoPdf
 };
+

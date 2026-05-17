@@ -4,35 +4,68 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 
 const rootDir = path.join(__dirname, '..');
 
-async function writeFixtures() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'academiq-phase3-pdf-'));
+function pdfEscape(text) {
+  return String(text || '').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+}
 
-  const sample = await PDFDocument.create();
-  sample.setTitle('AcademiQ Phase 3 Fixture');
-  sample.setAuthor('AcademiQ');
-  const font = await sample.embedFont(StandardFonts.Helvetica);
-  const page = sample.addPage([612, 792]);
-  page.drawText('AcademiQ Phase 3 Text', { x: 72, y: 700, size: 18, font, color: rgb(0, 0, 0) });
-  fs.writeFileSync(path.join(dir, 'sample.pdf'), await sample.save());
-
-  const large = await PDFDocument.create();
-  large.setTitle('AcademiQ Phase 3 Large Fixture');
-  const largeFont = await large.embedFont(StandardFonts.Helvetica);
-  for (let i = 1; i <= 100; i += 1) {
-    const p = large.addPage([612, 792]);
-    p.drawText(`AcademiQ large page ${i}`, { x: 72, y: 700, size: 12, font: largeFont });
+function writePdf(filePath, { title, author = '', pages }) {
+  const objects = [];
+  const add = (body) => {
+    objects.push(body);
+    return objects.length;
+  };
+  const catalogId = add('<< /Type /Catalog /Pages 2 0 R >>');
+  assert.equal(catalogId, 1);
+  objects.push(null); // pages tree placeholder, object 2
+  const fontId = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  const pageIds = [];
+  for (const page of pages) {
+    const content = `BT /F1 ${page.size || 18} Tf 72 700 Td (${pdfEscape(page.text || '')}) Tj ET`;
+    const contentId = add(`<< /Length ${Buffer.byteLength(content, 'latin1')} >>\nstream\n${content}\nendstream`);
+    const pageId = add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>`);
+    pageIds.push(pageId);
   }
-  fs.writeFileSync(path.join(dir, 'large.pdf'), await large.save());
+  objects[1] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`;
+  const infoId = add(`<< /Title (${pdfEscape(title)}) /Author (${pdfEscape(author)}) >>`);
 
-  const scanned = await PDFDocument.create();
-  scanned.setTitle('AcademiQ Phase 3 Scanned Fixture');
-  scanned.addPage([612, 792]);
-  fs.writeFileSync(path.join(dir, 'scanned.pdf'), await scanned.save());
+  let out = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((body, idx) => {
+    offsets[idx + 1] = Buffer.byteLength(out, 'latin1');
+    out += `${idx + 1} 0 obj\n${body}\nendobj\n`;
+  });
+  const xref = Buffer.byteLength(out, 'latin1');
+  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach((offset) => {
+    out += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  });
+  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info ${infoId} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  fs.writeFileSync(filePath, Buffer.from(out, 'latin1'));
+}
 
+function writeFixtures() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'academiq-phase3-pdf-'));
+  writePdf(path.join(dir, 'sample.pdf'), {
+    title: 'AcademiQ Phase 3 Fixture',
+    author: 'AcademiQ',
+    pages: [{ text: 'AcademiQ Phase 3 Text', size: 18 }]
+  });
+  writePdf(path.join(dir, 'large.pdf'), {
+    title: 'AcademiQ Phase 3 Large Fixture',
+    author: 'AcademiQ',
+    pages: Array.from({ length: 100 }, (_, index) => ({
+      text: `AcademiQ large page ${index + 1}`,
+      size: 12
+    }))
+  });
+  writePdf(path.join(dir, 'scanned.pdf'), {
+    title: 'AcademiQ Phase 3 Scanned Fixture',
+    author: 'AcademiQ',
+    pages: [{ text: '', size: 12 }]
+  });
   return dir;
 }
 
@@ -40,14 +73,15 @@ function cargoPdfTests(fixtureDir) {
   const result = spawnSync('cargo', ['test', 'phase3_pdf_', '--', '--nocapture'], {
     cwd: path.join(rootDir, 'src-tauri'),
     env: { ...process.env, AQ_PDF_FIXTURE_DIR: fixtureDir },
-    encoding: 'utf8'
+    encoding: 'utf8',
+    timeout: 240000
   });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   return result.stdout + result.stderr;
 }
 
-test('Rust PDF pipeline covers metadata, annotations, render, text, ingest and perf', async () => {
-  const fixtureDir = await writeFixtures();
+test('Rust PDF pipeline covers metadata, annotations, render, text, ingest and perf', () => {
+  const fixtureDir = writeFixtures();
   const output = cargoPdfTests(fixtureDir);
   for (const name of [
     'phase3_pdf_metadata_extracts_basic_fields',

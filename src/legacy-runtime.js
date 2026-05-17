@@ -10188,7 +10188,7 @@ async function exportAnnotatedPdf(){
   var name=(window.AQPdfAnnotationExport&&typeof window.AQPdfAnnotationExport.sanitizeFilename==='function')
     ? window.AQPdfAnnotationExport.sanitizeFilename((curRef&&curRef.title)||'annotated-pdf','annotated-pdf')
     : (((curRef&&curRef.title)||'annotated-pdf').replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim().slice(0,80)||'annotated-pdf');
-  // Native flatten (pdf-lib): keeps real PDF objects, smaller and text-selectable.
+  // Native flatten path: Rust/Tauri owns durable PDF object writes after Phase 3.
   if(typeof window.electronAPI.exportAnnotatedPdfNative==='function' && typeof pdfDoc.getData==='function'){
     try{
       setDst('Annotationlı PDF hazırlanıyor (native)...','ld');

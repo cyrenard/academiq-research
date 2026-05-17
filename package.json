@@ -27,7 +27,6 @@
   "dependencies": {
     "dictionary-tr": "^2.0.0",
     "nspell": "^2.1.5",
-    "pdf-lib": "^1.17.1",
     "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
