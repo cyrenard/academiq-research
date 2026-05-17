@@ -9,6 +9,7 @@ pub mod local_matrix;
 pub mod net;
 pub mod ocr;
 pub mod pdf;
+pub mod spell;
 pub mod sync;
 pub mod update;
 pub mod window;

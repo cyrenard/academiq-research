@@ -369,6 +369,29 @@ pub fn read_pdf_annotations(app_data_dir: &Path, ref_id: &str) -> Result<Vec<Val
     Ok(out)
 }
 
+pub fn kv_get(app_data_dir: &Path, key: &str) -> Result<Option<String>, String> {
+    let db_paths = init_or_migrate(app_data_dir)?;
+    let conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
+    conn.query_row(
+        "SELECT value FROM kv WHERE key = ?1",
+        params![key],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map_err(|e| e.to_string())
+}
+
+pub fn kv_set(app_data_dir: &Path, key: &str, value: &str) -> Result<(), String> {
+    let db_paths = init_or_migrate(app_data_dir)?;
+    let conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT OR REPLACE INTO kv(key, value) VALUES (?1, ?2)",
+        params![key, value],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub fn integrity_check(app_data_dir: &Path) -> Result<String, String> {
     let db_paths = init_or_migrate(app_data_dir)?;
     let conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
