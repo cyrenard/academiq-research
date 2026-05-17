@@ -116,6 +116,16 @@ test('Tauri shim preserves preload electronAPI and ocrAPI invoke parity', async 
   const ocrResult = await ocr.recognize({ imageDataUrl: 'data:image/png;base64,AAA=' });
   assert.equal(calls.at(-1).command, 'ocr_recognize');
   assert.equal(ocrResult.code, 'OCR_NOT_IMPLEMENTED_PHASE_4');
+
+  assert.equal(typeof api.db.librarySearch, 'function');
+  await api.db.librarySearch('Türkçe');
+  assert.equal(calls.at(-1).command, 'library_search');
+  await api.db.libraryGet('ref-1');
+  assert.equal(calls.at(-1).command, 'library_get');
+  await api.db.integrityCheck();
+  assert.equal(calls.at(-1).command, 'db_integrity_check');
+  await api.db.rollbackToLegacyJson();
+  assert.equal(calls.at(-1).command, 'db_rollback_to_legacy_json');
 });
 
 test('event-style renderer probe bridge maps to a Tauri command', () => {
@@ -132,6 +142,10 @@ test('Rust command modules register every preload invoke target', () => {
   }
   assert.match(lib, /commands::ocr::ocr_recognize/);
   assert.match(lib, /commands::app::renderer_probe_error/);
+  assert.match(lib, /commands::data::library_search/);
+  assert.match(lib, /commands::data::library_get/);
+  assert.match(lib, /commands::data::db_integrity_check/);
+  assert.match(lib, /commands::data::db_rollback_to_legacy_json/);
 });
 
 test('Phase-deferred handlers return explicit controlled stub messages', () => {

@@ -188,6 +188,13 @@ const ocrAPI = {
   recognize: (payload) => invokeCommand('ocr_recognize', { payload: pickObject(payload) })
 };
 
+electronAPI.db = {
+  librarySearch: (query) => invokeCommand('library_search', { query: asString(query, 1024) }),
+  libraryGet: (id) => invokeCommand('library_get', { id: asString(id, 320) }),
+  integrityCheck: () => invokeCommand('db_integrity_check'),
+  rollbackToLegacyJson: () => invokeCommand('db_rollback_to_legacy_json')
+};
+
 if (typeof window !== 'undefined') {
   window.electronAPI = Object.freeze(electronAPI);
   window.ocrAPI = Object.freeze(ocrAPI);
