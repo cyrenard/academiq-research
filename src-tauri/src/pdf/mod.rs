@@ -1,5 +1,7 @@
 pub mod annotations;
 pub mod extract;
+pub mod export;
+pub mod fonts;
 pub mod metadata;
 pub mod pdfium_init;
 pub mod render;
