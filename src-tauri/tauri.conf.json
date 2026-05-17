@@ -25,6 +25,7 @@
     "active": true,
     "targets": ["nsis"],
     "icon": ["../icon.ico"],
+    "resources": ["binaries/pdfium.dll"],
     "windows": {
       "nsis": {
         "installMode": "currentUser",
