@@ -1,21 +1,12 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 /**
- * Copy the Turkish Hunspell dictionary from node_modules/dictionary-tr/
- * into public/dictionary/tr/ so Vite serves it as a static asset and the
- * renderer can fetch it at runtime (`./dictionary/tr/index.dic`).
+ * Copy the Turkish Hunspell dictionary from node_modules/dictionary-tr/ into:
+ *   - public/dictionary/tr/ for the legacy renderer fallback
+ *   - src-tauri/resources/dict/tr/ for the Rust spell command bundle
  *
- * Why a script and not just a Vite plugin / direct import:
- *   - The .dic is ~9 MB. Importing it as a string would gum up bundle
- *     analysis and balloon source maps. Serving it as a plain asset
- *     keeps it lazy-loaded.
- *   - postinstall runs this automatically after `npm install`, so the
- *     dev server boots cleanly without manual setup.
- *   - Idempotent: skips when the destination matches the source size.
- *
- * License: dictionary-tr is MIT (Harun Reşit Zafer, 2014). The original
- * license file is also copied alongside index.aff/index.dic so the
- * attribution travels with the data.
+ * The .dic file is large, so both runtimes load it lazily from plain files
+ * instead of bundling it into JavaScript.
  */
 
 const fs = require('fs');
@@ -23,7 +14,10 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const SRC_DIR = path.join(ROOT, 'node_modules', 'dictionary-tr');
-const DST_DIR = path.join(ROOT, 'public', 'dictionary', 'tr');
+const DST_DIRS = [
+  path.join(ROOT, 'public', 'dictionary', 'tr'),
+  path.join(ROOT, 'src-tauri', 'resources', 'dict', 'tr')
+];
 
 const FILES = ['index.aff', 'index.dic', 'license'];
 
@@ -46,24 +40,22 @@ function copyIfChanged(src, dst) {
 
 function main() {
   if (!exists(SRC_DIR)) {
-    // node_modules not installed yet — postinstall called before deps?
-    // Silently exit; the next `npm install` round will run us again.
     return;
   }
   let copied = 0;
-  for (const f of FILES) {
-    const src = path.join(SRC_DIR, f);
-    const dst = path.join(DST_DIR, f === 'license' ? 'LICENSE' : f);
-    if (copyIfChanged(src, dst)) {
-      copied += 1;
-      console.log(`[sync-dictionary] ${f} → public/dictionary/tr/`);
+  for (const dstDir of DST_DIRS) {
+    for (const f of FILES) {
+      const src = path.join(SRC_DIR, f);
+      const dst = path.join(dstDir, f === 'license' ? 'LICENSE' : f);
+      if (copyIfChanged(src, dst)) {
+        copied += 1;
+        console.log(`[sync-dictionary] ${f} -> ${path.relative(ROOT, dstDir)}/`);
+      }
     }
   }
-  if (copied === 0) {
-    // Quiet success: nothing to do.
-    return;
+  if (copied > 0) {
+    console.log(`[sync-dictionary] done (${copied} file${copied === 1 ? '' : 's'} updated)`);
   }
-  console.log(`[sync-dictionary] done (${copied} file${copied === 1 ? '' : 's'} updated)`);
 }
 
 if (require.main === module) main();

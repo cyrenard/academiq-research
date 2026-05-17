@@ -14,6 +14,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "spellbook",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
@@ -75,6 +76,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
 dependencies = [
  "derive_arbitrary",
+]
+
+[[package]]
+name = "async-compression"
+version = "0.4.42"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e79b3f8a79cccc2898f31920fc69f304859b3bd567490f75ebf51ae1c792a9ac"
+dependencies = [
+ "compression-codecs",
+ "compression-core",
+ "pin-project-lite",
+ "tokio",
 ]
 
 [[package]]
@@ -374,6 +387,24 @@ dependencies = [
  "bytes",
  "memchr",
 ]
+
+[[package]]
+name = "compression-codecs"
+version = "0.4.38"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce2548391e9c1929c21bf6aa2680af86fe4c1b33e6cea9ac1cfeec0bd11218cf"
+dependencies = [
+ "brotli",
+ "compression-core",
+ "flate2",
+ "memchr",
+]
+
+[[package]]
+name = "compression-core"
+version = "0.4.32"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc14f565cf027a105f7a44ccf9e5b424348421a1d8952a8fc9d499d313107789"
 
 [[package]]
 name = "console_error_panic_hook"
@@ -1325,6 +1356,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "h2"
+version = "0.4.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "171fefbc92fe4a4de27e0698d6a5b392d6a0e333506bc49133760b3bcf948733"
+dependencies = [
+ "atomic-waker",
+ "bytes",
+ "fnv",
+ "futures-core",
+ "futures-sink",
+ "http",
+ "indexmap 2.14.0",
+ "slab",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1431,6 +1481,7 @@ dependencies = [
  "bytes",
  "futures-channel",
  "futures-core",
+ "h2",
  "http",
  "http-body",
  "httparse",
@@ -2965,6 +3016,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "futures-core",
+ "h2",
  "http",
  "http-body",
  "http-body-util",
@@ -3651,6 +3703,16 @@ dependencies = [
  "gobject-sys",
  "libc",
  "system-deps",
+]
+
+[[package]]
+name = "spellbook"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "28332bb44a9e7e7f1aa43ce4d97b6d1b27323a1fc160d4cfe0089245e1750845"
+dependencies = [
+ "foldhash 0.2.0",
+ "hashbrown 0.17.1",
 ]
 
 [[package]]
@@ -4450,12 +4512,17 @@ version = "0.6.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68d6fdd9f81c2819c9a8b0e0cd91660e7746a8e6ea2ba7c6b2b057985f6bcb51"
 dependencies = [
+ "async-compression",
  "bitflags 2.11.1",
  "bytes",
+ "futures-core",
  "futures-util",
  "http",
  "http-body",
+ "http-body-util",
  "pin-project-lite",
+ "tokio",
+ "tokio-util",
  "tower",
  "tower-layer",
  "tower-service",

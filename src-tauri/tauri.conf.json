@@ -25,7 +25,12 @@
     "active": true,
     "targets": ["nsis"],
     "icon": ["../icon.ico"],
-    "resources": ["binaries/pdfium.dll"],
+    "resources": [
+      "binaries/pdfium.dll",
+      "resources/dict/tr/index.aff",
+      "resources/dict/tr/index.dic",
+      "resources/dict/tr/LICENSE"
+    ],
     "windows": {
       "nsis": {
         "installMode": "currentUser",
