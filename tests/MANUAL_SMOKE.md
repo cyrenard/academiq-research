@@ -247,3 +247,55 @@ FTS performance:
 library_search 1000+ entry fixture: PASS under 50ms Rust budget
 Turkish character search (Türkçe / ğ / ş / ı / ö fixture terms): PASS
 ```
+## Phase 3 - pdf-lib call sites
+
+Inventory command:
+
+```text
+rg -n "pdf-lib|PDFDocument\.load|pdfDoc\.|PDFDocument" src tests package.json main.js preload.js
+```
+
+Call sites:
+
+- `src/main-process-pdf-annotate.js`: native annotated PDF flatten path currently uses `pdf-lib` (`PDFDocument.load`, page drawing, text wrapping). Phase 3 Rust replacement command is `pdf_apply_annotations`; export flatten remains deferred to Phase 5.
+- `tests/main-process-pdf-annotate.test.js`: pdf-lib fixture generation and reload assertions for the old Electron annotate helper. Keep until Phase 5 removes that JS path.
+- `src/legacy-runtime.js`: `pdfDoc.*` occurrences are pdf.js viewer/runtime calls (`getPage`, `getData`, `getOutline`, page render/search). These are viewer calls, not `pdf-lib`; pdf.js viewer remains untouched in Phase 3.
+- `package.json`: `pdf-lib` dependency remains installed by rule; do not remove before Phase 5.
+
+## Phase 3 perf
+
+Rust fixture gate:
+
+```text
+100 page PDF, 100 highlight annotations: PASS under 2s
+pdf_render_page, warmed 150 DPI render: PASS under 500ms
+```
+
+The first render includes PDFium dynamic library startup and is intentionally warmed before measuring the per-page render budget.
+
+## Phase 3 Results - 2026-05-17
+
+PDF Rust pipeline: PASS.
+
+- `lopdf = 0.34`, `pdfium-render = 0.8` with `thread_safe`, and PNG encoding compile on Windows MSVC.
+- `scripts/fetch-pdfium.ps1` downloads `pdfium-win-x64.tgz` and copies `pdfium.dll` to `src-tauri/binaries/pdfium.dll`.
+- `tauri.conf.json` bundles `binaries/pdfium.dll` as a resource.
+- Added Rust modules under `src-tauri/src/pdf/`: metadata, annotations, render, extract, pdfium_init.
+- Added Tauri commands: `pdf_extract_metadata`, `pdf_apply_annotations`, `pdf_read_annotations`, `pdf_render_page`, `pdf_extract_text`, `pdf_get_outline`, `library_ingest_pdf`.
+- `library_ingest_pdf` writes metadata into `library_items`; annotation apply writes both the PDF annotation object and the `annotations` DB cache.
+- `pdf_read_annotations` reads DB cache first, then falls back to parsing the PDF file.
+- `src/tauri-api.ts` added `electronAPI.pdf.*` wrappers only; renderer modules were not changed.
+- `cargo tauri dev` launched the Tauri debug executable and WebView2 process; the validation command was stopped after the 60s smoke window so no long-running dev server remained.
+
+Automated checks:
+
+```text
+node --test tests/pdf-rust.test.js: PASS
+node --test tests/ipc-parity.test.js tests/tauri-smoke.test.js tests/data-migration.test.js tests/library-fts.test.js tests/pdf-rust.test.js: 21 pass, 0 fail
+cargo check: PASS
+npm test: 955 pass, 0 fail
+npm run test:renderer: 25 files pass, 482 pass, 0 fail
+npm run gate:editor: PASS
+cargo tauri build --no-bundle: PASS
+cargo test --release phase3_pdf_perf_budget_large_annotation_and_render -- --nocapture: PASS
+```

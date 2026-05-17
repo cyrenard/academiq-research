@@ -223,7 +223,7 @@ Her faz: **Hedef → Yapılacak işler → Acceptance kriterleri → Risk**.
 
 ---
 
-### Faz 3 — PDF Storage + Annotation Rust Tarafı (1 hafta)
+### Faz 3 — PDF Storage + Annotation Rust Tarafı (1 hafta) — ✅ DONE 2026-05-17
 
 **Hedef**: Workspace-bazlı PDF dosya yönetimini Rust'a al, annotation yazımı için pdf-lib'i değiştir.
 
