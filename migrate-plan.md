@@ -368,6 +368,8 @@ Her faz: **Hedef → Yapılacak işler → Acceptance kriterleri → Risk**.
 
 ### Faz 8 — Dual-Run & Cutover (1-2 hafta)
 
+**Status**: DONE 2026-05-17 - beta dual-run tooling, local telemetry, release artifact pipeline, and cutover gates are ready. Stable cutover and legacy cleanup still require explicit user approval.
+
 **Hedef**: 1-2 hafta paralel kullanım, ardından Electron sürümünü emekli et.
 
 **Yapılacaklar**:

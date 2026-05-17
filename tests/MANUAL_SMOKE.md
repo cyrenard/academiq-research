@@ -636,3 +636,94 @@ NSIS installer launch in a clean VM was not executed from this local shell to av
 The installer artifact itself was produced by cargo tauri build, signed, timestamped, copied to dist/tauri, and validated by tauri-bundle-gate.
 Before external release, run one clean Windows VM smoke: open the installer, verify expected SmartScreen/unknown-publisher prompt, complete current-user install, launch AcademiQ Research, then uninstall.
 ```
+
+## Phase 8 Results — 2026-05-17
+
+Cutover preparation:
+
+```text
+PASS THIRD_PARTY_NOTICES.md was already committed and is bundled as a Tauri resource.
+PASS local legacy-electron branch exists to preserve the Electron 1.23.0 cutover base.
+PASS package.json, package-lock.json, src-tauri/Cargo.toml, Cargo.lock, and tauri.conf.json are synchronized at 1.24.0-beta.1.
+PASS MIGRATION_NOTES.md records that legacy-electron is local only and must not be pushed without user approval.
+PASS cutover and legacy cleanup were NOT executed; both still require explicit user approval.
+```
+
+Dual-run comparison gates:
+
+```text
+PASS node --test tests/dual-run-comparison.test.js tests/aq-engine-cross-shell.test.js tests/pdf-export-diff.test.js tests/storage-roundtrip-cutover.test.js
+  - 9 pass, 0 fail
+PASS golden snapshot fixtures cover small-doc, large-doc, turkish-heavy, bibliography-heavy, and annotated-pdf cutover classes.
+PASS AQ Engine cross-shell parity confirms React shell entry and legacy script order are both preserved.
+PASS PDF export diff gate produced tests/artifacts/phase5-50-page-apa.pdf.
+PASS storage roundtrip keeps data.json.bak rollback path green.
+```
+
+Telemetry and crash gate:
+
+```text
+PASS src-tauri/src/telemetry.rs writes local-only compatibility and crash jsonl logs under app_data_dir/telemetry.
+PASS no automatic upload endpoint is configured.
+PASS 30-day local rotation is implemented.
+PASS node --test tests/dual-run-crash-gate.test.js
+  - 3 pass, 0 fail
+```
+
+Beta build artifacts:
+
+```text
+PASS npm run build
+  - renderer build PASS
+  - cargo tauri build PASS
+  - signed NSIS beta installer produced
+  - copied root artifact: dist/AcademiQ-Setup-1.24.0-beta.1.exe
+  - copied updater artifact: dist/tauri/AcademiQ-Setup-1.24.0-beta.1.exe
+  - SHA256 for both copied beta artifacts: 340E08709ED4030C3F5C939A5F8CAAE2024B06805B9540D0D12F599D4BB4BA69
+  - dist/tauri/latest.json version: 1.24.0-beta.1
+  - latest.json URL: https://updates.academiq.research/windows-x86_64/1.24.0-beta.1/AcademiQ-Setup-1.24.0-beta.1.exe
+  - dist/THIRD_PARTY_NOTICES.md copied
+EXPECTED signtool verify /v reports an untrusted root chain for the self-signed certificate; signature presence and timestamp are still visible.
+```
+
+Regression checks:
+
+```text
+PASS npm run gate:release
+  - export-quality-gate PASS
+  - editor-stability-gate PASS
+  - node --test tests/*.test.js PASS 983/983
+  - tauri-bundle-gate PASS
+PASS npm run test:renderer
+  - 25 files PASS
+  - 482 tests PASS
+PASS node --test tests/release-pipeline.test.js
+  - 5 pass, 0 fail
+PASS cargo check
+  - PASS with existing pdf/fonts.rs dead_code warnings only
+PASS cargo test telemetry::tests
+  - 2 pass, 0 fail
+```
+
+Manual notes:
+
+```text
+Clean Windows VM installer launch was not executed from this shell to avoid modifying the developer machine.
+Dual-run week remains a user-operated beta exercise using docs/DUAL_RUN_GUIDE.md and scripts/dual-run-crash-gate.js.
+Stable 1.24.0 cutover, main merge, tag, and legacy Electron cleanup are intentionally paused until the user explicitly says "cutover et".
+```
+
+## Phase 5 Font Metrics - 2026-05-17T18:16:26.862Z
+
+System Times New Roman gate:
+
+```json
+{
+  "source": "system-times-new-roman",
+  "fontDir": "C:\\WINDOWS\\Fonts",
+  "max_diff": 0,
+  "avg_diff": 0,
+  "p99_diff": 0,
+  "worst": null
+}
+```
