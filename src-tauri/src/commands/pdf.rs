@@ -2,7 +2,13 @@ use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
-use tokio::fs;
+use tokio::{fs, task};
+
+use crate::db::migrate;
+use crate::pdf::{
+    annotations::{self, PdfAnnotation},
+    extract, metadata, render,
+};
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,6 +59,15 @@ async fn pdf_root(
     Ok(dir)
 }
 
+async fn pdf_path(
+    app: &AppHandle,
+    ref_id: &str,
+    ws: Option<WorkspaceContext>,
+) -> Result<std::path::PathBuf, String> {
+    let id = clean_ref_id(ref_id)?;
+    Ok(pdf_root(app, ws).await?.join(format!("{id}.pdf")))
+}
+
 fn bytes_from_value(value: Value) -> Result<Vec<u8>, String> {
     if let Some(s) = value.as_str() {
         return general_purpose::STANDARD
@@ -91,7 +106,7 @@ pub async fn pdf_save(
     if bytes.len() > 150 * 1024 * 1024 {
         return Ok(json!({ "ok": false, "error": "PDF dosyasi cok buyuk" }));
     }
-    let path = pdf_root(&app, ws).await?.join(format!("{id}.pdf"));
+    let path = pdf_path(&app, &id, ws).await?;
     fs::write(&path, bytes).await.map_err(|e| e.to_string())?;
     Ok(json!({ "ok": true, "path": path.to_string_lossy() }))
 }
@@ -103,7 +118,7 @@ pub async fn pdf_load(
     ws: Option<WorkspaceContext>,
 ) -> Result<Value, String> {
     let id = clean_ref_id(&ref_id)?;
-    let path = pdf_root(&app, ws).await?.join(format!("{id}.pdf"));
+    let path = pdf_path(&app, &id, ws).await?;
     match fs::read(path).await {
         Ok(data) => Ok(json!({ "ok": true, "data": data })),
         Err(err) => Ok(json!({ "ok": false, "error": err.to_string() })),
@@ -117,7 +132,7 @@ pub async fn pdf_exists(
     ws: Option<WorkspaceContext>,
 ) -> Result<bool, String> {
     let id = clean_ref_id(&ref_id)?;
-    let path = pdf_root(&app, ws).await?.join(format!("{id}.pdf"));
+    let path = pdf_path(&app, &id, ws).await?;
     Ok(fs::metadata(path)
         .await
         .map(|m| m.is_file())
@@ -131,7 +146,7 @@ pub async fn pdf_delete(
     ws: Option<WorkspaceContext>,
 ) -> Result<Value, String> {
     let id = clean_ref_id(&ref_id)?;
-    let path = pdf_root(&app, ws).await?.join(format!("{id}.pdf"));
+    let path = pdf_path(&app, &id, ws).await?;
     match fs::remove_file(path).await {
         Ok(_) => Ok(json!({ "ok": true })),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(json!({ "ok": true })),
@@ -146,11 +161,171 @@ pub async fn pdf_show_in_explorer(
     ws: Option<WorkspaceContext>,
 ) -> Result<Value, String> {
     let id = clean_ref_id(&ref_id)?;
-    let path = pdf_root(&app, ws).await?.join(format!("{id}.pdf"));
+    let path = pdf_path(&app, &id, ws).await?;
     if fs::metadata(&path).await.is_err() {
         return Ok(json!({ "ok": false, "error": "PDF bulunamadi" }));
     }
     Ok(json!({ "ok": true, "path": path.to_string_lossy() }))
+}
+
+#[tauri::command]
+pub async fn pdf_extract_metadata(
+    app: AppHandle,
+    ref_id: String,
+    ws: Option<WorkspaceContext>,
+) -> Result<Value, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let path = pdf_path(&app, &ref_id, ws).await?;
+    task::spawn_blocking(move || {
+        let meta = metadata::extract_metadata(&path)?;
+        let meta_json = json!(meta);
+        migrate::upsert_pdf_library_item(
+            &app_dir,
+            &ref_id,
+            meta_json.get("title").and_then(Value::as_str).unwrap_or(""),
+            meta_json
+                .get("author")
+                .and_then(Value::as_str)
+                .unwrap_or(""),
+            &path.to_string_lossy(),
+            &meta_json,
+        )?;
+        Ok(json!({ "ok": true, "metadata": meta_json }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn pdf_apply_annotations(
+    app: AppHandle,
+    ref_id: String,
+    ws: Option<WorkspaceContext>,
+    annotations: Vec<PdfAnnotation>,
+) -> Result<Value, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let path = pdf_path(&app, &ref_id, ws).await?;
+    task::spawn_blocking(move || {
+        annotations::apply_annotations(&path, &annotations)?;
+        let values = annotations
+            .iter()
+            .map(|item| serde_json::to_value(item).map_err(|e| e.to_string()))
+            .collect::<Result<Vec<_>, _>>()?;
+        migrate::save_pdf_annotations(&app_dir, &ref_id, &values)?;
+        Ok(json!({ "ok": true, "count": annotations.len() }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn pdf_read_annotations(
+    app: AppHandle,
+    ref_id: String,
+    ws: Option<WorkspaceContext>,
+) -> Result<Value, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let path = pdf_path(&app, &ref_id, ws).await?;
+    task::spawn_blocking(move || {
+        let cached = migrate::read_pdf_annotations(&app_dir, &ref_id)?;
+        if !cached.is_empty() {
+            return Ok(json!({ "ok": true, "annotations": cached, "source": "db" }));
+        }
+        let parsed = annotations::read_annotations(&path)?;
+        let values = parsed
+            .iter()
+            .map(|item| serde_json::to_value(item).map_err(|e| e.to_string()))
+            .collect::<Result<Vec<_>, _>>()?;
+        if !values.is_empty() {
+            migrate::save_pdf_annotations(&app_dir, &ref_id, &values)?;
+        }
+        Ok(json!({ "ok": true, "annotations": values, "source": "pdf" }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn pdf_render_page(
+    app: AppHandle,
+    ref_id: String,
+    ws: Option<WorkspaceContext>,
+    page: u32,
+    dpi: u32,
+) -> Result<Value, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let path = pdf_path(&app, &ref_id, ws).await?;
+    task::spawn_blocking(move || {
+        let bytes = render::render_page_png(&app_dir, &path, page, dpi)?;
+        Ok(json!({ "ok": true, "data": bytes, "mime": "image/png" }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn pdf_extract_text(
+    app: AppHandle,
+    ref_id: String,
+    ws: Option<WorkspaceContext>,
+    page: u32,
+) -> Result<Value, String> {
+    let path = pdf_path(&app, &ref_id, ws).await?;
+    task::spawn_blocking(move || {
+        let text = extract::extract_text(&path, page)?;
+        Ok(json!({ "ok": true, "text": text }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn pdf_get_outline(
+    app: AppHandle,
+    ref_id: String,
+    ws: Option<WorkspaceContext>,
+) -> Result<Value, String> {
+    let path = pdf_path(&app, &ref_id, ws).await?;
+    task::spawn_blocking(move || {
+        let outline = metadata::get_outline(&path)?;
+        Ok(json!({ "ok": true, "outline": outline }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn library_ingest_pdf(app: AppHandle, file_path: String) -> Result<Value, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    task::spawn_blocking(move || {
+        let path = std::path::PathBuf::from(&file_path);
+        let meta = metadata::extract_metadata(&path)?;
+        let id = format!(
+            "pdf:{}",
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(file_path.as_bytes())
+        );
+        let meta_json = json!({
+            "title": meta.title,
+            "author": meta.author,
+            "pageCount": meta.page_count,
+            "outlineCount": meta.outline_count,
+            "sourcePath": file_path
+        });
+        migrate::upsert_pdf_library_item(
+            &app_dir,
+            &id,
+            meta_json.get("title").and_then(Value::as_str).unwrap_or(""),
+            meta_json
+                .get("author")
+                .and_then(Value::as_str)
+                .unwrap_or(""),
+            &path.to_string_lossy(),
+            &meta_json,
+        )?;
+        Ok(json!({ "ok": true, "item": { "id": id, "metadata": meta_json } }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]

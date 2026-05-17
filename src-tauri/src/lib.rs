@@ -1,5 +1,6 @@
 mod commands;
 mod db;
+mod pdf;
 
 #[tauri::command]
 fn not_implemented(name: String) -> Result<serde_json::Value, String> {
@@ -56,10 +57,17 @@ pub fn run() {
             commands::pdf::pdf_delete_workspace_folder,
             commands::pdf::pdf_download,
             commands::pdf::pdf_exists,
+            commands::pdf::pdf_apply_annotations,
+            commands::pdf::pdf_extract_metadata,
+            commands::pdf::pdf_extract_text,
+            commands::pdf::pdf_get_outline,
             commands::pdf::pdf_load,
+            commands::pdf::pdf_read_annotations,
+            commands::pdf::pdf_render_page,
             commands::pdf::pdf_save,
             commands::pdf::pdf_show_in_explorer,
             commands::pdf::pdf_sync_all,
+            commands::pdf::library_ingest_pdf,
             commands::sync::sync_clear_sync_dir,
             commands::sync::sync_get_settings,
             commands::sync::sync_set_sync_dir,
