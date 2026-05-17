@@ -25,6 +25,7 @@
     "active": true,
     "targets": ["nsis"],
     "icon": ["../icon.ico"],
+    "externalBin": ["binaries/capture-agent"],
     "resources": [
       "binaries/pdfium.dll",
       "resources/dict/tr/index.aff",

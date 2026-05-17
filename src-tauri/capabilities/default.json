@@ -8,6 +8,7 @@
     "dialog:default",
     "dialog:allow-confirm",
     "shell:allow-open",
+    "shell:allow-execute",
     "updater:default"
   ]
 }

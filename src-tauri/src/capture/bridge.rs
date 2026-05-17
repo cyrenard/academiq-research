@@ -58,17 +58,23 @@ impl CaptureSidecarState {
 
 impl CaptureSidecar {
     pub async fn spawn(app: AppHandle) -> Result<Self, String> {
-        let sidecar_dir = sidecar_dir()?;
-        let index = sidecar_dir.join("index.js");
+        let command = sidecar_command()?;
         let app_data_dir = app
             .path()
             .app_data_dir()
             .map_err(|e| e.to_string())?
             .join("capture-sidecar");
 
-        let mut child = Command::new("node")
-            .arg(index)
-            .current_dir(&sidecar_dir)
+        let mut cmd = if command.is_binary {
+            Command::new(&command.program)
+        } else {
+            let mut cmd = Command::new("node");
+            cmd.arg(&command.program);
+            cmd
+        };
+
+        let mut child = cmd
+            .current_dir(&command.cwd)
             .env("AQ_CAPTURE_DATA_DIR", app_data_dir)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
@@ -164,11 +170,32 @@ impl CaptureSidecar {
     }
 }
 
-fn sidecar_dir() -> Result<PathBuf, String> {
+struct SidecarCommand {
+    program: PathBuf,
+    cwd: PathBuf,
+    is_binary: bool,
+}
+
+fn sidecar_command() -> Result<SidecarCommand, String> {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let binary = manifest
+        .join("binaries")
+        .join("capture-agent-x86_64-pc-windows-msvc.exe");
+    if binary.exists() {
+        return Ok(SidecarCommand {
+            program: binary,
+            cwd: manifest.clone(),
+            is_binary: true,
+        });
+    }
     let dir = manifest.join("..").join("src-sidecar").join("capture-agent");
-    if dir.join("index.js").exists() {
-        return Ok(dir);
+    let index = dir.join("index.js");
+    if index.exists() {
+        return Ok(SidecarCommand {
+            program: index,
+            cwd: dir,
+            is_binary: false,
+        });
     }
     Err(format!("capture_sidecar_not_found: {}", dir.display()))
 }
