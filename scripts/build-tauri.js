@@ -66,6 +66,20 @@ function copyArtifacts(installers, pkg) {
   fs.readdirSync(distDir)
     .filter((name) => name.toLowerCase().endsWith('.exe') || name.toLowerCase().endsWith('.exe.sig'))
     .forEach((name) => fs.rmSync(path.join(distDir, name), { force: true }));
+  const rootDist = path.join(rootDir, 'dist');
+  if (fs.existsSync(rootDist)) {
+    fs.readdirSync(rootDist, { withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name)
+      .filter((name) => /^AcademiQ-Setup-.*\.exe(\.sig)?$/i.test(name))
+      .filter((name) => name !== releaseInstallerName(pkg) && name !== `${releaseInstallerName(pkg)}.sig`)
+      .forEach((name) => {
+        const source = path.join(rootDist, name);
+        const backup = `${source}.bak`;
+        fs.rmSync(backup, { force: true });
+        fs.renameSync(source, backup);
+      });
+  }
   fs.rmSync(path.join(rootDir, 'dist', releaseInstallerName(pkg)), { force: true });
   fs.rmSync(path.join(distDir, releaseInstallerName(pkg)), { force: true });
   const copied = [];

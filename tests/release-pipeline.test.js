@@ -27,7 +27,7 @@ test('release versions stay synchronized for the beta cutover build', () => {
   const conf = json('src-tauri', 'tauri.conf.json');
   const cargoToml = read('src-tauri', 'Cargo.toml');
 
-  assert.equal(pkg.version, '1.24.0-beta.1');
+  assert.equal(pkg.version, '1.24.0-beta.2');
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[''].version, pkg.version);
   assert.equal(conf.version, pkg.version);

@@ -370,6 +370,8 @@ Her faz: **Hedef → Yapılacak işler → Acceptance kriterleri → Risk**.
 
 **Status**: DONE 2026-05-17 - beta dual-run tooling, local telemetry, release artifact pipeline, and cutover gates are ready. Stable cutover and legacy cleanup still require explicit user approval.
 
+**Hotfix 8.1 — 2026-05-18**: beta.2 keeps Faz 8 closed but fixes the soak-test migration path bug. The migrator now treats `%LOCALAPPDATA%\AcademiQ\` as the read-only Electron source, copies PDFs/workspaces/capture state into Tauri app data, writes the documented SQLite/KV mapping, and adds a defensive confirm fallback for `plugin:dialog|confirm` ACL denials.
+
 **Hedef**: 1-2 hafta paralel kullanım, ardından Electron sürümünü emekli et.
 
 **Yapılacaklar**:

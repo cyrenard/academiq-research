@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.24.0-beta.2 - 2026-05-18
+
+Hotfix release for the beta cutover soak test.
+
+- Fixed legacy data detection to read the real Electron root at `%LOCALAPPDATA%\AcademiQ\` instead of treating the Tauri app-data directory as the migration source.
+- Migrates `academiq-data.json`, `document-history.json`, settings, session state, capture state, PDFs, and workspace folders into the Tauri app-data layout without modifying the source directory.
+- Added a regression fixture for Turkish workspace paths and the LOCALAPPDATA migration path.
+- Added defensive Tauri dialog permissions and a synchronous confirm fallback so `plugin:dialog|confirm` ACL rejection no longer opens the beta console/probe path.
+
 ## 1.24.0-beta.1 - 2026-05-17
 
 Beta release for the Electron 42 to Tauri 2 cutover.
