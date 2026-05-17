@@ -29,7 +29,8 @@
       "binaries/pdfium.dll",
       "resources/dict/tr/index.aff",
       "resources/dict/tr/index.dic",
-      "resources/dict/tr/LICENSE"
+      "resources/dict/tr/LICENSE",
+      "resources/fonts/fallback/*"
     ],
     "windows": {
       "nsis": {
