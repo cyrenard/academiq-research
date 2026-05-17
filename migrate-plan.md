@@ -245,7 +245,7 @@ Her faz: **Hedef → Yapılacak işler → Acceptance kriterleri → Risk**.
 
 ---
 
-### Faz 4 — Spell + OCR + Network (2 hafta)
+### Faz 4 — Spell + OCR + Network (2 hafta) — ✅ DONE 2026-05-17
 
 **Hedef**: Hesaplama-yoğun JS modüllerini Rust'a taşı.
 
