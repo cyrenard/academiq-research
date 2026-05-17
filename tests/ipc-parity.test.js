@@ -14,6 +14,11 @@ function loadTauriApi() {
   const calls = [];
   const listeners = {};
   const window = {
+    confirmCalls: [],
+    confirm(message) {
+      window.confirmCalls.push(message);
+      return Promise.reject(new Error('Command plugin:dialog|confirm not allowed by ACL'));
+    },
     __TAURI__: {
       core: {
         invoke(command, args) {
@@ -45,7 +50,7 @@ function loadTauriApi() {
   };
   context.globalThis = window;
   vm.runInNewContext(read('src', 'tauri-api.ts'), context);
-  return { api: window.electronAPI, ocr: window.ocrAPI, calls, listeners };
+  return { api: window.electronAPI, ocr: window.ocrAPI, calls, listeners, window };
 }
 
 const parityCases = [
@@ -161,6 +166,14 @@ test('event-style renderer probe bridge maps to a Tauri command', () => {
   listeners.error({ message: 'boom', filename: 'app.js', lineno: 1, colno: 2, error: { stack: 'stack' } });
   assert.equal(calls.at(-1).command, 'renderer_probe_error');
   assert.equal(calls.at(-1).args.payload.type, 'error');
+});
+
+test('confirm guard consumes Tauri dialog promise rejections and returns safe false', async () => {
+  const { window } = loadTauriApi();
+  const result = window.confirm('delete?');
+  assert.equal(result, false);
+  assert.deepEqual(window.confirmCalls, ['delete?']);
+  await new Promise((resolve) => setImmediate(resolve));
 });
 
 test('Rust command modules register every preload invoke target', () => {

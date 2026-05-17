@@ -101,6 +101,9 @@ try {
       window.confirm = function confirmGuard(message) {
         try {
           const result = nativeConfirm(message);
+          if (result && typeof result === 'object' && typeof result.catch === 'function') {
+            result.catch(() => {});
+          }
           return typeof result === 'boolean' ? result : false;
         } catch (_e) {
           return false;

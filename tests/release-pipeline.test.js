@@ -76,6 +76,7 @@ test('Tauri build pipeline emits signed installer artifacts and updater manifest
   const build = read('scripts', 'build-tauri.js');
   const gate = read('scripts', 'tauri-bundle-gate.js');
   const releaseGate = read('scripts', 'release-gate.js');
+  const mainRs = read('src-tauri', 'src', 'main.rs');
 
   assert.match(build, /cargo['"], \['tauri', 'build'\]/);
   assert.match(build, /sign-installer\.ps1/);
@@ -93,4 +94,5 @@ test('Tauri build pipeline emits signed installer artifacts and updater manifest
   assert.match(gate, /latest\.json/);
   assert.match(gate, /dist['"], 'THIRD_PARTY_NOTICES\.md'/);
   assert.match(releaseGate, /tauri-bundle-gate\.js/);
+  assert.match(mainRs, /windows_subsystem = "windows"/);
 });

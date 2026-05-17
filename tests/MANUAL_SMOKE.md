@@ -713,6 +713,34 @@ Dual-run week remains a user-operated beta exercise using docs/DUAL_RUN_GUIDE.md
 Stable 1.24.0 cutover, main merge, tag, and legacy Electron cleanup are intentionally paused until the user explicitly says "cutover et".
 ```
 
+## Phase 8 Beta Hotfix — 2026-05-17
+
+User-reported beta install issue:
+
+```text
+Observed: the app opened, but a black console window also opened with:
+[renderer:probeError] ... "Command plugin:dialog|confirm not allowed by ACL"
+```
+
+Fix:
+
+```text
+PASS release binary now uses cfg_attr(not(debug_assertions), windows_subsystem = "windows") in src-tauri/src/main.rs.
+PASS src/tauri-api.ts confirm guard now consumes rejected Tauri dialog Promise values and returns safe false for synchronous window.confirm call sites.
+PASS node --test tests/ipc-parity.test.js tests/release-pipeline.test.js
+  - 10 pass, 0 fail
+PASS cargo check
+  - PASS with existing pdf/fonts.rs dead_code warnings only
+PASS npm run build
+  - rebuilt signed NSIS beta installer
+PASS node scripts/tauri-bundle-gate.js
+  - PASS
+PASS refreshed beta artifact SHA256:
+  - dist/AcademiQ-Setup-1.24.0-beta.1.exe
+  - dist/tauri/AcademiQ-Setup-1.24.0-beta.1.exe
+  - 8E1E91E495E1FE57361B122B2B5297B1D4E9242D0D00001EE7DC19201BEF0077
+```
+
 ## Phase 5 Font Metrics - 2026-05-17T18:16:26.862Z
 
 System Times New Roman gate:
