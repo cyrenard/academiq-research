@@ -2,6 +2,7 @@ mod capture;
 mod commands;
 mod db;
 mod pdf;
+mod telemetry;
 
 use tauri::Manager;
 
@@ -21,6 +22,10 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(capture::bridge::CaptureSidecarState::default())
+        .setup(|app| {
+            telemetry::install(&app.handle())?;
+            Ok(())
+        })
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 let app = window.app_handle().clone();
