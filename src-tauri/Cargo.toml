@@ -6,6 +6,7 @@ authors = ["AcademiQ"]
 license = "MIT"
 repository = ""
 edition = "2021"
+default-run = "academiq-research-tauri"
 
 [lib]
 name = "academiq_research_tauri_lib"
@@ -19,6 +20,7 @@ base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["png"] }
 lopdf = "0.34"
 pdfium-render = { version = "0.8", features = ["thread_safe"] }
+printpdf = "0.7"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip", "deflate", "brotli", "http2"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
@@ -28,5 +30,6 @@ tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-updater = "2"
+ttf-parser = "0.21"
 tokio = { version = "1", features = ["fs", "io-util", "rt-multi-thread", "time"] }
 zip = { version = "4", default-features = false, features = ["deflate"] }
