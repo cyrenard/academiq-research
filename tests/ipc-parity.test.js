@@ -126,6 +126,22 @@ test('Tauri shim preserves preload electronAPI and ocrAPI invoke parity', async 
   assert.equal(calls.at(-1).command, 'db_integrity_check');
   await api.db.rollbackToLegacyJson();
   assert.equal(calls.at(-1).command, 'db_rollback_to_legacy_json');
+
+  assert.equal(typeof api.pdf.extractMetadata, 'function');
+  await api.pdf.extractMetadata('ref-1', { id: 'ws-1' });
+  assert.equal(calls.at(-1).command, 'pdf_extract_metadata');
+  await api.pdf.applyAnnotations('ref-1', { id: 'ws-1' }, [{ kind: 'highlight', page: 1, rect: [1, 2, 3, 4] }]);
+  assert.equal(calls.at(-1).command, 'pdf_apply_annotations');
+  await api.pdf.readAnnotations('ref-1', { id: 'ws-1' });
+  assert.equal(calls.at(-1).command, 'pdf_read_annotations');
+  await api.pdf.renderPage('ref-1', { id: 'ws-1' }, 1, 150);
+  assert.equal(calls.at(-1).command, 'pdf_render_page');
+  await api.pdf.extractText('ref-1', { id: 'ws-1' }, 1);
+  assert.equal(calls.at(-1).command, 'pdf_extract_text');
+  await api.pdf.getOutline('ref-1', { id: 'ws-1' });
+  assert.equal(calls.at(-1).command, 'pdf_get_outline');
+  await api.pdf.ingest('C:/tmp/a.pdf');
+  assert.equal(calls.at(-1).command, 'library_ingest_pdf');
 });
 
 test('event-style renderer probe bridge maps to a Tauri command', () => {
@@ -146,6 +162,17 @@ test('Rust command modules register every preload invoke target', () => {
   assert.match(lib, /commands::data::library_get/);
   assert.match(lib, /commands::data::db_integrity_check/);
   assert.match(lib, /commands::data::db_rollback_to_legacy_json/);
+  for (const command of [
+    'pdf_extract_metadata',
+    'pdf_apply_annotations',
+    'pdf_read_annotations',
+    'pdf_render_page',
+    'pdf_extract_text',
+    'pdf_get_outline',
+    'library_ingest_pdf'
+  ]) {
+    assert.match(lib, new RegExp(`commands::pdf::${command}`), command);
+  }
 });
 
 test('Phase-deferred handlers return explicit controlled stub messages', () => {

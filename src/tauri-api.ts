@@ -195,6 +195,16 @@ electronAPI.db = {
   rollbackToLegacyJson: () => invokeCommand('db_rollback_to_legacy_json')
 };
 
+electronAPI.pdf = {
+  extractMetadata: (refId, ws) => invokeCommand('pdf_extract_metadata', { refId: asRefId(refId), ws: pickWsContext(ws) }),
+  applyAnnotations: (refId, ws, annotations) => invokeCommand('pdf_apply_annotations', { refId: asRefId(refId), ws: pickWsContext(ws), annotations: Array.isArray(annotations) ? annotations : [] }),
+  readAnnotations: (refId, ws) => invokeCommand('pdf_read_annotations', { refId: asRefId(refId), ws: pickWsContext(ws) }),
+  renderPage: (refId, ws, page, dpi) => invokeCommand('pdf_render_page', { refId: asRefId(refId), ws: pickWsContext(ws), page: Number(page) || 1, dpi: Number(dpi) || 150 }),
+  extractText: (refId, ws, page) => invokeCommand('pdf_extract_text', { refId: asRefId(refId), ws: pickWsContext(ws), page: Number(page) || 1 }),
+  getOutline: (refId, ws) => invokeCommand('pdf_get_outline', { refId: asRefId(refId), ws: pickWsContext(ws) }),
+  ingest: (filePath) => invokeCommand('library_ingest_pdf', { filePath: asString(filePath, 4096) })
+};
+
 if (typeof window !== 'undefined') {
   window.electronAPI = Object.freeze(electronAPI);
   window.ocrAPI = Object.freeze(ocrAPI);
