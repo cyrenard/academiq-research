@@ -1,0 +1,23 @@
+{
+  "id": "large-doc",
+  "workspaceId": "ws-large",
+  "activeDocId": "doc-large",
+  "documents": [
+    {
+      "id": "doc-large",
+      "title": "Large Feature Document",
+      "blocks": [
+        { "type": "heading", "level": 1, "text": "Yöntem" },
+        { "type": "paragraph", "text": "Araştırma tasarımı karma yöntem yaklaşımıyla yürütülmüştür.", "citations": ["ref-001"] },
+        { "type": "list", "items": ["Literatür taraması", "Kodlama", "Karşılaştırmalı analiz"] },
+        { "type": "table", "caption": "Bulgular özeti", "rows": [["Tema", "Sıklık"], ["Güvenirlik", "42"], ["Geçerlik", "37"]] },
+        { "type": "image", "alt": "Model diagram", "width": 640, "height": 360 },
+        { "type": "paragraph", "text": "Bu fixture elli sayfalık üretim belgelerini temsil eden yoğun özellik karmasını taşır." }
+      ]
+    }
+  ],
+  "references": [
+    { "id": "ref-001", "title": "Research Design", "authors": "Creswell, J.", "year": 2018, "doi": "10.1000/large" }
+  ],
+  "annotations": []
+}

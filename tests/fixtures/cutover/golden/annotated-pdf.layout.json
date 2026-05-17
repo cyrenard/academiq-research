@@ -1,0 +1,11 @@
+{
+  "fixture": "annotated-pdf",
+  "activeDocId": "doc-pdf",
+  "documentCount": 1,
+  "blockTypes": ["heading", "paragraph"],
+  "headingTexts": ["PDF Notları"],
+  "citationCount": 0,
+  "referenceCount": 1,
+  "annotationCount": 50,
+  "turkishTextPresent": true
+}

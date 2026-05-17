@@ -1,0 +1,23 @@
+{
+  "id": "annotated-pdf",
+  "workspaceId": "ws-pdf",
+  "activeDocId": "doc-pdf",
+  "documents": [
+    {
+      "id": "doc-pdf",
+      "title": "Annotated PDF",
+      "blocks": [
+        { "type": "heading", "level": 1, "text": "PDF Notları" },
+        { "type": "paragraph", "text": "PDF anotasyonlarının SQLite cache ve dosya hakikati arasında korunması beklenir." }
+      ]
+    }
+  ],
+  "references": [
+    { "id": "pdf-ref-001", "title": "Annotated Study", "authors": "Doe, J.", "year": 2024, "pdf_path": "pdfs/pdf-ref-001.pdf" }
+  ],
+  "annotations": [
+    { "id": "ann-001", "ref_id": "pdf-ref-001", "page": 1, "type": "highlight", "text": "Ana bulgu" },
+    { "id": "ann-050", "ref_id": "pdf-ref-001", "page": 12, "type": "note", "text": "Elli anotasyon seti temsilcisi" }
+  ],
+  "annotationCount": 50
+}

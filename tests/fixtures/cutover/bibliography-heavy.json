@@ -1,0 +1,22 @@
+{
+  "id": "bibliography-heavy",
+  "workspaceId": "ws-bib",
+  "activeDocId": "doc-bib",
+  "documents": [
+    {
+      "id": "doc-bib",
+      "title": "Bibliography Heavy",
+      "blocks": [
+        { "type": "heading", "level": 1, "text": "Kaynak Yönetimi" },
+        { "type": "paragraph", "text": "Bu belge çok kaynaklı atıf listesinin kesintisiz taşınmasını doğrular.", "citations": ["ref-001", "ref-050", "ref-100"] }
+      ]
+    }
+  ],
+  "references": [
+    { "id": "ref-001", "title": "Reference 001", "authors": "Author, A.", "year": 2001, "doi": "10.1000/ref001" },
+    { "id": "ref-050", "title": "Reference 050", "authors": "Author, B.", "year": 2050, "doi": "10.1000/ref050" },
+    { "id": "ref-100", "title": "Reference 100", "authors": "Author, C.", "year": 2100, "doi": "10.1000/ref100" }
+  ],
+  "referenceCount": 100,
+  "annotations": []
+}

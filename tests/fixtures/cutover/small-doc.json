@@ -1,0 +1,17 @@
+{
+  "id": "small-doc",
+  "workspaceId": "ws-small",
+  "activeDocId": "doc-small",
+  "documents": [
+    {
+      "id": "doc-small",
+      "title": "Small Document",
+      "blocks": [
+        { "type": "heading", "level": 1, "text": "Giriş" },
+        { "type": "paragraph", "text": "Bu kısa belge Tauri ve Electron veri şekli için temel kıyas sağlar." }
+      ]
+    }
+  ],
+  "references": [],
+  "annotations": []
+}

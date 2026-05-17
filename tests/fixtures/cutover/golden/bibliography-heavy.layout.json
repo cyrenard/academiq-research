@@ -1,0 +1,11 @@
+{
+  "fixture": "bibliography-heavy",
+  "activeDocId": "doc-bib",
+  "documentCount": 1,
+  "blockTypes": ["heading", "paragraph"],
+  "headingTexts": ["Kaynak Yönetimi"],
+  "citationCount": 3,
+  "referenceCount": 100,
+  "annotationCount": 0,
+  "turkishTextPresent": true
+}

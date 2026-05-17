@@ -1,0 +1,18 @@
+{
+  "id": "turkish-heavy",
+  "workspaceId": "ws-tr",
+  "activeDocId": "doc-tr",
+  "documents": [
+    {
+      "id": "doc-tr",
+      "title": "Türkçe Yoğun Belge",
+      "blocks": [
+        { "type": "heading", "level": 1, "text": "İçerik Doğrulama" },
+        { "type": "paragraph", "text": "ğ, ş, ı, i, ö, ü, ç karakterleri ölçüm, yazım ve dışa aktarım boyunca korunmalıdır." },
+        { "type": "paragraph", "text": "Iğdır, Öğretmen, Şarkı, Çözümleme ve Ölçüt sözcükleri IME kenar durumlarını temsil eder." }
+      ]
+    }
+  ],
+  "references": [],
+  "annotations": []
+}

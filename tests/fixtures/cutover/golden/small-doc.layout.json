@@ -1,0 +1,11 @@
+{
+  "fixture": "small-doc",
+  "activeDocId": "doc-small",
+  "documentCount": 1,
+  "blockTypes": ["heading", "paragraph"],
+  "headingTexts": ["Giriş"],
+  "citationCount": 0,
+  "referenceCount": 0,
+  "annotationCount": 0,
+  "turkishTextPresent": true
+}

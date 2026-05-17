@@ -1,0 +1,11 @@
+{
+  "fixture": "large-doc",
+  "activeDocId": "doc-large",
+  "documentCount": 1,
+  "blockTypes": ["heading", "paragraph", "list", "table", "image", "paragraph"],
+  "headingTexts": ["Yöntem"],
+  "citationCount": 1,
+  "referenceCount": 1,
+  "annotationCount": 0,
+  "turkishTextPresent": true
+}

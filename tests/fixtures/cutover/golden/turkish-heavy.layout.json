@@ -1,0 +1,11 @@
+{
+  "fixture": "turkish-heavy",
+  "activeDocId": "doc-tr",
+  "documentCount": 1,
+  "blockTypes": ["heading", "paragraph", "paragraph"],
+  "headingTexts": ["İçerik Doğrulama"],
+  "citationCount": 0,
+  "referenceCount": 0,
+  "annotationCount": 0,
+  "turkishTextPresent": true
+}
