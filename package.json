@@ -20,8 +20,10 @@
     "test:all": "npm test && npm run test:renderer",
     "gate:editor": "node scripts/editor-stability-gate.js",
     "gate:release": "node scripts/release-gate.js",
-    "release:baseline": "npm run gate:release && npm run build",
-    "build": "node scripts/build-win.js",
+    "gate:tauri-bundle": "node scripts/tauri-bundle-gate.js",
+    "release:baseline": "npm run build && npm run gate:release",
+    "build": "node scripts/build-tauri.js",
+    "build:electron": "node scripts/build-win.js",
     "build:dir": "node scripts/build-win.js --dir"
   },
   "dependencies": {

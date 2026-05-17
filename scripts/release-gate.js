@@ -29,6 +29,7 @@ function main() {
   runStep('export quality', node, ['scripts/export-quality-gate.js']);
   runStep('editor stability', node, ['scripts/editor-stability-gate.js']);
   runStep('tests', node, ['--test', '--test-concurrency=1', '--test-isolation=none', 'tests/*.test.js']);
+  runStep('tauri bundle artifacts', node, ['scripts/tauri-bundle-gate.js']);
   console.log('[gate] PASS');
 }
 
