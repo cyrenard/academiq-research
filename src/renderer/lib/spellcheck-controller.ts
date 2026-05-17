@@ -22,7 +22,9 @@
 import {
   ensureSpellLoaded,
   checkLoaded,
+  checkText,
   isSpellReady,
+  isNativeSpellReady,
   disposeSpell,
   type SpellMatch
 } from './spellcheck';
@@ -42,6 +44,7 @@ let loading = false;
 let lastError: string | null = null;
 let lastMatches: SpellMatch[] = [];
 let debounceHandle: ReturnType<typeof setTimeout> | null = null;
+let runToken = 0;
 const listeners = new Set<SpellcheckListener>();
 
 const DEBOUNCE_MS = 700;
@@ -134,9 +137,25 @@ export function runCheckNow(): void {
     return;
   }
   lastDocumentText = text;
-  lastMatches = checkLoaded(text);
-  applyMarkers(lastMatches);
-  emit();
+  if (!isNativeSpellReady()) {
+    lastMatches = checkLoaded(text);
+    applyMarkers(lastMatches);
+    emit();
+    return;
+  }
+  const token = ++runToken;
+  checkText(text)
+    .then((matches) => {
+      if (!enabled || token !== runToken) return;
+      lastMatches = matches;
+      applyMarkers(lastMatches);
+      emit();
+    })
+    .catch((err) => {
+      if (!enabled || token !== runToken) return;
+      lastError = err && err.message ? String(err.message) : 'spellcheck failed';
+      emit();
+    });
 }
 
 /** Free the in-memory dictionary. Calling enable again re-loads it. */
@@ -146,6 +165,7 @@ export function shutdownSpellcheck(): void {
   lastMatches = [];
   lastError = null;
   lastDocumentText = '';
+  runToken += 1;
   clearMarkers();
   disposeSpell();
   emit();

@@ -56,6 +56,11 @@ type NSpellInstance = ReturnType<typeof nspell>;
 
 let instance: NSpellInstance | null = null;
 let loadPromise: Promise<NSpellInstance> | null = null;
+let nativeReady = false;
+const nativeSpellFacade = {
+  correct: () => true,
+  suggest: () => []
+} as any as NSpellInstance;
 
 /**
  * Force-set the loaded spell instance. Used by tests so they don't have
@@ -65,6 +70,7 @@ let loadPromise: Promise<NSpellInstance> | null = null;
 export function _setSpellInstanceForTests(spell: NSpellInstance | null): void {
   instance = spell;
   loadPromise = spell ? Promise.resolve(spell) : null;
+  nativeReady = false;
 }
 
 const DEFAULT_AFF_URL = './dictionary/tr/index.aff';
@@ -76,6 +82,10 @@ const DEFAULT_DIC_URL = './dictionary/tr/index.dic';
  */
 export async function ensureSpellLoaded(options: SpellLoaderOptions = {}): Promise<NSpellInstance> {
   if (instance) return instance;
+  if (canUseNativeSpell(options)) {
+    nativeReady = true;
+    return nativeSpellFacade;
+  }
   if (loadPromise) return loadPromise;
   const affUrl = options.affUrl || DEFAULT_AFF_URL;
   const dicUrl = options.dicUrl || DEFAULT_DIC_URL;
@@ -108,13 +118,18 @@ export async function ensureSpellLoaded(options: SpellLoaderOptions = {}): Promi
 
 /** Whether the dictionary has already finished loading. Cheap sync check. */
 export function isSpellReady(): boolean {
-  return instance !== null;
+  return nativeReady || instance !== null;
 }
 
 /** Drop the loaded instance — frees ~30 MB of in-memory dictionary state. */
 export function disposeSpell(): void {
   instance = null;
   loadPromise = null;
+  nativeReady = false;
+}
+
+export function isNativeSpellReady(): boolean {
+  return nativeReady && !!nativeSpellApi();
 }
 
 // ─── Word tokenizer ────────────────────────────────────────────────────────
@@ -140,6 +155,33 @@ const DEFAULT_WORD_RE = /[A-Za-zçğıöşüÇĞİÖŞÜ][A-Za-zçğıöşüÇĞ
  * prose checks in milliseconds; if you need to keep the UI thread fully
  * unblocked, run this inside a web worker.
  */
+function nativeSpellApi(): any | null {
+  const api = typeof window !== 'undefined' ? (window as any).electronAPI?.spell : null;
+  return api && typeof api.check === 'function' ? api : null;
+}
+
+function canUseNativeSpell(options: SpellLoaderOptions = {}): boolean {
+  return !options.affUrl && !options.dicUrl && !options.fetchImpl && !!nativeSpellApi();
+}
+
+function normalizeNativeIssues(issues: any, maxSuggestions: number): SpellMatch[] {
+  if (!Array.isArray(issues)) return [];
+  const cap = Math.max(0, maxSuggestions);
+  return issues.map((issue) => {
+    const word = String(issue?.word ?? issue?.text ?? '');
+    const suggestions = Array.isArray(issue?.suggestions) ? issue.suggestions : [];
+    return {
+      offset: Number(issue?.offset) || 0,
+      length: Number(issue?.length) || word.length,
+      text: word,
+      message: 'OlasÄ± yazÄ±m hatasÄ±',
+      replacements: suggestions.slice(0, cap).map((value: unknown) => ({ value: String(value) })),
+      ruleId: 'SPELLBOOK_TR',
+      category: 'TYPOS'
+    };
+  });
+}
+
 export function checkLoaded(text: string, options: CheckOptions = {}): SpellMatch[] {
   if (!instance) {
     throw new Error('spellcheck: dictionary not loaded — call ensureSpellLoaded() first');
@@ -153,6 +195,11 @@ export function checkLoaded(text: string, options: CheckOptions = {}): SpellMatc
  * prefer ensureSpellLoaded() up-front + checkLoaded() in the loop.
  */
 export async function checkText(text: string, options: CheckOptions & SpellLoaderOptions = {}): Promise<SpellMatch[]> {
+  if (canUseNativeSpell(options)) {
+    nativeReady = true;
+    const issues = await nativeSpellApi()!.check(String(text || ''), 'tr');
+    return normalizeNativeIssues(issues, options.maxSuggestions ?? 5);
+  }
   const spell = await ensureSpellLoaded(options);
   return runCheck(spell, text, options);
 }
