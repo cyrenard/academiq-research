@@ -38,12 +38,17 @@ function runNpmScript(scriptName) {
   run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', scriptName], `npm run ${scriptName}`);
 }
 
-function findInstallers() {
+function findInstallers(pkg) {
   const nsisDir = path.join(srcTauriDir, 'target', 'release', 'bundle', 'nsis');
   if (!fs.existsSync(nsisDir)) return [];
-  return fs.readdirSync(nsisDir)
+  const allInstallers = fs.readdirSync(nsisDir)
     .filter((name) => name.toLowerCase().endsWith('.exe'))
     .map((name) => path.join(nsisDir, name));
+  const currentVersionInstallers = allInstallers.filter((installer) => {
+    const name = path.basename(installer).toLowerCase();
+    return name.includes(pkg.version.toLowerCase());
+  });
+  return currentVersionInstallers;
 }
 
 function sha256(filePath) {
@@ -58,6 +63,11 @@ function releaseInstallerName(pkg) {
 
 function copyArtifacts(installers, pkg) {
   fs.mkdirSync(distDir, { recursive: true });
+  fs.readdirSync(distDir)
+    .filter((name) => name.toLowerCase().endsWith('.exe') || name.toLowerCase().endsWith('.exe.sig'))
+    .forEach((name) => fs.rmSync(path.join(distDir, name), { force: true }));
+  fs.rmSync(path.join(rootDir, 'dist', releaseInstallerName(pkg)), { force: true });
+  fs.rmSync(path.join(distDir, releaseInstallerName(pkg)), { force: true });
   const copied = [];
   installers.forEach((installer, index) => {
     const name = index === 0 ? releaseInstallerName(pkg) : path.basename(installer);
@@ -133,9 +143,9 @@ function main() {
 
   run('cargo', ['tauri', 'build'], 'cargo tauri build', { cwd: srcTauriDir, env });
 
-  const installers = findInstallers();
+  const installers = findInstallers(pkg);
   if (!installers.length) {
-    throw new Error('No NSIS installer found under src-tauri/target/release/bundle/nsis');
+    throw new Error(`No NSIS installer for ${pkg.version} found under src-tauri/target/release/bundle/nsis`);
   }
   for (const installer of installers) {
     signInstaller(installer);

@@ -82,6 +82,9 @@ test('Tauri build pipeline emits signed installer artifacts and updater manifest
   assert.match(build, /SHA256SUMS\.txt/);
   assert.match(build, /latest\.json/);
   assert.match(build, /AcademiQ-Setup-\$\{pkg\.version\}\.exe/);
+  assert.match(build, /currentVersionInstallers/);
+  assert.match(build, /No NSIS installer for \$\{pkg\.version\}/);
+  assert.match(build, /endsWith\('\.exe'\)/);
   assert.match(build, /Beta release - see CHANGELOG\.md/);
   assert.match(build, /THIRD_PARTY_NOTICES\.md/);
   assert.match(build, /dist['"], 'THIRD_PARTY_NOTICES\.md'/);
