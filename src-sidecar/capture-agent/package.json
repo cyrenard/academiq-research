@@ -1,0 +1,19 @@
+{
+  "name": "@academiq/capture-agent-sidecar",
+  "version": "1.23.0",
+  "private": true,
+  "bin": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "build": "pkg index.js --targets node18-win-x64 --output ../../src-tauri/binaries/capture-agent-x86_64-pc-windows-msvc.exe"
+  },
+  "pkg": {
+    "scripts": [
+      "*.js"
+    ],
+    "assets": []
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  }
+}
