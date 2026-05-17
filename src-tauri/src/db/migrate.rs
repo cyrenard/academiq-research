@@ -290,6 +290,85 @@ pub fn library_get(app_data_dir: &Path, id: &str) -> Result<Option<LibraryItem>,
     .map_err(|e| e.to_string())
 }
 
+pub fn upsert_pdf_library_item(
+    app_data_dir: &Path,
+    id: &str,
+    title: &str,
+    authors: &str,
+    pdf_path: &str,
+    metadata: &Value,
+) -> Result<(), String> {
+    let db_paths = init_or_migrate(app_data_dir)?;
+    let conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT OR REPLACE INTO library_items
+         (id, title, authors, year, doi, abstract, pdf_path, metadata_json, created_at, updated_at)
+         VALUES (
+           ?1,
+           ?2,
+           ?3,
+           COALESCE((SELECT year FROM library_items WHERE id = ?1), NULL),
+           COALESCE((SELECT doi FROM library_items WHERE id = ?1), ''),
+           COALESCE((SELECT abstract FROM library_items WHERE id = ?1), ''),
+           ?4,
+           ?5,
+           COALESCE((SELECT created_at FROM library_items WHERE id = ?1), datetime('now')),
+           datetime('now')
+         )",
+        params![id, title, authors, pdf_path, stable_json(metadata)?],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn save_pdf_annotations(
+    app_data_dir: &Path,
+    ref_id: &str,
+    annotations: &[Value],
+) -> Result<(), String> {
+    let db_paths = init_or_migrate(app_data_dir)?;
+    let mut conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    for annotation in annotations {
+        let id = annotation
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("{ref_id}:{}", now_millis()));
+        let page = annotation.get("page").and_then(Value::as_i64).unwrap_or(1);
+        let kind = annotation
+            .get("kind")
+            .and_then(Value::as_str)
+            .unwrap_or("note")
+            .to_string();
+        tx.execute(
+            "INSERT OR REPLACE INTO annotations(id, ref_id, page, type, data_json)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![id, ref_id, page, kind, stable_json(annotation)?],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn read_pdf_annotations(app_data_dir: &Path, ref_id: &str) -> Result<Vec<Value>, String> {
+    let db_paths = init_or_migrate(app_data_dir)?;
+    let conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT data_json FROM annotations WHERE ref_id = ?1 ORDER BY page, id")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![ref_id], |row| row.get::<_, String>(0))
+        .map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    for row in rows {
+        let raw = row.map_err(|e| e.to_string())?;
+        out.push(serde_json::from_str::<Value>(&raw).map_err(|e| e.to_string())?);
+    }
+    Ok(out)
+}
+
 pub fn integrity_check(app_data_dir: &Path) -> Result<String, String> {
     let db_paths = init_or_migrate(app_data_dir)?;
     let conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
