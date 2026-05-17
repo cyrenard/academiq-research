@@ -317,7 +317,7 @@ Her faz: **Hedef → Yapılacak işler → Acceptance kriterleri → Risk**.
 
 ---
 
-### Faz 6 — Browser Capture Sidecar (2 hafta) — **YÜKSEK RİSK**
+### Faz 6 — Browser Capture Sidecar (2 hafta) — **YÜKSEK RİSK** — ✅ DONE 2026-05-17
 
 **Hedef**: Chrome/Firefox extension köprüsünü Tauri'de yeniden kur.
 

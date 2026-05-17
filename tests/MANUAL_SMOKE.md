@@ -453,3 +453,126 @@ System Times New Roman gate:
   "worst": null
 }
 ```
+
+## Phase 5 Font Metrics - 2026-05-17T15:36:10.008Z
+
+System Times New Roman gate:
+
+```json
+{
+  "source": "system-times-new-roman",
+  "fontDir": "C:\\WINDOWS\\Fonts",
+  "max_diff": 0,
+  "avg_diff": 0,
+  "p99_diff": 0,
+  "worst": null
+}
+```
+
+## Phase 5 Font Metrics - 2026-05-17T15:36:29.705Z
+
+System Times New Roman gate:
+
+```json
+{
+  "source": "system-times-new-roman",
+  "fontDir": "C:\\WINDOWS\\Fonts",
+  "max_diff": 0,
+  "avg_diff": 0,
+  "p99_diff": 0,
+  "worst": null
+}
+```
+
+## Phase 6 Results — 2026-05-17
+
+Browser Capture sidecar architecture and packaging:
+
+```text
+PASS docs/PHASE6_CAPTURE_ARCHITECTURE.md documents the existing Electron capture protocol.
+PASS src-sidecar/capture-agent runs as a standalone Node JSON-RPC sidecar.
+PASS pkg produced src-tauri/binaries/capture-agent-x86_64-pc-windows-msvc.exe.
+PASS tauri.conf.json includes the sidecar externalBin and packaged extension resources.
+PASS Tauri browserCapture commands call the sidecar bridge instead of Phase 1 stubs.
+PASS Tauri window Destroyed event sends sidecar shutdown and kill fallback.
+```
+
+Automated bridge and extension protocol checks:
+
+```text
+node --test tests/browser-capture-bridge.test.js
+PASS 4/4
+- JSON-RPC getStatus/createWorkspace/rendererReady/ackPayload
+- packaged .exe JSON-RPC getStatus
+- prepareSetup writes Chromium extension manifest + config.js
+- extension-style HTTP /hello and /capture accepted with X-AQ-Token
+```
+
+Chromium extension real-browser smoke:
+
+```text
+Chrome path check: NOT INSTALLED at the standard Program Files locations.
+Microsoft Edge Chromium path: C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
+Launched Edge with --load-extension=<prepared installDir> and temp profile.
+PASS extension background sent /hello to the sidecar bridge.
+extensionVersion: 1.0.1
+protocolVersion: 1
+browserFamily: chromium
+```
+
+Firefox extension:
+
+```text
+NOT RUN in this environment. Per Phase 6 acceptance, Firefox can be deferred when Chromium passes.
+```
+
+Regression checks:
+
+```text
+node --test tests/browser-capture-bridge.test.js tests/ipc-parity.test.js tests/tauri-smoke.test.js: 14 pass, 0 fail
+node --test tests/data-migration.test.js tests/library-fts.test.js tests/pdf-rust.test.js: 9 pass, 0 fail
+node --test tests/spell-rust.test.js tests/network-rust.test.js tests/font-metrics-parity.test.js tests/pdf-export.test.js: 4 pass, 0 fail
+npm test: 961 pass, 0 fail
+npm run test:renderer: 25 files pass, 482 pass, 0 fail
+npm run gate:editor: PASS
+cargo check: PASS
+cargo tauri build --no-bundle: PASS
+```
+
+Notes:
+
+```text
+The real-browser smoke used Edge Chromium because Google Chrome is not installed on this machine.
+The extension protocol and manifest are Chromium-compatible and the same extension background path reached the sidecar bridge.
+End-user popup click capture was represented by the extension HTTP /capture protocol test because GUI extension action automation is not available in this shell.
+```
+
+## Phase 5 Font Metrics - 2026-05-17T15:51:12.081Z
+
+System Times New Roman gate:
+
+```json
+{
+  "source": "system-times-new-roman",
+  "fontDir": "C:\\WINDOWS\\Fonts",
+  "max_diff": 0,
+  "avg_diff": 0,
+  "p99_diff": 0,
+  "worst": null
+}
+```
+
+## Phase 5 Font Metrics - 2026-05-17T15:54:32.219Z
+
+System Times New Roman gate:
+
+```json
+{
+  "source": "system-times-new-roman",
+  "fontDir": "C:\\WINDOWS\\Fonts",
+  "max_diff": 0,
+  "avg_diff": 0,
+  "p99_diff": 0,
+  "worst": null
+}
+```
