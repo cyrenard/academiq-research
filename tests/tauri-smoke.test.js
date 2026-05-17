@@ -74,11 +74,10 @@ test('Phase 0 shim exposes preload-compatible electronAPI and ocrAPI names', asy
   await api.savePDF(' ref ', new Uint8Array([1, 2]), { id: 'ws', name: 'Workspace' });
   await api.minimizeWindow();
   await ocr.recognize({ imageDataUrl: 'data:image/png;base64,AAA=' });
-  assert.equal(calls[0].command, 'not_implemented');
-  assert.equal(calls[0].args.name, 'pdf:save');
-  assert.equal(calls[0].args.args.refId, 'ref');
-  assert.equal(calls[1].args.name, 'window:minimize');
-  assert.equal(calls[2].args.name, 'ocr:recognize');
+  assert.equal(calls[0].command, 'pdf_save');
+  assert.equal(calls[0].args.refId, 'ref');
+  assert.equal(calls[1].command, 'window_minimize');
+  assert.equal(calls[2].command, 'ocr_recognize');
 });
 
 test('Phase 0.5 React shell loads aq-engine scripts before the React entry', () => {
