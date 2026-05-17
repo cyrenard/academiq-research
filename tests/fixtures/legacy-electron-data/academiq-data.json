@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 3,
+  "cur": "ws-fixt",
+  "curDoc": "doc-fixt",
+  "doc": "<h1>Akademik Başlık</h1><p>Türkçe gövde: ğ ş ı i ö ü ç.</p>",
+  "cm": "apa7",
+  "showPageNumbers": true,
+  "customLabels": { "figure": "Şekil", "table": "Tablo" },
+  "docs": [
+    {
+      "id": "doc-fixt",
+      "name": "Hotfix Fixture",
+      "content": "<h1>Akademik Başlık</h1><p>Türkçe gövde: ğ ş ı i ö ü ç.</p>",
+      "createdAt": "2026-05-18T10:00:00Z",
+      "updatedAt": "2026-05-18T11:00:00Z"
+    }
+  ],
+  "wss": [
+    {
+      "id": "ws-fixt",
+      "name": "AcademiQ-EĞT. ARŞ-fixt",
+      "lib": [
+        {
+          "id": "ref-fixt",
+          "title": "Türkçe Araştırma",
+          "authors": "İpek Şahin",
+          "year": 2026,
+          "doi": "10.0000/fixt",
+          "abstract": "Öğretmen, Iğdır ve çağdaş akademik yazım.",
+          "pdfPath": "pdfs/ref-fixt.pdf"
+        }
+      ]
+    }
+  ],
+  "literatureMatrix": {
+    "rows": [
+      { "id": "row-fixt", "refId": "ref-fixt", "notes": "Saha notu" }
+    ]
+  }
+}

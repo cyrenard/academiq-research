@@ -1,5 +1,6 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -8,6 +9,7 @@ const INIT_SQL: &str = include_str!("../../migrations/0001_init.sql");
 const DB_FILE: &str = "academiq.sqlite";
 const LEGACY_FILE: &str = "academiq-data.json";
 const LEGACY_ALT_FILE: &str = "data.json";
+const LEGACY_ELECTRON_DIR: &str = "AcademiQ";
 const STATE_BLOB_KEY: &str = "state_blob";
 const DRAFT_BLOB_KEY: &str = "editor_draft_blob";
 const MAX_DATA_JSON_BYTES: usize = 50 * 1024 * 1024;
@@ -57,6 +59,14 @@ pub fn init_or_migrate(app_data_dir: &Path) -> Result<DbPaths, String> {
         let conn = Connection::open(&db_paths.db_path).map_err(|e| e.to_string())?;
         ensure_schema(&conn)?;
         return Ok(db_paths);
+    }
+
+    if let Some(legacy_dir) = get_legacy_electron_dir() {
+        let legacy_state = legacy_dir.join(LEGACY_FILE);
+        if legacy_state.exists() {
+            migrate_legacy_electron_dir(app_data_dir, &db_paths.db_path, &legacy_dir)?;
+            return Ok(db_paths);
+        }
     }
 
     let mut conn = Connection::open(&db_paths.db_path).map_err(|e| e.to_string())?;
@@ -414,6 +424,237 @@ pub fn rollback_to_legacy_json(app_data_dir: &Path) -> Result<Value, String> {
     }))
 }
 
+pub fn get_legacy_electron_dir() -> Option<PathBuf> {
+    #[cfg(test)]
+    let local_app_data = env::var_os("AQ_TEST_LOCALAPPDATA")?;
+    #[cfg(not(test))]
+    let local_app_data = env::var_os("AQ_TEST_LOCALAPPDATA")
+        .or_else(|| env::var_os("LOCALAPPDATA"))?;
+    Some(PathBuf::from(local_app_data).join(LEGACY_ELECTRON_DIR))
+}
+
+fn migrate_legacy_electron_dir(
+    app_data_dir: &Path,
+    db_path: &Path,
+    legacy_dir: &Path,
+) -> Result<(), String> {
+    fs::create_dir_all(app_data_dir).map_err(|e| e.to_string())?;
+    let state_path = legacy_dir.join(LEGACY_FILE);
+    let state_raw = fs::read_to_string(&state_path).map_err(|e| {
+        format!(
+            "legacy_state_read_failed:{}:{e}",
+            state_path.to_string_lossy()
+        )
+    })?;
+    let state = parse_json(&state_raw)?;
+
+    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.pragma_update(None, "foreign_keys", "ON")
+        .map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    tx.execute_batch(INIT_SQL).map_err(|e| e.to_string())?;
+    tx.execute(
+        "INSERT OR REPLACE INTO kv(key, value) VALUES (?1, ?2)",
+        params![STATE_BLOB_KEY, state_raw],
+    )
+    .map_err(|e| e.to_string())?;
+    tx.execute(
+        "INSERT OR REPLACE INTO kv(key, value) VALUES (?1, ?2)",
+        params!["state_updated_at", utc_stamp()],
+    )
+    .map_err(|e| e.to_string())?;
+    tx.execute(
+        "INSERT OR REPLACE INTO kv(key, value) VALUES (?1, ?2)",
+        params!["state_source", "legacy-electron-localappdata"],
+    )
+    .map_err(|e| e.to_string())?;
+    rebuild_projection(&tx, &state, false)?;
+    migrate_legacy_state_kv(&tx, legacy_dir, &state)?;
+    migrate_legacy_document_history(&tx, legacy_dir)?;
+    tx.commit().map_err(|e| e.to_string())?;
+
+    copy_legacy_assets(app_data_dir, legacy_dir)?;
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT OR REPLACE INTO kv(key, value) VALUES (?1, ?2)",
+        params![
+            "legacy_source_path",
+            legacy_dir.to_string_lossy().to_string()
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT OR REPLACE INTO kv(key, value) VALUES (?1, ?2)",
+        params!["migration_completed_at", utc_stamp()],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn migrate_legacy_state_kv(
+    tx: &rusqlite::Transaction<'_>,
+    legacy_dir: &Path,
+    state: &Value,
+) -> Result<(), String> {
+    upsert_kv_tx(
+        tx,
+        "active_workspace",
+        state.get("cur").and_then(Value::as_str).unwrap_or(""),
+    )?;
+    upsert_kv_tx(
+        tx,
+        "active_doc",
+        state.get("curDoc").and_then(Value::as_str).unwrap_or(""),
+    )?;
+    if let Some(workspaces) = state.get("wss") {
+        upsert_kv_tx(tx, "workspaces", &stable_json(workspaces)?)?;
+    }
+    if let Some(matrix) = state.get("literatureMatrix") {
+        upsert_kv_tx(tx, "literature_matrix", &stable_json(matrix)?)?;
+    }
+
+    let settings_path = legacy_dir.join("settings.json");
+    let mut settings = if settings_path.exists() {
+        parse_json(&fs::read_to_string(&settings_path).map_err(|e| e.to_string())?)?
+    } else {
+        json!({})
+    };
+    if let Some(obj) = settings.as_object_mut() {
+        for key in ["cm", "showPageNumbers", "customLabels"] {
+            if let Some(value) = state.get(key) {
+                obj.insert(key.to_string(), value.clone());
+            }
+        }
+    }
+    upsert_kv_tx(tx, "settings", &stable_json(&settings)?)?;
+
+    let session_path = legacy_dir.join("session-state.json");
+    if session_path.exists() {
+        let session_raw = fs::read_to_string(&session_path).map_err(|e| e.to_string())?;
+        parse_json(&session_raw)?;
+        upsert_kv_tx(tx, "session_state", &session_raw)?;
+    }
+    Ok(())
+}
+
+fn migrate_legacy_document_history(
+    tx: &rusqlite::Transaction<'_>,
+    legacy_dir: &Path,
+) -> Result<(), String> {
+    let history_path = legacy_dir.join("document-history.json");
+    if !history_path.exists() {
+        return Ok(());
+    }
+    let history_raw = fs::read_to_string(&history_path).map_err(|e| e.to_string())?;
+    let history = parse_json(&history_raw)?;
+    let docs = history
+        .get("docs")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    for (doc_id, doc_history) in docs {
+        ensure_document_row(tx, &doc_id)?;
+        let snapshots = doc_history
+            .get("snapshots")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        for snapshot in snapshots {
+            let created_at = snapshot
+                .get("createdAt")
+                .or_else(|| snapshot.get("created_at"))
+                .map(|v| {
+                    v.as_str()
+                        .map(str::to_string)
+                        .unwrap_or_else(|| v.to_string())
+                })
+                .unwrap_or_else(utc_stamp);
+            tx.execute(
+                "INSERT INTO revisions(doc_id, snapshot_json, created_at) VALUES (?1, ?2, ?3)",
+                params![doc_id, stable_json(&snapshot)?, created_at],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn ensure_document_row(tx: &rusqlite::Transaction<'_>, doc_id: &str) -> Result<(), String> {
+    tx.execute(
+        "INSERT OR IGNORE INTO documents(id, title, body_json, created_at, updated_at)
+         VALUES (?1, '', '{}', datetime('now'), datetime('now'))",
+        params![doc_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn copy_legacy_assets(app_data_dir: &Path, legacy_dir: &Path) -> Result<(), String> {
+    copy_dir_if_exists(&legacy_dir.join("pdfs"), &app_data_dir.join("pdfs"))?;
+    copy_dir_if_exists(
+        &legacy_dir.join("workspaces"),
+        &app_data_dir.join("workspaces"),
+    )?;
+
+    let sidecar_dir = app_data_dir.join("capture-sidecar");
+    fs::create_dir_all(&sidecar_dir).map_err(|e| e.to_string())?;
+    copy_file_if_exists(
+        &legacy_dir.join("capture-agent-state.json"),
+        &sidecar_dir.join("agent-state.json"),
+    )?;
+    copy_file_if_exists(
+        &legacy_dir.join("capture-queue.json"),
+        &sidecar_dir.join("queue.json"),
+    )?;
+    copy_file_if_exists(
+        &legacy_dir.join("capture-targets.json"),
+        &sidecar_dir.join("targets.json"),
+    )?;
+    Ok(())
+}
+
+fn copy_dir_if_exists(src: &Path, dst: &Path) -> Result<(), String> {
+    if !src.exists() {
+        return Ok(());
+    }
+    copy_dir_all(src, dst)
+}
+
+fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
+    fs::create_dir_all(dst).map_err(|e| e.to_string())?;
+    for entry in fs::read_dir(src).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let ty = entry.file_type().map_err(|e| e.to_string())?;
+        let target = dst.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_all(&entry.path(), &target)?;
+        } else if ty.is_file() {
+            fs::copy(entry.path(), target).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn copy_file_if_exists(src: &Path, dst: &Path) -> Result<(), String> {
+    if !src.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    fs::copy(src, dst).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn upsert_kv_tx(tx: &rusqlite::Transaction<'_>, key: &str, value: &str) -> Result<(), String> {
+    tx.execute(
+        "INSERT OR REPLACE INTO kv(key, value) VALUES (?1, ?2)",
+        params![key, value],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 fn ensure_schema(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(INIT_SQL).map_err(|e| e.to_string())?;
     let version = conn
@@ -451,10 +692,14 @@ fn save_state_blob_tx(
         params!["state_source", source],
     )
     .map_err(|e| e.to_string())?;
-    rebuild_projection(tx, &parsed)
+    rebuild_projection(tx, &parsed, true)
 }
 
-fn rebuild_projection(tx: &rusqlite::Transaction<'_>, state: &Value) -> Result<(), String> {
+fn rebuild_projection(
+    tx: &rusqlite::Transaction<'_>,
+    state: &Value,
+    write_initial_revisions: bool,
+) -> Result<(), String> {
     for table in [
         "tabs",
         "citations",
@@ -467,12 +712,16 @@ fn rebuild_projection(tx: &rusqlite::Transaction<'_>, state: &Value) -> Result<(
         tx.execute(&format!("DELETE FROM {table}"), [])
             .map_err(|e| e.to_string())?;
     }
-    insert_documents(tx, state)?;
+    insert_documents(tx, state, write_initial_revisions)?;
     insert_library_items(tx, state)?;
     Ok(())
 }
 
-fn insert_documents(tx: &rusqlite::Transaction<'_>, state: &Value) -> Result<(), String> {
+fn insert_documents(
+    tx: &rusqlite::Transaction<'_>,
+    state: &Value,
+    write_initial_revisions: bool,
+) -> Result<(), String> {
     let docs = state
         .get("docs")
         .and_then(Value::as_array)
@@ -508,7 +757,9 @@ fn insert_documents(tx: &rusqlite::Transaction<'_>, state: &Value) -> Result<(),
             params![id, idx as i64, if id == cur_doc { 1 } else { 0 }],
         )
         .map_err(|e| e.to_string())?;
-        insert_revision_if_changed(tx, &id, doc)?;
+        if write_initial_revisions {
+            insert_revision_if_changed(tx, &id, doc)?;
+        }
     }
     Ok(())
 }
@@ -756,6 +1007,33 @@ mod tests {
         .to_string()
     }
 
+    fn fixture_dir() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("tests")
+            .join("fixtures")
+            .join("legacy-electron-data")
+    }
+
+    fn file_count_and_bytes(path: &Path) -> (usize, u64) {
+        let mut count = 0;
+        let mut bytes = 0;
+        if let Ok(entries) = fs::read_dir(path) {
+            for entry in entries.flatten() {
+                let entry_path = entry.path();
+                if entry_path.is_dir() {
+                    let nested = file_count_and_bytes(&entry_path);
+                    count += nested.0;
+                    bytes += nested.1;
+                } else if entry_path.is_file() {
+                    count += 1;
+                    bytes += entry.metadata().map(|m| m.len()).unwrap_or(0);
+                }
+            }
+        }
+        (count, bytes)
+    }
+
     #[test]
     fn clean_init_without_legacy_json_creates_schema() {
         let dir = temp_dir("empty");
@@ -840,5 +1118,74 @@ mod tests {
         rollback_to_legacy_json(&dir).unwrap();
         assert!(!dir.join(DB_FILE).exists());
         assert!(dir.join(LEGACY_FILE).exists());
+    }
+
+    #[test]
+    fn migration_path_hotfix_migrates_localappdata_academiq_fixture() {
+        let local_root = temp_dir("localappdata");
+        let legacy_dir = local_root.join(LEGACY_ELECTRON_DIR);
+        copy_dir_all(&fixture_dir(), &legacy_dir).unwrap();
+        let source_before = file_count_and_bytes(&legacy_dir);
+
+        let app_dir = temp_dir("tauri-appdata");
+        migrate_legacy_electron_dir(&app_dir, &app_dir.join(DB_FILE), &legacy_dir).unwrap();
+
+        let source_after = file_count_and_bytes(&legacy_dir);
+        assert_eq!(source_before, source_after, "legacy source must stay read-only");
+        assert!(app_dir.join("pdfs").join("ref-fixt.pdf").exists());
+        assert!(app_dir
+            .join("workspaces")
+            .join("AcademiQ-EĞT. ARŞ-fixt")
+            .join("workspace.json")
+            .exists());
+        assert!(app_dir
+            .join("capture-sidecar")
+            .join("agent-state.json")
+            .exists());
+        assert!(app_dir.join("capture-sidecar").join("queue.json").exists());
+        assert!(app_dir.join("capture-sidecar").join("targets.json").exists());
+
+        let conn = Connection::open(app_dir.join(DB_FILE)).unwrap();
+        let documents: i64 = conn
+            .query_row("SELECT COUNT(*) FROM documents", [], |row| row.get(0))
+            .unwrap();
+        let revisions: i64 = conn
+            .query_row("SELECT COUNT(*) FROM revisions", [], |row| row.get(0))
+            .unwrap();
+        assert!(documents >= 1);
+        assert_eq!(revisions, 5);
+
+        for key in [
+            STATE_BLOB_KEY,
+            "settings",
+            "session_state",
+            "active_workspace",
+            "active_doc",
+            "legacy_source_path",
+            "migration_completed_at",
+        ] {
+            let value: String = conn
+                .query_row("SELECT value FROM kv WHERE key = ?1", params![key], |row| {
+                    row.get(0)
+                })
+                .unwrap();
+            assert!(!value.is_empty(), "kv.{key} must be non-empty");
+        }
+        let state_blob: String = conn
+            .query_row(
+                "SELECT value FROM kv WHERE key = ?1",
+                params![STATE_BLOB_KEY],
+                |row| row.get(0),
+            )
+            .unwrap();
+        parse_json(&state_blob).unwrap();
+        let source_path: String = conn
+            .query_row(
+                "SELECT value FROM kv WHERE key = 'legacy_source_path'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(source_path, legacy_dir.to_string_lossy().to_string());
     }
 }

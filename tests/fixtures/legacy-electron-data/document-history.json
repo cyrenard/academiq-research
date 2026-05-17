@@ -1,0 +1,13 @@
+{
+  "docs": {
+    "doc-fixt": {
+      "snapshots": [
+        { "id": "s1", "content": "<p>v1</p>", "createdAt": 1760000000001 },
+        { "id": "s2", "content": "<p>v2</p>", "createdAt": 1760000000002 },
+        { "id": "s3", "content": "<p>v3</p>", "createdAt": 1760000000003 },
+        { "id": "s4", "content": "<p>v4</p>", "createdAt": 1760000000004 },
+        { "id": "s5", "content": "<p>v5</p>", "createdAt": 1760000000005 }
+      ]
+    }
+  }
+}
