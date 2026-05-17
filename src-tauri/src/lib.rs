@@ -1,4 +1,5 @@
 mod commands;
+mod db;
 
 #[tauri::command]
 fn not_implemented(name: String) -> Result<serde_json::Value, String> {
@@ -35,6 +36,8 @@ pub fn run() {
             commands::data::data_load,
             commands::data::data_save,
             commands::data::data_save_draft,
+            commands::data::db_integrity_check,
+            commands::data::db_rollback_to_legacy_json,
             commands::dialog::dialog_open_pdf,
             commands::doc_history::doc_history_get,
             commands::doc_history::doc_history_restore,
@@ -44,6 +47,8 @@ pub fn run() {
             commands::local_matrix::local_matrix_assistant_compose_cells,
             commands::local_matrix::local_matrix_assistant_get_status,
             commands::local_matrix::local_matrix_assistant_rank_candidates,
+            commands::data::library_get,
+            commands::data::library_search,
             commands::net::net_fetch_json,
             commands::net::net_fetch_text,
             commands::ocr::ocr_recognize,
