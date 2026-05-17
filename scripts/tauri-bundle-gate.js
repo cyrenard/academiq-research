@@ -39,6 +39,8 @@ function verifySignature(installerPath) {
 
 function main() {
   if (!fs.existsSync(distDir)) fail('dist/tauri does not exist; run npm run build first');
+  const noticesPath = path.join(rootDir, 'dist', 'THIRD_PARTY_NOTICES.md');
+  if (!fs.existsSync(noticesPath)) fail('dist/THIRD_PARTY_NOTICES.md is missing');
   const installers = fs.readdirSync(distDir)
     .filter((name) => name.toLowerCase().endsWith('.exe'))
     .map((name) => path.join(distDir, name));

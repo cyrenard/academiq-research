@@ -63,6 +63,17 @@ function copyArtifacts(installers) {
   return copied;
 }
 
+function copyThirdPartyNotices() {
+  const source = path.join(rootDir, 'THIRD_PARTY_NOTICES.md');
+  if (!fs.existsSync(source)) {
+    throw new Error('THIRD_PARTY_NOTICES.md is missing');
+  }
+  const target = path.join(rootDir, 'dist', 'THIRD_PARTY_NOTICES.md');
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.copyFileSync(source, target);
+  console.log(`[build-tauri] copied ${path.relative(rootDir, target)}`);
+}
+
 function latestJsonFor(installerPath) {
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
   const sigPath = `${installerPath}.sig`;
@@ -122,6 +133,7 @@ function main() {
     copied.map((file) => `${sha256(file)}  ${path.basename(file)}`).join('\n') + '\n',
     'utf8'
   );
+  copyThirdPartyNotices();
   console.log(`[build-tauri] wrote ${path.relative(rootDir, path.join(distDir, 'latest.json'))}`);
 }
 

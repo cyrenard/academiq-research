@@ -33,6 +33,7 @@ test('NSIS bundle metadata keeps Electron parity where Tauri supports it', () =>
   assert.equal(conf.bundle.windows.nsis.installerIcon, '../icon.ico');
   assert.equal(conf.bundle.windows.nsis.startMenuFolder, 'AcademiQ Research');
   assert.equal(conf.bundle.windows.nsis.compression, 'lzma');
+  assert.ok(conf.bundle.resources.includes('../THIRD_PARTY_NOTICES.md'));
 });
 
 test('signing scripts keep private material out of git and document SmartScreen limits', () => {
@@ -66,8 +67,11 @@ test('Tauri build pipeline emits signed installer artifacts and updater manifest
   assert.match(build, /sign-installer\.ps1/);
   assert.match(build, /SHA256SUMS\.txt/);
   assert.match(build, /latest\.json/);
+  assert.match(build, /THIRD_PARTY_NOTICES\.md/);
+  assert.match(build, /dist['"], 'THIRD_PARTY_NOTICES\.md'/);
   assert.match(gate, /signtool/);
   assert.match(gate, /'\/v'/);
   assert.match(gate, /latest\.json/);
+  assert.match(gate, /dist['"], 'THIRD_PARTY_NOTICES\.md'/);
   assert.match(releaseGate, /tauri-bundle-gate\.js/);
 });
