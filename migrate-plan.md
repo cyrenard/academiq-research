@@ -344,7 +344,7 @@ Her faz: **Hedef → Yapılacak işler → Acceptance kriterleri → Risk**.
 
 ---
 
-### Faz 7 — Updater + Signing + Release Pipeline (1 hafta)
+### Faz 7 — Updater + Signing + Release Pipeline (1 hafta) ✅ DONE 2026-05-17
 
 **Yapılacaklar**:
 1. `tauri-plugin-updater` ekle, mevcut `update:check/download/setUrl/restart` API'siyle wrap et.

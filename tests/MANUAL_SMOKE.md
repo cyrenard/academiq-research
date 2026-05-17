@@ -576,3 +576,63 @@ System Times New Roman gate:
   "worst": null
 }
 ```
+
+## Phase 7 Results — 2026-05-17
+
+Updater + release pipeline:
+
+```text
+PASS tauri-plugin-updater registered and update:* commands are wired to the plugin.
+PASS update:setUrl uses the documented SQLite kv channel workaround because Tauri 2 updater endpoints are static at runtime.
+PASS updater public key is committed in tauri.conf.json; private key remains outside the repo at %USERPROFILE%\.tauri\academiq-updater.key.
+PASS tauri-plugin-opener replaces the deprecated shell open path for app:openExternalUrl.
+```
+
+Signing and SmartScreen behavior:
+
+```text
+PASS scripts/generate-signing-cert.ps1 stores the self-signed code signing cert only in CurrentUser\My.
+PASS no automatic import into CurrentUser\Root or TrustedPublisher.
+PASS scripts/sign-installer.ps1 signs with signtool + RFC3161 timestamping.
+PASS local signature presence check uses signtool verify /v; /pa trust verification can fail for self-signed certs and is intentionally not required.
+EXPECTED signtool reports "certificate chain ... root certificate ... not trusted" on this dev machine.
+EXPECTED SmartScreen / unknown-publisher warning remains visible for end-user-reality testing.
+```
+
+Build and artifact checks:
+
+```text
+npm run build: PASS
+  - renderer build PASS
+  - cargo tauri build PASS
+  - NSIS installer produced: dist/tauri/AcademiQ Research_1.23.0_x64-setup.exe
+  - installer size: 27,603,448 bytes
+  - dist/tauri/latest.json written
+  - dist/tauri/SHA256SUMS.txt written
+
+npm run gate:release: PASS
+  - syntax checks PASS
+  - export-quality-gate PASS
+  - editor-stability-gate PASS
+  - node --test tests/*.test.js PASS 970/970
+  - tauri-bundle-gate PASS
+```
+
+Regression checks:
+
+```text
+npm test: PASS 970/970
+npm run test:renderer: PASS 25 files, 482/482
+npm run gate:editor: PASS
+node --test tests/release-pipeline.test.js tests/updater.test.js: PASS 7/7
+node --test tests/browser-capture-bridge.test.js: PASS 4/4
+node --test tests/data-migration.test.js: PASS 5/5
+```
+
+Installer manual note:
+
+```text
+NSIS installer launch in a clean VM was not executed from this local shell to avoid modifying the developer machine.
+The installer artifact itself was produced by cargo tauri build, signed, timestamped, copied to dist/tauri, and validated by tauri-bundle-gate.
+Before external release, run one clean Windows VM smoke: open the installer, verify expected SmartScreen/unknown-publisher prompt, complete current-user install, launch AcademiQ Research, then uninstall.
+```
