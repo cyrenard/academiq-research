@@ -80,6 +80,16 @@ function pickObject(value) {
 }
 
 function listen(_channel, _callback) {
+  const eventApi = typeof window !== 'undefined' && window.__TAURI__ && window.__TAURI__.event
+    ? window.__TAURI__.event
+    : null;
+  if (eventApi && typeof eventApi.listen === 'function') {
+    return eventApi.listen(_channel, (event) => {
+      try {
+        _callback(event && typeof event === 'object' && 'payload' in event ? event.payload : event);
+      } catch (_e) {}
+    });
+  }
   return function unsubscribe() {};
 }
 
@@ -177,6 +187,7 @@ const electronAPI = {
   createBrowserCaptureWorkspace: (name) => invokeCommand('browser_capture_create_workspace', { name: asString(name, 256) }),
   browserCaptureRendererReady: () => invokeCommand('browser_capture_renderer_ready'),
   ackBrowserCapturePayload: (queueId) => invokeCommand('browser_capture_ack_payload', { queueId: asString(queueId, 128) }),
+  onBrowserCaptureEvent: (callback) => listen('browser_capture:event', callback),
   onBrowserCaptureIncoming: (callback) => listen('browserCapture:incoming', callback),
   onBrowserCaptureWorkspaceCreated: (callback) => listen('browserCapture:workspaceCreated', callback),
   onBrowserCaptureStateChanged: (callback) => listen('browserCapture:stateChanged', callback),

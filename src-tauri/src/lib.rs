@@ -1,3 +1,4 @@
+mod capture;
 mod commands;
 mod db;
 mod pdf;
@@ -16,6 +17,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(capture::bridge::CaptureSidecarState::default())
         .invoke_handler(tauri::generate_handler![
             not_implemented,
             commands::app::app_get_info,

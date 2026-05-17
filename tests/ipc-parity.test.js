@@ -21,9 +21,6 @@ function loadTauriApi() {
           if (/^(export_|pdf_export_annotated)/.test(command)) {
             return Promise.resolve({ ok: false, error: 'not_implemented_phase_5' });
           }
-          if (/^browser_capture_/.test(command)) {
-            return Promise.resolve({ ok: false, error: 'not_implemented_phase_6' });
-          }
           if (command === 'ocr_recognize') {
             return Promise.resolve({ ok: false, code: 'OCR_NOT_IMPLEMENTED_PHASE_4' });
           }
@@ -82,17 +79,17 @@ const parityCases = [
   ['getAppInfo', 'app_get_info', []],
   ['getDocumentHistory', 'doc_history_get', ['doc-1', 3]],
   ['restoreDocumentHistorySnapshot', 'doc_history_restore', ['doc-1', 'snap-1']],
-  ['getBrowserCaptureStatus', 'browser_capture_get_status', [], 'not_implemented_phase_6'],
-  ['prepareBrowserCaptureSetup', 'browser_capture_prepare_setup', [], 'not_implemented_phase_6'],
-  ['runBrowserCaptureAction', 'browser_capture_run_action', ['install'], 'not_implemented_phase_6'],
-  ['testBrowserCaptureConnection', 'browser_capture_test_connection', [], 'not_implemented_phase_6'],
-  ['lookupBrowserCaptureTarget', 'browser_capture_lookup', [{ url: 'https://example.com' }], 'not_implemented_phase_6'],
-  ['openBrowserCaptureInstallDir', 'browser_capture_open_install_dir', [], 'not_implemented_phase_6'],
-  ['openBrowserCaptureGuide', 'browser_capture_open_guide', [], 'not_implemented_phase_6'],
-  ['updateBrowserCapturePrefs', 'browser_capture_update_prefs', [{ autoAttachPdfUrl: true }], 'not_implemented_phase_6'],
-  ['createBrowserCaptureWorkspace', 'browser_capture_create_workspace', ['Workspace'], 'not_implemented_phase_6'],
-  ['browserCaptureRendererReady', 'browser_capture_renderer_ready', [], 'not_implemented_phase_6'],
-  ['ackBrowserCapturePayload', 'browser_capture_ack_payload', ['queue-1'], 'not_implemented_phase_6'],
+  ['getBrowserCaptureStatus', 'browser_capture_get_status', []],
+  ['prepareBrowserCaptureSetup', 'browser_capture_prepare_setup', []],
+  ['runBrowserCaptureAction', 'browser_capture_run_action', ['install']],
+  ['testBrowserCaptureConnection', 'browser_capture_test_connection', []],
+  ['lookupBrowserCaptureTarget', 'browser_capture_lookup', [{ url: 'https://example.com' }]],
+  ['openBrowserCaptureInstallDir', 'browser_capture_open_install_dir', []],
+  ['openBrowserCaptureGuide', 'browser_capture_open_guide', []],
+  ['updateBrowserCapturePrefs', 'browser_capture_update_prefs', [{ autoAttachPdfUrl: true }]],
+  ['createBrowserCaptureWorkspace', 'browser_capture_create_workspace', ['Workspace']],
+  ['browserCaptureRendererReady', 'browser_capture_renderer_ready', []],
+  ['ackBrowserCapturePayload', 'browser_capture_ack_payload', ['queue-1']],
   ['checkUpdate', 'update_check', []],
   ['downloadUpdate', 'update_download', ['https://github.com/cyrenard/academiq-research/releases/download/v1/file.exe']],
   ['setUpdateUrl', 'update_set_url', ['https://api.github.com/repos/cyrenard/academiq-research/releases/latest']],
@@ -203,6 +200,6 @@ test('Phase-deferred handlers return explicit controlled stub messages', () => {
   const browserSource = read('src-tauri', 'src', 'commands', 'browser_capture.rs');
   const ocrSource = read('src-tauri', 'src', 'commands', 'ocr.rs');
   assert.match(exportSource, /not_implemented_phase_5/);
-  assert.match(browserSource, /not_implemented_phase_6/);
+  assert.doesNotMatch(browserSource, /not_implemented_phase_6/);
   assert.match(ocrSource, /not_implemented_phase_4/);
 });
