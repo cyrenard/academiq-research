@@ -299,3 +299,64 @@ npm run gate:editor: PASS
 cargo tauri build --no-bundle: PASS
 cargo test --release phase3_pdf_perf_budget_large_annotation_and_render -- --nocapture: PASS
 ```
+
+## Phase 4 - nspell and tesseract.js call sites
+
+Inventory commands:
+
+```text
+rg -n nspell src tests package.json scripts src-tauri
+rg -n "tesseract\.js|Tesseract\.|tesseract\.|ocrAPI|local-ocr|recognize" src tests package.json scripts src-tauri
+```
+
+nspell call sites:
+
+- `src/renderer/lib/spellcheck.ts`: the only runtime nspell service. Phase 4 keeps the fallback and routes Tauri through `window.electronAPI.spell.*`.
+- `src/renderer/lib/spellcheck-controller.ts`: service coordinator only; now uses the async Rust spell path when Tauri exposes it. `SpellcheckPanel` UI was not changed.
+- `src/renderer/lib/spellcheck.test.ts` and `src/renderer/lib/spellcheck-controller.test.ts`: fake nspell tests retained for fallback/tokenization behavior.
+- `package.json`: `nspell` remains installed as the Phase 8 fallback.
+- `scripts/sync-dictionary.js`: now copies `dictionary-tr` to both `public/dictionary/tr/` and `src-tauri/resources/dict/tr/`.
+
+tesseract.js/OCR call sites:
+
+- `src/local-ocr.js`: Electron-side local OCR service uses `tesseract.js`, lazy worker creation, `tesseract-cache`, and worker reuse.
+- `main.js`: `ocr:recognize` sanitizes payloads and delegates to `localOcr.recognize`; Electron OCR behavior is unchanged.
+- `preload.js`: exposes `window.ocrAPI.recognize`.
+- `src/legacy-runtime.js`: PDF OCR batch flow already tracks queued/running/progress/fail/cancel state through `pdfOcrRunToken`, caches OCR text items per tab, and calls `window.ocrAPI.recognize`.
+- `src-tauri/src/commands/ocr.rs`: remains an explicit Phase 4 JS-shim/stub boundary; no tesseract-rs migration was attempted.
+
+OCR review result: PASS.
+
+- Worker path exists and remains JS/Tesseract based.
+- Cancel/progress/batch state already exists in the PDF runtime.
+- OCR cache already syncs per PDF tab; no new OCR feature was added in Phase 4.
+
+## Phase 4 Results - 2026-05-17
+
+Spell + network Rust pipeline: PASS.
+
+- `spellbook = 0.4.0` added; `dictionary-tr` aff/dic files are bundled under `src-tauri/resources/dict/tr/`.
+- `dictionary-tr` numeric Hunspell flag `0` is remapped in memory for spellbook compatibility; source dictionary files are unchanged.
+- `spell_check`, `spell_suggest`, `spell_add_user_word`, and `spell_get_user_dictionary` are registered Tauri commands.
+- User dictionary persists in SQLite `kv` as `spell_user_dict_tr`.
+- `src/tauri-api.ts` exposes `electronAPI.spell.*`.
+- `src/renderer/lib/spellcheck.ts` uses Rust spell when Tauri exposes it and keeps nspell fallback for Electron/tests.
+- `SpellcheckPanel` UI component was not changed.
+- Network commands now use a singleton reqwest client with HTTP/2, pooled connections, 30s timeout default, shared User-Agent, per-host rate scoping, and ETag cache via SQLite `kv`.
+
+Automated checks so far:
+
+```text
+cargo check: PASS
+cargo test phase4_spell_ -- --nocapture: 3 pass, 0 fail
+cargo test phase4_network_ -- --nocapture: 3 pass, 0 fail
+node --test tests/spell-rust.test.js: PASS
+node --test tests/network-rust.test.js: PASS
+node --test tests/ipc-parity.test.js: 4 pass, 0 fail
+npm run test:renderer -- src/renderer/lib/spellcheck.test.ts src/renderer/lib/spellcheck-controller.test.ts: 26 pass, 0 fail
+node --test tests/ipc-parity.test.js tests/tauri-smoke.test.js tests/data-migration.test.js tests/library-fts.test.js tests/pdf-rust.test.js tests/spell-rust.test.js tests/network-rust.test.js: 23 pass, 0 fail
+npm test: 957 pass, 0 fail
+npm run test:renderer: 25 files pass, 482 pass, 0 fail
+npm run gate:editor: PASS
+cargo tauri build --no-bundle: PASS
+```
