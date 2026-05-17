@@ -87,9 +87,14 @@ function getSettings() {
   const state = loadState();
   const settings = normalizeBrowserCaptureSettings(state.settings || {});
   const patch = {};
+  const envPort = Number(process.env.AQ_CAPTURE_PORT);
   if (!settings.token) {
     settings.token = createToken();
     patch.token = settings.token;
+  }
+  if (Number.isFinite(envPort) && envPort >= 1024 && envPort <= 65535 && settings.port !== envPort) {
+    settings.port = envPort;
+    patch.port = settings.port;
   }
   if (!settings.port) {
     settings.port = DEFAULT_CAPTURE_PORT;
@@ -192,7 +197,7 @@ let lastHello = null;
 async function ensureBridge() {
   if (bridge) return { ok: true, port: activePort };
   const settings = getSettings();
-  bridge = createBrowserCaptureBridge({
+  const nextBridge = createBrowserCaptureBridge({
     host: '127.0.0.1',
     port: settings.port || DEFAULT_CAPTURE_PORT,
     token: settings.token,
@@ -220,7 +225,20 @@ async function ensureBridge() {
       return { ok: true };
     }
   });
-  const bound = await bridge.listen();
+  let bound;
+  try {
+    bound = await nextBridge.listen();
+  } catch (error) {
+    try { await nextBridge.close(); } catch (_e) {}
+    bridge = null;
+    activePort = 0;
+    patchSettings({
+      lifecycleState: 'failed',
+      lastError: error && error.message ? error.message : String(error)
+    });
+    throw error;
+  }
+  bridge = nextBridge;
   activePort = bound.port;
   patchSettings({ port: activePort, enabled: true, lifecycleState: 'ready', lastError: '' });
   notify('browserCapture:stateChanged', { bridgeReady: true, port: activePort });

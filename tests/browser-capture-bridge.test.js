@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
+const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
@@ -14,12 +15,12 @@ const sidecarBinary = path.join(
   'capture-agent-x86_64-pc-windows-msvc.exe'
 );
 
-function startSidecar(mode = 'node') {
+function startSidecar(mode = 'node', env = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'academiq-capture-sidecar-'));
   const useBinary = mode === 'binary';
   const child = spawn(useBinary ? sidecarBinary : process.execPath, useBinary ? [] : [sidecarEntry], {
     cwd: useBinary ? rootDir : path.dirname(sidecarEntry),
-    env: { ...process.env, AQ_CAPTURE_DATA_DIR: dataDir },
+    env: { ...process.env, AQ_CAPTURE_DATA_DIR: dataDir, ...env },
     stdio: ['pipe', 'pipe', 'pipe']
   });
   child.stdout.setEncoding('utf8');
@@ -61,8 +62,21 @@ function parseExtensionConfig(installDir) {
   return JSON.parse(match[1]);
 }
 
+function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      const port = address && typeof address === 'object' ? address.port : 0;
+      server.close(() => resolve(port));
+    });
+  });
+}
+
 test('capture sidecar JSON-RPC responds and emits notifications', async () => {
-  const sidecar = startSidecar();
+  const port = await getFreePort();
+  const sidecar = startSidecar('node', { AQ_CAPTURE_PORT: String(port) });
   try {
     const status = await call(sidecar, 'getStatus');
     assert.equal(status.ok, true);
@@ -84,7 +98,8 @@ test('capture sidecar JSON-RPC responds and emits notifications', async () => {
 });
 
 test('capture sidecar prepares extension config and accepts extension HTTP capture', async () => {
-  const sidecar = startSidecar();
+  const port = await getFreePort();
+  const sidecar = startSidecar('node', { AQ_CAPTURE_PORT: String(port) });
   try {
     const setup = await call(sidecar, 'prepareSetup', { browserFamily: 'chromium' });
     assert.equal(setup.ok, true);
@@ -134,7 +149,8 @@ test('packaged capture sidecar binary prepares extension config', async (t) => {
     t.skip('capture-agent binary has not been built yet');
     return;
   }
-  const sidecar = startSidecar('binary');
+  const port = await getFreePort();
+  const sidecar = startSidecar('binary', { AQ_CAPTURE_PORT: String(port) });
   try {
     const setup = await call(sidecar, 'prepareSetup', { browserFamily: 'chromium' });
     assert.equal(setup.ok, true);
@@ -153,7 +169,8 @@ test('packaged capture sidecar binary speaks the same JSON-RPC protocol', async 
     t.skip('capture-agent binary has not been built yet');
     return;
   }
-  const sidecar = startSidecar('binary');
+  const port = await getFreePort();
+  const sidecar = startSidecar('binary', { AQ_CAPTURE_PORT: String(port) });
   try {
     const status = await call(sidecar, 'getStatus');
     assert.equal(status.ok, true);
