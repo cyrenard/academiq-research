@@ -126,3 +126,83 @@ npm run test:renderer: 25 files pass, 482 pass, 0 fail
 npm run gate:editor: PASS
 npm run build:renderer: PASS
 ```
+
+## Phase 1 Results - 2026-05-17
+
+Environment:
+
+```text
+rustc 1.95.0 (59807616e 2026-04-14)
+cargo 1.95.0 (f2d3ce0bd 2026-03-21)
+tauri-cli 2.11.2
+```
+
+Tauri dev launch:
+
+```text
+cargo tauri dev
+Vite ready in 409 ms on the warm run
+Rust dev build finished in 53.73s
+WebView2 CDP page: title AcademiQ Research, URL http://127.0.0.1:5173/
+```
+
+IPC live smoke in the real WebView2 window: PASS.
+
+```json
+{
+  "title": "AcademiQ Research",
+  "hasRoot": true,
+  "hasAQ": true,
+  "directSave": { "ok": true },
+  "directLoadOk": true,
+  "savePdfOk": true,
+  "existsBeforeDelete": true,
+  "loadPdfOk": true,
+  "deletePdfOk": true,
+  "existsAfterDelete": false,
+  "netJsonOk": true,
+  "appInfoOk": true,
+  "updateCheckShape": true,
+  "exportStub": "not_implemented_phase_5",
+  "browserStub": "not_implemented_phase_6",
+  "browserPromptSeen": true,
+  "ocrStub": "OCR_NOT_IMPLEMENTED_PHASE_4",
+  "toggleOk": true,
+  "confirmType": "boolean"
+}
+```
+
+Notes:
+
+- `window.electronAPI` and `window.ocrAPI` remained the only renderer-facing contract.
+- Tauri v2 injected `window.__TAURI_INTERNALS__.invoke`; the Phase 1 shim now uses that runtime path.
+- `data_save` and `data_load` were verified by direct Tauri invoke to avoid React shell autosave racing the smoke payload.
+- PDF round-trip wrote, loaded, and deleted `phase-1-smoke-pdf.pdf` under the Tauri app data directory.
+- `netFetchJSON` successfully fetched CrossRef DOI `10.1038/nphys1170` and returned status `ok`.
+- `openPDFDialog` was invoked from the real WebView2 window and entered the native picker pending state. The cancel automation was interrupted by the operator, but the dialog command reached native UI without app crash.
+- `window.confirm` now returns a synchronous boolean guard in Tauri, preventing legacy browser-capture startup from throwing on Tauri's async confirm bridge.
+- `wordToHtml` now uses the Phase 1 JS shim path: Rust reads the DOCX bytes and `src/tauri-api.ts` converts them through browser `mammoth.convertToHtml`.
+- `downloadUpdate` now performs an HTTPS download to a temp file and returns `{ ok, path, size, url }`.
+- Browser Capture, export, and OCR returned explicit phase-deferred stubs as planned.
+
+Electron legacy shell guard: PASS.
+
+```text
+npm start -- --remote-debugging-port=9444
+CDP page title: AcademiQ — Yerel
+CDP page URL: file:///.../academiq-research.html
+```
+
+Because current `main.js` prefers `dist/renderer/index.html` when the built renderer exists, this check temporarily moved `dist/renderer` aside and restored it after the process exited. No Electron source files were changed.
+
+Build and automated checks:
+
+```text
+node --test tests/ipc-parity.test.js tests/tauri-smoke.test.js: 12 pass, 0 fail
+npm test: 946 pass, 0 fail
+npm run test:renderer: 25 files pass, 482 pass, 0 fail
+npm run gate:editor: PASS
+cargo check: PASS
+cargo tauri build --no-bundle: PASS
+Built application at src-tauri/target/release/academiq-research-tauri.exe
+```

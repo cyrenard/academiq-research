@@ -147,7 +147,7 @@ Her faz: **Hedef → Yapılacak işler → Acceptance kriterleri → Risk**.
 
 ---
 
-### Faz 1 — Tauri Shell + IPC Parity (2 hafta)
+### Faz 1 — Tauri Shell + IPC Parity (2 hafta) — ✅ DONE 2026-05-17
 
 **Hedef**: 45 IPC handler'ı Tauri command'larına 1-1 port. Davranış sıfır değişiklik.
 
