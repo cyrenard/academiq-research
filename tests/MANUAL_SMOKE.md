@@ -206,3 +206,44 @@ cargo check: PASS
 cargo tauri build --no-bundle: PASS
 Built application at src-tauri/target/release/academiq-research-tauri.exe
 ```
+
+## Phase 2 Results - 2026-05-17
+
+Data layer migration: PASS.
+
+- `rusqlite` was selected over `sqlx` for Phase 2 because the plan preferred the smaller MSVC surface; async isolation is handled with `tokio::task::spawn_blocking`.
+- `src-tauri/migrations/0001_init.sql` creates `schema_version`, documents/revisions/tabs/library/citation/annotation/highlight tables, `kv`, FTS5 table, FTS triggers, and required indexes.
+- `electronAPI.loadData()` still returns the same renderer blob shape from `kv.state_blob`; SQL tables are a projection for search/history.
+- `electronAPI.saveData()` and `saveEditorDraft()` write transactionally through SQLite.
+- Legacy `academiq-data.json` migration always copies `academiq-data.json.bak.<timestamp>` before SQLite writes. The original JSON is not deleted by default.
+
+Manual Tauri dev smoke:
+
+```text
+cargo tauri dev
+WebView2 page title: AcademiQ Research
+URL: http://127.0.0.1:5173/
+data load/save/load round-trip through window.electronAPI: PASS
+legacy JSON migration created academiq.sqlite and academiq-data.json.bak.<timestamp>: PASS
+```
+
+Note: WebView2/Tauri uses the real Windows app data path for `com.academiq.research`; after the manual smoke, the temporary smoke SQLite created during validation was removed so the user's legacy `academiq-data.json` remains the active source until the next app launch. The backup copy was intentionally left in place.
+
+Automated checks:
+
+```text
+node --test tests/data-migration.test.js tests/library-fts.test.js: 8 pass, 0 fail
+node --test tests/ipc-parity.test.js tests/tauri-smoke.test.js: 12 pass, 0 fail
+npm test: 954 pass, 0 fail
+npm run test:renderer: 25 files pass, 482 pass, 0 fail
+npm run gate:editor: PASS
+cargo check: PASS
+cargo tauri build --no-bundle: PASS
+```
+
+FTS performance:
+
+```text
+library_search 1000+ entry fixture: PASS under 50ms Rust budget
+Turkish character search (Türkçe / ğ / ş / ı / ö fixture terms): PASS
+```

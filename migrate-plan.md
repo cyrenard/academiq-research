@@ -187,7 +187,7 @@ Her faz: **Hedef → Yapılacak işler → Acceptance kriterleri → Risk**.
 
 ---
 
-### Faz 2 — SQLite + FTS5 Data Layer (2 hafta)
+### Faz 2 — SQLite + FTS5 Data Layer (2 hafta) — ✅ DONE 2026-05-17
 
 **Hedef**: Tek JSON blob'tan ilişkisel SQLite'a geç. Library araması FTS5 ile.
 
