@@ -96,17 +96,24 @@ function listen(_channel, _callback) {
 try {
   if (typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
     const nativeConfirm = typeof window.confirm === 'function' ? window.confirm.bind(window) : null;
+    const nativePrompt = typeof window.prompt === 'function' ? window.prompt.bind(window) : null;
     if (nativeConfirm && !window.__AQ_TAURI_CONFIRM_GUARD__) {
       Object.defineProperty(window, '__AQ_TAURI_CONFIRM_GUARD__', { value: true, configurable: true });
       window.confirm = function confirmGuard(message) {
+        const fallbackConfirm = () => {
+          if (!nativePrompt) return false;
+          const text = typeof message === 'string' ? message : String(message ?? '');
+          return nativePrompt(`${text}\n\nDevam etmek icin EVET yazin.`, 'EVET') === 'EVET';
+        };
         try {
           const result = nativeConfirm(message);
           if (result && typeof result === 'object' && typeof result.catch === 'function') {
             result.catch(() => {});
+            return fallbackConfirm();
           }
-          return typeof result === 'boolean' ? result : false;
+          return typeof result === 'boolean' ? result : fallbackConfirm();
         } catch (_e) {
-          return false;
+          return fallbackConfirm();
         }
       };
     }

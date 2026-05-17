@@ -19,6 +19,11 @@ function loadTauriApi() {
       window.confirmCalls.push(message);
       return Promise.reject(new Error('Command plugin:dialog|confirm not allowed by ACL'));
     },
+    promptCalls: [],
+    prompt(message, defaultValue) {
+      window.promptCalls.push({ message, defaultValue });
+      return defaultValue;
+    },
     __TAURI__: {
       core: {
         invoke(command, args) {
@@ -168,11 +173,13 @@ test('event-style renderer probe bridge maps to a Tauri command', () => {
   assert.equal(calls.at(-1).args.payload.type, 'error');
 });
 
-test('confirm guard consumes Tauri dialog promise rejections and returns safe false', async () => {
+test('confirm guard consumes Tauri dialog promise rejections and falls back to sync prompt', async () => {
   const { window } = loadTauriApi();
   const result = window.confirm('delete?');
-  assert.equal(result, false);
+  assert.equal(result, true);
   assert.deepEqual(window.confirmCalls, ['delete?']);
+  assert.equal(window.promptCalls.length, 1);
+  assert.match(window.promptCalls[0].message, /delete\?/);
   await new Promise((resolve) => setImmediate(resolve));
 });
 
