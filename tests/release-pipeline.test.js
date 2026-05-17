@@ -21,6 +21,20 @@ test('npm build now targets Tauri while Electron build remains available', () =>
   assert.equal(pkg.scripts['release:baseline'], 'npm run build && npm run gate:release');
 });
 
+test('release versions stay synchronized for the beta cutover build', () => {
+  const pkg = json('package.json');
+  const lock = json('package-lock.json');
+  const conf = json('src-tauri', 'tauri.conf.json');
+  const cargoToml = read('src-tauri', 'Cargo.toml');
+
+  assert.equal(pkg.version, '1.24.0-beta.1');
+  assert.equal(lock.version, pkg.version);
+  assert.equal(lock.packages[''].version, pkg.version);
+  assert.equal(conf.version, pkg.version);
+  assert.match(cargoToml, new RegExp(`^version = "${pkg.version.replace(/\./g, '\\.')}"$`, 'm'));
+});
+
+
 test('NSIS bundle metadata keeps Electron parity where Tauri supports it', () => {
   const conf = json('src-tauri', 'tauri.conf.json');
   assert.equal(conf.productName, 'AcademiQ Research');
@@ -67,6 +81,8 @@ test('Tauri build pipeline emits signed installer artifacts and updater manifest
   assert.match(build, /sign-installer\.ps1/);
   assert.match(build, /SHA256SUMS\.txt/);
   assert.match(build, /latest\.json/);
+  assert.match(build, /AcademiQ-Setup-\$\{pkg\.version\}\.exe/);
+  assert.match(build, /Beta release - see CHANGELOG\.md/);
   assert.match(build, /THIRD_PARTY_NOTICES\.md/);
   assert.match(build, /dist['"], 'THIRD_PARTY_NOTICES\.md'/);
   assert.match(gate, /signtool/);

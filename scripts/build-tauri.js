@@ -7,6 +7,10 @@ const rootDir = path.join(__dirname, '..');
 const srcTauriDir = path.join(rootDir, 'src-tauri');
 const distDir = path.join(rootDir, 'dist', 'tauri');
 
+function readPackage() {
+  return JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
+}
+
 function run(command, args, label, options = {}) {
   console.log(`[build-tauri] ${label}: ${command} ${(args || []).join(' ')}`);
   const result = spawnSync(command, args || [], {
@@ -48,18 +52,29 @@ function sha256(filePath) {
   return hash.digest('hex');
 }
 
-function copyArtifacts(installers) {
+function releaseInstallerName(pkg) {
+  return `AcademiQ-Setup-${pkg.version}.exe`;
+}
+
+function copyArtifacts(installers, pkg) {
   fs.mkdirSync(distDir, { recursive: true });
   const copied = [];
-  for (const installer of installers) {
-    const target = path.join(distDir, path.basename(installer));
+  installers.forEach((installer, index) => {
+    const name = index === 0 ? releaseInstallerName(pkg) : path.basename(installer);
+    const target = path.join(distDir, name);
     fs.copyFileSync(installer, target);
+    if (index === 0) {
+      fs.copyFileSync(installer, path.join(rootDir, 'dist', name));
+    }
     const sig = `${installer}.sig`;
     if (fs.existsSync(sig)) {
       fs.copyFileSync(sig, `${target}.sig`);
+      if (index === 0) {
+        fs.copyFileSync(sig, path.join(rootDir, 'dist', `${name}.sig`));
+      }
     }
     copied.push(target);
-  }
+  });
   return copied;
 }
 
@@ -75,13 +90,13 @@ function copyThirdPartyNotices() {
 }
 
 function latestJsonFor(installerPath) {
-  const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
+  const pkg = readPackage();
   const sigPath = `${installerPath}.sig`;
   const signature = fs.existsSync(sigPath) ? fs.readFileSync(sigPath, 'utf8').trim() : '';
   const url = `https://updates.academiq.research/windows-x86_64/${pkg.version}/${path.basename(installerPath)}`;
   return {
     version: pkg.version,
-    notes: 'AcademiQ Research Tauri release',
+    notes: pkg.version.includes('-beta') ? 'Beta release - see CHANGELOG.md' : 'AcademiQ Research Tauri release',
     pub_date: new Date().toISOString(),
     platforms: {
       'windows-x86_64': {
@@ -106,6 +121,7 @@ function signInstaller(installerPath) {
 }
 
 function main() {
+  const pkg = readPackage();
   runNpmScript('build:renderer');
 
   const signingKeyPath = process.env.TAURI_SIGNING_PRIVATE_KEY_PATH
@@ -124,7 +140,7 @@ function main() {
   for (const installer of installers) {
     signInstaller(installer);
   }
-  const copied = copyArtifacts(installers);
+  const copied = copyArtifacts(installers, pkg);
   const primary = copied[0];
   const manifest = latestJsonFor(primary);
   fs.writeFileSync(path.join(distDir, 'latest.json'), JSON.stringify(manifest, null, 2), 'utf8');
