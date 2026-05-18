@@ -219,6 +219,7 @@ electronAPI.db = {
   librarySearch: (query) => invokeCommand('library_search', { query: asString(query, 1024) }),
   libraryGet: (id) => invokeCommand('library_get', { id: asString(id, 320) }),
   integrityCheck: () => invokeCommand('db_integrity_check'),
+  forceRemigrateHistory: () => invokeCommand('db_force_remigrate_history'),
   rollbackToLegacyJson: () => invokeCommand('db_rollback_to_legacy_json')
 };
 

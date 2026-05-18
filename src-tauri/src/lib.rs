@@ -57,6 +57,7 @@ pub fn run() {
             commands::data::data_save,
             commands::data::data_save_draft,
             commands::data::db_integrity_check,
+            commands::data::db_force_remigrate_history,
             commands::data::db_rollback_to_legacy_json,
             commands::dialog::dialog_open_pdf,
             commands::doc_history::doc_history_get,

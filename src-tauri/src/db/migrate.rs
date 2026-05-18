@@ -58,6 +58,7 @@ pub fn init_or_migrate(app_data_dir: &Path) -> Result<DbPaths, String> {
     if db_paths.db_path.exists() {
         let conn = Connection::open(&db_paths.db_path).map_err(|e| e.to_string())?;
         ensure_schema(&conn)?;
+        auto_retry_empty_history(app_data_dir, &db_paths.db_path)?;
         return Ok(db_paths);
     }
 
@@ -188,10 +189,14 @@ pub fn restore_document_snapshot(
 ) -> Result<Value, String> {
     let db_paths = init_or_migrate(app_data_dir)?;
     let mut conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
+    let snapshot_like = format!("%\"id\":\"{}\"%", snapshot_id.replace('"', "\\\""));
     let snapshot_json = conn
         .query_row(
-            "SELECT snapshot_json FROM revisions WHERE doc_id = ?1 AND id = ?2",
-            params![doc_id, snapshot_id.parse::<i64>().unwrap_or(-1)],
+            "SELECT snapshot_json FROM revisions
+             WHERE doc_id = ?1
+               AND (CAST(id AS TEXT) = ?2 OR snapshot_json LIKE ?3)
+             ORDER BY id DESC LIMIT 1",
+            params![doc_id, snapshot_id, snapshot_like],
             |row| row.get::<_, String>(0),
         )
         .optional()
@@ -433,6 +438,120 @@ pub fn get_legacy_electron_dir() -> Option<PathBuf> {
     Some(PathBuf::from(local_app_data).join(LEGACY_ELECTRON_DIR))
 }
 
+pub fn force_remigrate_history(app_data_dir: &Path) -> Result<Value, String> {
+    let db_paths = init_or_migrate(app_data_dir)?;
+    let legacy_dir = legacy_dir_from_kv(&db_paths.db_path)?
+        .or_else(get_legacy_electron_dir)
+        .ok_or_else(|| "legacy_source_path_not_found".to_string())?;
+    let (doc_count, snapshot_count) =
+        force_remigrate_history_from_legacy_dir(&db_paths.db_path, &legacy_dir)?;
+    Ok(json!({
+        "ok": true,
+        "docCount": doc_count,
+        "snapshotCount": snapshot_count,
+        "legacySourcePath": legacy_dir.to_string_lossy()
+    }))
+}
+
+fn auto_retry_empty_history(app_data_dir: &Path, db_path: &Path) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let documents = count_table(&conn, "documents");
+    let revisions = count_table(&conn, "revisions");
+    if documents <= 0 || revisions > 0 {
+        return Ok(());
+    }
+    let Some(legacy_dir) = legacy_dir_from_kv(db_path)?.or_else(get_legacy_electron_dir) else {
+        return Ok(());
+    };
+    if let Err(error) = force_remigrate_history_from_legacy_dir(db_path, &legacy_dir) {
+        let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+        record_migration_error(&conn, Some(app_data_dir), &error);
+    }
+    Ok(())
+}
+
+fn force_remigrate_history_from_legacy_dir(
+    db_path: &Path,
+    legacy_dir: &Path,
+) -> Result<(usize, usize), String> {
+    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    ensure_schema(&conn)?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM revisions", [])
+        .map_err(|e| e.to_string())?;
+    let report = migrate_legacy_document_history(&tx, legacy_dir)?;
+    upsert_kv_tx(&tx, "history_migration_completed_at", &utc_stamp())?;
+    upsert_kv_tx(&tx, "history_migration_doc_count", &report.0.to_string())?;
+    upsert_kv_tx(
+        &tx,
+        "history_migration_snapshot_count",
+        &report.1.to_string(),
+    )?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(report)
+}
+
+fn legacy_dir_from_kv(db_path: &Path) -> Result<Option<PathBuf>, String> {
+    if !db_path.exists() {
+        return Ok(None);
+    }
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let value = conn
+        .query_row(
+            "SELECT value FROM kv WHERE key = 'legacy_source_path'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    Ok(value.map(PathBuf::from).filter(|path| path.exists()))
+}
+
+fn count_table(conn: &Connection, table: &str) -> i64 {
+    conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+        row.get::<_, i64>(0)
+    })
+    .unwrap_or(0)
+}
+
+fn record_migration_error(conn: &Connection, app_data_dir: Option<&Path>, error: &str) {
+    let current = conn
+        .query_row(
+            "SELECT value FROM kv WHERE key = 'migration_errors'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "[]".to_string());
+    let mut errors = serde_json::from_str::<Value>(&current).unwrap_or_else(|_| json!([]));
+    if let Some(list) = errors.as_array_mut() {
+        list.push(json!({ "at": utc_stamp(), "error": error }));
+    } else {
+        errors = json!([{ "at": utc_stamp(), "error": error }]);
+    }
+    let _ = conn.execute(
+        "INSERT OR REPLACE INTO kv(key, value) VALUES (?1, ?2)",
+        params![
+            "migration_errors",
+            serde_json::to_string(&errors).unwrap_or_else(|_| "[]".to_string())
+        ],
+    );
+    if let Some(dir) = app_data_dir {
+        let telemetry_dir = dir.join("telemetry");
+        let _ = fs::create_dir_all(&telemetry_dir);
+        let _ = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(telemetry_dir.join("migration-errors.jsonl"))
+            .and_then(|mut file| {
+                use std::io::Write;
+                writeln!(file, "{}", json!({ "at": utc_stamp(), "error": error }))
+            });
+    }
+}
+
 fn migrate_legacy_electron_dir(
     app_data_dir: &Path,
     db_path: &Path,
@@ -470,8 +589,12 @@ fn migrate_legacy_electron_dir(
     .map_err(|e| e.to_string())?;
     rebuild_projection(&tx, &state, false)?;
     migrate_legacy_state_kv(&tx, legacy_dir, &state)?;
-    migrate_legacy_document_history(&tx, legacy_dir)?;
     tx.commit().map_err(|e| e.to_string())?;
+
+    if let Err(error) = force_remigrate_history_from_legacy_dir(db_path, legacy_dir) {
+        let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+        record_migration_error(&conn, Some(app_data_dir), &error);
+    }
 
     copy_legacy_assets(app_data_dir, legacy_dir)?;
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
@@ -540,10 +663,10 @@ fn migrate_legacy_state_kv(
 fn migrate_legacy_document_history(
     tx: &rusqlite::Transaction<'_>,
     legacy_dir: &Path,
-) -> Result<(), String> {
+) -> Result<(usize, usize), String> {
     let history_path = legacy_dir.join("document-history.json");
     if !history_path.exists() {
-        return Ok(());
+        return Ok((0, 0));
     }
     let history_raw = fs::read_to_string(&history_path).map_err(|e| e.to_string())?;
     let history = parse_json(&history_raw)?;
@@ -552,7 +675,10 @@ fn migrate_legacy_document_history(
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
+    let mut doc_count = 0usize;
+    let mut snapshot_count = 0usize;
     for (doc_id, doc_history) in docs {
+        doc_count += 1;
         ensure_document_row(tx, &doc_id)?;
         let snapshots = doc_history
             .get("snapshots")
@@ -560,6 +686,7 @@ fn migrate_legacy_document_history(
             .cloned()
             .unwrap_or_default();
         for snapshot in snapshots {
+            snapshot_count += 1;
             let created_at = snapshot
                 .get("createdAt")
                 .or_else(|| snapshot.get("created_at"))
@@ -576,7 +703,7 @@ fn migrate_legacy_document_history(
             .map_err(|e| e.to_string())?;
         }
     }
-    Ok(())
+    Ok((doc_count, snapshot_count))
 }
 
 fn ensure_document_row(tx: &rusqlite::Transaction<'_>, doc_id: &str) -> Result<(), String> {
@@ -1187,5 +1314,78 @@ mod tests {
             )
             .unwrap();
         assert_eq!(source_path, legacy_dir.to_string_lossy().to_string());
+    }
+
+    #[test]
+    fn existing_db_with_empty_revisions_auto_recovers_history() {
+        let local_root = temp_dir("localappdata-history-retry");
+        let legacy_dir = local_root.join(LEGACY_ELECTRON_DIR);
+        copy_dir_all(&fixture_dir(), &legacy_dir).unwrap();
+
+        let app_dir = temp_dir("tauri-history-retry");
+        migrate_legacy_electron_dir(&app_dir, &app_dir.join(DB_FILE), &legacy_dir).unwrap();
+        let conn = Connection::open(app_dir.join(DB_FILE)).unwrap();
+        conn.execute("DELETE FROM revisions", []).unwrap();
+        drop(conn);
+
+        init_or_migrate(&app_dir).unwrap();
+        let conn = Connection::open(app_dir.join(DB_FILE)).unwrap();
+        let revisions: i64 = conn
+            .query_row("SELECT COUNT(*) FROM revisions", [], |row| row.get(0))
+            .unwrap();
+        let doc_count: i64 = conn
+            .query_row("SELECT COUNT(DISTINCT doc_id) FROM revisions", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(revisions, 5);
+        assert_eq!(doc_count, 1);
+    }
+
+    #[test]
+    fn force_remigrate_history_and_restore_accept_legacy_snapshot_id() {
+        let local_root = temp_dir("localappdata-force-history");
+        let legacy_dir = local_root.join(LEGACY_ELECTRON_DIR);
+        copy_dir_all(&fixture_dir(), &legacy_dir).unwrap();
+
+        let app_dir = temp_dir("tauri-force-history");
+        migrate_legacy_electron_dir(&app_dir, &app_dir.join(DB_FILE), &legacy_dir).unwrap();
+        let conn = Connection::open(app_dir.join(DB_FILE)).unwrap();
+        conn.execute("DELETE FROM revisions", []).unwrap();
+        drop(conn);
+
+        let report = force_remigrate_history(&app_dir).unwrap();
+        assert_eq!(report.get("snapshotCount").and_then(Value::as_i64), Some(5));
+
+        restore_document_snapshot(&app_dir, "doc-fixt", "s5").unwrap();
+        let loaded = parse_json(&load_state(&app_dir).unwrap().unwrap()).unwrap();
+        assert_eq!(loaded.get("doc").and_then(Value::as_str), Some("<p>v5</p>"));
+        let doc_content = loaded
+            .get("docs")
+            .and_then(Value::as_array)
+            .unwrap()
+            .iter()
+            .find(|doc| doc.get("id").and_then(Value::as_str) == Some("doc-fixt"))
+            .and_then(|doc| doc.get("content"))
+            .and_then(Value::as_str);
+        assert_eq!(doc_content, Some("<p>v5</p>"));
+    }
+
+    #[test]
+    fn state_blob_is_ground_truth_for_reference_persistence() {
+        let dir = temp_dir("state-blob-reference");
+        let state = sample_state();
+        save_state(&dir, &state, "reference-test").unwrap();
+        let loaded = parse_json(&load_state(&dir).unwrap().unwrap()).unwrap();
+        let lib = loaded
+            .get("wss")
+            .and_then(Value::as_array)
+            .and_then(|workspaces| workspaces.first())
+            .and_then(|workspace| workspace.get("lib"))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(lib.len(), 1);
+        assert_eq!(lib[0].get("id").and_then(Value::as_str), Some("ref1"));
     }
 }

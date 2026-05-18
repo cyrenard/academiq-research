@@ -106,3 +106,11 @@ pub async fn db_rollback_to_legacy_json(app: AppHandle) -> Result<Value, String>
         .await
         .map_err(|e| e.to_string())?
 }
+
+#[tauri::command]
+pub async fn db_force_remigrate_history(app: AppHandle) -> Result<Value, String> {
+    let dir = data_dir(&app).await?;
+    task::spawn_blocking(move || migrate::force_remigrate_history(&dir))
+        .await
+        .map_err(|e| e.to_string())?
+}

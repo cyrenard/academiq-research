@@ -131,6 +131,8 @@ test('Tauri shim preserves preload electronAPI and ocrAPI invoke parity', async 
   assert.equal(calls.at(-1).command, 'library_get');
   await api.db.integrityCheck();
   assert.equal(calls.at(-1).command, 'db_integrity_check');
+  await api.db.forceRemigrateHistory();
+  assert.equal(calls.at(-1).command, 'db_force_remigrate_history');
   await api.db.rollbackToLegacyJson();
   assert.equal(calls.at(-1).command, 'db_rollback_to_legacy_json');
 
@@ -193,6 +195,7 @@ test('Rust command modules register every preload invoke target', () => {
   assert.match(lib, /commands::data::library_search/);
   assert.match(lib, /commands::data::library_get/);
   assert.match(lib, /commands::data::db_integrity_check/);
+  assert.match(lib, /commands::data::db_force_remigrate_history/);
   assert.match(lib, /commands::data::db_rollback_to_legacy_json/);
   for (const command of [
     'pdf_extract_metadata',

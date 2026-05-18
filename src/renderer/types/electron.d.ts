@@ -57,6 +57,13 @@ declare global {
       minimizeWindow: () => IpcResult<unknown>;
       toggleMaximizeWindow: () => IpcResult<unknown>;
       closeWindow: () => IpcResult<unknown>;
+      db?: {
+        librarySearch?: (query: string) => IpcResult<unknown>;
+        libraryGet?: (id: string) => IpcResult<unknown>;
+        integrityCheck?: () => IpcResult<unknown>;
+        forceRemigrateHistory?: () => IpcResult<unknown>;
+        rollbackToLegacyJson?: () => IpcResult<unknown>;
+      };
       spell?: {
         check: (text: string, lang?: string) => IpcResult<Array<{ offset: number; length: number; word: string; suggestions: string[] }>>;
         suggest: (word: string, lang?: string) => IpcResult<string[]>;
