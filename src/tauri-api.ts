@@ -215,6 +215,40 @@ const ocrAPI = {
   recognize: (payload) => invokeCommand('ocr_recognize', { payload: pickObject(payload) })
 };
 
+function installWindowAPI(name, api) {
+  if (typeof window === 'undefined') return api;
+  const frozen = Object.freeze(api);
+  try {
+    const current = window[name];
+    if (current && typeof current === 'object') {
+      const merged = Object.freeze(Object.assign({}, frozen, current));
+      Object.defineProperty(window, name, {
+        value: merged,
+        writable: false,
+        configurable: true,
+        enumerable: true
+      });
+      return merged;
+    }
+    Object.defineProperty(window, name, {
+      value: frozen,
+      writable: false,
+      configurable: true,
+      enumerable: true
+    });
+    return frozen;
+  } catch (error) {
+    try {
+      const current = window[name];
+      if (current && typeof current === 'object') return current;
+    } catch (_e) {}
+    try {
+      window.localStorage?.setItem?.(`aq.${name}.installError`, String(error && error.message ? error.message : error));
+    } catch (_e) {}
+    return frozen;
+  }
+}
+
 electronAPI.db = {
   librarySearch: (query) => invokeCommand('library_search', { query: asString(query, 1024) }),
   libraryGet: (id) => invokeCommand('library_get', { id: asString(id, 320) }),
@@ -248,8 +282,15 @@ electronAPI.export = {
 };
 
 if (typeof window !== 'undefined') {
-  window.electronAPI = Object.freeze(electronAPI);
-  window.ocrAPI = Object.freeze(ocrAPI);
+  installWindowAPI('electronAPI', electronAPI);
+  installWindowAPI('ocrAPI', ocrAPI);
+  try {
+    Object.defineProperty(window, '__AQ_TAURI_API_READY__', {
+      value: true,
+      writable: false,
+      configurable: true
+    });
+  } catch (_e) {}
 }
 
 if (typeof module !== 'undefined' && module.exports) {
