@@ -16,6 +16,8 @@ use tokio::{
 };
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Default)]
 pub struct CaptureSidecarState {
@@ -72,6 +74,8 @@ impl CaptureSidecar {
             cmd.arg(&command.program);
             cmd
         };
+        #[cfg(windows)]
+        cmd.creation_flags(CREATE_NO_WINDOW);
 
         let mut child = cmd
             .current_dir(&command.cwd)
