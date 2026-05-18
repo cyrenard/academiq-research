@@ -842,3 +842,31 @@ System Times New Roman gate:
   "worst": null
 }
 ```
+
+## Phase 5 Font Metrics - 2026-05-18T08:45:36.844Z
+
+System Times New Roman gate:
+
+```json
+{
+  "source": "system-times-new-roman",
+  "fontDir": "C:\\WINDOWS\\Fonts",
+  "max_diff": 0,
+  "avg_diff": 0,
+  "p99_diff": 0,
+  "worst": null
+}
+```
+
+## Phase 8.3 Tauri API Bundle Guard - 2026-05-18
+
+- `node --test tests/regression/tauri-api-idempotent.test.js`: PASS (2/2)
+- `npm run build:renderer`: PASS
+- Built renderer bundle check:
+  - `__AQ_TAURI_API_READY__`: 1 occurrence in `index-7qCxgr74.js`
+  - `downloadPDFfromURL`: 2 occurrences in `index-7qCxgr74.js`
+  - `Cannot assign to read only`: 0 occurrences
+- DevTools expectation after beta.3 reinstall:
+  - `typeof window.electronAPI.downloadPDFfromURL === 'function'`
+  - `Object.isFrozen(window.electronAPI) === true`
+  - `Object.keys(window.electronAPI).length >= 45`
