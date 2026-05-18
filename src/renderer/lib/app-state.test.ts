@@ -82,6 +82,16 @@ describe('workspace CRUD', () => {
     expect(next.cur).toBe(next.wss[next.wss.length - 1]!.id);
   });
 
+  it('preserves committed active document content when adding and switching workspaces', () => {
+    const committed = updateActiveDocumentHTML(createBlankState(), '<p>ABC</p>');
+    const originalWorkspace = committed.cur;
+    const originalDoc = committed.curDoc;
+    const added = addWorkspace(committed, 'WS2');
+    const back = switchWorkspace(added, originalWorkspace);
+    expect(back.docs.find((doc) => doc.id === originalDoc)?.content).toBe('<p>ABC</p>');
+    expect(back.doc).toBe('<p>ABC</p>');
+  });
+
   it('switchWorkspace moves cur to a known id, no-op for unknown', () => {
     const s1 = addWorkspace(createBlankState(), 'B');
     const ids = s1.wss.map((w) => w.id);

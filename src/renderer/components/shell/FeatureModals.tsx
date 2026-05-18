@@ -7,6 +7,7 @@ import { BrowserCaptureModal } from './modals/BrowserCaptureModal';
 import { HistoryModal } from './modals/HistoryModal';
 import { useSpellcheck } from '../../lib/useSpellcheck';
 import { L, fmt } from '../../lib/labels';
+import { confirmDialog } from '../../lib/dialog';
 
 type FeatureModal = 'settings' | 'recovery' | 'history' | 'browserCapture' | 'referenceEdit' | null;
 
@@ -94,8 +95,8 @@ export function FeatureModals({
       .finally(() => setLoadingAction(''));
   };
 
-  const runBackupRestore = () => {
-    if (!window.confirm('Backup yüklendiğinde mevcut yerel veriler, notlar, workspace kayıtları ve PDF klasörleri seçilen backup ile değiştirilecek. Devam edilsin mi?')) return;
+  const runBackupRestore = async () => {
+    if (!(await confirmDialog('Backup yüklendiğinde mevcut yerel veriler, notlar, workspace kayıtları ve PDF klasörleri seçilen backup ile değiştirilecek. Devam edilsin mi?'))) return;
     (window as any).__aqBackupRestoreInProgress = true;
     setLoadingAction('backup-restore');
     window.electronAPI.restoreBackup()
@@ -158,14 +159,28 @@ export function FeatureModals({
       .finally(() => setLoadingAction(''));
   };
 
-  const restoreSnapshot = (snapshotId: string) => {
+  const restoreSnapshot = async (snapshotId: string) => {
     if (!snapshotId) return;
-    if (!window.confirm('Bu belge sürümü geri yüklensin mi?')) return;
+    if (!(await confirmDialog('Bu belge sürümü geri yüklensin mi?'))) return;
     window.electronAPI.restoreDocumentHistorySnapshot(state.curDoc, snapshotId).then(() => {
       onStatus('Snapshot geri yüklendi');
       onRestoreState();
       onClose();
     }).catch(() => onStatus('Snapshot geri yüklenemedi'));
+  };
+  const runHistoryRemigrate = () => {
+    setLoadingAction('history-remigrate');
+    window.electronAPI.db?.forceRemigrateHistory?.()
+      .then((result: any) => {
+        if (!result?.ok) {
+          onStatus(`Belge geçmişi geri yüklenemedi${result?.error ? `: ${String(result.error)}` : ''}`);
+          return;
+        }
+        onStatus(`Belge geçmişi geri yüklendi: ${Number(result.docCount || 0)} doc, ${Number(result.snapshotCount || 0)} snapshot`);
+        refreshHistory();
+      })
+      .catch(() => onStatus('Belge geçmişi geri yüklenemedi'))
+      .finally(() => setLoadingAction(''));
   };
 
   const capture = asRecord(browserStatus);
@@ -544,6 +559,14 @@ export function FeatureModals({
                     onClick={runBackupRestore}
                   >
                     {loadingAction === 'backup-restore' ? 'Yedek yükleniyor...' : 'Yedek yükle / geri yükle'}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={loadingAction === 'history-remigrate'}
+                    onClick={runHistoryRemigrate}
+                  >
+                    {loadingAction === 'history-remigrate' ? 'Geçmiş yükleniyor...' : 'Eski belge geçmişini geri yükle'}
                   </button>
                 </div>
                 <div className="mt-3 rounded-md bg-white p-3 text-xs text-aq-muted">

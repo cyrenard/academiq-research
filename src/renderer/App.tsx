@@ -10,6 +10,7 @@ import { useSpellcheck } from './lib/useSpellcheck';
 import { SpellcheckPanel } from './components/shell/SpellcheckPanel';
 import { InlineInteractionHandler } from './components/editor/InlineInteractionHandler';
 import { SpellSuggestionPopup } from './components/editor/SpellSuggestionPopup';
+import { ConfirmDialog } from './components/Dialog/ConfirmDialog';
 import { TopToolbar } from './components/shell/TopToolbar';
 import {
   addManualNote,
@@ -58,6 +59,7 @@ import {
   collectOpenAccessPdfCandidates,
   countDownloadedPdfCandidates
 } from './lib/reference-import';
+import { confirmDialog } from './lib/dialog';
 import {
   noteTextForInsert,
   buildNoteInsertHTML,
@@ -254,6 +256,15 @@ export default function App() {
     }, 1800);
   };
 
+  const tracePdfDownloadAttempt = (payload: Record<string, unknown>) => {
+    try {
+      localStorage.setItem('aq.lastPdfDownloadAttempt', JSON.stringify({
+        at: new Date().toISOString(),
+        ...payload
+      }));
+    } catch (_error) {}
+  };
+
   const persistState = useCallback(async (nextState: AcademiqAppState, draft = false) => {
     if ((window as any).__aqBackupRestoreInProgress) return;
     appStateRef.current = nextState;
@@ -317,6 +328,19 @@ export default function App() {
     win.S = { ...(win.S || {}), ...nextState };
     try { if (typeof win.save === 'function') win.save(); } catch (_error) {}
     await window.electronAPI?.saveData?.(JSON.stringify(nextState));
+    return nextState;
+  }, []);
+
+  const commitEditorHTML = useCallback(async () => {
+    const maybeHTML = editorRef.current?.getHTML?.();
+    const currentHTML = maybeHTML && typeof (maybeHTML as any).then === 'function'
+      ? await maybeHTML
+      : maybeHTML;
+    const nextState = currentHTML
+      ? updateActiveDocumentHTML(appStateRef.current, String(currentHTML))
+      : appStateRef.current;
+    appStateRef.current = nextState;
+    setAppState(nextState);
     return nextState;
   }, []);
 
@@ -500,26 +524,23 @@ export default function App() {
     persistEditorDraft(next).catch(() => flashStatus('Taslak kaydedilemedi'));
   }, [persistEditorDraft]);
 
-  const handleWorkspaceChange = (workspaceId: string) => {
-    const currentHTML = editorRef.current?.getHTML?.();
-    const committed = currentHTML ? updateActiveDocumentHTML(appStateRef.current, currentHTML) : appStateRef.current;
+  const handleWorkspaceChange = async (workspaceId: string) => {
+    const committed = await commitEditorHTML();
     const next = switchWorkspace(committed, workspaceId);
     persistState(next).catch(() => flashStatus('Workspace kaydedilemedi'));
     setActiveReferenceId(getActiveWorkspace(next).lib[0]?.id || '');
     flashStatus('Workspace değişti');
   };
 
-  const handleDocumentChange = (docId: string) => {
-    const currentHTML = editorRef.current?.getHTML?.();
-    const committed = currentHTML ? updateActiveDocumentHTML(appStateRef.current, currentHTML) : appStateRef.current;
+  const handleDocumentChange = async (docId: string) => {
+    const committed = await commitEditorHTML();
     const next = switchDocument(committed, docId);
     persistState(next).then(() => flashStatus('Belge değişti')).catch(() => flashStatus('Belge kaydedilemedi'));
   };
 
-  const handleAddDocument = () => {
+  const handleAddDocument = async () => {
     const name = window.prompt('Belge ad?', `Belge ${appStateRef.current.docs.length + 1}`);
-    const currentHTML = editorRef.current?.getHTML?.();
-    const committed = currentHTML ? updateActiveDocumentHTML(appStateRef.current, currentHTML) : appStateRef.current;
+    const committed = await commitEditorHTML();
     const next = addDocument(committed, name || undefined);
     persistState(next).then(() => flashStatus('Belge eklendi')).catch(() => flashStatus('Belge eklenemedi'));
   };
@@ -532,20 +553,19 @@ export default function App() {
     persistState(next).then(() => flashStatus('Belge yeniden adlandırıldı')).catch(() => flashStatus('Belge kaydedilemedi'));
   };
 
-  const handleDeleteDocument = () => {
+  const handleDeleteDocument = async () => {
     const current = getActiveDocument(appStateRef.current);
     if (appStateRef.current.docs.length <= 1) {
       flashStatus('Son belge silinemez');
       return;
     }
-    if (!window.confirm(`${current.name || current.id} silinsin mi?`)) return;
+    if (!(await confirmDialog(`${current.name || current.id} silinsin mi?`))) return;
     const next = deleteDocument(appStateRef.current, current.id);
     persistState(next).then(() => flashStatus('Belge silindi')).catch(() => flashStatus('Belge silinemedi'));
   };
 
-  const handleAddWorkspace = (name?: string) => {
-    const currentHTML = editorRef.current?.getHTML?.();
-    const committed = currentHTML ? updateActiveDocumentHTML(appStateRef.current, currentHTML) : appStateRef.current;
+  const handleAddWorkspace = async (name?: string) => {
+    const committed = await commitEditorHTML();
     const next = addWorkspace(committed, name);
     persistState(next).then(() => flashStatus('Workspace eklendi')).catch(() => flashStatus('Workspace eklenemedi'));
     setActiveReferenceId('');
@@ -565,7 +585,7 @@ export default function App() {
       persistState(next).then(() => flashStatus('Workspace yeniden adlandırıldı')).catch(() => flashStatus('Workspace kaydedilemedi'));
       return;
     }
-    handleAddWorkspace(name);
+    void handleAddWorkspace(name);
   };
 
   const handleRenameWorkspace = (workspaceId?: string) => {
@@ -573,13 +593,13 @@ export default function App() {
     setWorkspaceNameModal({ mode: 'rename', workspaceId: current.id });
   };
 
-  const handleDeleteWorkspace = (workspaceId?: string) => {
+  const handleDeleteWorkspace = async (workspaceId?: string) => {
     const current = appStateRef.current.wss.find((workspace) => workspace.id === workspaceId) || getActiveWorkspace(appStateRef.current);
     if (appStateRef.current.wss.length <= 1) {
       flashStatus('Son workspace silinemez');
       return;
     }
-    if (!window.confirm(`${current.name} silinsin mi?`)) return;
+    if (!(await confirmDialog(`${current.name} silinsin mi?`))) return;
     const next = deleteWorkspace(appStateRef.current, current.id);
     const workspacePdfContext = {
       id: current.id,
@@ -661,6 +681,7 @@ export default function App() {
     await persistState(next);
     setActiveReferenceId(referenceId);
     if (doi && ref.pdfUrl) {
+      tracePdfDownloadAttempt({ source: 'reference-import', phase: 'start', url: ref.pdfUrl, referenceId, doi });
       try {
         const result = await window.electronAPI?.downloadPDFfromURL?.(String(ref.pdfUrl), referenceId, {
           ws: { id: next.cur, name: getActiveWorkspace(next).name, title: ref.title },
@@ -671,6 +692,7 @@ export default function App() {
           expectedYear: ref.year,
           requireDoiEvidence: true
         }) as any;
+        tracePdfDownloadAttempt({ source: 'reference-import', phase: 'result', url: ref.pdfUrl, referenceId, doi, result });
         if (result?.ok) {
           const withPdf = updateReferenceInActiveWorkspace(appStateRef.current, referenceId, {
             pdfUrl: ref.pdfUrl,
@@ -681,7 +703,9 @@ export default function App() {
           flashStatus('Kaynak eklendi, OA PDF indirildi');
           return;
         }
-      } catch (_error) {}
+      } catch (error) {
+        tracePdfDownloadAttempt({ source: 'reference-import', phase: 'error', url: ref.pdfUrl, referenceId, doi, error: String(error) });
+      }
     }
     flashStatus(metadata ? 'Kaynak metadata ile eklendi' : 'Kaynak eklendi');
   };
@@ -1165,6 +1189,7 @@ export default function App() {
           flashStatus('PDF URL bulunamadı');
           return;
         }
+        tracePdfDownloadAttempt({ source: 'reference-action', phase: 'start', url, referenceId, doi: ref.doi });
         const result = await window.electronAPI?.downloadPDFfromURL?.(url, referenceId, {
           ws: { id: workspace.id, name: workspace.name, title: ref.title },
           title: ref.title,
@@ -1175,6 +1200,7 @@ export default function App() {
           requireDoiEvidence: Boolean(ref.doi),
           allowUnverifiedPdf: true
         }) as any;
+        tracePdfDownloadAttempt({ source: 'reference-action', phase: 'result', url, referenceId, doi: ref.doi, result });
         if (result?.ok) {
           setPdfProgress({ total: 1, attempted: 1, downloaded: 1, failed: 0, active: false });
           callLegacy('openRef', referenceId);
@@ -1400,6 +1426,7 @@ export default function App() {
       }
       try {
         const attemptedUrl = url;
+        tracePdfDownloadAttempt({ source: 'batch-oa', phase: 'start', url, referenceId: reference.id, doi: reference.doi, workspaceId: candidate.workspaceId });
         const result = await window.electronAPI?.downloadPDFfromURL?.(url, reference.id, {
           ws: { id: candidate.workspaceId, name: candidate.workspaceName, title: reference.title },
           title: reference.title,
@@ -1410,6 +1437,7 @@ export default function App() {
           requireDoiEvidence: Boolean(reference.doi),
           allowUnverifiedPdf: true
         }) as any;
+        tracePdfDownloadAttempt({ source: 'batch-oa', phase: 'result', url, referenceId: reference.id, doi: reference.doi, workspaceId: candidate.workspaceId, result });
         if (result?.ok) {
           done++;
           nextState = patchReferenceInWorkspace(nextState, candidate.workspaceId, reference.id, {
@@ -1426,6 +1454,7 @@ export default function App() {
         }
       } catch (_error) {
         failed++;
+        tracePdfDownloadAttempt({ source: 'batch-oa', phase: 'error', url, referenceId: reference.id, doi: reference.doi, workspaceId: candidate.workspaceId, error: String(_error) });
         nextState = patchReferenceInWorkspace(nextState, candidate.workspaceId, reference.id, { pdfUrl: url });
         commitProgress(`OA PDF indirilemedi: ${done + failed}/${candidates.length}`);
       }
@@ -1827,6 +1856,7 @@ export default function App() {
           />
         ) : null}
         <SpellcheckPanel open={spellPanelOpen} onClose={() => setSpellPanelOpen(false)} />
+        <ConfirmDialog />
         <InlineInteractionHandler />
         <SpellSuggestionPopup editorRef={editorRef} />
         {collectionManagerOpen ? (
