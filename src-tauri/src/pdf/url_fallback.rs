@@ -1,6 +1,7 @@
 use reqwest::header::{ACCEPT, CONTENT_LENGTH, CONTENT_TYPE, USER_AGENT};
 use reqwest::{Client, Url};
 use serde_json::Value;
+use std::collections::VecDeque;
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -71,14 +72,60 @@ pub async fn fetch_pdf_with_fallback(
     url: &str,
     opts: &DownloadOptions,
 ) -> Result<DownloadOutcome, DownloadFailure> {
-    fetch_pdf_inner(url, opts, 0).await
+    fetch_pdf_inner(url, opts).await
 }
 
 async fn fetch_pdf_inner(
     url: &str,
     opts: &DownloadOptions,
-    depth: usize,
 ) -> Result<DownloadOutcome, DownloadFailure> {
+    let mut queue = VecDeque::from([(url.to_string(), 0usize)]);
+    let mut last_failure: Option<DownloadFailure> = None;
+    while let Some((candidate, depth)) = queue.pop_front() {
+        if depth > 2 {
+            continue;
+        }
+        match fetch_single(&candidate, opts).await {
+            Ok(SingleFetch::Pdf(outcome)) => return Ok(outcome),
+            Ok(SingleFetch::Html { html, final_url, status, content_type }) => {
+                if depth < 2 {
+                    for next in extract_pdf_candidates_from_html(&html, &final_url) {
+                        if opts.allow_localhost_for_tests || is_safe_http_url(&next) {
+                            queue.push_back((next, depth + 1));
+                        }
+                    }
+                }
+                last_failure = Some(DownloadFailure {
+                    error: "not_pdf".to_string(),
+                    attempted_url: final_url,
+                    content_type,
+                    status: Some(status),
+                });
+            }
+            Err(failure) => {
+                last_failure = Some(failure);
+            }
+        }
+    }
+    Err(last_failure.unwrap_or_else(|| DownloadFailure {
+        error: "not_pdf".to_string(),
+        attempted_url: url.to_string(),
+        content_type: String::new(),
+        status: None,
+    }))
+}
+
+enum SingleFetch {
+    Pdf(DownloadOutcome),
+    Html {
+        html: String,
+        final_url: String,
+        status: u16,
+        content_type: String,
+    },
+}
+
+async fn fetch_single(url: &str, opts: &DownloadOptions) -> Result<SingleFetch, DownloadFailure> {
     if !opts.allow_localhost_for_tests && !is_safe_http_url(url) {
         return Err(DownloadFailure {
             error: "unsafe_url".to_string(),
@@ -138,23 +185,22 @@ async fn fetch_pdf_inner(
         status: Some(status.as_u16()),
     })?;
     if looks_like_pdf(&content_type, &bytes) {
-        return Ok(DownloadOutcome {
+        return Ok(SingleFetch::Pdf(DownloadOutcome {
             bytes,
             final_url,
             attempted_url: url.to_string(),
             content_type,
             status: status.as_u16(),
-        });
+        }));
     }
-    if content_type.to_ascii_lowercase().contains("text/html") && depth == 0 {
+    if content_type.to_ascii_lowercase().contains("text/html") || looks_like_html(&bytes) {
         let html = String::from_utf8_lossy(&bytes);
-        for candidate in extract_pdf_candidates_from_html(&html, &final_url) {
-            if opts.allow_localhost_for_tests || is_safe_http_url(&candidate) {
-                if let Ok(outcome) = Box::pin(fetch_pdf_inner(&candidate, opts, depth + 1)).await {
-                    return Ok(outcome);
-                }
-            }
-        }
+        return Ok(SingleFetch::Html {
+            html: html.to_string(),
+            final_url,
+            status: status.as_u16(),
+            content_type,
+        });
     }
     Err(DownloadFailure {
         error: "not_pdf".to_string(),
@@ -168,14 +214,26 @@ pub fn extract_pdf_candidates_from_html(html: &str, base: &str) -> Vec<String> {
     let mut out = Vec::new();
     for tag in html.split('<') {
         let lower = tag.to_ascii_lowercase();
-        if lower.contains("citation_pdf_url") {
+        if lower.contains("citation_pdf_url")
+            || lower.contains("dc.identifier")
+            || lower.contains("eprints.document_url")
+            || lower.contains("bepress_citation_pdf_url")
+            || lower.contains("og:url")
+        {
             if let Some(content) = attr_value(tag, "content") {
-                push_resolved(&mut out, base, &content);
+                if looks_like_pdf_candidate(&content) {
+                    push_resolved(&mut out, base, &content);
+                }
             }
         }
-        if lower.contains("href") && (lower.contains(".pdf") || lower.contains("/pdf/")) {
+        if lower.contains("href") && looks_like_pdf_candidate(&lower) {
             if let Some(href) = attr_value(tag, "href") {
                 push_resolved(&mut out, base, &href);
+            }
+        }
+        if lower.contains("data-pdf-url") {
+            if let Some(value) = attr_value(tag, "data-pdf-url") {
+                push_resolved(&mut out, base, &value);
             }
         }
     }
@@ -231,6 +289,21 @@ async fn read_limited(mut response: reqwest::Response, max_bytes: u64) -> Result
 
 fn looks_like_pdf(content_type: &str, bytes: &[u8]) -> bool {
     content_type.to_ascii_lowercase().contains("application/pdf") || bytes.starts_with(b"%PDF")
+}
+
+fn looks_like_html(bytes: &[u8]) -> bool {
+    let prefix = String::from_utf8_lossy(&bytes[..bytes.len().min(512)]).to_ascii_lowercase();
+    prefix.contains("<html") || prefix.contains("<!doctype html") || prefix.contains("<meta") || prefix.contains("<a ")
+}
+
+fn looks_like_pdf_candidate(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    lower.contains(".pdf")
+        || lower.contains("/pdf/")
+        || lower.contains("pdfdirect")
+        || lower.contains("epdf")
+        || lower.contains("download")
+        || lower.contains("fulltext")
 }
 
 fn client() -> Result<&'static Client, DownloadFailure> {
@@ -300,6 +373,12 @@ mod tests {
             .unwrap();
         assert!(html.bytes.starts_with(b"%PDF"));
         assert!(html.final_url.ends_with("/oa.pdf"));
+
+        let nested = rt
+            .block_on(fetch_pdf_with_fallback(&format!("{base}/article-link"), &opts))
+            .unwrap();
+        assert!(nested.bytes.starts_with(b"%PDF"));
+        assert!(nested.final_url.contains("/nested.pdf"));
 
         let missing = rt
             .block_on(fetch_pdf_with_fallback(&format!("{base}/missing"), &opts))

@@ -11,7 +11,9 @@ test('OA PDF frontend flow invokes pdf:download and records last attempt', () =>
   assert.match(app, /downloadPDFfromURL\?\.\(String\(ref\.pdfUrl\), referenceId/);
   assert.match(app, /downloadPDFfromURL\?\.\(url, referenceId/);
   assert.match(app, /downloadPDFfromURL\?\.\(url, reference\.id/);
+  assert.match(app, /pdfAttached: true/);
   assert.match(app, /source: 'batch-oa'/);
   assert.match(app, /source: 'reference-action'/);
   assert.match(app, /source: 'reference-import'/);
+  assert.doesNotMatch(app, /win\.batchDownloadOA/);
 });

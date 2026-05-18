@@ -1282,6 +1282,12 @@ export default function App() {
         }) as any;
         tracePdfDownloadAttempt({ source: 'reference-action', phase: 'result', url, referenceId, doi: ref.doi, result });
         if (result?.ok) {
+          const next = updateReferenceInActiveWorkspace(appStateRef.current, referenceId, {
+            pdfUrl: result.finalUrl || url,
+            pdfAttached: true,
+            pdfVerification: result.verification || null
+          });
+          await persistState(next);
           setPdfProgress({ total: 1, attempted: 1, downloaded: 1, failed: 0, active: false });
           callLegacy('openRef', referenceId);
           flashStatus('PDF indirildi');
@@ -1457,31 +1463,6 @@ export default function App() {
 
     flashStatus(`OA PDF indiriliyor: 0/${candidates.length}`);
     setPdfProgress({ total: candidates.length, attempted: 0, downloaded: 0, failed: 0, active: true });
-
-    const win = window as any;
-    if (typeof win.batchDownloadOA === 'function') {
-      try {
-        win.S = appStateRef.current;
-        await win.batchDownloadOA();
-        const syncedState = hydrateAppState(win.S || appStateRef.current);
-        setAppState(syncedState);
-        appStateRef.current = syncedState;
-        await persistState(syncedState);
-        const downloaded = await countDownloadedPdfCandidates(syncedState, candidates);
-        const failed = Math.max(0, candidates.length - downloaded);
-        const lastFailure = typeof win.__aqGetOALastFailure === 'function'
-          ? String(win.__aqGetOALastFailure() || '').slice(0, 180)
-          : '';
-        setPdfProgress({ total: candidates.length, attempted: candidates.length, downloaded, failed, active: false });
-        if (downloaded) {
-          flashStatus(`OA PDF indirme bitti: ${downloaded} bulundu${failed ? `, ${failed} bulunamadı` : ''}`);
-          return;
-        }
-        flashStatus(`Legacy OA bulamad?, alternatif resolver deneniyor${lastFailure ? `: ${lastFailure}` : ''}`);
-      } catch (_error) {
-        flashStatus('Legacy OA motoru hata verdi, alternatif indirme deneniyor');
-      }
-    }
 
     let nextState = appStateRef.current;
     let done = 0;

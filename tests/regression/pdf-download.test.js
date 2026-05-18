@@ -20,6 +20,21 @@ function startServer() {
       res.end('<html><head><meta name="citation_pdf_url" content="/oa.pdf"></head><body>paper</body></html>');
       return;
     }
+    if (req.url === '/article-link') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end('<html><body><a href="/download/fulltext">Download full text</a></body></html>');
+      return;
+    }
+    if (req.url === '/download/fulltext') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end('<html><body><a href="/nested.pdf?download=1">PDF</a></body></html>');
+      return;
+    }
+    if (req.url === '/nested.pdf?download=1') {
+      res.writeHead(200, { 'content-type': 'application/octet-stream' });
+      res.end(pdf);
+      return;
+    }
     if (req.url === '/oa.pdf') {
       res.writeHead(200, { 'content-type': 'application/pdf' });
       res.end(pdf);
