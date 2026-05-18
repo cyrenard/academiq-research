@@ -5,6 +5,7 @@ pub mod fonts;
 pub mod metadata;
 pub mod pdfium_init;
 pub mod render;
+pub mod url_fallback;
 
 #[cfg(test)]
 mod tests {
