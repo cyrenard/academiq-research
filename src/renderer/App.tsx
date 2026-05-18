@@ -8,6 +8,7 @@ import { NoteSidebar, type NoteSidebarTab } from './components/shell/NoteSidebar
 import { StatusBar } from './components/shell/StatusBar';
 import { useSpellcheck } from './lib/useSpellcheck';
 import { SpellcheckPanel } from './components/shell/SpellcheckPanel';
+import { InlineInteractionHandler } from './components/editor/InlineInteractionHandler';
 import { SpellSuggestionPopup } from './components/editor/SpellSuggestionPopup';
 import { TopToolbar } from './components/shell/TopToolbar';
 import {
@@ -96,7 +97,7 @@ function uid(prefix: string) {
 export default function App() {
   const [appState, setAppState] = useState<AcademiqAppState>(() => createBlankState());
   const [loading, setLoading] = useState(true);
-  const [activeView, setActiveView] = useState<'library' | 'notes' | 'pdf' | 'focus' | 'settings'>('notes');
+  const [activeView, setActiveView] = useState<'library' | 'notes' | 'pdf' | 'matrix' | 'focus' | 'settings'>('notes');
   const [activeReferenceId, setActiveReferenceId] = useState('');
   const [rightTab, setRightTab] = useState<NoteSidebarTab>('notes');
   const [noteSidebarOpen, setNoteSidebarOpen] = useState(true);
@@ -192,13 +193,24 @@ export default function App() {
     return `PDF ${pdfProgress.downloaded}/${pdfProgress.total} indi · ${pdfProgress.attempted}/${pdfProgress.total} denendi${failed} · ${state}`;
   }, [pdfProgress]);
 
+  const openLeanSidePanel = (tab: string) => {
+    const shell = (window as any).AQLeanUIShell;
+    if (shell && typeof shell.openSidePanel === 'function') {
+      shell.openSidePanel(tab);
+      return true;
+    }
+    return false;
+  };
+
   const openLegacyIssueSurface = () => {
+    if (openLeanSidePanel('linter')) return;
     window.dispatchEvent(new CustomEvent('aq:open-quality-surface', {
       detail: { target: qualityStatus.duplicateGroups ? 'duplicate' : 'metadata' }
     }));
   };
 
   const openLegacyMetadataSurface = () => {
+    if (openLeanSidePanel('linter')) return;
     window.dispatchEvent(new CustomEvent('aq:open-quality-surface', {
       detail: { target: 'metadata' }
     }));
@@ -458,11 +470,30 @@ export default function App() {
       if ((event.ctrlKey || event.metaKey) && (key === 'k' || (event.shiftKey && key === 'p'))) {
         event.preventDefault();
         setCommandOpen(true);
+        return;
+      }
+      if (event.key === 'F1' || ((event.ctrlKey || event.metaKey) && key === '/')) {
+        const shell = (window as any).AQLeanUIShell;
+        if (shell && typeof shell.openShortcutHelp === 'function') {
+          event.preventDefault();
+          shell.openShortcutHelp();
+        }
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
+
+  useEffect(() => {
+    const onEditReference = (event: Event) => {
+      const detail = (event as CustomEvent<{ refId?: string }>).detail || {};
+      const refId = String(detail.refId || activeReferenceId || '');
+      if (refId) setActiveReferenceId(refId);
+      setFeatureModal('referenceEdit');
+    };
+    window.addEventListener('aq:react-edit-reference', onEditReference as EventListener);
+    return () => window.removeEventListener('aq:react-edit-reference', onEditReference as EventListener);
+  }, [activeReferenceId]);
 
   const handleEditorChange = useCallback((editorState: AcademiqEditorState) => {
     const next = updateActiveDocumentHTML(appStateRef.current, editorState.html);
@@ -1630,6 +1661,7 @@ export default function App() {
           }
           setActiveView(view);
           if (view === 'settings') setFeatureModal('settings');
+          if (view === 'matrix') handleOpenMatrix();
           if (view === 'pdf') {
             if (activeReferenceId) {
               if (!callLegacy('openRef', activeReferenceId)) {
@@ -1795,6 +1827,7 @@ export default function App() {
           />
         ) : null}
         <SpellcheckPanel open={spellPanelOpen} onClose={() => setSpellPanelOpen(false)} />
+        <InlineInteractionHandler />
         <SpellSuggestionPopup editorRef={editorRef} />
         {collectionManagerOpen ? (
           <CollectionManagerModal

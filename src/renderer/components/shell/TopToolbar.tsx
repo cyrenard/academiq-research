@@ -17,6 +17,7 @@ import {
   Search,
   Strikethrough,
   Table2,
+  PenLine,
   Underline
 } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
@@ -126,6 +127,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
   const [abstractKeywords, setAbstractKeywords] = useState('');
   const [abstractEnglishText, setAbstractEnglishText] = useState('');
   const [abstractEnglishKeywords, setAbstractEnglishKeywords] = useState('');
+  const [trackChangesActive, setTrackChangesActive] = useState(false);
 
   const refreshActiveMarks = () => {
     const next = computeActiveMarks();
@@ -137,6 +139,14 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     window.setTimeout(refreshActiveMarks, 80);
   };
 
+  const refreshTrackChangesState = () => {
+    const win = window as any;
+    const doc = typeof win.getCurrentDocument === 'function'
+      ? win.getCurrentDocument()
+      : win.S?.docs?.find?.((item: any) => item?.id === win.S?.curDoc);
+    setTrackChangesActive(Boolean(doc?.trackChangesEnabled));
+  };
+
   useEffect(() => {
     scheduleActiveMarksRefresh();
     const onChange = () => scheduleActiveMarksRefresh();
@@ -145,12 +155,15 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     document.addEventListener('mouseup', onChange, true);
     document.addEventListener('pointerup', onChange, true);
     window.addEventListener('aq:react-sync', onChange as EventListener);
+    window.addEventListener('aq:track-changes-toggle', refreshTrackChangesState as EventListener);
+    refreshTrackChangesState();
     return () => {
       document.removeEventListener('selectionchange', onChange);
       document.removeEventListener('keyup', onChange, true);
       document.removeEventListener('mouseup', onChange, true);
       document.removeEventListener('pointerup', onChange, true);
       window.removeEventListener('aq:react-sync', onChange as EventListener);
+      window.removeEventListener('aq:track-changes-toggle', refreshTrackChangesState as EventListener);
     };
   }, []);
 
@@ -527,6 +540,22 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     if (!created && typeof mod?.toggleMnMode === 'function') {
       mod.toggleMnMode();
     }
+  };
+
+  const toggleTrackChanges = () => {
+    preserveEditorSelection();
+    const toggled = callLegacy('toggleTrackChangesMode');
+    if (!toggled) {
+      const win = window as any;
+      const doc = typeof win.getCurrentDocument === 'function'
+        ? win.getCurrentDocument()
+        : win.S?.docs?.find?.((item: any) => item?.id === win.S?.curDoc);
+      if (doc) doc.trackChangesEnabled = !doc.trackChangesEnabled;
+      window.dispatchEvent(new CustomEvent('aq:track-changes-toggle', { detail: { enabled: Boolean(doc?.trackChangesEnabled) } }));
+      activeNotifySave();
+    }
+    window.setTimeout(refreshTrackChangesState, 0);
+    window.setTimeout(refreshTrackChangesState, 120);
   };
 
   const selectAction = (event: ChangeEvent<HTMLSelectElement>, run: (value: string) => void) => {
@@ -949,6 +978,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
         <ToolbarGroup label="Medya & Not">
           <ToolbarButton label="Kenar notu ekle" onClick={marginNoteAction}>+ Not</ToolbarButton>
           <IconButton icon={<Eye size={13} />} label="Kenar notlarını göster/gizle" onClick={() => moduleAction('AQMarginNotes', 'toggleMnVisible')} className="h-7 w-7" />
+          <IconButton icon={<PenLine size={13} />} label="Değişiklikleri izle" active={trackChangesActive} onClick={toggleTrackChanges} className="h-7 w-7" />
         </ToolbarGroup>
 
         <ToolbarGroup label="Dönüşüm">

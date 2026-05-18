@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent, ReactNode } from 'react';
 
 type AppShellProps = {
-  activeView: 'library' | 'notes' | 'pdf' | 'focus' | 'settings';
+  activeView: 'library' | 'notes' | 'pdf' | 'matrix' | 'focus' | 'settings';
   onViewChange: (view: AppShellProps['activeView']) => void;
   onExportPDF: () => void;
   onExportDOCX: () => void;
@@ -191,6 +191,7 @@ export function AppShell({
           {navButton('focus', 'Odak')}
           {navButton('settings', 'Ayarlar')}
           {navButton('pdf', 'PDF')}
+          {navButton('matrix', 'Matris')}
           {navButton('library', 'Kütüphane', true)}
           {navButton('notes', 'Not & Refs', true)}
           <div className="ml-1 flex h-full items-center gap-0.5 border-l border-aq-line pl-1 text-aq-muted">
