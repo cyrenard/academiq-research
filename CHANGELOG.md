@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.24.0-beta.3 - 2026-05-18
+
+Hotfix release for beta.2 soak-test regressions.
+
+- Restores legacy document history when an existing beta SQLite database has documents but an empty `revisions` table; adds a manual Storage action for force remigration.
+- Keeps `kv.state_blob` as the lossless data-load source so references saved in workspaces survive app restarts.
+- Commits fresh AQ Engine HTML before workspace/document transitions to prevent workspace content loss.
+- Prevents workspace add from entering a switch loop by keeping the transition path explicit.
+- Uses the React confirm dialog for document/workspace delete flows instead of native confirm fallback.
+- Adds frontend OA PDF download tracing via `aq.lastPdfDownloadAttempt` and verifies React flows call `pdf:download`.
+
 ## 1.24.0-beta.2 - 2026-05-18
 
 Hotfix release for the beta cutover soak test.

@@ -374,6 +374,8 @@ Her faz: **Hedef → Yapılacak işler → Acceptance kriterleri → Risk**.
 
 **Hotfix 8.2 + 8.3 — 2026-05-18**: Faz 8 remains DONE. beta.2 also restores high-impact feature parity in the React shell: open-access PDF download fallback, spell left-click suggestions, inline citation/footnote/xref/link/image/table click routing, visible track changes toggle, matrix navigation, APA linter access, shortcut help, and Windows sidecar no-window spawning. Deep rewrites that exceed the hotfix budget are documented in `MIGRATION_BLOCKER.md`.
 
+**Hotfix 8.3 — 2026-05-18**: Faz 8 remains DONE. beta.3 fixes beta.2 soak regressions: empty revisions/history remigration, state_blob-first reference persistence, workspace transition content commits, workspace add no-loop guard, React confirm delete flows, and OA PDF frontend tracing.
+
 **Hedef**: 1-2 hafta paralel kullanım, ardından Electron sürümünü emekli et.
 
 **Yapılacaklar**:
