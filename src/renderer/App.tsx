@@ -8,6 +8,7 @@ import { NoteSidebar, type NoteSidebarTab } from './components/shell/NoteSidebar
 import { StatusBar } from './components/shell/StatusBar';
 import { useSpellcheck } from './lib/useSpellcheck';
 import { SpellcheckPanel } from './components/shell/SpellcheckPanel';
+import { SpellSuggestionPopup } from './components/editor/SpellSuggestionPopup';
 import { TopToolbar } from './components/shell/TopToolbar';
 import {
   addManualNote,
@@ -1794,6 +1795,7 @@ export default function App() {
           />
         ) : null}
         <SpellcheckPanel open={spellPanelOpen} onClose={() => setSpellPanelOpen(false)} />
+        <SpellSuggestionPopup editorRef={editorRef} />
         {collectionManagerOpen ? (
           <CollectionManagerModal
             open={collectionManagerOpen}
