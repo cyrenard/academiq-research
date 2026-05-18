@@ -8,6 +8,7 @@ use crate::db::migrate;
 use crate::pdf::{
     annotations::{self, PdfAnnotation},
     extract, metadata, render,
+    url_fallback::{fetch_pdf_with_fallback, sanitize_options},
 };
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -353,19 +354,34 @@ pub async fn pdf_download(
     ref_id: String,
     options: Value,
 ) -> Result<Value, String> {
-    let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
-    if !response.status().is_success() {
-        return Ok(json!({ "ok": false, "error": format!("HTTP {}", response.status()) }));
-    }
-    let final_url = response.url().to_string();
-    let bytes = response.bytes().await.map_err(|e| e.to_string())?.to_vec();
+    let download_options = sanitize_options(&options);
+    let outcome = match fetch_pdf_with_fallback(&url, &download_options).await {
+        Ok(outcome) => outcome,
+        Err(failure) => {
+            return Ok(json!({
+                "ok": false,
+                "error": failure.error,
+                "attemptedUrl": failure.attempted_url,
+                "contentType": failure.content_type,
+                "status": failure.status
+            }));
+        }
+    };
     let ws = options
         .get("ws")
         .and_then(|value| serde_json::from_value::<WorkspaceContext>(value.clone()).ok());
-    let size = bytes.len();
-    let save_result = pdf_save(app, ref_id, json!(bytes), ws).await?;
+    let size = outcome.bytes.len();
+    let save_result = pdf_save(app, ref_id, json!(outcome.bytes), ws).await?;
     if save_result.get("ok").and_then(Value::as_bool) == Some(true) {
-        Ok(json!({ "ok": true, "size": size, "finalUrl": final_url, "verification": Value::Null }))
+        Ok(json!({
+            "ok": true,
+            "size": size,
+            "finalUrl": outcome.final_url,
+            "attemptedUrl": outcome.attempted_url,
+            "contentType": outcome.content_type,
+            "status": outcome.status,
+            "verification": Value::Null
+        }))
     } else {
         Ok(save_result)
     }
