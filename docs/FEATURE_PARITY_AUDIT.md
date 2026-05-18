@@ -96,3 +96,32 @@ Legend: 🟢 parity observed, 🟡 parity likely but needs soak/manual coverage,
 3. Add explicit soak cases for citation click, footnote click, cross-reference click, image selection panel, and table toolbar.
 4. Exercise live updater endpoints before stable cutover.
 5. Run a large real-library `pdf:syncAll` and backup/restore recovery test before stable cutover.
+
+## Status Update 2026-05-18
+
+Closed in beta.2 hotfix:
+
+- [x] A1 migration path: `%LOCALAPPDATA%/AcademiQ` legacy source detection and lossless copy/migration regression coverage.
+- [x] A2 confirm ACL: defensive dialog permissions plus confirm fallback regression coverage.
+- [x] A3 `pdf:download`: User-Agent, safe URL guard, maxBytes, detailed errors, and HTML PDF fallback.
+- [x] A4 spell left click: React shell suggestion popup.
+- [x] A5 sidecar console: Windows `CREATE_NO_WINDOW` flag.
+- [x] B1 inline left-click routing: citation, footnote, cross-reference, link, image, and table targets now have a shared React bridge.
+- [x] B2 footnote insertion: TopToolbar exposes `AQFootnotes.insertFootnote`.
+- [x] B3 track changes: TopToolbar exposes a visible track changes toggle.
+- [x] B4 APA linter access: status bar tries `AQLeanUIShell.openSidePanel('linter')` before metadata fallback.
+- [x] B5 margin notes: TopToolbar exposes margin-note create and visibility controls.
+- [x] B6 literature matrix: AppShell exposes a Matrix nav item and reuses the legacy `matrixView` host.
+- [x] B9 Firefox/Zen capture: manual E2E checklist added to `tests/MANUAL_SMOKE.md`.
+- [x] C3 shortcut help: F1 / Ctrl+/ opens the lean shortcut help when available.
+
+Deferred with blocker notes:
+
+- [ ] B7 drop router for all file types.
+- [ ] B8 central keyboard router replacing all competing listeners.
+- [ ] C1 label manager modal.
+- [ ] C2 combined linter/history side panel React port.
+- [ ] C4 React PDF viewer controls.
+- [ ] C5 broad export validation suite.
+- [ ] C6 local matrix assistant mock-server behavior suite.
+- [ ] C7 broad IPC behavior sample suite.

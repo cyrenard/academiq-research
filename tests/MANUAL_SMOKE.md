@@ -56,6 +56,18 @@ WebView2 148.0.3967.54
 MSVC Visual Studio Build Tools 2022
 ```
 
+## Phase 8.2 Browser Capture Manual E2E — 2026-05-18
+
+Firefox / Zen Browser checklist for beta.2 soak:
+
+1. Open AcademiQ 1.24.0-beta.2 and keep it running.
+2. Open Settings / browser capture and confirm `browserFamily=firefox` or the Zen Browser executable path is still present after migration.
+3. In Firefox or Zen Browser, load the bundled extension from the app's capture guide path.
+4. Open the extension popup and verify it connects to `127.0.0.1:27183`.
+5. Capture a DOI page and a page with `citation_pdf_url`.
+6. Expected result: the payload reaches the active workspace, the queue is acknowledged, and no sidecar console window opens.
+7. If Firefox fails but Chrome/Edge works, record the extension popup error and sidecar queue file contents; this is not a cutover blocker unless the user depends on Firefox/Zen for browser capture.
+
 Launch:
 
 ```text
@@ -742,6 +754,36 @@ PASS refreshed beta artifact SHA256:
 ```
 
 ## Phase 5 Font Metrics - 2026-05-17T18:16:26.862Z
+
+System Times New Roman gate:
+
+```json
+{
+  "source": "system-times-new-roman",
+  "fontDir": "C:\\WINDOWS\\Fonts",
+  "max_diff": 0,
+  "avg_diff": 0,
+  "p99_diff": 0,
+  "worst": null
+}
+```
+
+## Phase 5 Font Metrics - 2026-05-18T07:40:19.794Z
+
+System Times New Roman gate:
+
+```json
+{
+  "source": "system-times-new-roman",
+  "fontDir": "C:\\WINDOWS\\Fonts",
+  "max_diff": 0,
+  "avg_diff": 0,
+  "p99_diff": 0,
+  "worst": null
+}
+```
+
+## Phase 5 Font Metrics - 2026-05-18T07:51:08.414Z
 
 System Times New Roman gate:
 

@@ -126,3 +126,18 @@ Manual smoke evidence:
 Decision:
 
 Phase 0 and Phase 0.5 are complete. Phase 1 remains paused until the user explicitly says to proceed.
+
+## Phase 8.2 / 8.3 deferred parity items — 2026-05-18
+
+These items were intentionally kept out of the beta.2 hotfix implementation because each one either requires a deeper React port or broader destructive/manual workflows than the two-day hotfix budget allows.
+
+- B7 drop router for editor / notes / library: needs real import paths for PDF, Word, BibTeX/RIS, and image insertion without regressing existing file inputs. Estimated extra time: 2-3 days.
+- B8 central keyboard router: replacing legacy and React listeners safely requires an app-wide shortcut contract and manual editor focus soak. Estimated extra time: 2 days.
+- C1 label manager modal: RefSidebar already exposes label creation and filtering, but a full modal with color management is separate UI work. Estimated extra time: 1 day.
+- C2 linter/history React side panel: beta.2 now opens the existing lean linter and existing history modal; a combined React tabbed side panel is a UI port. Estimated extra time: 1-2 days.
+- C4 PDF viewer custom controls: legacy PDF controls remain loaded; React controls need pdf.js state synchronization and manual PDF soak. Estimated extra time: 2 days.
+- C5 export pipeline validation suite: broad export artifact validation is valuable but slow and fixture-heavy. Estimated extra time: 1-2 days.
+- C6 localMatrixAssistant behavior tests: mock-server tests require locking down the HTTP contract. Estimated extra time: 1 day.
+- C7 IPC behavior sample suite: category sampling is feasible, but all write-paths need isolated temp app-data contracts. Estimated extra time: 1-2 days.
+
+Recommendation: do not block beta.2 on these. Keep them as post-beta stabilization tasks before stable cutover if soak testing shows user-facing impact.

@@ -8,6 +8,11 @@ Hotfix release for the beta cutover soak test.
 - Migrates `academiq-data.json`, `document-history.json`, settings, session state, capture state, PDFs, and workspace folders into the Tauri app-data layout without modifying the source directory.
 - Added a regression fixture for Turkish workspace paths and the LOCALAPPDATA migration path.
 - Added defensive Tauri dialog permissions and a synchronous confirm fallback so `plugin:dialog|confirm` ACL rejection no longer opens the beta console/probe path.
+- Restored open-access PDF downloads with a Rust-side User-Agent, content length cap, safe URL guard, and HTML `citation_pdf_url` / `.pdf` fallback.
+- Restored left-click spell suggestions and added a shared inline interaction bridge for citations, footnotes, cross-references, links, images, and tables in the React shell.
+- Added visible React shell bridges for literature matrix navigation, APA linter status access, track changes toggle, margin notes, footnotes, and shortcut help.
+- Hid the browser capture sidecar console window on Windows.
+- Added Phase 8.2 parity regression coverage and a feature parity audit status update.
 
 ## 1.24.0-beta.1 - 2026-05-17
 

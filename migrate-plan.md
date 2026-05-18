@@ -372,6 +372,8 @@ Her faz: **Hedef → Yapılacak işler → Acceptance kriterleri → Risk**.
 
 **Hotfix 8.1 — 2026-05-18**: beta.2 keeps Faz 8 closed but fixes the soak-test migration path bug. The migrator now treats `%LOCALAPPDATA%\AcademiQ\` as the read-only Electron source, copies PDFs/workspaces/capture state into Tauri app data, writes the documented SQLite/KV mapping, and adds a defensive confirm fallback for `plugin:dialog|confirm` ACL denials.
 
+**Hotfix 8.2 + 8.3 — 2026-05-18**: Faz 8 remains DONE. beta.2 also restores high-impact feature parity in the React shell: open-access PDF download fallback, spell left-click suggestions, inline citation/footnote/xref/link/image/table click routing, visible track changes toggle, matrix navigation, APA linter access, shortcut help, and Windows sidecar no-window spawning. Deep rewrites that exceed the hotfix budget are documented in `MIGRATION_BLOCKER.md`.
+
 **Hedef**: 1-2 hafta paralel kullanım, ardından Electron sürümünü emekli et.
 
 **Yapılacaklar**:
