@@ -117,6 +117,8 @@ export default function App() {
   const editorRef = useRef<AcademiqEditorApi | null>(null);
   const appStateRef = useRef(appState);
   const statusTimerRef = useRef<number | null>(null);
+  const autosaveTimerRef = useRef<number | null>(null);
+  const autosaveInFlightRef = useRef<Promise<unknown> | null>(null);
   const editorContext = useMemo(() => ({ editorRef }), []);
   const activeWorkspace = getActiveWorkspace(appState);
   const activeDocument = getActiveDocument(appState);
@@ -265,20 +267,66 @@ export default function App() {
     } catch (_error) {}
   };
 
+  const saveDataChecked = useCallback(async (nextState: AcademiqAppState, source = 'save') => {
+    const payload = JSON.stringify(nextState);
+    const result = await window.electronAPI?.saveData?.(payload) as { ok?: boolean; error?: string } | undefined;
+    if (!result || result.ok !== true) {
+      const error = result?.error || `${source}_failed`;
+      try {
+        localStorage.setItem('aq.lastSaveError', JSON.stringify({
+          at: new Date().toISOString(),
+          source,
+          error,
+          bytes: payload.length
+        }));
+      } catch (_error) {}
+      throw new Error(error);
+    }
+    try {
+      localStorage.setItem('aq.lastSaveOk', JSON.stringify({
+        at: new Date().toISOString(),
+        source,
+        bytes: payload.length
+      }));
+    } catch (_error) {}
+    return result;
+  }, []);
+
+  const scheduleFullAutosave = useCallback((nextState: AcademiqAppState, delay = 900) => {
+    if ((window as any).__aqBackupRestoreInProgress) return;
+    if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = window.setTimeout(() => {
+      autosaveTimerRef.current = null;
+      autosaveInFlightRef.current = saveDataChecked(appStateRef.current, 'editor-autosave')
+        .then(() => {
+          flashStatus('otomatik kaydedildi');
+        })
+        .catch(() => {
+          flashStatus('Autosave kaydedilemedi');
+        });
+    }, delay);
+    appStateRef.current = nextState;
+  }, [saveDataChecked]);
+
   const persistState = useCallback(async (nextState: AcademiqAppState, draft = false) => {
     if ((window as any).__aqBackupRestoreInProgress) return;
     appStateRef.current = nextState;
     setAppState(nextState);
+    if (autosaveTimerRef.current) {
+      window.clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
     const payload = JSON.stringify(nextState);
     if (draft) await window.electronAPI?.saveEditorDraft?.(payload);
-    await window.electronAPI?.saveData?.(payload);
-  }, []);
+    await saveDataChecked(nextState, draft ? 'draft-promote' : 'persistState');
+  }, [saveDataChecked]);
 
   const persistEditorDraft = useCallback(async (nextState: AcademiqAppState) => {
     if ((window as any).__aqBackupRestoreInProgress) return;
     appStateRef.current = nextState;
     const win = window as any;
     win.S = { ...(win.S || {}), ...nextState };
+    scheduleFullAutosave(nextState);
     await new Promise<void>((resolve) => {
       const run = async () => {
         try {
@@ -293,7 +341,7 @@ export default function App() {
         window.setTimeout(run, 0);
       }
     });
-  }, []);
+  }, [scheduleFullAutosave]);
 
   const reloadStateFromDisk = useCallback(async (focus?: { workspaceId?: string; refId?: string }) => {
     const result = await window.electronAPI?.loadData?.();
@@ -327,9 +375,9 @@ export default function App() {
     const win = window as any;
     win.S = { ...(win.S || {}), ...nextState };
     try { if (typeof win.save === 'function') win.save(); } catch (_error) {}
-    await window.electronAPI?.saveData?.(JSON.stringify(nextState));
+    await saveDataChecked(nextState, 'flush-editor');
     return nextState;
-  }, []);
+  }, [saveDataChecked]);
 
   const commitEditorHTML = useCallback(async () => {
     const maybeHTML = editorRef.current?.getHTML?.();
@@ -343,6 +391,38 @@ export default function App() {
     setAppState(nextState);
     return nextState;
   }, []);
+
+  useEffect(() => {
+    const flushNow = (source: string) => {
+      if ((window as any).__aqBackupRestoreInProgress) return;
+      try {
+        const currentHTML = editorRef.current?.getHTML?.();
+        if (currentHTML && typeof (currentHTML as any).then !== 'function') {
+          appStateRef.current = updateActiveDocumentHTML(appStateRef.current, String(currentHTML));
+        }
+        if (autosaveTimerRef.current) {
+          window.clearTimeout(autosaveTimerRef.current);
+          autosaveTimerRef.current = null;
+        }
+        autosaveInFlightRef.current = saveDataChecked(appStateRef.current, source).catch(() => {
+          flashStatus('Kapanış kaydı başarısız');
+        });
+      } catch (_error) {}
+    };
+    const onBeforeUnload = () => flushNow('beforeunload');
+    const onPageHide = () => flushNow('pagehide');
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flushNow('visibility-hidden');
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    window.addEventListener('pagehide', onPageHide);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      window.removeEventListener('pagehide', onPageHide);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [saveDataChecked]);
 
   useEffect(() => {
     let alive = true;

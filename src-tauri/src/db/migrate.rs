@@ -834,13 +834,39 @@ fn rebuild_projection(
         "annotations",
         "highlights",
         "library_items",
-        "documents",
     ] {
         tx.execute(&format!("DELETE FROM {table}"), [])
             .map_err(|e| e.to_string())?;
     }
+    delete_removed_document_projection(tx, state)?;
     insert_documents(tx, state, write_initial_revisions)?;
     insert_library_items(tx, state)?;
+    Ok(())
+}
+
+fn delete_removed_document_projection(
+    tx: &rusqlite::Transaction<'_>,
+    state: &Value,
+) -> Result<(), String> {
+    let docs = state
+        .get("docs")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let ids = docs
+        .iter()
+        .filter_map(|doc| doc.get("id").and_then(Value::as_str))
+        .filter(|id| !id.is_empty())
+        .map(|id| format!("'{}'", id.replace('\'', "''")))
+        .collect::<Vec<_>>();
+    if ids.is_empty() {
+        return Ok(());
+    }
+    tx.execute(
+        &format!("DELETE FROM documents WHERE id NOT IN ({})", ids.join(",")),
+        [],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -869,8 +895,12 @@ fn insert_documents(
             .unwrap_or("")
             .to_string();
         tx.execute(
-            "INSERT OR REPLACE INTO documents(id, title, body_json, created_at, updated_at)
-             VALUES (?1, ?2, ?3, COALESCE(?4, datetime('now')), datetime('now'))",
+            "INSERT INTO documents(id, title, body_json, created_at, updated_at)
+             VALUES (?1, ?2, ?3, COALESCE(?4, datetime('now')), datetime('now'))
+             ON CONFLICT(id) DO UPDATE SET
+               title = excluded.title,
+               body_json = excluded.body_json,
+               updated_at = datetime('now')",
             params![
                 id,
                 title,
@@ -1387,5 +1417,38 @@ mod tests {
             .unwrap_or_default();
         assert_eq!(lib.len(), 1);
         assert_eq!(lib[0].get("id").and_then(Value::as_str), Some("ref1"));
+    }
+
+    #[test]
+    fn save_state_projection_preserves_existing_revisions() {
+        let dir = temp_dir("projection-keeps-revisions");
+        let mut state = parse_json(&sample_state()).unwrap();
+        save_state(&dir, &stable_json(&state).unwrap(), "initial").unwrap();
+
+        let db_path = get_db_path(&dir);
+        let conn = Connection::open(&db_path).unwrap();
+        let before: i64 = conn
+            .query_row("SELECT COUNT(*) FROM revisions WHERE doc_id = 'doc1'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert!(before >= 1);
+        drop(conn);
+
+        state["doc"] = Value::String("<p>changed</p>".to_string());
+        if let Some(docs) = state.get_mut("docs").and_then(Value::as_array_mut) {
+            if let Some(doc) = docs.first_mut().and_then(Value::as_object_mut) {
+                doc.insert("content".to_string(), Value::String("<p>changed</p>".to_string()));
+            }
+        }
+        save_state(&dir, &stable_json(&state).unwrap(), "autosave").unwrap();
+
+        let conn = Connection::open(&db_path).unwrap();
+        let after: i64 = conn
+            .query_row("SELECT COUNT(*) FROM revisions WHERE doc_id = 'doc1'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert!(after >= before, "revisions dropped from {before} to {after}");
     }
 }
