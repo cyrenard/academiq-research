@@ -19,6 +19,8 @@ test('Phase 0 Tauri config points at the React renderer build', () => {
   assert.equal(config.app.windows[0].title, 'AcademiQ Research');
   assert.equal(config.app.windows[0].width, 1400);
   assert.equal(config.app.windows[0].height, 900);
+  assert.equal(config.app.windows[0].decorations, false);
+  assert.equal(config.app.windows[0].resizable, true);
   assert.deepEqual(config.bundle.targets, ['nsis']);
   assert.equal(config.bundle.windows.nsis.installMode, 'currentUser');
   assert.deepEqual(config.bundle.windows.nsis.languages, ['Turkish', 'English']);

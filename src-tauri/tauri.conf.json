@@ -14,7 +14,9 @@
       {
         "title": "AcademiQ Research",
         "width": 1400,
-        "height": 900
+        "height": 900,
+        "decorations": false,
+        "resizable": true
       }
     ],
     "security": {
