@@ -585,6 +585,35 @@ fn build_pdf_verification(
     })
 }
 
+/// Internal: persist already-decoded PDF bytes for a reference.
+///
+/// Used by both `pdf_save` (which decodes a renderer-supplied [`Value`] first)
+/// and `pdf_download` (which already holds owned bytes from `reqwest`). Keeping
+/// this split prevents the download path from round-tripping a 50 MB byte
+/// stream through `serde_json::Value::Array` of u8 (≈8× memory amplification
+/// and a 50M-step decode loop in `bytes_from_value`). See pdf::url_fallback
+/// for the upstream `DownloadOutcome.bytes`.
+async fn save_pdf_bytes(
+    app: &AppHandle,
+    ref_id: &str,
+    bytes: Vec<u8>,
+    ws: Option<WorkspaceContext>,
+) -> Result<Value, String> {
+    if bytes.len() > 150 * 1024 * 1024 {
+        return Ok(json!({ "ok": false, "error": "PDF dosyasi cok buyuk" }));
+    }
+    let ws_for_cleanup = ws.clone();
+    let path = pdf_path(app, ref_id, ws).await?;
+    fs::write(&path, bytes).await.map_err(|e| e.to_string())?;
+    let removed_legacy_copies =
+        cleanup_legacy_pdf_copies(app, ref_id, ws_for_cleanup.as_ref(), &path)
+            .await
+            .unwrap_or(0);
+    Ok(
+        json!({ "ok": true, "path": path.to_string_lossy(), "removedLegacyCopies": removed_legacy_copies }),
+    )
+}
+
 #[tauri::command]
 pub async fn pdf_save(
     app: AppHandle,
@@ -594,19 +623,7 @@ pub async fn pdf_save(
 ) -> Result<Value, String> {
     clean_ref_id(&ref_id)?;
     let bytes = bytes_from_value(buffer)?;
-    if bytes.len() > 150 * 1024 * 1024 {
-        return Ok(json!({ "ok": false, "error": "PDF dosyasi cok buyuk" }));
-    }
-    let ws_for_cleanup = ws.clone();
-    let path = pdf_path(&app, &ref_id, ws).await?;
-    fs::write(&path, bytes).await.map_err(|e| e.to_string())?;
-    let removed_legacy_copies =
-        cleanup_legacy_pdf_copies(&app, &ref_id, ws_for_cleanup.as_ref(), &path)
-            .await
-            .unwrap_or(0);
-    Ok(
-        json!({ "ok": true, "path": path.to_string_lossy(), "removedLegacyCopies": removed_legacy_copies }),
-    )
+    save_pdf_bytes(&app, &ref_id, bytes, ws).await
 }
 
 #[tauri::command]
@@ -961,7 +978,12 @@ pub async fn pdf_download(
         .and_then(|value| serde_json::from_value::<WorkspaceContext>(value.clone()).ok());
     let size = outcome.bytes.len();
     let verification = build_pdf_verification(&options, &outcome);
-    let save_result = pdf_save(app, ref_id, json!(outcome.bytes), ws).await?;
+    clean_ref_id(&ref_id)?;
+    // Pass owned bytes directly into the on-disk write path. Going through
+    // pdf_save (and therefore `json!(outcome.bytes)`) would serialize each
+    // byte as a JSON number and immediately decode it back — pure waste for
+    // 5-50 MB downloads.
+    let save_result = save_pdf_bytes(&app, &ref_id, outcome.bytes, ws).await?;
     if save_result.get("ok").and_then(Value::as_bool) == Some(true) {
         Ok(json!({
             "ok": true,
