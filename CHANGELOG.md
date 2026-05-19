@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.24.0-beta.5 - 2026-05-18
+
+Stabilisation + polish pass on top of beta.4. No new user-facing
+features; tightens hot paths and diagnostics so the next bug report
+arrives with enough log signal to debug from.
+
+- `pdf_download` no longer round-trips 25 MB+ PDF bodies through
+  `serde_json::Value::Array<u8>` on the way to `pdf_save`. A new
+  internal helper `save_pdf_bytes` writes the owned `Vec<u8>` straight
+  to disk, dropping peak memory ~8× on large open-access downloads.
+- Capture sidecar now respawns once when the prior child crashed or
+  wedged. Transport-shaped errors (`capture_sidecar_write_failed`,
+  `capture_sidecar_response_closed`, `capture_sidecar_timeout`) trigger
+  a one-shot retry instead of silently failing every subsequent
+  invocation. Protocol-level errors from the sidecar surface as before.
+- New `telemetry::record_event(name, payload)` API writes structured
+  events to `events-day-<unix_day>.jsonl` next to the existing
+  `compat-day-*.jsonl`. Wired in for sidecar respawn/spawn failure,
+  PDF download success/failure (host-only, no full URLs), and SQLite
+  state-save failures broken down by stage (open / begin_tx /
+  write_blob / commit).
+- App.tsx no longer duplicates `window.S` publish logic in five
+  places — extracted into `src/renderer/lib/legacy-state-bridge.ts`
+  with a docstring that explains why mutation is unsafe here (legacy
+  hydrate paths reassign `S` wholesale).
+- `.gitignore` now pattern-matches the SQLite recovery snapshots that
+  Phase 8.3 history-recovery code writes next to the live database.
+
+Test gate: 994 node tests, 495 vitest, 47 cargo lib, full
+`cargo tauri build --no-bundle` all pass. No behaviour changes vs
+beta.4; beta.4 installer is preserved as `.bak` for rollback.
+
+## 1.24.0-beta.4 - 2026-05-18
+
+Broad parity advance covering Phase 8.3 soak feedback in a single
+release. Frameless Tauri window chrome, open-access PDF download
+flow repair, autosave persistence chain restoration, idempotent
+`window.electronAPI` bundle guard, renderer workspace + confirm
+flow stabilisation, empty-revisions history recovery, drop router,
+section tab parity, and a refreshed Phase 8.2 parity audit.
+
 ## 1.24.0-beta.3 - 2026-05-18
 
 Hotfix release for beta.2 soak-test regressions.
