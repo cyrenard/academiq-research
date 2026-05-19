@@ -120,22 +120,22 @@ describe('importExternalEntries', () => {
     expect(onStatus).not.toHaveBeenCalled();
   });
 
-  it('calls legacy window.importReferenceEntries when present', () => {
+  it('dispatches React import event even when legacy importer is present', () => {
     const onStatus = vi.fn();
     const importerFake = vi.fn(() => ({ imported: 5, duplicates: 1, skipped: 0 }));
+    const listener = vi.fn();
     (window as any).importReferenceEntries = importerFake;
+    window.addEventListener('aq:import-references', listener as any);
     const statusEl = document.createElement('div');
     statusEl.id = 'externalReferenceImportStatus';
     document.body.appendChild(statusEl);
 
     importExternalEntries([{ id: 'r1' }, { id: 'r2' }], 'BibTeX', onStatus);
-    expect(importerFake).toHaveBeenCalledWith(
-      [{ id: 'r1' }, { id: 'r2' }],
-      { includeInBibliography: true, revealBibliography: true }
-    );
-    expect(onStatus).toHaveBeenCalledWith(expect.stringContaining('5 eklendi'));
-    expect(onStatus).toHaveBeenCalledWith(expect.stringContaining('1 duplicate'));
-    expect(statusEl.textContent).toMatch(/5 eklendi/);
+    expect(importerFake).not.toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(onStatus).toHaveBeenCalledWith(expect.stringContaining('kaydediliyor'));
+    expect(statusEl.textContent).toMatch(/kaydediliyor/);
+    window.removeEventListener('aq:import-references', listener as any);
   });
 
   it('falls back to CustomEvent dispatch when legacy importer missing', () => {
@@ -159,7 +159,7 @@ describe('importExternalEntries', () => {
 
   it('catches errors and reports them via onStatus + status DOM', () => {
     const onStatus = vi.fn();
-    (window as any).importReferenceEntries = () => { throw new Error('boom'); };
+    const dispatch = vi.spyOn(window, 'dispatchEvent').mockImplementation(() => { throw new Error('boom'); });
     const statusEl = document.createElement('div');
     statusEl.id = 'externalReferenceImportStatus';
     document.body.appendChild(statusEl);
@@ -167,6 +167,7 @@ describe('importExternalEntries', () => {
     importExternalEntries([{ id: 'r1' }], 'BibTeX', onStatus);
     expect(onStatus).toHaveBeenCalledWith(expect.stringContaining('aktarılamadı'));
     expect(statusEl.textContent).toMatch(/aktarılamadı/);
+    dispatch.mockRestore();
   });
 });
 
@@ -174,9 +175,9 @@ describe('runExternalReferenceTextImport (APA textarea)', () => {
   it('reads from #externalReferenceTextInput, parses, imports, and clears', () => {
     const onStatus = vi.fn();
     const apaFake = vi.fn(() => [{ id: 'apa-1', title: 'X' }]);
-    const importerFake = vi.fn(() => ({ imported: 1, duplicates: 0, skipped: 0 }));
+    const listener = vi.fn();
     (window as any).parseApaReferenceText = apaFake;
-    (window as any).importReferenceEntries = importerFake;
+    window.addEventListener('aq:import-references', listener as any);
 
     const input = document.createElement('textarea');
     input.id = 'externalReferenceTextInput';
@@ -188,8 +189,9 @@ describe('runExternalReferenceTextImport (APA textarea)', () => {
 
     runExternalReferenceTextImport(onStatus);
     expect(apaFake).toHaveBeenCalled();
-    expect(importerFake).toHaveBeenCalled();
+    expect(listener).toHaveBeenCalled();
     expect(input.value).toBe('');
+    window.removeEventListener('aq:import-references', listener as any);
   });
 
   it('reports empty-input status without parsing', () => {
@@ -215,8 +217,8 @@ describe('runExternalReferenceBibliographyTextImport', () => {
     const onStatus = vi.fn();
     const parser = vi.fn(() => [{ id: 'bib' }]);
     (window as any).parseBibTeX = parser;
-    const importerFake = vi.fn(() => ({ imported: 1, duplicates: 0, skipped: 0 }));
-    (window as any).importReferenceEntries = importerFake;
+    const listener = vi.fn();
+    window.addEventListener('aq:import-references', listener as any);
 
     const input = document.createElement('textarea');
     input.id = 'externalReferenceBibRisInput';
@@ -229,14 +231,16 @@ describe('runExternalReferenceBibliographyTextImport', () => {
     runExternalReferenceBibliographyTextImport(onStatus);
     expect(parser).toHaveBeenCalled();
     expect(onStatus).toHaveBeenCalledWith(expect.stringContaining('BibTeX'));
+    expect(listener).toHaveBeenCalled();
+    window.removeEventListener('aq:import-references', listener as any);
   });
 
   it('parses RIS and reports RIS label', () => {
     const onStatus = vi.fn();
     const parser = vi.fn(() => [{ id: 'ris' }]);
     (window as any).parseRIS = parser;
-    const importerFake = vi.fn(() => ({ imported: 1, duplicates: 0, skipped: 0 }));
-    (window as any).importReferenceEntries = importerFake;
+    const listener = vi.fn();
+    window.addEventListener('aq:import-references', listener as any);
 
     const input = document.createElement('textarea');
     input.id = 'externalReferenceBibRisInput';
@@ -249,6 +253,8 @@ describe('runExternalReferenceBibliographyTextImport', () => {
     runExternalReferenceBibliographyTextImport(onStatus);
     expect(parser).toHaveBeenCalled();
     expect(onStatus).toHaveBeenCalledWith(expect.stringContaining('RIS'));
+    expect(listener).toHaveBeenCalled();
+    window.removeEventListener('aq:import-references', listener as any);
   });
 });
 

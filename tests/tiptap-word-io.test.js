@@ -150,6 +150,24 @@ test('normalizeWordHtml upgrades common Word heading classes', () => {
   assert.match(html, /<h2>Alt Baslik<\/h2>/);
 });
 
+test('normalizeWordHtml preserves localized Word heading style names', () => {
+  const html = io.normalizeWordHtml(
+    '<p style="mso-style-name:&quot;Ba\u015fl\u0131k 1&quot;;font-weight:bold;text-align:center">Ana B\u00f6l\u00fcm</p>'
+    + '<p style="mso-style-name:&quot;Heading 3&quot;">Alt D\u00fczey</p>'
+  );
+  assert.match(html, /<h1>Ana B(?:\u00f6|ö)l(?:\u00fc|ü)m<\/h1>/);
+  assert.match(html, /<h3>Alt D(?:\u00fc|ü)zey<\/h3>/);
+});
+
+test('normalizeWordHtml promotes conservative visual headings from DOCX import', () => {
+  const html = io.normalizeWordHtml(
+    '<p style="text-align:center;font-size:16pt"><strong>G\u0130R\u0130\u015e</strong></p>'
+    + '<p>Bu normal akademik paragraf c\u00fcmle olarak kalmal\u0131d\u0131r.</p>'
+  );
+  assert.match(html, /<h1><strong>G(?:\u0130|İ)R(?:\u0130|İ)(?:\u015e|Ş)<\/strong><\/h1>/);
+  assert.match(html, /<p>Bu normal akademik paragraf/);
+});
+
 test('normalizeWordHtml strips office markup and list markers', () => {
   const html = io.normalizeWordHtml('<p class="MsoListParagraph" style="mso-list:l0 level1 lfo1"><o:p></o:p>1. Bir oge</p>');
   assert.equal(/o:p/i.test(html), false);

@@ -903,22 +903,8 @@
     if(!api || typeof api.runBrowserCaptureAction !== 'function' || typeof api.updateBrowserCapturePrefs !== 'function') return;
     var source = info && typeof info === 'object' ? info : {};
     if(source.setupPromptSeen) return;
-    if(source.installStrategy && source.installStrategy.supported === false) return;
-    if(String(source.lifecycleState || '') === 'ready' || String(source.lifecycleState || '') === 'connected') return;
     await api.updateBrowserCapturePrefs({ setupPromptSeen: true });
-    var accepted = false;
-    try{
-      accepted = !!root.confirm('Browser Capture etkinlestirilsin mi?\nTarayicidan buldugunuz makaleleri dogrudan AcademiQ\'a ekleyebilirsiniz.');
-    }catch(_e){
-      accepted = false;
-    }
-    if(!accepted){
-      status('Browser Capture daha sonra Ayarlar icinden etkinlestirilebilir.', '');
-      return;
-    }
-    var result = await api.runBrowserCaptureAction('install');
-    renderSettingsStatus(result || {});
-    status(result && result.ok ? 'Browser Capture kurulumu baslatildi.' : ((result && result.error) || 'Kurulum baslatilamadi.'), result && result.ok ? 'ok' : 'er');
+    status('Browser Capture varsayilan olarak kapali. Ayarlar > Capture agent bolumunden acabilirsiniz.', '');
   }
 
   function init(){

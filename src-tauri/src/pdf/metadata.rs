@@ -52,9 +52,7 @@ pub fn get_outline(path: &Path) -> Result<Vec<OutlineItem>, String> {
         .get(b"Outlines")
         .ok()
         .and_then(|obj| resolve_dict(&doc, obj));
-    let first = outlines
-        .and_then(|dict| dict.get(b"First").ok())
-        .cloned();
+    let first = outlines.and_then(|dict| dict.get(b"First").ok()).cloned();
     let Some(first) = first else {
         return Ok(Vec::new());
     };

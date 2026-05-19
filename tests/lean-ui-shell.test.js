@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const shell = require('../src/lean-ui-shell.js');
 
@@ -495,6 +497,16 @@ test('export preflight helpers summarize risk for confirmation UI', () => {
   assert.equal(shell.getExportRiskLevel(risky), 'blocker');
   assert.match(shell.formatPreflightMessage(risky, 'pdf'), /PDF oncesi kalite kontrolu/);
   assert.match(shell.formatPreflightMessage(risky, 'pdf'), /Yine de disa aktarmaya devam edilsin mi\?/);
+});
+
+test('export preflight guard prefers shell modal over native confirm', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'lean-ui-shell.js'), 'utf8');
+  assert.match(source, /typeof w\.aqConfirm === 'function'/);
+  assert.match(source, /confirmLabel: 'Yine de aktar'/);
+  assert.match(source, /var wrapped = async function/);
+  assert.match(source, /await confirmPreflightWithShell\(report, target\)/);
+  assert.match(source, /wrap\('expPDF', 'pdf'\) \|\| didWrap/);
+  assert.match(source, /wrap\('expDOC', 'docx'\) \|\| didWrap/);
 });
 
 test('side panel width helpers clamp to viewport-safe bounds', () => {

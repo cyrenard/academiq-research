@@ -1,6 +1,10 @@
 type ConfirmRequest = {
   id: number;
+  title?: string;
   message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  tone?: 'default' | 'warning' | 'danger';
 };
 
 type Listener = (request: ConfirmRequest | null) => void;
@@ -28,13 +32,26 @@ export function resolveConfirmDialog(value: boolean) {
   if (done) done(value);
 }
 
-export function confirmDialog(message: unknown): Promise<boolean> {
+type ConfirmDialogInput = string | {
+  title?: string;
+  message?: unknown;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  tone?: 'default' | 'warning' | 'danger';
+};
+
+export function confirmDialog(input: ConfirmDialogInput): Promise<boolean> {
   if (resolver) {
     resolveConfirmDialog(false);
   }
+  const options = input && typeof input === 'object' ? input : { message: input };
   current = {
     id: nextId++,
-    message: typeof message === 'string' ? message : String(message ?? '')
+    title: options.title,
+    message: typeof options.message === 'string' ? options.message : String(options.message ?? ''),
+    confirmLabel: options.confirmLabel,
+    cancelLabel: options.cancelLabel,
+    tone: options.tone
   };
   notify();
   return new Promise<boolean>((resolve) => {

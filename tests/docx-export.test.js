@@ -90,3 +90,13 @@ test('buildDocumentXml escapes text content safely', () => {
   assert.equal(xml.includes('<evil>'), false);
   assert.match(xml, /&lt;evil&gt;&amp;stuff&lt;\/evil&gt;/);
 });
+
+test('buildDocxBytesFromBlocks creates a valid OOXML zip package', () => {
+  const bytes = docx.buildDocxBytesFromBlocks([{ type:'paragraph', text:'Merhaba DOCX' }]);
+  assert.ok(bytes instanceof Uint8Array);
+  assert.equal(bytes[0], 0x50);
+  assert.equal(bytes[1], 0x4b);
+  const text = Buffer.from(bytes).toString('latin1');
+  assert.match(text, /\[Content_Types\]\.xml/);
+  assert.match(text, /word\/document\.xml/);
+});

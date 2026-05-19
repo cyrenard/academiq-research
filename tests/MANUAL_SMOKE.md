@@ -870,3 +870,48 @@ System Times New Roman gate:
   - `typeof window.electronAPI.downloadPDFfromURL === 'function'`
   - `Object.isFrozen(window.electronAPI) === true`
   - `Object.keys(window.electronAPI).length >= 45`
+
+## Phase 5 Font Metrics - 2026-05-18T20:00:17.801Z
+
+System Times New Roman gate:
+
+```json
+{
+  "source": "system-times-new-roman",
+  "fontDir": "C:\\WINDOWS\\Fonts",
+  "max_diff": 0,
+  "avg_diff": 0,
+  "p99_diff": 0,
+  "worst": null
+}
+```
+
+## Phase 5 Font Metrics - 2026-05-19T11:01:33.742Z
+
+System Times New Roman gate:
+
+```json
+{
+  "source": "system-times-new-roman",
+  "fontDir": "C:\\WINDOWS\\Fonts",
+  "max_diff": 0,
+  "avg_diff": 0,
+  "p99_diff": 0,
+  "worst": null
+}
+```
+
+## Phase 5 Font Metrics - 2026-05-19T11:13:30.505Z
+
+System Times New Roman gate:
+
+```json
+{
+  "source": "system-times-new-roman",
+  "fontDir": "C:\\WINDOWS\\Fonts",
+  "max_diff": 0,
+  "avg_diff": 0,
+  "p99_diff": 0,
+  "worst": null
+}
+```

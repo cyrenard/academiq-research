@@ -4,6 +4,8 @@
   root.AQPlainCitationLinking = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function(){
   var YEAR_RE = '(?:19|20)\\d{2}[a-z]?|t\\.y\\.';
+  var AUTO_ANALYSIS_MAX_BLOCKS = 220;
+  var AUTO_ANALYSIS_MAX_CHARS = 26000;
 
   function normalizeText(value){
     return String(value == null ? '' : value)
@@ -244,9 +246,12 @@
     return /^(giriş|introduction|yöntem|method|methods|bulgular|findings|tartışma|discussion|sonuç|conclusion|özet|abstract|ek|appendix)\b/i.test(value);
   }
 
-  function analyzeImportedDocument(editor, references){
+  function analyzeImportedDocument(editor, references, options){
+    options = options || {};
     references = references || currentWorkspaceReferences();
-    var blocks = getAQBlocks(editor);
+    var allBlocks = getAQBlocks(editor);
+    var maxBlocks = Number(options.maxBlocks || 0);
+    var blocks = maxBlocks > 0 ? allBlocks.slice(0, maxBlocks) : allBlocks;
     var textBlocks = blocks.map(function(block, index){
       return { index: index, text: blockText(block), block: block };
     }).filter(function(item){ return normalizeText(item.text); });
@@ -267,7 +272,7 @@
         if(looksLikeHeadingCandidate(text)) headingCandidates.push(item);
       }
     });
-    var matches = scanAQEngine(editor, references);
+    var matches = options.skipPlainCitations ? [] : scanAQEngine(editor, references, options);
     return {
       plainCitationSummary: summarizeMatches(matches),
       plainCitationMatches: matches,
@@ -275,17 +280,26 @@
       bibliographyText: bibliographyLines.map(function(item){ return item.text; }).join('\n'),
       headingCandidates: headingCandidates.slice(0, 24),
       headingCandidateCount: headingCandidates.length,
-      blockCount: textBlocks.length
+      blockCount: textBlocks.length,
+      analysisLimited: !!(options.maxBlocks || options.maxTextLength || options.skipPlainCitations) && (allBlocks.length > blocks.length || matches.truncated)
     };
   }
 
-  function scanAQEngine(editor, references){
+  function scanAQEngine(editor, references, options){
+    options = options || {};
     if(!editor || !editor._aqEngine || !editor._docModel || typeof editor._docModel.get !== 'function') return [];
     var model = editor._docModel.get() || {};
     var results = [];
     var offset = 0;
     var inBibliography = false;
-    (model.blocks || []).forEach(function(block, blockIndex){
+    var scannedChars = 0;
+    var blocks = model.blocks || [];
+    var maxBlocks = Number(options.maxBlocks || 0);
+    var maxTextLength = Number(options.maxTextLength || 0);
+    for(var blockIndex = 0; blockIndex < blocks.length; blockIndex++){
+      if(maxBlocks > 0 && blockIndex >= maxBlocks){ results.truncated = true; break; }
+      if(maxTextLength > 0 && scannedChars >= maxTextLength){ results.truncated = true; break; }
+      var block = blocks[blockIndex];
       var len = typeof editor._docModel.blockTextLength === 'function'
         ? editor._docModel.blockTextLength(blockIndex)
         : blockText(block).length;
@@ -293,15 +307,18 @@
       if(block && (block._isBibHeading || isBibliographyHeadingText(textForBlock))){
         inBibliography = true;
         offset += len + 1;
-        return;
+        scannedChars += len;
+        continue;
       }
       if(block && block._isAppendixHeading) inBibliography = false;
       if(inBibliography || (block && (block._isBibEntry || block._isAppendixHeading))){
         offset += len + 1;
-        return;
+        scannedChars += len;
+        continue;
       }
       var runOffset = offset;
       (block.runs || []).forEach(function(run){
+        if(maxTextLength > 0 && scannedChars >= maxTextLength){ results.truncated = true; return; }
         var text = String(run && run.text || '');
         if(text && !(run && run.citation)){
           detectPlainCitations(text).forEach(function(occ){
@@ -314,9 +331,10 @@
           });
         }
         runOffset += text.length;
+        scannedChars += text.length;
       });
       offset += len + 1;
-    });
+    }
     return results;
   }
 
@@ -890,14 +908,29 @@
     return Math.max(start, Math.min(end, start + Math.floor(Math.max(0, end - start) / 2)));
   }
 
+  function offsetFromAQPoint(editor, event){
+    if(!editor || !event || typeof window === 'undefined') return null;
+    var stage = editor._stageEl || (editor.view && editor.view.dom) || document.getElementById('aq-engine-stage');
+    var selectionApi = window.AQEngineSelection;
+    if(!stage || !selectionApi || typeof selectionApi.pointToOffset !== 'function') return null;
+    try {
+      var hit = selectionApi.pointToOffset(stage, event.clientX || 0, event.clientY || 0);
+      if(!hit || !Number.isFinite(Number(hit.offset))) return null;
+      return Number(hit.offset);
+    } catch(_e){
+      return null;
+    }
+  }
+
   function showEditorContextMenu(event){
     if(!event || event.defaultPrevented) return;
     var target = event.target;
     if(!target || !target.closest) return;
-    if(target.closest('#pdfpanel, #pdfctxmenu, input, textarea, select, button, .modal-bg')) return;
+    if(target.closest('#pdfpanel, #pdfctxmenu, input:not(.aq-input-capture), textarea:not(.aq-input-capture), select, button, .modal-bg')) return;
     var editor = getActiveEditor();
     if(!editor || !editor._aqEngine) return;
     var offset = offsetFromEvent(event);
+    if(offset == null) offset = offsetFromAQPoint(editor, event);
     if(offset == null) return;
     var refs = currentWorkspaceReferences();
     var citation = citationRunAtOffset(editor, offset);
@@ -921,6 +954,28 @@
     menu.style.display = 'block';
   }
 
+  function showEditorClickSuggestion(event){
+    if(!event || event.defaultPrevented) return;
+    var target = event.target;
+    if(!target || !target.closest) return;
+    if(target.closest('#plainCitationReviewModal, #plainCitationContextMenu, #pdfpanel, input:not(.aq-input-capture), textarea:not(.aq-input-capture), select, button, .modal-bg')) return;
+    try{
+      var selection = window.getSelection && window.getSelection();
+      if(selection && String(selection.toString() || '').trim()) return;
+    }catch(_e){}
+    var editor = getActiveEditor();
+    if(!editor || !editor._aqEngine) return;
+    var offset = offsetFromEvent(event);
+    if(offset == null) offset = offsetFromAQPoint(editor, event);
+    if(offset == null) return;
+    if(citationRunAtOffset(editor, offset)) return;
+    var match = findPlainMatchAtOffset(editor, currentWorkspaceReferences(), offset);
+    if(!match) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openSingleLinkModal(match, null);
+  }
+
   function openSingleLinkModal(match, citation){
     var refs = currentWorkspaceReferences();
     var occurrence = match && match.occurrence;
@@ -939,6 +994,7 @@
     if(document.__aqPlainCitationContextInstalled) return true;
     document.__aqPlainCitationContextInstalled = true;
     document.addEventListener('contextmenu', showEditorContextMenu, true);
+    document.addEventListener('click', showEditorClickSuggestion, true);
     document.addEventListener('mousedown', function(event){
       var target = event.target;
       if(target && target.closest && target.closest('#plainCitationContextMenu')) return;
@@ -952,15 +1008,67 @@
     else installContextMenu();
   }
 
-  if(typeof window !== 'undefined'){
-    window.addEventListener('aq:word-import-complete', function(){
-      var editor = getActiveEditor();
-      var analysis = analyzeImportedDocument(editor, currentWorkspaceReferences());
-      var plain = analysis && analysis.plainCitationSummary || {};
-      if((plain.scanned || 0) || (analysis.bibliographyLines && analysis.bibliographyLines.length) || (analysis.headingCandidateCount || 0)){
-        openImportCleanupModal(editor, currentWorkspaceReferences());
-      }
+  var pendingImportCleanupTimer = null;
+  var lastImportCleanupSignature = '';
+  var lastImportCleanupAt = 0;
+
+  function editorImportCleanupSignature(editor){
+    try{
+      var state = window.S || {};
+      var refs = currentWorkspaceReferences();
+      var blocks = getAQBlocks(editor);
+      var textLength = 0;
+      blocks.forEach(function(block){ textLength += blockText(block).length; });
+      return [String(state.cur || ''), String(state.curDoc || ''), refs.length, blocks.length, textLength].join(':');
+    }catch(_e){
+      return '';
+    }
+  }
+
+  function runImportCleanupAnalysis(){
+    pendingImportCleanupTimer = null;
+    var editor = getActiveEditor();
+    if(!editor || !editor._aqEngine) return;
+    var signature = editorImportCleanupSignature(editor);
+    var now = Date.now();
+    if(signature && signature === lastImportCleanupSignature && now - lastImportCleanupAt < 5000) return;
+    lastImportCleanupSignature = signature;
+    lastImportCleanupAt = now;
+    var refs = currentWorkspaceReferences();
+    var blocks = getAQBlocks(editor);
+    var textLength = 0;
+    blocks.forEach(function(block){ textLength += blockText(block).length; });
+    var analysis = analyzeImportedDocument(editor, refs, {
+      maxBlocks: AUTO_ANALYSIS_MAX_BLOCKS,
+      maxTextLength: AUTO_ANALYSIS_MAX_CHARS,
+      skipPlainCitations: textLength > AUTO_ANALYSIS_MAX_CHARS * 2
     });
+    var plain = analysis && analysis.plainCitationSummary || {};
+    if((plain.scanned || 0) || (analysis.bibliographyLines && analysis.bibliographyLines.length) || (analysis.headingCandidateCount || 0)){
+      openImportCleanupModal(editor, refs);
+    }
+  }
+
+  function handleWordImportComplete(){
+    if(pendingImportCleanupTimer) return;
+    var schedule = window.requestIdleCallback || function(callback){ return window.setTimeout(callback, 180); };
+    pendingImportCleanupTimer = schedule(function(){
+      window.setTimeout(runImportCleanupAnalysis, 0);
+    }, { timeout: 1200 });
+  }
+
+  if(typeof window !== 'undefined'){
+    window.addEventListener('aq:word-import-complete', handleWordImportComplete);
+    window.addEventListener('aq:word-import-committed', handleWordImportComplete);
+    window.openPlainCitationLinking = function(){
+      openReviewModal(getActiveEditor(), currentWorkspaceReferences());
+      return true;
+    };
+    window.linkHighConfidencePlainCitations = function(){
+      var result = linkHighConfidence(getActiveEditor(), currentWorkspaceReferences(), { root: window });
+      toast(result.linked ? (result.linked + ' düz atıf bağlandı.') : 'Bağlanacak güvenli eşleşme yok.', result.linked ? 'ok' : '');
+      return result;
+    };
   }
 
   return {

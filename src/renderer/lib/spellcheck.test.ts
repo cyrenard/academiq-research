@@ -3,6 +3,7 @@ import {
   ensureSpellLoaded,
   checkText,
   checkLoaded,
+  suggestWord,
   isSpellReady,
   disposeSpell,
   _setSpellInstanceForTests,
@@ -171,6 +172,14 @@ describe('checkLoaded', () => {
       ruleId: 'NSPELL_TR',
       category: 'TYPOS'
     });
+  });
+
+  it('suggests missing-letter and Turkish de-asciified corrections first', async () => {
+    _setSpellInstanceForTests(fakeSpell({ knownWords: ['merhaba', 'yanlış', 'çalışma'] }));
+
+    expect(await suggestWord('meraba')).toContain('merhaba');
+    expect((await suggestWord('yanlis'))[0]).toBe('yanlış');
+    expect((await suggestWord('calisma'))[0]).toBe('çalışma');
   });
 });
 

@@ -1,6 +1,14 @@
 use serde_json::{json, Value};
+use std::{
+    fs,
+    io::{Read, Seek, Write},
+    path::{Path, PathBuf},
+};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
+use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
+
+const MANIFEST_PATH: &str = "manifest.json";
 
 #[tauri::command]
 pub async fn backup_create(app: AppHandle) -> Result<Value, String> {
@@ -16,17 +24,39 @@ pub async fn backup_create(app: AppHandle) -> Result<Value, String> {
         return Ok(json!({ "ok": false, "canceled": true }));
     };
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let snapshot = json!({
+    let file = fs::File::create(path).map_err(|e| e.to_string())?;
+    let mut zip = ZipWriter::new(file);
+    let manifest = json!({
+        "format": "academiq-tauri-backup",
+        "formatVersion": 1,
         "version": app.package_info().version.to_string(),
         "source": data_dir.to_string_lossy(),
         "createdAt": chrono_like_now()
     });
-    std::fs::write(
+    let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    zip.start_file(MANIFEST_PATH, options)
+        .map_err(|e| e.to_string())?;
+    zip.write_all(&serde_json::to_vec_pretty(&manifest).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+
+    let mut file_count = 1_u64;
+    let mut total_bytes = 0_u64;
+    add_dir_to_zip(
+        &mut zip,
+        &data_dir,
+        &data_dir,
         path,
-        serde_json::to_vec_pretty(&snapshot).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(json!({ "ok": true, "filePath": path.to_string_lossy() }))
+        &mut file_count,
+        &mut total_bytes,
+    )?;
+    zip.finish().map_err(|e| e.to_string())?;
+
+    Ok(json!({
+        "ok": true,
+        "filePath": path.to_string_lossy(),
+        "fileCount": file_count,
+        "totalBytes": total_bytes
+    }))
 }
 
 #[tauri::command]
@@ -42,8 +72,144 @@ pub async fn backup_restore(app: AppHandle) -> Result<Value, String> {
     let Some(path) = source.as_path() else {
         return Ok(json!({ "ok": false, "canceled": true }));
     };
-    let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
-    Ok(json!({ "ok": true, "filePath": path.to_string_lossy(), "size": size, "restored": false }))
+
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let file = fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut archive = ZipArchive::new(file).map_err(|e| e.to_string())?;
+    validate_manifest(&mut archive)?;
+
+    let restore_backup_dir = data_dir.with_file_name(format!(
+        "{}.pre-restore.{}",
+        data_dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("academiq-data"),
+        chrono_like_now()
+    ));
+    if data_dir.exists() {
+        if restore_backup_dir.exists() {
+            fs::remove_dir_all(&restore_backup_dir).map_err(|e| e.to_string())?;
+        }
+        fs::rename(&data_dir, &restore_backup_dir).map_err(|e| e.to_string())?;
+    }
+    fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+
+    let result = extract_archive(&mut archive, &data_dir);
+    if let Err(error) = result {
+        let _ = fs::remove_dir_all(&data_dir);
+        if restore_backup_dir.exists() {
+            let _ = fs::rename(&restore_backup_dir, &data_dir);
+        }
+        return Ok(json!({ "ok": false, "error": error }));
+    }
+
+    Ok(json!({
+        "ok": true,
+        "filePath": path.to_string_lossy(),
+        "restored": true,
+        "preRestoreBackup": restore_backup_dir.to_string_lossy()
+    }))
+}
+
+fn add_dir_to_zip<W: Write + Seek>(
+    zip: &mut ZipWriter<W>,
+    root: &Path,
+    dir: &Path,
+    target_backup_path: &Path,
+    file_count: &mut u64,
+    total_bytes: &mut u64,
+) -> Result<(), String> {
+    let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    for entry in fs::read_dir(dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if same_path(&path, target_backup_path) {
+            continue;
+        }
+        let rel = path
+            .strip_prefix(root)
+            .map_err(|e| e.to_string())?
+            .to_string_lossy()
+            .replace('\\', "/");
+        if path.is_dir() {
+            add_dir_to_zip(
+                zip,
+                root,
+                &path,
+                target_backup_path,
+                file_count,
+                total_bytes,
+            )?;
+            continue;
+        }
+        if !path.is_file() {
+            continue;
+        }
+        zip.start_file(format!("data/{rel}"), options)
+            .map_err(|e| e.to_string())?;
+        let mut file = fs::File::open(&path).map_err(|e| e.to_string())?;
+        let bytes = std::io::copy(&mut file, zip).map_err(|e| e.to_string())?;
+        *file_count += 1;
+        *total_bytes += bytes;
+    }
+    Ok(())
+}
+
+fn validate_manifest<R: Read + Seek>(archive: &mut ZipArchive<R>) -> Result<(), String> {
+    let mut file = archive
+        .by_name(MANIFEST_PATH)
+        .map_err(|_| "Backup manifest bulunamadi".to_string())?;
+    let mut raw = String::new();
+    file.read_to_string(&mut raw).map_err(|e| e.to_string())?;
+    let value: Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    if value.get("format").and_then(Value::as_str) != Some("academiq-tauri-backup") {
+        return Err("Gecersiz AcademiQ backup dosyasi".into());
+    }
+    Ok(())
+}
+
+fn extract_archive<R: Read + Seek>(
+    archive: &mut ZipArchive<R>,
+    data_dir: &Path,
+) -> Result<(), String> {
+    for index in 0..archive.len() {
+        let mut file = archive.by_index(index).map_err(|e| e.to_string())?;
+        let name = file.name().replace('\\', "/");
+        if name == MANIFEST_PATH || file.is_dir() {
+            continue;
+        }
+        let Some(rel) = name.strip_prefix("data/") else {
+            continue;
+        };
+        if rel.contains("..") {
+            return Err("Backup icinde guvensiz yol var".into());
+        }
+        let out_path = safe_join(data_dir, rel)?;
+        if let Some(parent) = out_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let mut out = fs::File::create(&out_path).map_err(|e| e.to_string())?;
+        std::io::copy(&mut file, &mut out).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+fn safe_join(root: &Path, rel: &str) -> Result<PathBuf, String> {
+    let mut out = root.to_path_buf();
+    for part in rel.split('/') {
+        if part.is_empty() || part == "." || part == ".." {
+            return Err("Backup icinde guvensiz yol var".into());
+        }
+        out.push(part);
+    }
+    Ok(out)
+}
+
+fn same_path(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
 }
 
 fn chrono_like_now() -> String {

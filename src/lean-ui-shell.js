@@ -2499,14 +2499,35 @@
       return report;
     }
 
+    function confirmPreflightWithShell(report, target){
+      var risk = getExportRiskLevel(report);
+      if(risk === 'clean') return Promise.resolve(report);
+      var w = win();
+      var message = formatPreflightMessage(report, target || 'export');
+      if(w && typeof w.aqConfirm === 'function'){
+        return w.aqConfirm({
+          title: String(target || 'export').toUpperCase() + ' kalite kontrolu',
+          message: message,
+          confirmLabel: 'Yine de aktar',
+          cancelLabel: 'Iptal',
+          tone: risk === 'blocker' ? 'danger' : 'warning'
+        }).then(function(ok){ return ok ? report : false; });
+      }
+      if(w && typeof w.confirm === 'function'){
+        return Promise.resolve(w.confirm(message) ? report : false);
+      }
+      return Promise.resolve(report);
+    }
+
     function installExportPreflightGuard(){
       var w = win();
       if(!w || w.__aqLeanExportPreflightBound) return;
       var wrap = function(name, target){
         var original = w[name];
         if(typeof original !== 'function' || original.__aqLeanPreflightWrapped) return false;
-        var wrapped = function(){
-          var report = runPreflight({interactive:true, target:target});
+        var wrapped = async function(){
+          var report = runPreflight({interactive:false, target:target});
+          report = await confirmPreflightWithShell(report, target);
           if(report === false) return false;
           return original.apply(this, arguments);
         };
@@ -2515,7 +2536,9 @@
         w[name] = wrapped;
         return true;
       };
-      var didWrap = wrap('expPDF', 'pdf') || wrap('expDOC', 'docx');
+      var didWrap = false;
+      didWrap = wrap('expPDF', 'pdf') || didWrap;
+      didWrap = wrap('expDOC', 'docx') || didWrap;
       if(didWrap) w.__aqLeanExportPreflightBound = true;
     }
 

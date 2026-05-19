@@ -87,7 +87,12 @@ async fn fetch_pdf_inner(
         }
         match fetch_single(&candidate, opts).await {
             Ok(SingleFetch::Pdf(outcome)) => return Ok(outcome),
-            Ok(SingleFetch::Html { html, final_url, status, content_type }) => {
+            Ok(SingleFetch::Html {
+                html,
+                final_url,
+                status,
+                content_type,
+            }) => {
                 if depth < 2 {
                     for next in extract_pdf_candidates_from_html(&html, &final_url) {
                         if opts.allow_localhost_for_tests || is_safe_http_url(&next) {
@@ -178,12 +183,14 @@ async fn fetch_single(url: &str, opts: &DownloadOptions) -> Result<SingleFetch, 
             });
         }
     }
-    let bytes = read_limited(response, opts.max_bytes).await.map_err(|error| DownloadFailure {
-        error,
-        attempted_url: final_url.clone(),
-        content_type: content_type.clone(),
-        status: Some(status.as_u16()),
-    })?;
+    let bytes = read_limited(response, opts.max_bytes)
+        .await
+        .map_err(|error| DownloadFailure {
+            error,
+            attempted_url: final_url.clone(),
+            content_type: content_type.clone(),
+            status: Some(status.as_u16()),
+        })?;
     if looks_like_pdf(&content_type, &bytes) {
         return Ok(SingleFetch::Pdf(DownloadOutcome {
             bytes,
@@ -288,12 +295,18 @@ async fn read_limited(mut response: reqwest::Response, max_bytes: u64) -> Result
 }
 
 fn looks_like_pdf(content_type: &str, bytes: &[u8]) -> bool {
-    content_type.to_ascii_lowercase().contains("application/pdf") || bytes.starts_with(b"%PDF")
+    content_type
+        .to_ascii_lowercase()
+        .contains("application/pdf")
+        || bytes.starts_with(b"%PDF")
 }
 
 fn looks_like_html(bytes: &[u8]) -> bool {
     let prefix = String::from_utf8_lossy(&bytes[..bytes.len().min(512)]).to_ascii_lowercase();
-    prefix.contains("<html") || prefix.contains("<!doctype html") || prefix.contains("<meta") || prefix.contains("<a ")
+    prefix.contains("<html")
+        || prefix.contains("<!doctype html")
+        || prefix.contains("<meta")
+        || prefix.contains("<a ")
 }
 
 fn looks_like_pdf_candidate(value: &str) -> bool {
@@ -347,8 +360,12 @@ mod tests {
         "#;
         let candidates = extract_pdf_candidates_from_html(html, "https://example.com/article");
         assert_eq!(candidates[0], "https://example.com/paper.pdf");
-        assert!(candidates.iter().any(|url| url.ends_with("/download/pdf/article")));
-        assert!(candidates.iter().any(|url| url == "https://cdn.example.org/file.pdf"));
+        assert!(candidates
+            .iter()
+            .any(|url| url.ends_with("/download/pdf/article")));
+        assert!(candidates
+            .iter()
+            .any(|url| url == "https://cdn.example.org/file.pdf"));
     }
 
     #[test]
@@ -364,7 +381,10 @@ mod tests {
         opts.allow_localhost_for_tests = true;
 
         let direct = rt
-            .block_on(fetch_pdf_with_fallback(&format!("{base}/direct.pdf"), &opts))
+            .block_on(fetch_pdf_with_fallback(
+                &format!("{base}/direct.pdf"),
+                &opts,
+            ))
             .unwrap();
         assert!(direct.bytes.starts_with(b"%PDF"));
 
@@ -375,7 +395,10 @@ mod tests {
         assert!(html.final_url.ends_with("/oa.pdf"));
 
         let nested = rt
-            .block_on(fetch_pdf_with_fallback(&format!("{base}/article-link"), &opts))
+            .block_on(fetch_pdf_with_fallback(
+                &format!("{base}/article-link"),
+                &opts,
+            ))
             .unwrap();
         assert!(nested.bytes.starts_with(b"%PDF"));
         assert!(nested.final_url.contains("/nested.pdf"));

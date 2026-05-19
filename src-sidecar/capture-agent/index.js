@@ -4,11 +4,13 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { execFile } = require('child_process');
 const {
   createBrowserCaptureBridge,
   DEFAULT_CAPTURE_PORT,
   BROWSER_CAPTURE_PROTOCOL_VERSION,
   normalizeBrowserCaptureSettings,
+  getBrowserExtensionManagerUrl,
   prepareExtensionBundle,
   sanitizeCapturePayload,
   safeId
@@ -29,6 +31,23 @@ function writeLine(message) {
 
 function notify(method, params) {
   writeLine({ method, params: params || {} });
+}
+
+function openShellTarget(target) {
+  const value = asText(target, 4096);
+  if (!value) return Promise.resolve({ ok: false, error: 'empty_target' });
+  return new Promise((resolve) => {
+    if (process.platform === 'win32') {
+      execFile('cmd.exe', ['/c', 'start', '', value], { windowsHide: true }, (error) => {
+        resolve(error ? { ok: false, error: error.message } : { ok: true, target: value });
+      });
+      return;
+    }
+    const opener = process.platform === 'darwin' ? 'open' : 'xdg-open';
+    execFile(opener, [value], (error) => {
+      resolve(error ? { ok: false, error: error.message } : { ok: true, target: value });
+    });
+  });
 }
 
 function getDataDir() {
@@ -113,6 +132,12 @@ function patchSettings(patch) {
   return settings;
 }
 
+function resolveBrowserFamily(requested, settings) {
+  const raw = asText(requested || settings && settings.browserFamily, 32).toLowerCase();
+  if (raw === 'firefox' || raw === 'mozilla') return 'firefox';
+  return 'chromium';
+}
+
 function loadQueue() {
   const state = loadState();
   return Array.isArray(state.queue) ? state.queue : [];
@@ -162,7 +187,9 @@ function prepareSetupBundle(browserFamily) {
       error
     });
   }
-  const family = browserFamily === 'firefox' ? 'firefox' : 'chromium';
+  const family = resolveBrowserFamily(browserFamily, settings);
+  const managerUrl = getBrowserExtensionManagerUrl(Object.assign({}, settings, { browserFamily: family })) ||
+    (family === 'firefox' ? 'about:debugging#/runtime/this-firefox' : 'chrome://extensions');
   const prepared = prepareExtensionBundle({
     sourceRoot,
     appDir: getAppDir(),
@@ -185,8 +212,19 @@ function prepareSetupBundle(browserFamily) {
     ok: true,
     installDir: prepared.installDir,
     guidePath: prepared.guidePath,
+    managerUrl,
+    browserFamily: family,
     sourceRoot,
     installStrategy: { id: 'manual_extension_load', supported: true }
+  });
+}
+
+async function prepareAndOpenSetup(browserFamily, action) {
+  const prepared = prepareSetupBundle(browserFamily);
+  if (!prepared.ok) return Object.assign({ action }, prepared);
+  return Object.assign({}, prepared, {
+    action,
+    message: 'Capture extension hazirlandi. Kurulum klasoru aciliyor.'
   });
 }
 
@@ -260,9 +298,14 @@ function buildStatus(extra) {
   const queue = loadQueue();
   return Object.assign({
     ok: true,
-    enabled: settings.enabled !== false,
+    enabled: settings.enabled === true,
     port: activePort || settings.port || DEFAULT_CAPTURE_PORT,
     tokenReady: !!settings.token,
+    browserFamily: settings.browserFamily || 'chromium',
+    defaultBrowserLabel: settings.defaultBrowserLabel || '',
+    defaultBrowserProgId: settings.defaultBrowserProgId || '',
+    installDir: settings.installDir || '',
+    guidePath: settings.guidePath || '',
     browserCaptureProtocolVersion: BROWSER_CAPTURE_PROTOCOL_VERSION,
     bridgeConnected: !!bridge,
     bridgeReady: !!bridge,
@@ -283,16 +326,26 @@ async function dispatch(method, params) {
   switch (method) {
     case 'status':
     case 'getStatus':
-      await ensureBridge();
+      if (getSettings().enabled === true) await ensureBridge();
       return buildStatus();
     case 'prepareSetup':
-      await ensureBridge();
-      return prepareSetupBundle(params && params.browserFamily);
+      {
+        const setup = prepareSetupBundle(params && params.browserFamily);
+        if (setup && setup.ok) {
+          await ensureBridge();
+          return buildStatus(setup);
+        }
+        return setup;
+      }
     case 'runAction':
       if (params && params.action === 'stop_agent') return stopBridge();
       if (!params || !params.action || ['install', 'repair', 'update'].includes(String(params.action).toLowerCase())) {
-        await ensureBridge();
-        return Object.assign({ action: asText(params && params.action, 64) || 'install' }, prepareSetupBundle(params && params.browserFamily));
+        const setup = await prepareAndOpenSetup(params && params.browserFamily, asText(params && params.action, 64) || 'install');
+        if (setup && setup.ok) {
+          await ensureBridge();
+          return buildStatus(setup);
+        }
+        return setup;
       }
       await ensureBridge();
       return buildStatus({ ok: true, action: asText(params && params.action, 64) || 'install' });
@@ -301,16 +354,33 @@ async function dispatch(method, params) {
       return buildStatus({ ok: true, action: 'test' });
     case 'lookup':
       return { ok: false, message: 'Lookup host import path is owned by Tauri.', payload: params && params.payload || {} };
-    case 'openInstallDir':
-      return buildStatus({ ok: true, installDir: getSettings().installDir || '' });
-    case 'openGuide':
-      return buildStatus({ ok: true, guidePath: getSettings().guidePath || '' });
+    case 'openInstallDir': {
+      const settings = getSettings();
+      const family = resolveBrowserFamily(params && params.browserFamily, settings);
+      const needsPrepare = !settings.installDir || settings.browserFamily !== family;
+      const status = needsPrepare ? prepareSetupBundle(family) : buildStatus({ ok: true, installDir: settings.installDir, browserFamily: family });
+      return Object.assign({}, status, {
+        opened: false,
+        message: status.installDir ? 'Capture kurulum klasoru hazir.' : 'Capture kurulum klasoru bulunamadi.'
+      });
+    }
+    case 'openGuide': {
+      const settings = getSettings();
+      const family = resolveBrowserFamily(params && params.browserFamily, settings);
+      const needsPrepare = !settings.guidePath || settings.browserFamily !== family;
+      const status = needsPrepare ? prepareSetupBundle(family) : buildStatus({ ok: true, guidePath: settings.guidePath, browserFamily: family });
+      return Object.assign({}, status, {
+        opened: false,
+        message: status.guidePath ? 'Capture rehberi hazir.' : 'Capture rehberi bulunamadi.'
+      });
+    }
     case 'updatePrefs':
-      return Object.assign({ ok: true }, buildStatus({ settings: patchSettings(params && params.prefs || {}) }));
+      patchSettings(params && params.prefs || {});
+      return Object.assign({ ok: true }, buildStatus());
     case 'createWorkspace':
       return queueWorkspace(params && params.name);
     case 'rendererReady':
-      await ensureBridge();
+      if (getSettings().enabled === true) await ensureBridge();
       notify('browserCapture:stateChanged', { rendererReady: true });
       return { ok: true };
     case 'ackPayload':
@@ -347,10 +417,6 @@ process.stdin.on('data', (chunk) => {
       }
     });
   }
-});
-
-ensureBridge().catch((error) => {
-  notify('browserCapture:error', { error: error && error.message ? error.message : String(error) });
 });
 
 process.on('SIGTERM', () => {

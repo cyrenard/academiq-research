@@ -25,6 +25,7 @@ pub struct ResolvedFont {
     pub bytes: Vec<u8>,
     pub source: FontSource,
     pub name: String,
+    #[cfg_attr(not(test), allow(dead_code))]
     pub path: PathBuf,
 }
 
@@ -50,7 +51,11 @@ impl FontResolver {
             italic,
         };
         let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-        if let Some(found) = cache.lock().map_err(|_| "font cache lock failed")?.get(&key) {
+        if let Some(found) = cache
+            .lock()
+            .map_err(|_| "font cache lock failed")?
+            .get(&key)
+        {
             return Ok(found.clone());
         }
 
@@ -83,6 +88,7 @@ impl FontResolver {
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn system_font_path(family: &str, weight: u16, italic: bool) -> Option<PathBuf> {
     let key = FontKey {
         family: canonical_family(family),
@@ -98,10 +104,12 @@ fn resolve_uncached(key: &FontKey) -> Result<ResolvedFont, String> {
 
 fn resolve_uncached_with_system(key: &FontKey, allow_system: bool) -> Result<ResolvedFont, String> {
     if allow_system {
-        if let Some(path) = system_file_name(key).and_then(|name| windows_font_dir().map(|dir| dir.join(name))) {
-        if path.exists() {
-            return read_font(path, FontSource::System, requested_name(key));
-        }
+        if let Some(path) =
+            system_file_name(key).and_then(|name| windows_font_dir().map(|dir| dir.join(name)))
+        {
+            if path.exists() {
+                return read_font(path, FontSource::System, requested_name(key));
+            }
         }
     }
 
@@ -165,7 +173,10 @@ fn fallback_file_name(key: &FontKey) -> (&'static str, &'static str) {
         ("Arial", false, false) => ("LiberationSans-Regular.ttf", "Liberation Sans"),
         ("Arial", true, false) => ("LiberationSans-Bold.ttf", "Liberation Sans Bold"),
         ("Arial", false, true) => ("LiberationSans-Italic.ttf", "Liberation Sans Italic"),
-        ("Arial", true, true) => ("LiberationSans-BoldItalic.ttf", "Liberation Sans Bold Italic"),
+        ("Arial", true, true) => (
+            "LiberationSans-BoldItalic.ttf",
+            "Liberation Sans Bold Italic",
+        ),
         ("Calibri", false, false) => ("Carlito-Regular.ttf", "Carlito"),
         ("Calibri", true, false) => ("Carlito-Bold.ttf", "Carlito Bold"),
         ("Calibri", false, true) => ("Carlito-Italic.ttf", "Carlito Italic"),
@@ -173,7 +184,10 @@ fn fallback_file_name(key: &FontKey) -> (&'static str, &'static str) {
         (_, false, false) => ("LiberationSerif-Regular.ttf", "Liberation Serif"),
         (_, true, false) => ("LiberationSerif-Bold.ttf", "Liberation Serif Bold"),
         (_, false, true) => ("LiberationSerif-Italic.ttf", "Liberation Serif Italic"),
-        (_, true, true) => ("LiberationSerif-BoldItalic.ttf", "Liberation Serif Bold Italic"),
+        (_, true, true) => (
+            "LiberationSerif-BoldItalic.ttf",
+            "Liberation Serif Bold Italic",
+        ),
     }
 }
 
@@ -203,10 +217,7 @@ mod tests {
     static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
     fn lock_and_clear() -> MutexGuard<'static, ()> {
-        let guard = TEST_LOCK
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .unwrap();
+        let guard = TEST_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
         if let Some(cache) = CACHE.get() {
             cache.lock().unwrap().clear();
         }

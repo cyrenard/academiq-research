@@ -38,11 +38,11 @@ declare global {
       restoreDocumentHistorySnapshot: (docId: string, snapshotId: string) => IpcResult<unknown>;
       getBrowserCaptureStatus: () => IpcResult<unknown>;
       prepareBrowserCaptureSetup: () => IpcResult<unknown>;
-      runBrowserCaptureAction: (action: string) => IpcResult<unknown>;
+      runBrowserCaptureAction: (action: string, browserFamily?: string) => IpcResult<unknown>;
       testBrowserCaptureConnection: () => IpcResult<unknown>;
       lookupBrowserCaptureTarget: (payload: unknown) => IpcResult<unknown>;
-      openBrowserCaptureInstallDir: () => IpcResult<unknown>;
-      openBrowserCaptureGuide: () => IpcResult<unknown>;
+      openBrowserCaptureInstallDir: (browserFamily?: string) => IpcResult<unknown>;
+      openBrowserCaptureGuide: (browserFamily?: string) => IpcResult<unknown>;
       updateBrowserCapturePrefs: (prefs: unknown) => IpcResult<unknown>;
       createBrowserCaptureWorkspace: (name: string) => IpcResult<unknown>;
       browserCaptureRendererReady: () => IpcResult<unknown>;

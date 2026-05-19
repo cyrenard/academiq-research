@@ -20,6 +20,21 @@ test('canonical editor runtime modules load from src/ as the single source of tr
   });
 });
 
+test('plain citation linking runtime is loaded in legacy and Tauri entries', () => {
+  const legacyHtml = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  const tauriHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.match(legacyHtml, /<script src="\.\/src\/plain-citation-linking\.js"><\/script>/);
+  assert.match(tauriHtml, /<script src="\/src\/plain-citation-linking\.js"><\/script>/);
+  assert.ok(
+    legacyHtml.indexOf('./src/tiptap-word-citation.js') < legacyHtml.indexOf('./src/plain-citation-linking.js'),
+    'legacy plain citation linking should load after citation runtime helpers'
+  );
+  assert.ok(
+    tauriHtml.indexOf('/src/tiptap-word-citation.js') < tauriHtml.indexOf('/src/plain-citation-linking.js'),
+    'Tauri plain citation linking should load after citation runtime helpers'
+  );
+});
+
 test('startup retries TipTap init until canonical init module is available', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
   const legacy = fs.readFileSync(path.join(__dirname, '..', 'src', 'legacy-runtime.js'), 'utf8');

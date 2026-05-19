@@ -42,9 +42,11 @@ pub async fn spell_suggest(
     lang: Option<String>,
 ) -> Result<Vec<String>, String> {
     let ctx = spell_context(&app, lang).await?;
-    task::spawn_blocking(move || suggest_word(&word, &ctx.app_data_dir, &ctx.aff_path, &ctx.dic_path))
-        .await
-        .map_err(|e| e.to_string())?
+    task::spawn_blocking(move || {
+        suggest_word(&word, &ctx.app_data_dir, &ctx.aff_path, &ctx.dic_path)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -54,9 +56,11 @@ pub async fn spell_add_user_word(
     lang: Option<String>,
 ) -> Result<(), String> {
     let ctx = spell_context(&app, lang).await?;
-    task::spawn_blocking(move || add_user_word(&word, &ctx.app_data_dir, &ctx.aff_path, &ctx.dic_path))
-        .await
-        .map_err(|e| e.to_string())?
+    task::spawn_blocking(move || {
+        add_user_word(&word, &ctx.app_data_dir, &ctx.aff_path, &ctx.dic_path)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -100,7 +104,12 @@ fn dict_paths(resource_dir: Option<&Path>) -> Result<(PathBuf, PathBuf), String>
         bases.push(dir.join("resources").join("dict").join("tr"));
         bases.push(dir.join("dict").join("tr"));
     }
-    bases.push(PathBuf::from("src-tauri").join("resources").join("dict").join("tr"));
+    bases.push(
+        PathBuf::from("src-tauri")
+            .join("resources")
+            .join("dict")
+            .join("tr"),
+    );
     bases.push(PathBuf::from("resources").join("dict").join("tr"));
     bases.push(PathBuf::from("public").join("dictionary").join("tr"));
     for base in bases {
@@ -121,8 +130,12 @@ fn dictionary(
     if let Some(lock) = SPELL_TR.get() {
         return Ok(lock);
     }
-    let aff = normalize_hunspell_zero_flag(&std::fs::read_to_string(aff_path).map_err(|e| e.to_string())?);
-    let dic = normalize_hunspell_zero_flag(&std::fs::read_to_string(dic_path).map_err(|e| e.to_string())?);
+    let aff = normalize_hunspell_zero_flag(
+        &std::fs::read_to_string(aff_path).map_err(|e| e.to_string())?,
+    );
+    let dic = normalize_hunspell_zero_flag(
+        &std::fs::read_to_string(dic_path).map_err(|e| e.to_string())?,
+    );
     let mut dict = Dictionary::new(&aff, &dic).map_err(|e| e.to_string())?;
     for word in read_user_words(app_data_dir)? {
         let _ = dict.add(&word);
@@ -152,7 +165,13 @@ fn normalize_hunspell_zero_flag(input: &str) -> String {
             }
             let mapped = flags
                 .split(',')
-                .map(|flag| if flag == "0" { ZERO_FLAG_REPLACEMENT } else { flag })
+                .map(|flag| {
+                    if flag == "0" {
+                        ZERO_FLAG_REPLACEMENT
+                    } else {
+                        flag
+                    }
+                })
                 .collect::<Vec<_>>()
                 .join(",");
             format!("{stem}/{mapped}")
@@ -171,7 +190,9 @@ fn check_text(
         return Ok(Vec::new());
     }
     let lock = dictionary(app_data_dir, aff_path, dic_path)?;
-    let dict = lock.read().map_err(|_| "spell_dictionary_poisoned".to_string())?;
+    let dict = lock
+        .read()
+        .map_err(|_| "spell_dictionary_poisoned".to_string())?;
     let mut issues = Vec::new();
     for token in tokenize_words(text) {
         if token.word.chars().count() < 2 || is_all_caps(&token.word) {
@@ -198,7 +219,9 @@ fn suggest_word(
     dic_path: &Path,
 ) -> Result<Vec<String>, String> {
     let lock = dictionary(app_data_dir, aff_path, dic_path)?;
-    let dict = lock.read().map_err(|_| "spell_dictionary_poisoned".to_string())?;
+    let dict = lock
+        .read()
+        .map_err(|_| "spell_dictionary_poisoned".to_string())?;
     Ok(merged_suggestions(&dict, word, 8))
 }
 
@@ -285,19 +308,7 @@ fn is_word_char(ch: char) -> bool {
     ch.is_ascii_alphabetic()
         || matches!(
             ch,
-            'ç' | 'ğ'
-                | 'ı'
-                | 'ö'
-                | 'ş'
-                | 'ü'
-                | 'Ç'
-                | 'Ğ'
-                | 'İ'
-                | 'Ö'
-                | 'Ş'
-                | 'Ü'
-                | '\''
-                | '’'
+            'ç' | 'ğ' | 'ı' | 'ö' | 'ş' | 'ü' | 'Ç' | 'Ğ' | 'İ' | 'Ö' | 'Ş' | 'Ü' | '\'' | '’'
         )
 }
 
@@ -315,14 +326,21 @@ fn merged_suggestions(dict: &Dictionary, word: &str, max: usize) -> Vec<String> 
     let mut out = Vec::new();
     dict.suggest(word, &mut out);
     for candidate in one_edit_candidates(dict, word) {
-        if !out.iter().any(|existing| existing.eq_ignore_ascii_case(&candidate)) {
+        if !out
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(&candidate))
+        {
             out.push(candidate);
         }
     }
     out.sort_by(|a, b| {
         damerau(word, a)
             .cmp(&damerau(word, b))
-            .then_with(|| a.len().abs_diff(word.len()).cmp(&b.len().abs_diff(word.len())))
+            .then_with(|| {
+                a.len()
+                    .abs_diff(word.len())
+                    .cmp(&b.len().abs_diff(word.len()))
+            })
             .then_with(|| a.to_lowercase().cmp(&b.to_lowercase()))
     });
     out.truncate(max);

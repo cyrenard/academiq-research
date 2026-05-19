@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState, type MouseEvent } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react';
 import type { AcademiqReference } from '../../lib/app-state';
 import { referenceAuthors, referenceTags, referenceTitle } from '../../lib/app-state';
 import { legacyFeatures, runLegacyFeature } from '../../lib/legacy-feature-adapter';
@@ -11,6 +11,15 @@ type SidebarCollection = {
 type SidebarLabel = {
   name: string;
   color?: string;
+};
+
+type InlineConfirm = {
+  kind: 'reference' | 'collection' | 'label' | 'pdf';
+  id: string;
+  title: string;
+  body: string;
+  x: number;
+  y: number;
 };
 
 type RefSidebarProps = {
@@ -26,23 +35,41 @@ type RefSidebarProps = {
   onEditReference: (id: string) => void;
   onToggleReferenceLabel: (referenceId: string, label: SidebarLabel) => void;
   onCreateLabel: (name: string) => void;
-  onDeleteLabel: (name: string) => void;
+  onDeleteLabel: (name: string, options?: { skipConfirm?: boolean }) => void;
   onCreateCollection: (name: string) => void;
   onSelectCollection: (collectionId: string) => void;
   onRenameCollection: (collectionId: string) => void;
-  onDeleteCollection: (collectionId: string) => void;
+  onDeleteCollection: (collectionId: string, options?: { skipConfirm?: boolean }) => void;
   onMoveReferenceToCollection: (referenceId: string, collectionId: string) => void;
   onToggleReferenceCollection: (referenceId: string, collectionId: string) => void;
-  onReferencePdfAction: (action: 'open' | 'show' | 'delete' | 'download' | 'browser', referenceId: string) => void;
+  onReferencePdfAction: (action: 'open' | 'show' | 'delete' | 'download' | 'browser', referenceId: string, options?: { skipConfirm?: boolean }) => void;
   onBatchOADownload: () => void;
   onShowReferenceInExplorer: (referenceId: string) => void;
   onOpenRelatedPapers: (reference: AcademiqReference) => void;
-  onDeleteReference: (referenceId: string) => void;
+  onDeleteReference: (referenceId: string, options?: { skipConfirm?: boolean }) => void;
   filtersOpen: boolean;
 };
 
 function refCollectionIds(ref: AcademiqReference) {
   return Array.isArray(ref.collectionIds) ? ref.collectionIds.map((id) => String(id)) : [];
+}
+
+function setDragReference(event: DragEvent<HTMLElement>, refId: string) {
+  const id = String(refId || '').trim();
+  if (!id) return;
+  event.dataTransfer.setData('application/x-academiq-reference-id', id);
+  event.dataTransfer.setData('text/academiq-reference', id);
+  event.dataTransfer.setData('text/plain', id);
+  event.dataTransfer.effectAllowed = 'copyMove';
+}
+
+function getDragReference(event: DragEvent<HTMLElement>) {
+  return (
+    event.dataTransfer.getData('application/x-academiq-reference-id') ||
+    event.dataTransfer.getData('text/academiq-reference') ||
+    event.dataTransfer.getData('text/plain') ||
+    ''
+  ).trim();
 }
 
 function refLabelName(label: unknown) {
@@ -88,6 +115,11 @@ export function RefSidebar({
   const [newCollectionName, setNewCollectionName] = useState('');
   const [collapsedCollections, setCollapsedCollections] = useState<Record<string, boolean>>({});
   const [unfiledCollapsed, setUnfiledCollapsed] = useState(false);
+  const dragCandidateRef = useRef<{ refId: string; x: number; y: number; active: boolean } | null>(null);
+  const suppressClickRef = useRef(false);
+  const [draggingReferenceId, setDraggingReferenceId] = useState('');
+  const [dragGhost, setDragGhost] = useState<{ refId: string; title: string; x: number; y: number } | null>(null);
+  const [inlineConfirm, setInlineConfirm] = useState<InlineConfirm | null>(null);
   const activeMenuReference = useMemo(
     () => references.find((ref) => ref.id === referenceMenu?.refId) || null,
     [referenceMenu?.refId, references]
@@ -148,6 +180,39 @@ export function RefSidebar({
     setReferenceMenu({ refId, x: event.clientX, y: event.clientY });
   };
 
+  const moveTargetReferenceId = draggingReferenceId;
+
+  const openInlineConfirm = (
+    event: MouseEvent<HTMLElement>,
+    confirm: Omit<InlineConfirm, 'x' | 'y'>
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    setInlineConfirm({
+      ...confirm,
+      x: Math.max(12, Math.min(rect.right + 8, window.innerWidth - 304)),
+      y: Math.max(12, Math.min(rect.top - 8, window.innerHeight - 168))
+    });
+  };
+
+  const runInlineConfirm = () => {
+    if (!inlineConfirm) return;
+    if (inlineConfirm.kind === 'reference') onDeleteReference(inlineConfirm.id, { skipConfirm: true });
+    if (inlineConfirm.kind === 'collection') onDeleteCollection(inlineConfirm.id, { skipConfirm: true });
+    if (inlineConfirm.kind === 'label') onDeleteLabel(inlineConfirm.id, { skipConfirm: true });
+    if (inlineConfirm.kind === 'pdf') onReferencePdfAction('delete', inlineConfirm.id, { skipConfirm: true });
+    setInlineConfirm(null);
+    closeReferenceMenu();
+  };
+
+  const moveReferenceToCollection = useCallback((refId: string, collectionId: string) => {
+    if (!refId || !collectionId) return;
+    onMoveReferenceToCollection(refId, collectionId);
+    setDraggingReferenceId('');
+    setDragGhost(null);
+  }, [onMoveReferenceToCollection]);
+
   const closeReferenceMenu = () => {
     setReferenceMenu(null);
     setReferenceSubmenu(null);
@@ -170,6 +235,69 @@ export function RefSidebar({
       window.removeEventListener('keydown', closeOnEscape);
     };
   }, [referenceMenu]);
+
+  useEffect(() => {
+    const cancelDrag = () => {
+      dragCandidateRef.current = null;
+      suppressClickRef.current = false;
+      setDraggingReferenceId('');
+      setDragGhost(null);
+    };
+    const onPointerMove = (event: globalThis.PointerEvent) => {
+      const candidate = dragCandidateRef.current;
+      if (!candidate) return;
+      const dx = Math.abs(event.clientX - candidate.x);
+      const dy = Math.abs(event.clientY - candidate.y);
+      if (!candidate.active && (dx > 6 || dy > 6)) {
+        candidate.active = true;
+        setDraggingReferenceId(candidate.refId);
+      }
+      if (candidate.active) {
+        const ref = references.find((item) => item.id === candidate.refId);
+        setDragGhost({
+          refId: candidate.refId,
+          title: ref ? referenceTitle(ref) : 'Kaynak',
+          x: event.clientX,
+          y: event.clientY
+        });
+      }
+    };
+    const onPointerUp = (event: globalThis.PointerEvent) => {
+      const candidate = dragCandidateRef.current;
+      dragCandidateRef.current = null;
+      setDraggingReferenceId('');
+      setDragGhost(null);
+      if (!candidate?.active) return;
+      suppressClickRef.current = true;
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
+      const target = document.elementFromPoint(event.clientX, event.clientY);
+      const drop = target?.closest('[data-ref-collection-drop-id]') as HTMLElement | null;
+      const collectionId = drop?.dataset.refCollectionDropId || '';
+      if (collectionId) moveReferenceToCollection(candidate.refId, collectionId);
+    };
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') cancelDrag();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') cancelDrag();
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+    window.addEventListener('blur', cancelDrag);
+    window.addEventListener('keydown', onKeyDown);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+      window.removeEventListener('blur', cancelDrag);
+      window.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [onMoveReferenceToCollection, references, moveReferenceToCollection]);
 
   const referenceHasLabel = (ref: AcademiqReference, labelName: string) => (
     Array.isArray(ref.labels) && ref.labels.some((label) => (
@@ -211,15 +339,29 @@ export function RefSidebar({
     const hasDoi = Boolean(String(ref.doi || '').trim());
     const metadataIncomplete = !referenceTitle(ref) || !referenceAuthors(ref) || !String(ref.year || '').trim();
     return (
-      <button
-        type="button"
+      <article
         key={ref.id}
-        draggable
-        onDragStart={(event) => {
-          event.dataTransfer.setData('text/academiq-reference', ref.id);
-          event.dataTransfer.effectAllowed = 'move';
+        role="button"
+        tabIndex={0}
+        data-reference-id={ref.id}
+        onPointerDown={(event: PointerEvent<HTMLElement>) => {
+          if (event.button !== 0) return;
+          dragCandidateRef.current = {
+            refId: ref.id,
+            x: event.clientX,
+            y: event.clientY,
+            active: false
+          };
+          setDragGhost(null);
         }}
-        onClick={() => {
+        draggable={false}
+        onDragStart={(event) => event.preventDefault()}
+        onClick={(event) => {
+          if (suppressClickRef.current) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
           onSelectReference(ref.id);
           // Always open the PDF panel — even when there's no local PDF.
           // The legacy `showNoPDF` fallback now renders the article's
@@ -228,8 +370,15 @@ export function RefSidebar({
           onReferencePdfAction('open', ref.id);
         }}
         onContextMenu={(event) => openReferenceMenu(event, ref.id)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onSelectReference(ref.id);
+            onReferencePdfAction('open', ref.id);
+          }
+        }}
         className={[
-          'relative block w-full rounded-lg border bg-white p-3 pr-8 text-left transition hover:border-aq-navy hover:shadow-sm active:translate-y-px',
+          'relative block w-full cursor-grab select-none rounded-lg border bg-white p-3 pr-8 text-left transition hover:border-aq-navy hover:shadow-sm active:translate-y-px',
           activeReferenceId === ref.id ? 'border-aq-navy ring-1 ring-aq-navy/20' : 'border-aq-line'
         ].join(' ')}
       >
@@ -248,6 +397,7 @@ export function RefSidebar({
             }
           }}
           className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-md text-aq-muted opacity-70 transition hover:bg-aq-panel hover:text-aq-ink"
+          data-ref-menu-trigger="true"
           title="Kaynak menüsü"
         >
           ...
@@ -274,7 +424,7 @@ export function RefSidebar({
             <span key={tag} className="rounded bg-aq-panel px-1.5 py-0.5 text-[9px] text-aq-ink">{tag}</span>
           ))}
         </div>
-      </button>
+      </article>
     );
   };
 
@@ -287,24 +437,35 @@ export function RefSidebar({
     canManage = true
   ) => (
     <div
-      className={['group flex items-center gap-1 rounded-md border border-aq-line bg-white/80 px-2 py-1.5 transition', activeCollectionId === id ? 'ring-1 ring-aq-navy/25' : ''].join(' ')}
+      data-ref-collection-drop-id={id}
+      className={[
+        'group flex items-center gap-1 rounded-md border border-aq-line bg-white/80 px-2 py-1.5 transition',
+        activeCollectionId === id ? 'ring-1 ring-aq-navy/25' : '',
+        moveTargetReferenceId ? 'ring-1 ring-aq-navy/40 bg-aq-panel/60 cursor-pointer' : ''
+      ].join(' ')}
       onDragOver={(event) => event.preventDefault()}
+      onDragEnter={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault();
-        const refId = event.dataTransfer.getData('text/academiq-reference');
+        event.stopPropagation();
+        const refId = getDragReference(event);
         if (refId) onMoveReferenceToCollection(refId, id);
       }}
     >
       <button
         type="button"
         onClick={() => {
+          if (moveTargetReferenceId) {
+            moveReferenceToCollection(moveTargetReferenceId, id);
+            return;
+          }
           onSelectCollection(id);
           onToggle();
         }}
         className="flex min-w-0 flex-1 items-center gap-2 text-left"
       >
         <span className="text-[10px] text-aq-muted">{collapsed ? '>' : 'v'}</span>
-        <span className="text-aq-navy">□</span>
+        <span className="text-aq-navy">?</span>
         <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-aq-ink">{name}</span>
         <span className="rounded-full border border-aq-line bg-white px-1.5 py-0.5 text-[10px] text-aq-muted">{count}</span>
       </button>
@@ -320,7 +481,12 @@ export function RefSidebar({
           </button>
           <button
             type="button"
-            onClick={() => onDeleteCollection(id)}
+            onClick={(event) => openInlineConfirm(event, {
+              kind: 'collection',
+              id,
+              title: 'Klasör silinsin mi?',
+              body: 'Kaynaklar silinmez, sadece klasör bağlantısı kaldırılır.'
+            })}
             className="hidden h-6 w-6 rounded-md text-[13px] text-red-600 hover:bg-red-50 group-hover:block"
             title="Klasörü sil"
           >
@@ -328,6 +494,43 @@ export function RefSidebar({
           </button>
         </>
       ) : null}
+    </div>
+  );
+
+  const renderCollectionDropZone = (collectionId: string, children: ReactNode, extraClass = '') => (
+    <div
+      data-ref-collection-drop-id={collectionId}
+      className={[
+        'space-y-2 rounded-lg border border-transparent p-1 transition hover:border-aq-navy/20',
+        moveTargetReferenceId ? 'border-aq-navy/40 bg-aq-panel/40 cursor-pointer' : '',
+        extraClass
+      ].join(' ')}
+      onClick={(event) => {
+        if (!moveTargetReferenceId) return;
+        event.preventDefault();
+        event.stopPropagation();
+        moveReferenceToCollection(moveTargetReferenceId, collectionId);
+      }}
+      onDragOver={(event) => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+      }}
+      onDragEnter={(event) => {
+        event.preventDefault();
+        event.currentTarget.classList.add('border-aq-navy', 'bg-aq-panel/60');
+      }}
+      onDragLeave={(event) => {
+        event.currentTarget.classList.remove('border-aq-navy', 'bg-aq-panel/60');
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.currentTarget.classList.remove('border-aq-navy', 'bg-aq-panel/60');
+        const refId = getDragReference(event);
+        if (refId) onMoveReferenceToCollection(refId, collectionId);
+      }}
+    >
+      {children}
     </div>
   );
 
@@ -391,13 +594,16 @@ export function RefSidebar({
                   collapsed,
                   () => setCollapsedCollections((value) => ({ ...value, [collection.id]: !value[collection.id] }))
                 )}
-                {!collapsed ? (
-                  <div className="space-y-2 pl-4">
-                    {folderRefs.length ? folderRefs.map(renderReferenceCard) : (
-                      <div className="rounded-lg border border-dashed border-aq-line p-4 text-center text-xs text-aq-muted">Kaynakları buraya sürükle.</div>
-                    )}
-                  </div>
-                ) : null}
+                {!collapsed
+                  ? renderCollectionDropZone(
+                      collection.id,
+                      <div className="space-y-2 pl-4">
+                        {folderRefs.length ? folderRefs.map(renderReferenceCard) : (
+                          <div className="rounded-lg border border-dashed border-aq-line p-4 text-center text-xs text-aq-muted">Kaynakları buraya sürükle.</div>
+                        )}
+                      </div>
+                    )
+                  : null}
               </section>
             );
           })}
@@ -405,7 +611,7 @@ export function RefSidebar({
           {orphanedReferences.length ? (
             <section className="space-y-2">
               {renderFolderHeader('unfiled', 'Eksik Klasör Bağlantısı', orphanedReferences.length, false, () => undefined, false)}
-              <div className="space-y-2 pl-4">{orphanedReferences.map(renderReferenceCard)}</div>
+              {renderCollectionDropZone('unfiled', <div className="space-y-2 pl-4">{orphanedReferences.map(renderReferenceCard)}</div>)}
             </section>
           ) : null}
 
@@ -418,13 +624,16 @@ export function RefSidebar({
               () => setUnfiledCollapsed((value) => !value),
               false
             )}
-            {!unfiledCollapsed ? (
-              <div className="space-y-2 pl-4">
-                {unfiledReferences.length ? unfiledReferences.map(renderReferenceCard) : (
-                  <div className="rounded-lg border border-dashed border-aq-line p-4 text-center text-xs text-aq-muted">Klasörsüz kaynak yok.</div>
-                )}
-              </div>
-            ) : null}
+            {!unfiledCollapsed
+              ? renderCollectionDropZone(
+                  'unfiled',
+                  <div className="space-y-2 pl-4">
+                    {unfiledReferences.length ? unfiledReferences.map(renderReferenceCard) : (
+                      <div className="rounded-lg border border-dashed border-aq-line p-4 text-center text-xs text-aq-muted">Klasörsüz kaynak yok.</div>
+                    )}
+                  </div>
+                )
+              : null}
           </section>
 
           {!searchableReferences.length ? (
@@ -494,10 +703,30 @@ export function RefSidebar({
             <button type="button" disabled={!Boolean(activeMenuReference.pdfAttached || activeMenuReference.pdfData || activeMenuReference.pdfPath)} title={Boolean(activeMenuReference.pdfAttached || activeMenuReference.pdfData || activeMenuReference.pdfPath) ? 'PDF dosyasını göster' : 'Bu kaynağa bağlı PDF yok'} className="block w-full rounded-md px-2.5 py-2 text-left font-medium text-aq-ink hover:bg-aq-panel disabled:cursor-not-allowed disabled:text-aq-muted disabled:hover:bg-transparent" onClick={() => { onShowReferenceInExplorer(activeMenuReference.id); closeReferenceMenu(); }}>
               Dosya gezgininde aç
             </button>
-            <button type="button" disabled={!Boolean(activeMenuReference.pdfAttached || activeMenuReference.pdfData || activeMenuReference.pdfPath)} title={Boolean(activeMenuReference.pdfAttached || activeMenuReference.pdfData || activeMenuReference.pdfPath) ? 'PDF dosyasını sil' : 'Bu kaynağa bağlı PDF yok'} className="block w-full rounded-md px-2.5 py-2 text-left font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:text-aq-muted disabled:hover:bg-transparent" onClick={() => { onReferencePdfAction('delete', activeMenuReference.id); closeReferenceMenu(); }}>
+            <button
+              type="button"
+              disabled={!Boolean(activeMenuReference.pdfAttached || activeMenuReference.pdfData || activeMenuReference.pdfPath)}
+              title={Boolean(activeMenuReference.pdfAttached || activeMenuReference.pdfData || activeMenuReference.pdfPath) ? 'PDF dosyasını sil' : 'Bu kaynağa bağlı PDF yok'}
+              className="block w-full rounded-md px-2.5 py-2 text-left font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:text-aq-muted disabled:hover:bg-transparent"
+              onClick={(event) => openInlineConfirm(event, {
+                kind: 'pdf',
+                id: activeMenuReference.id,
+                title: 'PDF dosyası silinsin mi?',
+                body: 'Kaynak kaydı kalır, sadece bağlı PDF dosyası kaldırılır.'
+              })}
+            >
               PDF Sil
             </button>
-            <button type="button" className="mt-1 block w-full rounded-md px-2.5 py-2 text-left font-semibold text-red-700 hover:bg-red-50" onClick={() => { onDeleteReference(activeMenuReference.id); closeReferenceMenu(); }}>
+            <button
+              type="button"
+              className="mt-1 block w-full rounded-md px-2.5 py-2 text-left font-semibold text-red-700 hover:bg-red-50"
+              onClick={(event) => openInlineConfirm(event, {
+                kind: 'reference',
+                id: activeMenuReference.id,
+                title: 'Kaynak silinsin mi?',
+                body: 'Kaynak aktif çalışma alanından kaldırılır. Bağlı PDF de temizlenir.'
+              })}
+            >
               Kaynağı Sil
             </button>
           </div>
@@ -520,7 +749,7 @@ export function RefSidebar({
                     return (
                       <div key={label.name} className="flex items-center gap-1 rounded-md hover:bg-aq-panel">
                         <button type="button" className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left font-medium text-aq-ink" onClick={() => onToggleReferenceLabel(activeMenuReference.id, label)}>
-                          <span className={['flex h-4 w-4 items-center justify-center rounded border text-[10px]', selected ? 'border-aq-navy bg-aq-navy text-white' : 'border-aq-line text-transparent'].join(' ')}>✓</span>
+                          <span className={['flex h-4 w-4 items-center justify-center rounded border text-[10px]', selected ? 'border-aq-navy bg-aq-navy text-white' : 'border-aq-line text-transparent'].join(' ')}>?</span>
                           <span className="h-2.5 w-2.5 rounded-full" style={{ background: label.color || '#9aa' }} />
                           <span className="truncate">{label.name}</span>
                         </button>
@@ -529,8 +758,12 @@ export function RefSidebar({
                           className="mr-1 h-6 w-6 rounded-md text-[12px] font-semibold text-red-600 hover:bg-red-50"
                           title="Etiketi sil"
                           onClick={(event) => {
-                            event.stopPropagation();
-                            onDeleteLabel(label.name);
+                            openInlineConfirm(event, {
+                              kind: 'label',
+                              id: label.name,
+                              title: 'Etiket silinsin mi?',
+                              body: 'Etiket kaynaklardan kaldırılır, kaynaklar silinmez.'
+                            });
                           }}
                         >
                           x
@@ -550,7 +783,7 @@ export function RefSidebar({
                     const selected = refCollectionIds(activeMenuReference).includes(String(collection.id));
                     return (
                       <button key={collection.id} type="button" className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left font-medium text-aq-ink hover:bg-aq-panel" onClick={() => onToggleReferenceCollection(activeMenuReference.id, collection.id)}>
-                        <span className={['flex h-4 w-4 items-center justify-center rounded border text-[10px]', selected ? 'border-aq-navy bg-aq-navy text-white' : 'border-aq-line text-transparent'].join(' ')}>✓</span>
+                        <span className={['flex h-4 w-4 items-center justify-center rounded border text-[10px]', selected ? 'border-aq-navy bg-aq-navy text-white' : 'border-aq-line text-transparent'].join(' ')}>?</span>
                         <span className="truncate">{collection.name}</span>
                       </button>
                     );
@@ -568,6 +801,53 @@ export function RefSidebar({
           ) : null}
         </>
       ) : null}
+      {inlineConfirm ? (
+        <div className="fixed inset-0 z-[2300]" onClick={() => setInlineConfirm(null)}>
+          <div
+            className="absolute w-[288px] rounded-[13px] border border-aq-line/90 bg-white/95 p-3 text-xs text-aq-ink shadow-[0_24px_64px_rgba(22,27,34,0.20)] backdrop-blur-xl"
+            style={{ left: inlineConfirm.x, top: inlineConfirm.y }}
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-label={inlineConfirm.title}
+          >
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-aq-muted">
+              {inlineConfirm.kind === 'reference' ? 'Kaynak' : inlineConfirm.kind === 'collection' ? 'Klasör' : inlineConfirm.kind === 'pdf' ? 'PDF' : 'Etiket'}
+            </div>
+            <div className="mt-1 font-semibold">{inlineConfirm.title}</div>
+            <p className="mt-1 leading-5 text-aq-muted">{inlineConfirm.body}</p>
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setInlineConfirm(null)}
+                className="h-8 rounded-md border border-aq-line bg-white px-3 text-xs font-semibold text-aq-muted hover:bg-aq-panel"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={runInlineConfirm}
+                className="h-8 rounded-md bg-red-700 px-3 text-xs font-semibold text-white hover:bg-red-800"
+              >
+                Sil
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {dragGhost ? (
+        <div
+          className="pointer-events-none fixed z-[10080] max-w-[260px] -translate-y-1/2 rounded-lg border border-aq-navy/35 bg-white/95 px-3 py-2 text-xs font-semibold text-aq-ink shadow-[0_18px_48px_rgba(22,27,34,0.22)]"
+          style={{
+            left: Math.min(dragGhost.x + 14, window.innerWidth - 280),
+            top: Math.min(dragGhost.y + 10, window.innerHeight - 60)
+          }}
+        >
+          <div className="truncate">{dragGhost.title}</div>
+          <div className="mt-0.5 text-[10px] font-medium text-aq-muted">Klasöre bırak</div>
+        </div>
+      ) : null}
     </aside>
   );
 }
+
+

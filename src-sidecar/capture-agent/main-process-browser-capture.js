@@ -380,7 +380,7 @@ function normalizeBrowserCaptureSettings(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
   const port = Number.isFinite(Number(source.port)) ? Number(source.port) : DEFAULT_CAPTURE_PORT;
   return {
-    enabled: source.enabled !== false,
+    enabled: source.enabled === true,
     agentAutoStart: source.agentAutoStart !== false,
     agentAutoStartSupported: typeof source.agentAutoStartSupported === 'undefined' ? false : !!source.agentAutoStartSupported,
     port: Math.min(65535, Math.max(1024, port || DEFAULT_CAPTURE_PORT)),

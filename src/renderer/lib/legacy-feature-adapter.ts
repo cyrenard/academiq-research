@@ -88,6 +88,8 @@ export function runLegacyFeature(feature: LegacyFeature) {
 
 export const legacyFeatures: LegacyFeature[] = [
   { id: 'citation-insert', group: 'Atıf', label: 'Atıf ekle', fn: 'doTrigRef' },
+  { id: 'citation-link-plain', group: 'Atıf', label: 'Düz APA atıflarını kaynaklara bağla', fn: 'openPlainCitationLinking' },
+  { id: 'citation-link-safe', group: 'Atıf', label: 'Güvenli düz atıfları otomatik bağla', fn: 'linkHighConfidencePlainCitations' },
   { id: 'citation-style-apa', group: 'Atıf', label: 'APA 7 stilini seç', fn: 'setCitationStyle', args: ['apa7'] },
   { id: 'citation-style-chicago', group: 'Atıf', label: 'Chicago stilini seç', fn: 'setCitationStyle', args: ['chicago'] },
   { id: 'citation-style-vancouver', group: 'Atıf', label: 'Vancouver stilini seç', fn: 'setCitationStyle', args: ['vancouver'] },

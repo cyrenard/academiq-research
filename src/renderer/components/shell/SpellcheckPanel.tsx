@@ -117,7 +117,7 @@ export function SpellcheckPanel({ open, onClose }: SpellcheckPanelProps) {
   useEffect(() => {
     if (!open) return;
     setDocText(takeEditorText());
-    runCheckNow();
+    runCheckNow({ deep: true });
   }, [open]);
 
   useEffect(() => {
@@ -150,7 +150,7 @@ export function SpellcheckPanel({ open, onClose }: SpellcheckPanelProps) {
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={() => runCheckNow()}
+            onClick={() => runCheckNow({ deep: true })}
             className="h-7 rounded-md border border-aq-line px-2 text-[11px] font-semibold text-aq-muted hover:bg-aq-panel"
             title="Belgeyi şimdi tekrar denetle"
           >

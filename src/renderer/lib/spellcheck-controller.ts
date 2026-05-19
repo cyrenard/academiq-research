@@ -24,7 +24,6 @@ import {
   checkLoaded,
   checkText,
   isSpellReady,
-  isNativeSpellReady,
   disposeSpell,
   type SpellMatch
 } from './spellcheck';
@@ -49,6 +48,12 @@ const listeners = new Set<SpellcheckListener>();
 
 const DEBOUNCE_MS = 700;
 const SPELL_CLASS = 'aq-spell-error';
+const NATIVE_CHUNK_CHARS = 9000;
+const MAX_AUTO_CHECK_CHARS = 60000;
+const MAX_DEEP_CHECK_CHARS = 220000;
+const VISIBLE_CONTEXT_BEFORE = 4000;
+const VISIBLE_CONTEXT_AFTER = 18000;
+const MAX_MARKED_MATCHES = 700;
 
 function snapshot(): SpellcheckState {
   return {
@@ -102,7 +107,7 @@ export function setSpellcheckEnabled(value: boolean): void {
   loading = true;
   lastError = null;
   emit();
-  ensureSpellLoaded()
+  ensureSpellLoaded({ preferNative: preferNativeSpell() })
     .then(() => {
       loading = false;
       emit();
@@ -129,24 +134,32 @@ export function scheduleRecheck(): void {
 }
 
 /** Run an immediate check, bypassing the debounce. */
-export function runCheckNow(): void {
+export function runCheckNow(options: { deep?: boolean } = {}): void {
   if (!enabled || !isSpellReady()) return;
-  const text = getActiveDocumentText();
+  if (checkInFlight) {
+    pendingCheck = true;
+    return;
+  }
+  const fullText = getActiveDocumentText();
+  const selection = selectDocumentTextForCheck(fullText, options);
+  const text = selection.text;
   if (text === lastDocumentText && lastMatches.length === 0) {
     // No change since last run AND nothing flagged — nothing to do.
     return;
   }
   lastDocumentText = text;
-  if (!isNativeSpellReady()) {
-    lastMatches = checkLoaded(text);
+  if (!preferNativeSpell()) {
+    lastMatches = checkLoaded(text).map((match) => ({ ...match, offset: match.offset + selection.baseOffset }));
     applyMarkers(lastMatches);
     emit();
     return;
   }
   const token = ++runToken;
-  checkText(text)
+  checkInFlight = true;
+  pendingCheck = false;
+  checkTextCooperatively(text, token, selection.baseOffset, options.deep ? MAX_DEEP_CHECK_CHARS : MAX_AUTO_CHECK_CHARS)
     .then((matches) => {
-      if (!enabled || token !== runToken) return;
+      if (!enabled || token !== runToken || !matches) return;
       lastMatches = matches;
       applyMarkers(lastMatches);
       emit();
@@ -155,7 +168,16 @@ export function runCheckNow(): void {
       if (!enabled || token !== runToken) return;
       lastError = err && err.message ? String(err.message) : 'spellcheck failed';
       emit();
-    });
+    })
+    .finally(() => {
+      if (token !== runToken) return;
+      checkInFlight = false;
+    if (pendingCheck) {
+      pendingCheck = false;
+      if (options.deep) runCheckNow({ deep: true });
+      else scheduleRecheck();
+    }
+  });
 }
 
 /** Free the in-memory dictionary. Calling enable again re-loads it. */
@@ -166,6 +188,8 @@ export function shutdownSpellcheck(): void {
   lastError = null;
   lastDocumentText = '';
   runToken += 1;
+  checkInFlight = false;
+  pendingCheck = false;
   clearMarkers();
   disposeSpell();
   emit();
@@ -174,6 +198,79 @@ export function shutdownSpellcheck(): void {
 // ─── Internals ──────────────────────────────────────────────────────────────
 
 let lastDocumentText = '';
+let checkInFlight = false;
+let pendingCheck = false;
+
+function preferNativeSpell(): boolean {
+  return typeof window !== 'undefined' && typeof (window as any).electronAPI?.spell?.check === 'function';
+}
+
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() => resolve());
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
+}
+
+function boundedTextForAutomaticCheck(text: string, maxChars: number): string {
+  return text.length > maxChars ? text.slice(0, maxChars) : text;
+}
+
+function selectDocumentTextForCheck(fullText: string, options: { deep?: boolean } = {}): { text: string; baseOffset: number } {
+  if (options.deep) return { text: fullText, baseOffset: 0 };
+  const visible = visibleTextWindow(fullText);
+  if (visible) return visible;
+  return { text: fullText.slice(0, MAX_AUTO_CHECK_CHARS), baseOffset: 0 };
+}
+
+function visibleTextWindow(fullText: string): { text: string; baseOffset: number } | null {
+  if (typeof document === 'undefined' || !fullText) return null;
+  const spans = Array.from(document.querySelectorAll<HTMLElement>('span[data-offset-start][data-offset-end]'));
+  if (!spans.length) return null;
+  const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 900;
+  let first = Number.POSITIVE_INFINITY;
+  let last = 0;
+  for (const span of spans) {
+    const rect = span.getBoundingClientRect();
+    if (rect.bottom < -80 || rect.top > viewportHeight + 80) continue;
+    const start = Number(span.dataset.offsetStart);
+    const end = Number(span.dataset.offsetEnd);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+    first = Math.min(first, start);
+    last = Math.max(last, end);
+  }
+  if (!Number.isFinite(first) || last <= first) return null;
+  const baseOffset = Math.max(0, first - VISIBLE_CONTEXT_BEFORE);
+  const end = Math.min(fullText.length, Math.max(last + VISIBLE_CONTEXT_AFTER, baseOffset + 12000));
+  return { text: fullText.slice(baseOffset, end), baseOffset };
+}
+
+async function checkTextCooperatively(text: string, token: number, baseOffset = 0, maxChars = MAX_AUTO_CHECK_CHARS): Promise<SpellMatch[] | null> {
+  const source = boundedTextForAutomaticCheck(text, maxChars);
+  if (!source) return [];
+  if (!preferNativeSpell()) {
+    return checkLoaded(source).map((match) => ({ ...match, offset: match.offset + baseOffset }));
+  }
+  const all: SpellMatch[] = [];
+  let offset = 0;
+  while (offset < source.length) {
+    if (!enabled || token !== runToken) return null;
+    let end = Math.min(source.length, offset + NATIVE_CHUNK_CHARS);
+    if (end < source.length) {
+      const boundary = source.lastIndexOf(' ', end);
+      if (boundary > offset + Math.floor(NATIVE_CHUNK_CHARS * 0.65)) end = boundary;
+    }
+    const chunk = source.slice(offset, end);
+    const matches = await checkText(chunk, { preferNative: true, maxSuggestions: 3 });
+    for (const match of matches) all.push({ ...match, offset: match.offset + offset + baseOffset });
+    offset = end;
+    await nextFrame();
+  }
+  return all;
+}
 
 function getActiveDocumentText(): string {
   const win = window as any;
@@ -219,7 +316,7 @@ function applyMarkers(matches: SpellMatch[]): void {
   sortedSpans.sort((a, b) => a.start - b.start);
 
   // For each match, mark every span whose [start,end) intersects it.
-  for (const m of matches) {
+  for (const m of matches.slice(0, MAX_MARKED_MATCHES)) {
     const mStart = m.offset;
     const mEnd = m.offset + m.length;
     // Binary search for the first span that ends after mStart.

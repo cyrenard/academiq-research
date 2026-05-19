@@ -31,7 +31,12 @@ pub struct CaptureSidecar {
 }
 
 impl CaptureSidecarState {
-    pub async fn call(&self, app: &AppHandle, method: &str, params: Value) -> Result<Value, String> {
+    pub async fn call(
+        &self,
+        app: &AppHandle,
+        method: &str,
+        params: Value,
+    ) -> Result<Value, String> {
         let sidecar = self.get_or_spawn(app).await?;
         sidecar.call(method, params).await
     }
@@ -122,7 +127,10 @@ impl CaptureSidecar {
                 if let Some(id) = message.get("id").and_then(Value::as_str) {
                     if let Some(tx) = pending_reader.lock().await.remove(id) {
                         let result = if let Some(error) = message.get("error") {
-                            Err(error.as_str().unwrap_or("capture_sidecar_error").to_string())
+                            Err(error
+                                .as_str()
+                                .unwrap_or("capture_sidecar_error")
+                                .to_string())
                         } else {
                             Ok(message.get("result").cloned().unwrap_or(Value::Null))
                         };
@@ -182,6 +190,21 @@ struct SidecarCommand {
 
 fn sidecar_command() -> Result<SidecarCommand, String> {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let dir = manifest
+        .join("..")
+        .join("src-sidecar")
+        .join("capture-agent");
+    let index = dir.join("index.js");
+
+    #[cfg(debug_assertions)]
+    if index.exists() {
+        return Ok(SidecarCommand {
+            program: index,
+            cwd: dir,
+            is_binary: false,
+        });
+    }
+
     let binary = manifest
         .join("binaries")
         .join("capture-agent-x86_64-pc-windows-msvc.exe");
@@ -192,8 +215,8 @@ fn sidecar_command() -> Result<SidecarCommand, String> {
             is_binary: true,
         });
     }
-    let dir = manifest.join("..").join("src-sidecar").join("capture-agent");
-    let index = dir.join("index.js");
+
+    #[cfg(not(debug_assertions))]
     if index.exists() {
         return Ok(SidecarCommand {
             program: index,

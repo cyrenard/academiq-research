@@ -180,7 +180,10 @@ fn read_etag_cache(app_data_dir: &Path, url: &str) -> Result<Option<CacheEntry>,
     };
     let value = serde_json::from_str::<Value>(&raw).unwrap_or(Value::Null);
     Ok(Some(CacheEntry {
-        etag: value.get("etag").and_then(Value::as_str).map(str::to_string),
+        etag: value
+            .get("etag")
+            .and_then(Value::as_str)
+            .map(str::to_string),
         body: value
             .get("body")
             .and_then(Value::as_str)
@@ -225,10 +228,7 @@ mod tests {
     use std::thread;
 
     fn temp_dir(name: &str) -> std::path::PathBuf {
-        let path = std::env::temp_dir().join(format!(
-            "academiq-net-test-{name}-{}",
-            unix_secs()
-        ));
+        let path = std::env::temp_dir().join(format!("academiq-net-test-{name}-{}", unix_secs()));
         std::fs::create_dir_all(&path).unwrap();
         path
     }
@@ -275,8 +275,12 @@ mod tests {
             .enable_all()
             .build()
             .unwrap();
-        let first = rt.block_on(cached_get(&dir, &url, Duration::from_secs(5))).unwrap();
-        let second = rt.block_on(cached_get(&dir, &url, Duration::from_secs(5))).unwrap();
+        let first = rt
+            .block_on(cached_get(&dir, &url, Duration::from_secs(5)))
+            .unwrap();
+        let second = rt
+            .block_on(cached_get(&dir, &url, Duration::from_secs(5)))
+            .unwrap();
         handle.join().unwrap();
         assert!(!first.cached);
         assert!(second.cached);

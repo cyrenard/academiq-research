@@ -8043,7 +8043,7 @@ function expPDF(){
       exportHTML:getExportPDFHTML()
     }).then(function(result){
       if(!result||result.ok||result.canceled)return;
-      alert('PDF dışa aktarma hatası: '+(result.error||'Bilinmeyen hata'));
+      alert('PDF dışa aktarma hatası: '+(result.error||result.message||JSON.stringify(result)||'Bilinmeyen hata'));
     }).catch(function(err){
       alert('PDF dışa aktarma hatası: '+(err&&err.message?err.message:'Bilinmeyen hata'));
     });

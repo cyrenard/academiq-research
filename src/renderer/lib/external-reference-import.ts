@@ -111,33 +111,27 @@ export function parseExternalReferenceText(text: string, kind: 'auto' | 'bibtex'
   return parsed.length ? parsed : parseApaFallbackEntries(raw);
 }
 
-/** Hand off parsed entries to the legacy importer OR dispatch via CustomEvent. */
+/**
+ * Hand off parsed entries to React persistence.
+ *
+ * The legacy importer mutates `window.S` and saves on a debounce. In the React
+ * shell that can race with autosave and write an older state_blob back over the
+ * freshly imported references. Parsed entries therefore go through
+ * `aq:import-references`, whose App.tsx listener calls persistState
+ * immediately.
+ */
 export function importExternalEntries(entries: any[], sourceLabel: string, onStatus: StatusFn) {
   if (!entries.length) {
     setExternalImportStatus('Kaynak bulunamadı.');
     return;
   }
   try {
-    const win = legacyWin();
-    const importReferenceEntries = (win as any).importReferenceEntries as
-      | ((entries: any[], opts: any) => { imported?: number; duplicates?: number; skipped?: number } | undefined)
-      | undefined;
-    if (typeof importReferenceEntries === 'function') {
-      const summary = importReferenceEntries(entries, { includeInBibliography: true, revealBibliography: true });
-      const imported = Number(summary?.imported || 0);
-      const duplicates = Number(summary?.duplicates || 0);
-      const skipped = Number(summary?.skipped || 0);
-      const message = `${sourceLabel}: ${imported} eklendi, ${duplicates} duplicate, ${skipped} atlandi`;
-      setExternalImportStatus(message);
-      onStatus(message);
-      syncAfterExternalImport();
-      return;
-    }
     window.dispatchEvent(new CustomEvent('aq:import-references', {
       detail: { entries, sourceLabel, includeInBibliography: true, revealBibliography: true }
     }));
-    setExternalImportStatus(`${sourceLabel}: ${entries.length} kaynak bulundu.`);
-    syncAfterExternalImport();
+    const message = `${sourceLabel}: ${entries.length} kaynak bulundu, kaydediliyor...`;
+    setExternalImportStatus(message);
+    onStatus(message);
   } catch (error) {
     console.error('[external-reference-import]', error);
     setExternalImportStatus(`${sourceLabel} aktarılamadı.`);

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { MouseEvent } from 'react';
 import type { AcademiqNote, AcademiqReference } from '../../lib/app-state';
 import { referenceAuthors, referenceTitle } from '../../lib/app-state';
 import { legacyFeatures, runLegacyFeature } from '../../lib/legacy-feature-adapter';
@@ -75,6 +76,7 @@ export function NoteSidebar({
   const [refFilter, setRefFilter] = useState('all');
   const [noteMenu, setNoteMenu] = useState<{ noteId: string; x: number; y: number } | null>(null);
   const [tagPopup, setTagPopup] = useState<{ noteId: string; x: number; y: number } | null>(null);
+  const [deleteNotebookConfirm, setDeleteNotebookConfirm] = useState<{ id: string; x: number; y: number } | null>(null);
   const [newTagName, setNewTagName] = useState('');
   const visibleTab: 'notes' | 'refs' = activeTab === 'refs' ? 'refs' : 'notes';
   const bibliographyReferences = usedReferences || references;
@@ -161,6 +163,7 @@ export function NoteSidebar({
   };
 
   const beginRenameNotebook = (notebook: { id: string; name: string }) => {
+    setDeleteNotebookConfirm(null);
     setRenamingNotebookId(notebook.id);
     setRenamingNotebookName(notebook.name);
   };
@@ -171,6 +174,26 @@ export function NoteSidebar({
     onRenameNotebook(renamingNotebookId, name);
     setRenamingNotebookId('');
     setRenamingNotebookName('');
+  };
+
+  const askDeleteNotebook = (event: MouseEvent<HTMLButtonElement>, notebook: { id: string }) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    setRenamingNotebookId('');
+    setDeleteNotebookConfirm({
+      id: notebook.id,
+      x: Math.max(12, Math.min(rect.right + 8, window.innerWidth - 286)),
+      y: Math.max(12, Math.min(rect.top - 8, window.innerHeight - 158))
+    });
+  };
+
+  const confirmDeleteNotebook = () => {
+    if (!deleteNotebookConfirm) return;
+    const notebookId = deleteNotebookConfirm.id;
+    onDeleteNotebook(notebookId);
+    if (selectedNotebookId === notebookId) setSelectedNotebookId('all');
+    setDeleteNotebookConfirm(null);
   };
 
   const saveEditingNote = () => {
@@ -431,7 +454,15 @@ export function NoteSidebar({
                         <span className="text-[10px] opacity-70">{notebookCounts.get(notebook.id) || 0} not</span>
                       </button>
                       <button type="button" onClick={() => beginRenameNotebook(notebook)} className="hidden rounded px-1.5 py-1 text-[10px] text-aq-muted hover:bg-white group-hover:block">Ad</button>
-                      {notebooks.length > 1 ? <button type="button" onClick={() => { if (window.confirm('Not defteri silinsin mi? Notlar Genel Notlar defterine taşınır.')) onDeleteNotebook(notebook.id); }} className="hidden rounded px-1.5 py-1 text-[10px] text-red-700 hover:bg-red-50 group-hover:block">Sil</button> : null}
+                      {notebooks.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={(event) => askDeleteNotebook(event, notebook)}
+                          className="hidden rounded px-1.5 py-1 text-[10px] text-red-700 hover:bg-red-50 group-hover:block"
+                        >
+                          Sil
+                        </button>
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -520,6 +551,37 @@ export function NoteSidebar({
               </div>
             </div>
           </section>
+        </div>
+      ) : null}
+      {deleteNotebookConfirm ? (
+        <div className="fixed inset-0 z-[3050]" onClick={() => setDeleteNotebookConfirm(null)}>
+          <div
+            className="absolute w-[270px] rounded-[13px] border border-aq-line/90 bg-white/95 p-3 text-xs text-aq-ink shadow-[0_24px_64px_rgba(22,27,34,0.20)] backdrop-blur-xl"
+            style={{ left: deleteNotebookConfirm.x, top: deleteNotebookConfirm.y }}
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-label="Not defterini sil"
+          >
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-aq-muted">Not defteri</div>
+            <div className="mt-1 font-semibold">Not defteri silinsin mi?</div>
+            <p className="mt-1 leading-5 text-aq-muted">Notlar Genel Notlar defterine taşınır.</p>
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteNotebookConfirm(null)}
+                className="h-8 rounded-md border border-aq-line bg-white px-3 text-xs font-semibold text-aq-muted hover:bg-aq-panel"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteNotebook}
+                className="h-8 rounded-md bg-red-700 px-3 text-xs font-semibold text-white hover:bg-red-800"
+              >
+                Sil
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
       {menuNote && noteMenu ? (

@@ -129,7 +129,7 @@ describe('ReferenceEditModal', () => {
     expect(screen.queryByRole('button', { name: 'Kaydet' })).not.toBeInTheDocument();
   });
 
-  it('delete button calls onDelete with reference id', async () => {
+  it('delete button confirms near the action before deleting', async () => {
     const onDelete = vi.fn();
     render(
       <ReferenceEditModal
@@ -141,7 +141,10 @@ describe('ReferenceEditModal', () => {
       />
     );
     await userEvent.click(screen.getByRole('button', { name: 'Sil' }));
-    expect(onDelete).toHaveBeenCalledWith('ref-x');
+    expect(onDelete).not.toHaveBeenCalled();
+    const confirmButtons = screen.getAllByRole('button', { name: 'Sil' });
+    await userEvent.click(confirmButtons[confirmButtons.length - 1]);
+    expect(onDelete).toHaveBeenCalledWith('ref-x', { skipConfirm: true });
   });
 
   it('reloads draft when reference prop changes', async () => {

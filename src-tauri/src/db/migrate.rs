@@ -1,5 +1,6 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -106,7 +107,7 @@ pub fn init_or_migrate(app_data_dir: &Path) -> Result<DbPaths, String> {
 
 pub fn load_state(app_data_dir: &Path) -> Result<Option<String>, String> {
     let db_paths = init_or_migrate(app_data_dir)?;
-    let conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
+    let conn = Connection::open(&db_paths.db_path).map_err(|e| e.to_string())?;
     let value = conn
         .query_row(
             "SELECT value FROM kv WHERE key = ?1",
@@ -115,7 +116,131 @@ pub fn load_state(app_data_dir: &Path) -> Result<Option<String>, String> {
         )
         .optional()
         .map_err(|e| e.to_string())?;
+    drop(conn);
+    if let Some(recovered) =
+        recover_state_blob_from_legacy_if_richer(app_data_dir, &db_paths.db_path, value.as_deref())?
+    {
+        return Ok(Some(recovered));
+    }
     Ok(value)
+}
+
+fn recover_state_blob_from_legacy_if_richer(
+    app_data_dir: &Path,
+    db_path: &Path,
+    current_raw: Option<&str>,
+) -> Result<Option<String>, String> {
+    let current_ref_count = current_raw.map(count_state_references).unwrap_or(0);
+    if current_ref_count > 0 {
+        return Ok(None);
+    }
+    let Some(legacy_dir) = legacy_dir_from_kv(db_path)?.or_else(get_legacy_electron_dir) else {
+        return Ok(None);
+    };
+    let legacy_path = if legacy_dir.join(LEGACY_FILE).exists() {
+        legacy_dir.join(LEGACY_FILE)
+    } else {
+        legacy_dir.join(LEGACY_ALT_FILE)
+    };
+    if !legacy_path.exists() {
+        return Ok(None);
+    }
+    let legacy_raw = fs::read_to_string(&legacy_path).map_err(|e| {
+        format!(
+            "legacy_state_recovery_read_failed:{}:{e}",
+            legacy_path.to_string_lossy()
+        )
+    })?;
+    let legacy_ref_count = count_state_references(&legacy_raw);
+    if legacy_ref_count == 0 || legacy_ref_count <= current_ref_count {
+        return Ok(None);
+    }
+
+    let legacy_state = parse_json(&legacy_raw)?;
+    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    ensure_schema(&conn)?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    save_state_blob_tx(&tx, &legacy_raw, "legacy-recovery")?;
+    migrate_legacy_state_kv(&tx, &legacy_dir, &legacy_state)?;
+    upsert_kv_tx(&tx, "legacy_recovery_completed_at", &utc_stamp())?;
+    upsert_kv_tx(
+        &tx,
+        "legacy_recovery_reference_count",
+        &legacy_ref_count.to_string(),
+    )?;
+    tx.commit().map_err(|e| e.to_string())?;
+    copy_legacy_assets(app_data_dir, &legacy_dir)?;
+    Ok(Some(legacy_raw))
+}
+
+fn count_state_references(raw: &str) -> usize {
+    parse_json(raw)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("wss")
+                .and_then(Value::as_array)
+                .map(|workspaces| {
+                    workspaces
+                        .iter()
+                        .map(|workspace| {
+                            workspace
+                                .get("lib")
+                                .and_then(Value::as_array)
+                                .map(Vec::len)
+                                .unwrap_or(0)
+                        })
+                        .sum()
+                })
+        })
+        .unwrap_or(0)
+}
+
+fn count_state_array(raw: &str, key: &str) -> usize {
+    parse_json(raw)
+        .ok()
+        .and_then(|value| value.get(key).and_then(Value::as_array).map(Vec::len))
+        .unwrap_or(0)
+}
+
+fn clean_reference_field(reference: &Value, key: &str) -> String {
+    reference
+        .get(key)
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string()
+}
+
+fn reference_merge_keys(reference: &Value) -> Vec<String> {
+    let id = clean_reference_field(reference, "id");
+    let doi = clean_reference_field(reference, "doi").to_lowercase();
+    let isbn = clean_reference_field(reference, "isbn")
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_uppercase();
+    let url = clean_reference_field(reference, "url").to_lowercase();
+    let title = clean_reference_field(reference, "title").to_lowercase();
+    let year = clean_reference_field(reference, "year");
+    let author = reference
+        .get("authors")
+        .and_then(Value::as_array)
+        .and_then(|authors| authors.first())
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_lowercase();
+    [
+        (!id.is_empty()).then(|| format!("id:{id}")),
+        (!doi.is_empty()).then(|| format!("doi:{doi}")),
+        (!isbn.is_empty()).then(|| format!("isbn:{isbn}")),
+        (!url.is_empty()).then(|| format!("url:{url}")),
+        (!title.is_empty()).then(|| format!("title:{title}|{year}|{author}")),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 pub fn save_state(app_data_dir: &Path, raw: &str, source: &str) -> Result<Value, String> {
@@ -124,11 +249,139 @@ pub fn save_state(app_data_dir: &Path, raw: &str, source: &str) -> Result<Value,
     }
     parse_json(raw)?;
     let db_paths = init_or_migrate(app_data_dir)?;
+    let guarded_raw = preserve_reference_libraries_on_save(raw, &db_paths.db_path, source)?;
     let mut conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
-    save_state_blob_tx(&tx, raw, source)?;
+    save_state_blob_tx(&tx, &guarded_raw, source)?;
     tx.commit().map_err(|e| e.to_string())?;
     Ok(json!({ "ok": true, "savedAt": now_millis(), "storage": "sqlite" }))
+}
+
+fn preserve_reference_libraries_on_save(
+    raw: &str,
+    db_path: &Path,
+    source: &str,
+) -> Result<String, String> {
+    if !db_path.exists() {
+        return Ok(raw.to_string());
+    }
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let current_raw = conn
+        .query_row(
+            "SELECT value FROM kv WHERE key = ?1",
+            params![STATE_BLOB_KEY],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    drop(conn);
+    let Some(current_raw) = current_raw else {
+        return Ok(raw.to_string());
+    };
+    let current_workspace_count = count_state_array(&current_raw, "wss");
+    let next_workspace_count = count_state_array(raw, "wss");
+    let current_doc_count = count_state_array(&current_raw, "docs");
+    let next_doc_count = count_state_array(raw, "docs");
+    if (current_workspace_count > next_workspace_count && current_workspace_count > 1)
+        || (current_doc_count > next_doc_count && current_doc_count > 1)
+    {
+        return Ok(current_raw);
+    }
+    let current_reference_count = count_state_references(&current_raw);
+    let next_reference_count = count_state_references(raw);
+    let can_merge_reference_shrink = matches!(
+        source,
+        "editor-autosave"
+            | "flush-editor"
+            | "word-import-commit"
+            | "legacy-empty-overwrite"
+            | "bad-overwrite"
+    );
+    if current_reference_count > next_reference_count && !can_merge_reference_shrink {
+        return Ok(raw.to_string());
+    }
+    if next_reference_count > 0
+        && !(can_merge_reference_shrink && current_reference_count > next_reference_count)
+    {
+        return Ok(raw.to_string());
+    }
+    if current_reference_count == 0 {
+        return Ok(raw.to_string());
+    }
+
+    let mut next = parse_json(raw)?;
+    let current = parse_json(&current_raw)?;
+    let current_workspaces = current
+        .get("wss")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let current_libs = current_workspaces
+        .iter()
+        .filter_map(|workspace| {
+            let id = workspace.get("id").and_then(Value::as_str)?;
+            let lib = workspace.get("lib").and_then(Value::as_array)?;
+            if lib.is_empty() {
+                None
+            } else {
+                Some((id.to_string(), Value::Array(lib.clone())))
+            }
+        })
+        .collect::<HashMap<_, _>>();
+
+    let Some(workspaces) = next.get_mut("wss").and_then(Value::as_array_mut) else {
+        return Ok(current_raw);
+    };
+    let mut changed = false;
+    for workspace in workspaces {
+        let Some(id) = workspace
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+        else {
+            continue;
+        };
+        let Some(current_lib) = current_libs.get(&id).and_then(Value::as_array) else {
+            continue;
+        };
+        let next_lib = workspace
+            .get("lib")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        if next_lib.len() >= current_lib.len() {
+            continue;
+        }
+        let mut merged = next_lib;
+        let mut seen = merged
+            .iter()
+            .flat_map(reference_merge_keys)
+            .collect::<HashSet<_>>();
+        let mut workspace_changed = false;
+        for reference in current_lib {
+            let keys = reference_merge_keys(reference);
+            if keys.is_empty() || keys.iter().any(|key| seen.contains(key)) {
+                continue;
+            }
+            for key in keys {
+                seen.insert(key);
+            }
+            merged.push(reference.clone());
+            workspace_changed = true;
+        }
+        if workspace_changed {
+            if let Some(obj) = workspace.as_object_mut() {
+                obj.insert("lib".to_string(), Value::Array(merged));
+            }
+            changed = true;
+        }
+    }
+
+    if changed {
+        stable_json(&next)
+    } else {
+        Ok(raw.to_string())
+    }
 }
 
 pub fn save_draft(app_data_dir: &Path, raw: &str) -> Result<Value, String> {
@@ -387,11 +640,9 @@ pub fn read_pdf_annotations(app_data_dir: &Path, ref_id: &str) -> Result<Vec<Val
 pub fn kv_get(app_data_dir: &Path, key: &str) -> Result<Option<String>, String> {
     let db_paths = init_or_migrate(app_data_dir)?;
     let conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
-    conn.query_row(
-        "SELECT value FROM kv WHERE key = ?1",
-        params![key],
-        |row| row.get::<_, String>(0),
-    )
+    conn.query_row("SELECT value FROM kv WHERE key = ?1", params![key], |row| {
+        row.get::<_, String>(0)
+    })
     .optional()
     .map_err(|e| e.to_string())
 }
@@ -433,8 +684,8 @@ pub fn get_legacy_electron_dir() -> Option<PathBuf> {
     #[cfg(test)]
     let local_app_data = env::var_os("AQ_TEST_LOCALAPPDATA")?;
     #[cfg(not(test))]
-    let local_app_data = env::var_os("AQ_TEST_LOCALAPPDATA")
-        .or_else(|| env::var_os("LOCALAPPDATA"))?;
+    let local_app_data =
+        env::var_os("AQ_TEST_LOCALAPPDATA").or_else(|| env::var_os("LOCALAPPDATA"))?;
     Some(PathBuf::from(local_app_data).join(LEGACY_ELECTRON_DIR))
 }
 
@@ -926,10 +1177,21 @@ fn insert_revision_if_changed(
     doc_id: &str,
     doc: &Value,
 ) -> Result<(), String> {
+    let content = doc
+        .get("content")
+        .or_else(|| doc.get("html"))
+        .or_else(|| doc.get("body"))
+        .or_else(|| doc.get("doc"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let plain = strip_html(content);
     let snapshot = json!({
         "docId": doc_id,
         "docName": doc.get("name").and_then(Value::as_str).unwrap_or(""),
-        "content": doc.get("content").and_then(Value::as_str).unwrap_or(""),
+        "content": content,
+        "charCount": plain.chars().count(),
+        "wordCount": plain.split_whitespace().filter(|part| !part.trim().is_empty()).count(),
+        "excerpt": plain.chars().take(280).collect::<String>(),
         "createdAt": now_millis(),
         "source": "sqlite-save"
     });
@@ -951,6 +1213,54 @@ fn insert_revision_if_changed(
     )
     .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+fn strip_html(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut in_tag = false;
+    let mut entity = String::new();
+    let mut in_entity = false;
+    for ch in raw.chars() {
+        if in_tag {
+            if ch == '>' {
+                in_tag = false;
+                out.push(' ');
+            }
+            continue;
+        }
+        if ch == '<' {
+            in_tag = true;
+            continue;
+        }
+        if in_entity {
+            if ch == ';' {
+                match entity.as_str() {
+                    "nbsp" => out.push(' '),
+                    "amp" => out.push('&'),
+                    "lt" => out.push('<'),
+                    "gt" => out.push('>'),
+                    "quot" => out.push('"'),
+                    "#39" | "apos" => out.push('\''),
+                    _ => {}
+                }
+                entity.clear();
+                in_entity = false;
+            } else if entity.len() < 12 {
+                entity.push(ch);
+            } else {
+                entity.clear();
+                in_entity = false;
+            }
+            continue;
+        }
+        if ch == '&' {
+            in_entity = true;
+            entity.clear();
+            continue;
+        }
+        out.push(ch);
+    }
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn insert_library_items(tx: &rusqlite::Transaction<'_>, state: &Value) -> Result<(), String> {
@@ -1288,7 +1598,10 @@ mod tests {
         migrate_legacy_electron_dir(&app_dir, &app_dir.join(DB_FILE), &legacy_dir).unwrap();
 
         let source_after = file_count_and_bytes(&legacy_dir);
-        assert_eq!(source_before, source_after, "legacy source must stay read-only");
+        assert_eq!(
+            source_before, source_after,
+            "legacy source must stay read-only"
+        );
         assert!(app_dir.join("pdfs").join("ref-fixt.pdf").exists());
         assert!(app_dir
             .join("workspaces")
@@ -1300,7 +1613,10 @@ mod tests {
             .join("agent-state.json")
             .exists());
         assert!(app_dir.join("capture-sidecar").join("queue.json").exists());
-        assert!(app_dir.join("capture-sidecar").join("targets.json").exists());
+        assert!(app_dir
+            .join("capture-sidecar")
+            .join("targets.json")
+            .exists());
 
         let conn = Connection::open(app_dir.join(DB_FILE)).unwrap();
         let documents: i64 = conn
@@ -1420,6 +1736,222 @@ mod tests {
     }
 
     #[test]
+    fn load_state_recovers_references_from_legacy_when_blob_was_overwritten_empty() {
+        let dir = temp_dir("state-blob-legacy-recovery");
+        let legacy_dir = temp_dir("legacy-reference-source");
+        fs::write(legacy_dir.join(LEGACY_FILE), sample_state()).unwrap();
+
+        let empty_state = json!({
+            "schemaVersion": 3,
+            "cur": "ws1",
+            "curDoc": "doc1",
+            "doc": "<p></p>",
+            "docs": [{ "id": "doc1", "name": "Empty", "content": "<p></p>" }],
+            "wss": [{ "id": "ws1", "name": "Workspace", "lib": [] }],
+            "notes": []
+        })
+        .to_string();
+        save_state(&dir, &empty_state, "bad-overwrite").unwrap();
+        let conn = Connection::open(dir.join(DB_FILE)).unwrap();
+        conn.execute(
+            "INSERT OR REPLACE INTO kv(key, value) VALUES (?1, ?2)",
+            params![
+                "legacy_source_path",
+                legacy_dir.to_string_lossy().to_string()
+            ],
+        )
+        .unwrap();
+        drop(conn);
+
+        let loaded = parse_json(&load_state(&dir).unwrap().unwrap()).unwrap();
+        let lib = loaded
+            .get("wss")
+            .and_then(Value::as_array)
+            .and_then(|workspaces| workspaces.first())
+            .and_then(|workspace| workspace.get("lib"))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(lib.len(), 1);
+        assert_eq!(lib[0].get("id").and_then(Value::as_str), Some("ref1"));
+
+        let conn = Connection::open(dir.join(DB_FILE)).unwrap();
+        let source: String = conn
+            .query_row(
+                "SELECT value FROM kv WHERE key = 'state_source'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(source, "legacy-recovery");
+    }
+
+    #[test]
+    fn save_state_preserves_existing_references_when_empty_library_overwrite_arrives() {
+        let dir = temp_dir("state-blob-empty-library-overwrite");
+        save_state(&dir, &sample_state(), "reference-test").unwrap();
+
+        let empty_state = json!({
+            "schemaVersion": 3,
+            "cur": "ws1",
+            "curDoc": "doc1",
+            "doc": "<p>Changed editor content</p>",
+            "docs": [{ "id": "doc1", "name": "Changed", "content": "<p>Changed editor content</p>" }],
+            "wss": [{ "id": "ws1", "name": "Workspace", "lib": [] }],
+            "notes": []
+        })
+        .to_string();
+        save_state(&dir, &empty_state, "legacy-empty-overwrite").unwrap();
+
+        let loaded = parse_json(&load_state(&dir).unwrap().unwrap()).unwrap();
+        let lib = loaded
+            .get("wss")
+            .and_then(Value::as_array)
+            .and_then(|workspaces| workspaces.first())
+            .and_then(|workspace| workspace.get("lib"))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(lib.len(), 1);
+        assert_eq!(lib[0].get("id").and_then(Value::as_str), Some("ref1"));
+        assert_eq!(
+            loaded.get("doc").and_then(Value::as_str),
+            Some("<p>Changed editor content</p>")
+        );
+    }
+
+    #[test]
+    fn editor_autosave_merges_missing_references_instead_of_shrinking_library() {
+        let dir = temp_dir("state-blob-partial-library-overwrite");
+        let richer = json!({
+            "schemaVersion": 3,
+            "cur": "ws1",
+            "curDoc": "doc1",
+            "doc": "<p>Original</p>",
+            "docs": [{ "id": "doc1", "name": "Doc", "content": "<p>Original</p>" }],
+            "wss": [{
+                "id": "ws1",
+                "name": "Workspace",
+                "lib": [
+                    { "id": "ref1", "title": "Old Ref", "authors": ["A"], "year": "2020" },
+                    { "id": "ref2", "title": "External Text Ref", "authors": ["B"], "year": "2024" }
+                ]
+            }],
+            "notes": []
+        })
+        .to_string();
+        save_state(&dir, &richer, "reference-import").unwrap();
+
+        let stale_editor_save = json!({
+            "schemaVersion": 3,
+            "cur": "ws1",
+            "curDoc": "doc1",
+            "doc": "<p>Autosaved editor content</p>",
+            "docs": [{ "id": "doc1", "name": "Doc", "content": "<p>Autosaved editor content</p>" }],
+            "wss": [{
+                "id": "ws1",
+                "name": "Workspace",
+                "lib": [{ "id": "ref1", "title": "Old Ref", "authors": ["A"], "year": "2020" }]
+            }],
+            "notes": []
+        })
+        .to_string();
+        save_state(&dir, &stale_editor_save, "editor-autosave").unwrap();
+
+        let loaded = parse_json(&load_state(&dir).unwrap().unwrap()).unwrap();
+        let lib = loaded
+            .get("wss")
+            .and_then(Value::as_array)
+            .and_then(|workspaces| workspaces.first())
+            .and_then(|workspace| workspace.get("lib"))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(lib.len(), 2);
+        assert!(lib
+            .iter()
+            .any(|reference| reference.get("id").and_then(Value::as_str) == Some("ref2")));
+        assert_eq!(
+            loaded.get("doc").and_then(Value::as_str),
+            Some("<p>Autosaved editor content</p>")
+        );
+    }
+
+    #[test]
+    fn explicit_persist_state_allows_reference_deletion() {
+        let dir = temp_dir("state-blob-reference-delete");
+        save_state(&dir, &sample_state(), "reference-test").unwrap();
+
+        let deleted_state = json!({
+            "schemaVersion": 3,
+            "cur": "ws1",
+            "curDoc": "doc1",
+            "doc": "<p>Reference deleted</p>",
+            "docs": [{ "id": "doc1", "name": "Doc", "content": "<p>Reference deleted</p>" }],
+            "wss": [{ "id": "ws1", "name": "Workspace", "lib": [] }],
+            "notes": []
+        })
+        .to_string();
+        save_state(&dir, &deleted_state, "persistState").unwrap();
+
+        let loaded = parse_json(&load_state(&dir).unwrap().unwrap()).unwrap();
+        let lib = loaded
+            .get("wss")
+            .and_then(Value::as_array)
+            .and_then(|workspaces| workspaces.first())
+            .and_then(|workspace| workspace.get("lib"))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert!(lib.is_empty());
+    }
+
+    #[test]
+    fn save_state_rejects_smaller_workspace_or_document_overwrite() {
+        let dir = temp_dir("state-blob-smaller-overwrite");
+        let richer = json!({
+            "schemaVersion": 3,
+            "cur": "ws2",
+            "curDoc": "doc2",
+            "doc": "<p>Doc 2</p>",
+            "docs": [
+                { "id": "doc1", "name": "Doc 1", "content": "<p>Doc 1</p>" },
+                { "id": "doc2", "name": "Doc 2", "content": "<p>Doc 2</p>" }
+            ],
+            "wss": [
+                { "id": "ws1", "name": "Workspace 1", "docId": "doc1", "lib": [] },
+                { "id": "ws2", "name": "Workspace 2", "docId": "doc2", "lib": [] }
+            ],
+            "notes": []
+        })
+        .to_string();
+        save_state(&dir, &richer, "initial-rich-state").unwrap();
+
+        let smaller = json!({
+            "schemaVersion": 3,
+            "cur": "ws1",
+            "curDoc": "doc1",
+            "doc": "<p>Stale blank</p>",
+            "docs": [{ "id": "doc1", "name": "Doc 1", "content": "<p>Stale blank</p>" }],
+            "wss": [{ "id": "ws1", "name": "Workspace 1", "docId": "doc1", "lib": [] }],
+            "notes": []
+        })
+        .to_string();
+        save_state(&dir, &smaller, "stale-autosave").unwrap();
+
+        let loaded = parse_json(&load_state(&dir).unwrap().unwrap()).unwrap();
+        assert_eq!(
+            loaded.get("wss").and_then(Value::as_array).map(Vec::len),
+            Some(2)
+        );
+        assert_eq!(
+            loaded.get("docs").and_then(Value::as_array).map(Vec::len),
+            Some(2)
+        );
+        assert_eq!(loaded.get("cur").and_then(Value::as_str), Some("ws2"));
+    }
+
+    #[test]
     fn save_state_projection_preserves_existing_revisions() {
         let dir = temp_dir("projection-keeps-revisions");
         let mut state = parse_json(&sample_state()).unwrap();
@@ -1428,9 +1960,11 @@ mod tests {
         let db_path = get_db_path(&dir);
         let conn = Connection::open(&db_path).unwrap();
         let before: i64 = conn
-            .query_row("SELECT COUNT(*) FROM revisions WHERE doc_id = 'doc1'", [], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM revisions WHERE doc_id = 'doc1'",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
         assert!(before >= 1);
         drop(conn);
@@ -1438,17 +1972,25 @@ mod tests {
         state["doc"] = Value::String("<p>changed</p>".to_string());
         if let Some(docs) = state.get_mut("docs").and_then(Value::as_array_mut) {
             if let Some(doc) = docs.first_mut().and_then(Value::as_object_mut) {
-                doc.insert("content".to_string(), Value::String("<p>changed</p>".to_string()));
+                doc.insert(
+                    "content".to_string(),
+                    Value::String("<p>changed</p>".to_string()),
+                );
             }
         }
         save_state(&dir, &stable_json(&state).unwrap(), "autosave").unwrap();
 
         let conn = Connection::open(&db_path).unwrap();
         let after: i64 = conn
-            .query_row("SELECT COUNT(*) FROM revisions WHERE doc_id = 'doc1'", [], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM revisions WHERE doc_id = 'doc1'",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
-        assert!(after >= before, "revisions dropped from {before} to {after}");
+        assert!(
+            after >= before,
+            "revisions dropped from {before} to {after}"
+        );
     }
 }

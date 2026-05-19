@@ -385,10 +385,36 @@
     return /^(kaynak(?:\u00e7|c)a|kaynaklar|references?|bibliography)$/.test(normalized);
   }
 
-  function detectHeadingTag(className, text){
+  function extractWordStyleName(styleText){
+    var match = String(styleText || '').match(/mso-style-name\s*:\s*(?:"([^"]+)"|'([^']+)'|([^;]+))/i);
+    return normalizeWhitespace(match ? (match[1] || match[2] || match[3] || '') : '');
+  }
+
+  function parseFontSizePt(styleText){
+    var match = String(styleText || '').match(/font-size\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*(pt|px)?/i);
+    if(!match) return 0;
+    var value = parseFloat(match[1]);
+    if(!isFinite(value)) return 0;
+    return String(match[2] || 'pt').toLowerCase() === 'px' ? value * 72 / 96 : value;
+  }
+
+  function isLikelyHeadingText(text){
+    var value = normalizeWhitespace(text);
+    if(!value || value.length < 3 || value.length > 90) return false;
+    if(/[.;,]$/.test(value)) return false;
+    if(/(?:doi|https?:\/\/|(?:19|20)\d{2})/i.test(value)) return false;
+    var words = value.split(/\s+/).filter(Boolean);
+    return words.length <= 12;
+  }
+
+  function detectHeadingTag(className, text, styleText){
     var cls = String(className || '');
+    var styleName = extractWordStyleName(styleText);
+    var styleProbe = (cls + ' ' + styleName).toLocaleLowerCase('tr-TR');
     if(hasClassName(cls, 'MsoTitle')) return 'h1';
     if(hasClassName(cls, 'MsoSubtitle')) return 'h2';
+    if(/(?:^|\s)(?:mso)?heading\s*([1-5])(?:\s|$)/i.test(styleProbe)) return 'h' + RegExp.$1;
+    if(/(?:^|\s)(?:başlık|baslik)\s*([1-5])(?:\s|$)/i.test(styleProbe)) return 'h' + RegExp.$1;
     if(/(?:^|\s)msoheading([1-5])(?:\s|$)/i.test(cls)) return 'h' + RegExp.$1;
     if(/^(abstract|özet|ozet|giriş|giris|yöntem|yontem|bulgular|tartışma|tartisma|sonuç|sonuc|kaynakça|kaynakca|references)$/i.test(normalizeWhitespace(text))){
       return 'h1';
@@ -396,10 +422,27 @@
     return '';
   }
 
-function resolveWordHeadingTag(className, text){
-  var headingTag = detectHeadingTag(className, text);
+function resolveWordHeadingTag(className, text, styleText){
+  var headingTag = detectHeadingTag(className, text, styleText);
   if(headingTag) return headingTag;
   if(isReferenceHeadingText(text)) return 'h1';
+  return '';
+}
+
+function resolveVisualHeadingTag(node){
+  if(!node) return '';
+  var text = normalizeWhitespace(node.textContent || '');
+  if(!isLikelyHeadingText(text)) return '';
+  if(isReferenceHeadingText(text)) return 'h1';
+  var style = String(node.getAttribute && node.getAttribute('style') || '');
+  var align = (style.match(/text-align\s*:\s*(center|left|right|justify)/i) || [])[1] || '';
+  var fontSize = parseFontSizePt(style);
+  var bold = /font-weight\s*:\s*(bold|[6-9]00)\b/i.test(style)
+    || !!(node.querySelector && node.querySelector('strong,b'));
+  var upper = text === text.toLocaleUpperCase('tr-TR') && /[A-ZÃ‡ÄÄ°Ã–ÅÃœ]/i.test(text);
+  if(String(align || '').toLowerCase() === 'center' && (bold || fontSize >= 13.5)) return 'h1';
+  if(upper && text.split(/\s+/).length <= 8 && (bold || fontSize >= 13.5)) return 'h1';
+  if(bold && /^(abstract|Ã¶zet|ozet|giriÅŸ|giris|yÃ¶ntem|yontem|bulgular|tartÄ±ÅŸma|tartisma|sonuÃ§|sonuc|references?)$/i.test(text)) return 'h1';
   return '';
 }
 
@@ -810,7 +853,11 @@ function isWordListParagraph(node){
     wrapper.querySelectorAll('[style],[class]').forEach(function(node){
       var tag = String(node.tagName || '').toLowerCase();
       if(tag === 'p' || tag === 'div'){
-        var headingTag = resolveWordHeadingTag(node.getAttribute('class') || '', node.textContent || '');
+        var headingTag = resolveWordHeadingTag(
+          node.getAttribute('class') || '',
+          node.textContent || '',
+          node.getAttribute('style') || ''
+        ) || resolveVisualHeadingTag(node);
         if(headingTag){
           var heading = document.createElement(headingTag);
           heading.innerHTML = node.innerHTML;
@@ -1118,6 +1165,15 @@ function isWordListParagraph(node){
     out = out.replace(/<(p|div)([^>]*)class="([^"]*MsoSubtitle[^"]*)"([^>]*)>([\s\S]*?)<\/\1>/gi, '<h2>$5</h2>');
     out = out.replace(/<(p|div)([^>]*)class="([^"]*MsoHeading([1-5])[^"]*)"([^>]*)>([\s\S]*?)<\/\1>/gi, function(_m, _tag, _a, _b, level, _c, content){
       return '<h' + level + '>' + content + '</h' + level + '>';
+    });
+    out = out.replace(/<(p|div)([^>]*)style="([^"]*mso-style-name\s*:\s*(?:&quot;|")?(?:Heading|Başlık|Baslik)\s*([1-5])[^"]*)"([^>]*)>([\s\S]*?)<\/\1>/gi, function(_m, _tag, _before, _style, level, _after, content){
+      return '<h' + level + '>' + content + '</h' + level + '>';
+    });
+    out = out.replace(/<(p|div)([^>]*)style="([^"]*text-align\s*:\s*center[^"]*)"([^>]*)>\s*(<(?:strong|b)\b[^>]*>[\s\S]*?<\/(?:strong|b)>)\s*<\/\1>/gi, function(match, _tag, _before, style, _after, content){
+      var text = String(content || '').replace(/<[^>]+>/g, ' ');
+      if(!isLikelyHeadingText(text)) return match;
+      if(!(/font-size\s*:\s*(?:1[4-9]|[2-9][0-9])(?:\.\d+)?\s*pt/i.test(style) || /font-weight\s*:\s*(?:bold|[6-9]00)\b/i.test(style) || /<(?:strong|b)\b/i.test(content))) return match;
+      return '<h1>' + content + '</h1>';
     });
     out = out.replace(/<(p|div)([^>]*)>\s*(kaynak[cç]a|references?|bibliography|kaynaklar)\s*<\/\1>/gi, '<h1>$3</h1>');
     out = out.replace(/<(p|div)([^>]*)>\s*(kaynak[cÃ§]a|kaynakca|references?|bibliography|kaynaklar)\s*[:;,.â€“â€”-]\s*<\/\1>/gi, '<h1>$3</h1>');

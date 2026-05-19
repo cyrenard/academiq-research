@@ -2,6 +2,7 @@ import { memo, useEffect, useRef } from 'react';
 import type { MutableRefObject } from 'react';
 import { createEditor } from '../../lib/editor';
 import type { AcademiqEditorApi, AcademiqEditorState } from '../../lib/editor-adapter';
+import { scheduleRecheck } from '../../lib/spellcheck-controller';
 
 type AQEngineEditorProps = {
   docId: string;
@@ -29,15 +30,42 @@ function AQEngineEditorComponent({ docId, editorRef, initialState, onEditorChang
   useEffect(() => {
     if (!containerRef.current) return;
     const saveDraft = debounce((state: AcademiqEditorState) => onEditorChangeRef.current(state), 1600);
+    let lastHTML = '';
+    const notifyFromEditor = debounce(() => {
+      const html = editorRef.current?.getHTML?.() || '';
+      scheduleRecheck();
+      if (!html || html === lastHTML) return;
+      lastHTML = html;
+      onEditorChangeRef.current({
+        docId,
+        html,
+        snapshot: editorRef.current?.exportSnapshot?.() || null
+      });
+    }, 700);
 
     editorRef.current = createEditor({
       mount: containerRef.current,
       docId,
       initialState: initialStateRef.current,
-      onChange: saveDraft
+      onChange: (state) => {
+        lastHTML = state.html;
+        scheduleRecheck();
+        saveDraft(state);
+      }
     });
+    lastHTML = editorRef.current?.getHTML?.() || '';
+    window.setTimeout(scheduleRecheck, 400);
+
+    const scheduleNotify = () => window.setTimeout(notifyFromEditor, 0);
+    const container = containerRef.current;
+    const eventNames = ['beforeinput', 'input', 'keyup', 'compositionend', 'paste', 'cut'];
+    eventNames.forEach((eventName) => container.addEventListener(eventName, scheduleNotify, true));
+    const observer = new MutationObserver(scheduleNotify);
+    observer.observe(container, { childList: true, subtree: true, characterData: true });
 
     return () => {
+      eventNames.forEach((eventName) => container.removeEventListener(eventName, scheduleNotify, true));
+      observer.disconnect();
       editorRef.current?.destroy?.();
       editorRef.current = null;
     };

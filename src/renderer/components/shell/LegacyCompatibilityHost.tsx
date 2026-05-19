@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type MouseEvent } from 'react';
 import type { AcademiqReference } from '../../lib/app-state';
 import {
   openQualitySurface,
@@ -9,9 +9,11 @@ import {
 } from '../../lib/quality-surface';
 import {
   insertImageFile,
+  insertImageFileObject,
   importWordFileDirect,
   importBibliographyFile
 } from '../../lib/file-import';
+import { handleDroppedFiles } from '../../lib/drop-router';
 import {
   runExternalReferenceTextImport,
   runExternalReferenceBibliographyTextImport,
@@ -140,6 +142,9 @@ function callFileHandler(name: string, event: ChangeEvent<HTMLInputElement>, onS
 
 
 export function LegacyCompatibilityHost({ onStatus, onImportReferences }: LegacyCompatibilityHostProps) {
+  const pdfFullscreenLockRef = useRef(false);
+  const dragDepthRef = useRef(0);
+  const [dropActive, setDropActive] = useState(false);
   const [metadataRows, setMetadataRows] = useState<MetadataHealthRow[]>([]);
   const [metadataSummary, setMetadataSummary] = useState<MetadataHealthSummary>({
     total: 0,
@@ -154,6 +159,94 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
 
   // Note: the legacy → React sync debounce timer is owned by
   // legacy-dom-helpers; no per-component cleanup needed here.
+
+  useEffect(() => {
+    const win = window as any;
+    const previousToggle = win.togglePdfFullscreen;
+    win.togglePdfFullscreen = () => {
+      if (pdfFullscreenLockRef.current) return;
+      const panel = document.getElementById('pdfpanel');
+      if (!panel) return;
+      pdfFullscreenLockRef.current = true;
+      const nextFullscreen = !panel.classList.contains('fullscreen');
+      panel.classList.toggle('fullscreen', nextFullscreen);
+      document.body.classList.toggle('aq-pdf-reader-fullscreen', nextFullscreen);
+      const fullBtn = document.getElementById('pdffullbtn');
+      if (fullBtn) {
+        fullBtn.innerHTML = nextFullscreen ? '&#x2716;' : '&#x26F6;';
+        fullBtn.setAttribute('title', nextFullscreen ? 'Küçült' : 'Tam ekran');
+        fullBtn.setAttribute('aria-label', nextFullscreen ? 'PDF okuyucuyu küçült' : 'Tam ekran aç/kapat');
+      }
+      document.getElementById('pdfresize')?.classList.toggle('aq-hidden', nextFullscreen);
+      window.setTimeout(() => {
+        pdfFullscreenLockRef.current = false;
+      }, 180);
+    };
+    return () => {
+      win.togglePdfFullscreen = previousToggle;
+    };
+  }, []);
+
+  useEffect(() => {
+    const hasFiles = (event: DragEvent) => {
+      const types = Array.from(event.dataTransfer?.types || []);
+      return types.includes('Files');
+    };
+    const onDragEnter = (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      dragDepthRef.current += 1;
+      setDropActive(true);
+      event.preventDefault();
+    };
+    const onDragOver = (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+      setDropActive(true);
+    };
+    const onDragLeave = (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+      if (!dragDepthRef.current) setDropActive(false);
+    };
+    const onDrop = (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      dragDepthRef.current = 0;
+      setDropActive(false);
+      const files = Array.from(event.dataTransfer?.files || []);
+      void handleDroppedFiles(files, onStatus);
+    };
+    window.addEventListener('dragenter', onDragEnter, true);
+    window.addEventListener('dragover', onDragOver, true);
+    window.addEventListener('dragleave', onDragLeave, true);
+    window.addEventListener('drop', onDrop, true);
+    return () => {
+      window.removeEventListener('dragenter', onDragEnter, true);
+      window.removeEventListener('dragover', onDragOver, true);
+      window.removeEventListener('dragleave', onDragLeave, true);
+      window.removeEventListener('drop', onDrop, true);
+    };
+  }, [onStatus]);
+
+  useEffect(() => {
+    const isEditorPasteTarget = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      return !!el?.closest?.('[data-aq-engine-editor], #apaed, .ProseMirror, [contenteditable="true"]');
+    };
+    const onPaste = (event: ClipboardEvent) => {
+      if (!isEditorPasteTarget(event.target)) return;
+      const files = Array.from(event.clipboardData?.files || []);
+      const images = files.filter((file) => String(file.type || '').toLowerCase().startsWith('image/'));
+      if (!images.length) return;
+      event.preventDefault();
+      images.forEach((file) => {
+        void insertImageFileObject(file, onStatus);
+      });
+    };
+    document.addEventListener('paste', onPaste, true);
+    return () => document.removeEventListener('paste', onPaste, true);
+  }, [onStatus]);
 
   const refreshMetadataHealth = () => {
     const win = window as any;
@@ -311,6 +404,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     const timer = window.setTimeout(() => {
       try {
         (window as any).AQCitationRuntime?.init?.();
+        (window as any).AQPlainCitationLinking?.installContextMenu?.();
         (window as any).AQLiteratureMatrix?.init?.();
         (window as any).AQMarginNotes?.init?.();
         (window as any).__bindSprint1PanelEvents?.();
@@ -430,6 +524,24 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       const state = win.__aqPdfFallbackState;
       const panel = document.getElementById('pdfpanel');
       const scroll = document.getElementById('pdfscroll');
+      const togglePdfFullscreenSafe = () => {
+        if (!panel || pdfFullscreenLockRef.current) return true;
+        pdfFullscreenLockRef.current = true;
+        const nextFullscreen = !panel.classList.contains('fullscreen');
+        panel.classList.toggle('fullscreen', nextFullscreen);
+        document.body.classList.toggle('aq-pdf-reader-fullscreen', nextFullscreen);
+        const fullBtn = document.getElementById('pdffullbtn');
+        if (fullBtn) {
+          fullBtn.innerHTML = nextFullscreen ? '&#x2716;' : '&#x26F6;';
+          fullBtn.setAttribute('title', nextFullscreen ? 'Küçült' : 'Tam ekran');
+          fullBtn.setAttribute('aria-label', nextFullscreen ? 'PDF okuyucuyu küçült' : 'Tam ekran aç/kapat');
+        }
+        document.getElementById('pdfresize')?.classList.toggle('aq-hidden', nextFullscreen);
+        window.setTimeout(() => {
+          pdfFullscreenLockRef.current = false;
+        }, 180);
+        return true;
+      };
       const scrollToPage = (pageNumber: number) => {
         if (!scroll) return;
         const pages = Array.from(scroll.querySelectorAll<HTMLElement>('.pdf-page-wrap'));
@@ -584,8 +696,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         return true;
       }
       if (id === 'pdffullbtn') {
-        panel?.classList.toggle('fullscreen');
-        return true;
+        return togglePdfFullscreenSafe();
       }
       if (id === 'pdfSearchToggleBtn' || id === 'pdfSearchCloseBtn') {
         document.getElementById('pdfsearchbar')?.classList.toggle('open');
@@ -2063,6 +2174,15 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       <input id="zoteroinp" type="file" accept=".json,.rdf,.bib,.ris" hidden onChange={(event) => callFileHandler('importZotero', event, onStatus)} />
       <input id="wordinp" type="file" accept=".doc,.docx,.html,.htm,.rtf,.txt" hidden onChange={(event) => importWordFileDirect(event, onStatus)} />
       <input id="imginp" type="file" accept="image/*" hidden onChange={(event) => insertImageFile(event, onStatus)} />
+
+      {dropActive ? (
+        <div className="pointer-events-none fixed inset-3 z-[10040] flex items-center justify-center rounded-xl border-2 border-dashed border-aq-navy bg-white/80 text-aq-navy shadow-[0_24px_90px_rgba(31,42,68,0.22)] backdrop-blur-sm">
+          <div className="rounded-lg bg-white px-5 py-4 text-center shadow-sm">
+            <div className="text-sm font-semibold">Dosyaları içe aktar</div>
+            <div className="mt-1 text-xs text-aq-muted">PDF, DOCX, BibTeX/RIS, Zotero ve görseller desteklenir.</div>
+          </div>
+        </div>
+      ) : null}
 
       <section id="pdfpanel" className="aq-legacy-pdf-panel" aria-label="PDF viewer">
         <div id="pdfresize" className="aq-legacy-pdf-resize" title="Genislik ayarla" />

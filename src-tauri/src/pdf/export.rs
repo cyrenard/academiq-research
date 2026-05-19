@@ -71,9 +71,12 @@ fn default_page_size() -> String {
     "A4".to_string()
 }
 
-pub fn export_pdf_from_layout(layout_json: &str, options: ExportOptions) -> Result<ExportResult, String> {
-    let mut layout: Layout = serde_json::from_str(layout_json)
-        .map_err(|e| format!("layout_json_parse_failed: {e}"))?;
+pub fn export_pdf_from_layout(
+    layout_json: &str,
+    options: ExportOptions,
+) -> Result<ExportResult, String> {
+    let mut layout: Layout =
+        serde_json::from_str(layout_json).map_err(|e| format!("layout_json_parse_failed: {e}"))?;
     if layout.pages.is_empty() {
         layout.pages.push(Page { lines: Vec::new() });
     }
@@ -94,10 +97,22 @@ pub fn export_pdf_from_layout(layout_json: &str, options: ExportOptions) -> Resu
         let (page_ref, layer_ref) = if index == 0 {
             (first_page, first_layer)
         } else {
-            doc.add_page(pt_to_mm(page_w_pt), pt_to_mm(page_h_pt), format!("Layer {}", index + 1))
+            doc.add_page(
+                pt_to_mm(page_w_pt),
+                pt_to_mm(page_h_pt),
+                format!("Layer {}", index + 1),
+            )
         };
         let layer = doc.get_page(page_ref).get_layer(layer_ref);
-        draw_header(&layer, &fallback, &options, index + 1, pages_len, page_w_pt, page_h_pt);
+        draw_header(
+            &layer,
+            &fallback,
+            &options,
+            index + 1,
+            pages_len,
+            page_w_pt,
+            page_h_pt,
+        );
         for line in &page.lines {
             let mut cursor_x = line.x;
             for item in &line.items {
@@ -162,7 +177,11 @@ struct FontStyle {
 impl FontStyle {
     fn parse(raw: &str) -> Self {
         let lower = raw.to_ascii_lowercase();
-        let weight = if lower.contains("bold") || lower.contains("700") { 700 } else { 400 };
+        let weight = if lower.contains("bold") || lower.contains("700") {
+            700
+        } else {
+            400
+        };
         let italic = lower.contains("italic");
         let family = if lower.contains("arial") || lower.contains("helvetica") {
             "Arial"
@@ -237,7 +256,10 @@ fn draw_header(
 
 fn page_size_points(options: &ExportOptions, layout: &Layout) -> (f32, f32) {
     if layout.page_width_px > 0.0 && layout.page_height_px > 0.0 {
-        return (px_to_pt(layout.page_width_px), px_to_pt(layout.page_height_px));
+        return (
+            px_to_pt(layout.page_width_px),
+            px_to_pt(layout.page_height_px),
+        );
     }
     match options.page_size.to_ascii_lowercase().as_str() {
         "letter" => (612.0, 792.0),
@@ -284,16 +306,30 @@ fn pt_to_mm(pt: f32) -> Mm {
     Mm(pt * 25.4 / 72.0)
 }
 
-pub fn export_from_value(layout_json: Option<String>, options: Value) -> Result<ExportResult, String> {
+pub fn export_from_value(
+    layout_json: Option<String>,
+    options: Value,
+) -> Result<ExportResult, String> {
     let layout = layout_json
-        .or_else(|| options.get("layoutJson").and_then(Value::as_str).map(str::to_string))
-        .or_else(|| options.get("layout_json").and_then(Value::as_str).map(str::to_string))
+        .or_else(|| {
+            options
+                .get("layoutJson")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .or_else(|| {
+            options
+                .get("layout_json")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
         .ok_or("layout_json_required")?;
-    let export_options = serde_json::from_value::<ExportOptions>(options).unwrap_or(ExportOptions {
-        running_head: String::new(),
-        page_size: default_page_size(),
-        margins_pt: None,
-    });
+    let export_options =
+        serde_json::from_value::<ExportOptions>(options).unwrap_or(ExportOptions {
+            running_head: String::new(),
+            page_size: default_page_size(),
+            margins_pt: None,
+        });
     export_pdf_from_layout(&layout, export_options)
 }
 

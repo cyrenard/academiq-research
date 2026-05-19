@@ -7,72 +7,145 @@ type BrowserCaptureModalProps = {
   onStatus: (message: string) => void;
 };
 
+function describeError(error: unknown) {
+  return error instanceof Error ? error.message : String(error || 'Bilinmeyen hata');
+}
+
+function getElectronAPI(): any {
+  return window.electronAPI || {};
+}
+
 export function BrowserCaptureModal({ open, onClose, onStatus }: BrowserCaptureModalProps) {
   const [browserStatus, setBrowserStatus] = useState<unknown>(null);
+  const [loadingAction, setLoadingAction] = useState('');
+  const current = browserStatus && typeof browserStatus === 'object' ? browserStatus as Record<string, unknown> : {};
+  const settings = current.settings && typeof current.settings === 'object' ? current.settings as Record<string, unknown> : {};
+  const browserFamily = String(current.browserFamily || settings.browserFamily || 'chromium') === 'firefox' ? 'firefox' : 'chromium';
 
   useEffect(() => {
     if (!open) return;
-    window.electronAPI.getBrowserCaptureStatus()
+    getElectronAPI().getBrowserCaptureStatus()
       .then(setBrowserStatus)
-      .catch(() => onStatus('Capture durumu alınamadı'));
+      .catch((error: unknown) => onStatus(`Capture durumu alınamadı: ${describeError(error)}`));
   }, [open, onStatus]);
 
-  const prepareSetup = () =>
-    window.electronAPI.prepareBrowserCaptureSetup()
-      .then(() => onStatus('Capture kurulumu hazırlandı'))
-      .catch(() => onStatus('Capture kurulumu hazırlanamadı'));
+  const runAction = (action: string, success: string, failure: string) => {
+    setLoadingAction(action);
+    const api = getElectronAPI();
+    const runner = typeof api.runBrowserCaptureAction === 'function'
+      ? () => api.runBrowserCaptureAction(action, browserFamily)
+      : action === 'install' && typeof api.prepareBrowserCaptureSetup === 'function'
+        ? () => api.prepareBrowserCaptureSetup(browserFamily)
+        : null;
+    if (!runner) {
+      onStatus(`${failure}: Browser Capture komutu bulunamadı`);
+      setLoadingAction('');
+      return;
+    }
+    runner()
+      .then((result: unknown) => {
+        setBrowserStatus(result);
+        const message = result && typeof result === 'object' && 'message' in result
+          ? String((result as { message?: unknown }).message || '')
+          : '';
+        onStatus(message || success);
+      })
+      .catch((error: unknown) => onStatus(`${failure}: ${describeError(error)}`))
+      .finally(() => setLoadingAction(''));
+  };
 
   const openInstallDir = () =>
-    window.electronAPI.openBrowserCaptureInstallDir()
-      .then(() => onStatus('Kurulum klasörü açıldı'))
-      .catch(() => onStatus('Kurulum klasörü açılamadı'));
+    getElectronAPI().openBrowserCaptureInstallDir(browserFamily)
+      .then((result: unknown) => {
+        setBrowserStatus(result);
+        onStatus('Kurulum klasörü açıldı');
+      })
+      .catch((error: unknown) => onStatus(`Kurulum klasörü açılamadı: ${describeError(error)}`));
 
   const openGuide = () =>
-    window.electronAPI.openBrowserCaptureGuide()
-      .then(() => onStatus('Kurulum rehberi açıldı'))
-      .catch(() => onStatus('Kurulum rehberi açılamadı'));
+    getElectronAPI().openBrowserCaptureGuide(browserFamily)
+      .then((result: unknown) => {
+        setBrowserStatus(result);
+        onStatus('Kurulum rehberi açıldı');
+      })
+      .catch((error: unknown) => onStatus(`Kurulum rehberi açılamadı: ${describeError(error)}`));
 
   const testConnection = () =>
-    window.electronAPI.testBrowserCaptureConnection()
-      .then((result) => {
+    getElectronAPI().testBrowserCaptureConnection()
+      .then((result: unknown) => {
         setBrowserStatus(result);
         onStatus('Capture test edildi');
       })
-      .catch(() => onStatus('Capture test edilemedi'));
+      .catch((error: unknown) => onStatus(`Capture test edilemedi: ${describeError(error)}`));
 
-  const enableCapture = () =>
-    window.electronAPI.updateBrowserCapturePrefs({ enabled: true })
-      .then((result) => {
+  const enableCapture = () => {
+    setLoadingAction('enable');
+    const api = getElectronAPI();
+    api.updateBrowserCapturePrefs({ enabled: true, setupPromptSeen: true, browserFamily })
+      .then((result: unknown) => {
         setBrowserStatus(result);
-        onStatus('Capture tercihleri güncellendi');
+        onStatus('Capture açılıyor...');
+        if (typeof api.runBrowserCaptureAction === 'function') {
+          return api.runBrowserCaptureAction('install', browserFamily);
+        }
+        if (typeof api.prepareBrowserCaptureSetup === 'function') {
+          return api.prepareBrowserCaptureSetup(browserFamily);
+        }
+        return result;
       })
-      .catch(() => onStatus('Yakalama tercihleri güncellenemedi'));
+      .then((result: unknown) => {
+        setBrowserStatus(result);
+        onStatus('Capture aktif edildi');
+      })
+      .catch((error: unknown) => onStatus(`Yakalama tercihleri güncellenemedi: ${describeError(error)}`))
+      .finally(() => setLoadingAction(''));
+  };
 
   return (
     <Modal title="Tarayıcıdan Yakala" open={open} onClose={onClose}>
       <div className="space-y-3 text-sm">
         <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Kurulum</div>
+          <div className="mb-3 grid grid-cols-2 gap-2">
+            {[
+              ['chromium', 'Chromium / Chrome / Edge'],
+              ['firefox', 'Firefox / Mozilla']
+            ].map(([family, label]) => (
+              <button
+                type="button"
+                key={family}
+                className={[
+                  'rounded-md border px-3 py-2 text-left text-xs font-semibold',
+                  browserFamily === family ? 'border-aq-navy bg-aq-navy text-white' : 'border-aq-line bg-white text-aq-ink'
+                ].join(' ')}
+                onClick={() => getElectronAPI().updateBrowserCapturePrefs({ browserFamily: family })
+                  .then(setBrowserStatus)
+                  .catch((error: unknown) => onStatus(`Tarayıcı tipi güncellenemedi: ${describeError(error)}`))}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <div className="grid grid-cols-2 gap-2">
-            <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={prepareSetup}>
-              Kurulumu hazırla
+            <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={() => runAction('install', 'Capture kurulumu hazırlandı', 'Capture kurulumu hazırlanamadı')}>
+              {loadingAction === 'install' ? 'Hazırlanıyor...' : 'Kurulumu hazırla'}
             </button>
-            <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={openInstallDir}>
+            <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={openInstallDir}>
               Kurulum klasörünü aç
             </button>
-            <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={openGuide}>
+            <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={openGuide}>
               Rehberi aç
             </button>
-            <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={testConnection}>
+            <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={testConnection}>
               Bağlantıyı test et
             </button>
           </div>
         </section>
 
         <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Preferences</div>
-          <button className="w-full rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={enableCapture}>
-            Capture aktif et
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Tercihler</div>
+          <button type="button" className="w-full rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={enableCapture}>
+            {loadingAction === 'enable' ? 'Aktifleştiriliyor...' : 'Capture aktif et'}
           </button>
         </section>
 

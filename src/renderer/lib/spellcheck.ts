@@ -47,6 +47,8 @@ export interface SpellLoaderOptions {
   dicUrl?: string;
   /** Injectable fetch for tests. Defaults to globalThis.fetch. */
   fetchImpl?: typeof fetch;
+  /** Use the Tauri/Rust spell command instead of the renderer quality layer. */
+  preferNative?: boolean;
 }
 
 // nspell exposes `correct(word) → boolean` and `suggest(word) → string[]`.
@@ -161,7 +163,7 @@ function nativeSpellApi(): any | null {
 }
 
 function canUseNativeSpell(options: SpellLoaderOptions = {}): boolean {
-  return !options.affUrl && !options.dicUrl && !options.fetchImpl && !!nativeSpellApi();
+  return options.preferNative === true && !options.affUrl && !options.dicUrl && !options.fetchImpl && !!nativeSpellApi();
 }
 
 function normalizeNativeIssues(issues: any, maxSuggestions: number): SpellMatch[] {
@@ -202,6 +204,18 @@ export async function checkText(text: string, options: CheckOptions & SpellLoade
   }
   const spell = await ensureSpellLoaded(options);
   return runCheck(spell, text, options);
+}
+
+export async function suggestWord(word: string, options: CheckOptions & SpellLoaderOptions = {}): Promise<string[]> {
+  const clean = String(word || '').trim();
+  if (!clean) return [];
+  const maxSug = Math.max(0, options.maxSuggestions ?? 8);
+  if (canUseNativeSpell(options)) {
+    const native = await nativeSpellApi()!.suggest(clean, 'tr');
+    return Array.isArray(native) ? native.slice(0, maxSug).map(String) : [];
+  }
+  const spell = await ensureSpellLoaded(options);
+  return mergedSuggestions(spell, clean, maxSug);
 }
 
 /**
@@ -276,6 +290,47 @@ const KIND_WEIGHT: Record<EditKind, number> = {
   substitute: 1
 };
 
+const DEASCII_MAP: Record<string, string[]> = {
+  c: ['c', 'ç'],
+  g: ['g', 'ğ'],
+  i: ['i', 'ı', 'İ'],
+  o: ['o', 'ö'],
+  s: ['s', 'ş'],
+  u: ['u', 'ü'],
+  C: ['C', 'Ç'],
+  G: ['G', 'Ğ'],
+  I: ['I', 'İ'],
+  O: ['O', 'Ö'],
+  S: ['S', 'Ş'],
+  U: ['U', 'Ü']
+};
+
+function deasciiCandidates(spell: NSpellInstance, word: string): string[] {
+  if (!/[cgiosuCGIOSU]/.test(word)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const chars = Array.from(word);
+  const walk = (idx: number, current: string[]) => {
+    if (out.length >= 24) return;
+    if (idx >= chars.length) {
+      const candidate = current.join('');
+      if (candidate !== word && !seen.has(candidate)) {
+        seen.add(candidate);
+        if (spell.correct(candidate)) out.push(candidate);
+      }
+      return;
+    }
+    const options = DEASCII_MAP[chars[idx]!] || [chars[idx]!];
+    for (const option of options) {
+      current.push(option);
+      walk(idx + 1, current);
+      current.pop();
+    }
+  };
+  walk(0, []);
+  return out;
+}
+
 /**
  * Damerau-Levenshtein (transpose dahil) edit distance — küçük dizgiler
  * için klasik DP. Önerileri benzerlik sırasına dizmek için kullanırız.
@@ -334,6 +389,9 @@ function mergedSuggestions(spell: NSpellInstance, word: string, maxSug: number):
       pool.set(key, { display: existing.display, kindWeight });
     }
   }
+  // ASCII Turkish input is common on Windows keyboards; prioritize valid
+  // diacritic restorations before broad edit-distance candidates.
+  deasciiCandidates(spell, word).forEach((s) => add(s, 0));
   // nspell çıktısı (zaten ranked) — edit-türü bilinmiyor; substitution
   // benzeri ağırlık ver (1).
   try { spell.suggest(word).forEach((s) => add(s, 1)); } catch (_e) {}

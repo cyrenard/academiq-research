@@ -24,8 +24,15 @@ pub async fn browser_capture_get_status(
 pub async fn browser_capture_prepare_setup(
     app: AppHandle,
     state: State<'_, CaptureSidecarState>,
+    browser_family: Option<String>,
 ) -> Result<Value, String> {
-    call(app, state, "prepareSetup", json!({})).await
+    call(
+        app,
+        state,
+        "prepareSetup",
+        json!({ "browserFamily": browser_family }),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -33,8 +40,33 @@ pub async fn browser_capture_run_action(
     app: AppHandle,
     state: State<'_, CaptureSidecarState>,
     action: String,
+    browser_family: Option<String>,
 ) -> Result<Value, String> {
-    call(app, state, "runAction", json!({ "action": action })).await
+    let normalized = action.trim().to_ascii_lowercase();
+    let result = call(
+        app.clone(),
+        state,
+        "runAction",
+        json!({ "action": action, "browserFamily": browser_family }),
+    )
+    .await?;
+    if matches!(normalized.as_str(), "install" | "repair" | "update") {
+        if let Some(path) = result
+            .get("installDir")
+            .and_then(Value::as_str)
+            .filter(|path| !path.is_empty())
+        {
+            let _ = tauri_plugin_opener::open_path(path, None::<&str>);
+        }
+        if let Some(url) = result
+            .get("managerUrl")
+            .and_then(Value::as_str)
+            .filter(|url| !url.is_empty())
+        {
+            let _ = tauri_plugin_opener::open_url(url, None::<&str>);
+        }
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -58,16 +90,46 @@ pub async fn browser_capture_lookup(
 pub async fn browser_capture_open_install_dir(
     app: AppHandle,
     state: State<'_, CaptureSidecarState>,
+    browser_family: Option<String>,
 ) -> Result<Value, String> {
-    call(app, state, "openInstallDir", json!({})).await
+    let result = call(
+        app,
+        state,
+        "openInstallDir",
+        json!({ "browserFamily": browser_family }),
+    )
+    .await?;
+    if let Some(path) = result
+        .get("installDir")
+        .and_then(Value::as_str)
+        .filter(|path| !path.is_empty())
+    {
+        tauri_plugin_opener::open_path(path, None::<&str>).map_err(|e| e.to_string())?;
+    }
+    Ok(result)
 }
 
 #[tauri::command]
 pub async fn browser_capture_open_guide(
     app: AppHandle,
     state: State<'_, CaptureSidecarState>,
+    browser_family: Option<String>,
 ) -> Result<Value, String> {
-    call(app, state, "openGuide", json!({})).await
+    let result = call(
+        app,
+        state,
+        "openGuide",
+        json!({ "browserFamily": browser_family }),
+    )
+    .await?;
+    if let Some(path) = result
+        .get("guidePath")
+        .and_then(Value::as_str)
+        .filter(|path| !path.is_empty())
+    {
+        tauri_plugin_opener::open_path(path, None::<&str>).map_err(|e| e.to_string())?;
+    }
+    Ok(result)
 }
 
 #[tauri::command]

@@ -95,6 +95,51 @@ function uid(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function countWorkspaceReferences(state: AcademiqAppState) {
+  return (state.wss || []).reduce((total, workspace) => (
+    total + (Array.isArray(workspace.lib) ? workspace.lib.length : 0)
+  ), 0);
+}
+
+function referenceMergeKeys(reference: AcademiqReference) {
+  return [
+    String(reference.id || '').trim() ? `id:${String(reference.id).trim()}` : '',
+    referenceImportKey(reference)
+  ].filter(Boolean);
+}
+
+function preserveReferenceLibraries(next: AcademiqAppState, current: AcademiqAppState) {
+  const currentCount = countWorkspaceReferences(current);
+  const nextCount = countWorkspaceReferences(next);
+  if (!currentCount || nextCount >= currentCount) return next;
+
+  const currentById = new Map((current.wss || []).map((workspace) => [workspace.id, workspace]));
+  let changed = false;
+  const wss = (next.wss || []).map((workspace) => {
+    const currentWorkspace = currentById.get(workspace.id);
+    const currentLib = Array.isArray(currentWorkspace?.lib) ? currentWorkspace.lib : [];
+    const nextLib = Array.isArray(workspace.lib) ? workspace.lib : [];
+    if (!currentLib.length) return workspace;
+    if (!nextLib.length) {
+      changed = true;
+      return { ...workspace, lib: currentLib };
+    }
+    const seen = new Set(nextLib.flatMap(referenceMergeKeys));
+    const missing = currentLib.filter((reference) => {
+      const keys = referenceMergeKeys(reference);
+      return keys.length && !keys.some((key) => seen.has(key));
+    });
+    if (missing.length) {
+      changed = true;
+      missing.forEach((reference) => referenceMergeKeys(reference).forEach((key) => seen.add(key)));
+      return { ...workspace, lib: [...nextLib, ...missing] };
+    }
+    return workspace;
+  });
+
+  return changed ? { ...next, wss } : next;
+}
+
 
 export default function App() {
   const [appState, setAppState] = useState<AcademiqAppState>(() => createBlankState());
@@ -119,6 +164,7 @@ export default function App() {
   const statusTimerRef = useRef<number | null>(null);
   const autosaveTimerRef = useRef<number | null>(null);
   const autosaveInFlightRef = useRef<Promise<unknown> | null>(null);
+  const localWorkspaceTransitionUntilRef = useRef(0);
   const editorContext = useMemo(() => ({ editorRef }), []);
   const activeWorkspace = getActiveWorkspace(appState);
   const activeDocument = getActiveDocument(appState);
@@ -197,24 +243,13 @@ export default function App() {
     return `PDF ${pdfProgress.downloaded}/${pdfProgress.total} indi · ${pdfProgress.attempted}/${pdfProgress.total} denendi${failed} · ${state}`;
   }, [pdfProgress]);
 
-  const openLeanSidePanel = (tab: string) => {
-    const shell = (window as any).AQLeanUIShell;
-    if (shell && typeof shell.openSidePanel === 'function') {
-      shell.openSidePanel(tab);
-      return true;
-    }
-    return false;
-  };
-
   const openLegacyIssueSurface = () => {
-    if (openLeanSidePanel('linter')) return;
     window.dispatchEvent(new CustomEvent('aq:open-quality-surface', {
       detail: { target: qualityStatus.duplicateGroups ? 'duplicate' : 'metadata' }
     }));
   };
 
   const openLegacyMetadataSurface = () => {
-    if (openLeanSidePanel('linter')) return;
     window.dispatchEvent(new CustomEvent('aq:open-quality-surface', {
       detail: { target: 'metadata' }
     }));
@@ -224,7 +259,9 @@ export default function App() {
     setFeatureModal('recovery');
   };
 
-  appStateRef.current = appState;
+  useEffect(() => {
+    appStateRef.current = appState;
+  }, [appState]);
 
   useEffect(() => {
     (window as any).S = { ...((window as any).S || {}), ...appState };
@@ -233,7 +270,19 @@ export default function App() {
   useEffect(() => {
     (window as any).__aqReactSyncFromLegacy = (legacyState: unknown) => {
       try {
-        const hydrated = normalizeReferenceState(hydrateAppState(legacyState));
+        const hydrated = preserveReferenceLibraries(
+          normalizeReferenceState(hydrateAppState(legacyState)),
+          appStateRef.current
+        );
+        const activeId = appStateRef.current.cur;
+        if (
+          Date.now() < localWorkspaceTransitionUntilRef.current &&
+          hydrated.cur &&
+          activeId &&
+          hydrated.cur !== activeId
+        ) {
+          return;
+        }
         appStateRef.current = hydrated;
         setAppState(hydrated);
         setActiveReferenceId((current) => {
@@ -291,6 +340,21 @@ export default function App() {
     } catch (_error) {}
     return result;
   }, []);
+
+  useEffect(() => {
+    const onWordImportCommitted = (event: Event) => {
+      const html = String((event as CustomEvent<{ html?: string }>).detail?.html || '');
+      if (!html.trim()) return;
+      const next = updateActiveDocumentHTML(appStateRef.current, html);
+      appStateRef.current = next;
+      setAppState(next);
+      saveDataChecked(next, 'word-import-commit')
+        .then(() => flashStatus('Word içeriği kaydedildi'))
+        .catch(() => flashStatus('Word içeriği kaydedilemedi'));
+    };
+    window.addEventListener('aq:word-import-committed', onWordImportCommitted as EventListener);
+    return () => window.removeEventListener('aq:word-import-committed', onWordImportCommitted as EventListener);
+  }, [saveDataChecked]);
 
   const scheduleFullAutosave = useCallback((nextState: AcademiqAppState, delay = 900) => {
     if ((window as any).__aqBackupRestoreInProgress) return;
@@ -374,7 +438,6 @@ export default function App() {
     setAppState(nextState);
     const win = window as any;
     win.S = { ...(win.S || {}), ...nextState };
-    try { if (typeof win.save === 'function') win.save(); } catch (_error) {}
     await saveDataChecked(nextState, 'flush-editor');
     return nextState;
   }, [saveDataChecked]);
@@ -481,6 +544,8 @@ export default function App() {
           if (editor && typeof editor.on === 'function') {
             const handler = () => scheduleRecheck();
             editor.on('update', handler);
+            scheduleRecheck();
+            window.setTimeout(scheduleRecheck, 350);
             detach = () => {
               try { editor.off?.('update', handler); } catch (_e) {}
             };
@@ -605,6 +670,8 @@ export default function App() {
   }, [persistEditorDraft]);
 
   const handleWorkspaceChange = async (workspaceId: string) => {
+    if (!workspaceId || workspaceId === appStateRef.current.cur) return;
+    localWorkspaceTransitionUntilRef.current = Date.now() + 1800;
     const committed = await commitEditorHTML();
     const next = switchWorkspace(committed, workspaceId);
     persistState(next).catch(() => flashStatus('Workspace kaydedilemedi'));
@@ -645,6 +712,7 @@ export default function App() {
   };
 
   const handleAddWorkspace = async (name?: string) => {
+    localWorkspaceTransitionUntilRef.current = Date.now() + 1800;
     const committed = await commitEditorHTML();
     const next = addWorkspace(committed, name);
     persistState(next).then(() => flashStatus('Workspace eklendi')).catch(() => flashStatus('Workspace eklenemedi'));
@@ -944,8 +1012,8 @@ export default function App() {
     persistState(next).then(() => flashStatus('Kaynak güncellendi')).catch(() => flashStatus('Kaynak kaydedilemedi'));
   };
 
-  const handleDeleteReference = async (referenceId: string) => {
-    if (!window.confirm('Kaynak silinsin mi?')) return;
+  const handleDeleteReference = async (referenceId: string, options?: { skipConfirm?: boolean }) => {
+    if (!options?.skipConfirm && !(await confirmDialog('Kaynak silinsin mi?'))) return;
     const next = removeReferenceFromActiveWorkspace(appStateRef.current, referenceId);
     await persistState(next);
     try {
@@ -1149,7 +1217,7 @@ export default function App() {
     };
   }, []);
 
-  const handleReferencePdfAction = async (action: 'open' | 'show' | 'delete' | 'download' | 'browser', referenceId: string) => {
+  const handleReferencePdfAction = async (action: 'open' | 'show' | 'delete' | 'download' | 'browser', referenceId: string, options?: { skipConfirm?: boolean }) => {
     const workspace = getActiveWorkspace(appStateRef.current);
     const ref = workspace.lib.find((item) => item.id === referenceId);
     try {
@@ -1172,7 +1240,7 @@ export default function App() {
           }
         }
         if (!opened && ref) {
-          const result = await window.electronAPI?.loadPDF?.(referenceId, { id: workspace.id, name: workspace.name }) as any;
+          const result = await window.electronAPI?.loadPDF?.(referenceId, { id: workspace.id, name: workspace.name, title: ref.title }) as any;
           const buffer = result?.ok ? result.buffer : null;
           if (buffer) {
             const legacyWs = Array.isArray(win.S?.wss) ? win.S.wss.find((item: any) => item?.id === workspace.id) : null;
@@ -1219,12 +1287,12 @@ export default function App() {
         }
       }
       if (action === 'show') {
-        await window.electronAPI?.showPdfInExplorer?.(referenceId, { id: workspace.id, name: workspace.name });
+        await window.electronAPI?.showPdfInExplorer?.(referenceId, { id: workspace.id, name: workspace.name, title: ref?.title });
         flashStatus('PDF klasörde gösterildi');
       }
       if (action === 'delete') {
-        if (!window.confirm('Bu kaynağın PDF dosyası silinsin mi?')) return;
-        await window.electronAPI?.deletePDF?.(referenceId, { id: workspace.id, name: workspace.name });
+        if (!options?.skipConfirm && !(await confirmDialog('Bu kaynağın PDF dosyası silinsin mi?'))) return;
+        await window.electronAPI?.deletePDF?.(referenceId, { id: workspace.id, name: workspace.name, title: ref?.title });
         flashStatus('PDF silindi');
       }
       if (action === 'browser') {
@@ -1289,7 +1357,7 @@ export default function App() {
           });
           await persistState(next);
           setPdfProgress({ total: 1, attempted: 1, downloaded: 1, failed: 0, active: false });
-          callLegacy('openRef', referenceId);
+          await handleReferencePdfAction('open', referenceId);
           flashStatus('PDF indirildi');
         } else {
           setPdfProgress({ total: 1, attempted: 1, downloaded: 0, failed: 1, active: false });
@@ -1349,10 +1417,10 @@ export default function App() {
       .catch(() => flashStatus('Etiket kaydedilemedi'));
   };
 
-  const handleDeleteLabel = (name: string) => {
+  const handleDeleteLabel = async (name: string, options?: { skipConfirm?: boolean }) => {
     const label = name.trim();
     if (!label) return;
-    if (!window.confirm(`${label} etiketi silinsin mi?`)) return;
+    if (!options?.skipConfirm && !(await confirmDialog(`${label} etiketi silinsin mi?`))) return;
     const customLabels = Array.isArray(appStateRef.current.customLabels) ? appStateRef.current.customLabels : [];
     const next = {
       ...appStateRef.current,
@@ -1413,12 +1481,12 @@ export default function App() {
       .catch(() => flashStatus('Klasör kaydedilemedi'));
   };
 
-  const handleDeleteCollection = (collectionId: string) => {
+  const handleDeleteCollection = async (collectionId: string, options?: { skipConfirm?: boolean }) => {
     const workspace = getActiveWorkspace(appStateRef.current);
     const collections = Array.isArray(workspace.collections) ? workspace.collections as Array<{ id: string; name: string }> : [];
     const collection = collections.find((item) => String(item.id) === String(collectionId));
     if (!collection) return;
-    if (!window.confirm(`${collection.name} klasör? silinsin mi? Kaynaklar silinmez.`)) return;
+    if (!options?.skipConfirm && !(await confirmDialog(`${collection.name} klasörü silinsin mi?\nKaynaklar silinmez, sadece klasör bağlantısı kaldırılır.`))) return;
     const next = {
       ...appStateRef.current,
       wss: appStateRef.current.wss.map((item) => item.id === workspace.id
@@ -1639,28 +1707,52 @@ export default function App() {
     flashStatus('PDF hazırlanıyor...');
     try {
       const result = await window.electronAPI?.exportPDF?.({ exportHTML: html, defaultPath: 'academiq-document.pdf' });
-      flashStatus(result && typeof result === 'object' && 'ok' in result && result.ok ? 'PDF dışa aktarıldı' : 'PDF iptal edildi');
-    } catch (_error) {
-      flashStatus('PDF dışa aktarılamadı');
+      if (result && typeof result === 'object' && 'ok' in result && result.ok) {
+        flashStatus('PDF dışa aktarıldı');
+      } else if (result && typeof result === 'object' && 'canceled' in result && result.canceled) {
+        flashStatus('PDF iptal edildi');
+      } else {
+        const message = result && typeof result === 'object' && 'error' in result ? String(result.error || '') : '';
+        flashStatus(message ? `PDF dışa aktarılamadı: ${message}` : 'PDF dışa aktarılamadı');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error || '');
+      flashStatus(message ? `PDF dışa aktarılamadı: ${message}` : 'PDF dışa aktarılamadı');
     }
   };
 
   const handleExportDOCX = async () => {
     await flushEditorToState().catch(() => flashStatus('Export öncesi kayıt tamamlanamadı'));
-    if (callLegacy('expDOC') || callLegacy('expDOCX')) {
-      flashStatus('DOCX dışa aktarma açıldı');
-      return;
-    }
+    try { if (typeof (window as any).refreshExportAuxSections === 'function') (window as any).refreshExportAuxSections(); } catch (_error) {}
     const legacyExportHTML = typeof (window as any).getExportDocHTML === 'function'
       ? String((window as any).getExportDocHTML() || '')
       : '';
     const html = legacyExportHTML || editorRef.current?.getHTML?.() || '<p></p>';
     flashStatus('DOCX hazırlanıyor...');
     try {
-      const result = await window.electronAPI?.exportDOCX?.({ exportHTML: html, defaultPath: 'academiq-document.docx' });
-      flashStatus(result && typeof result === 'object' && 'ok' in result && result.ok ? 'DOCX dışa aktarıldı' : 'DOCX iptal edildi');
-    } catch (_error) {
-      flashStatus('DOCX dışa aktarılamadı');
+      const docxApi = (window as any).AQDocxExport;
+      if (!docxApi || typeof docxApi.buildDocxBytesFromHTML !== 'function') {
+        throw new Error('DOCX JS exporter yüklenmedi');
+      }
+      const bytes = docxApi.buildDocxBytesFromHTML(html) as Uint8Array;
+      let binary = '';
+      for (let index = 0; index < bytes.length; index += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+      }
+      const result = await window.electronAPI?.exportDOCX?.({
+        defaultPath: 'academiq-document.docx',
+        base64: window.btoa(binary)
+      }) as { ok?: boolean; canceled?: boolean; error?: string } | undefined;
+      if (result?.ok) {
+        flashStatus('DOCX dışa aktarıldı');
+      } else if (result?.canceled) {
+        flashStatus('DOCX iptal edildi');
+      } else {
+        throw new Error(result?.error || 'DOCX kaydedilemedi');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Bilinmeyen hata';
+      flashStatus(`DOCX dışa aktarılamadı: ${message}`);
     }
   };
 
@@ -1709,6 +1801,38 @@ export default function App() {
     editorRef.current?.insertCitation(activeReferenceId);
   };
 
+  const handleOpenPlainCitationLinking = () => {
+    const linking = (window as any).AQPlainCitationLinking;
+    if (linking && typeof linking.openReviewModal === 'function') {
+      linking.openReviewModal();
+      flashStatus('Düz atıf bağlama açıldı');
+      return;
+    }
+    if (callLegacy('openPlainCitationLinking')) {
+      flashStatus('Düz atıf bağlama açıldı');
+      return;
+    }
+    flashStatus('Düz atıf bağlama hazır değil');
+  };
+
+  const runPdfViewerCommand = (fnName: string, label: string) => {
+    const panel = document.getElementById('pdfpanel');
+    if (panel && !panel.classList.contains('open')) panel.classList.add('open');
+    if (callLegacy(fnName)) {
+      flashStatus(label);
+      return;
+    }
+    const fn = (window as any)[fnName];
+    if (typeof fn === 'function') {
+      try {
+        fn();
+        flashStatus(label);
+        return;
+      } catch (_error) {}
+    }
+    flashStatus(`${label} hazır değil`);
+  };
+
   const commands: CommandItem[] = [
     { id: 'new-workspace', group: 'Workspace', label: 'Yeni workspace', run: openNewWorkspaceModal },
     { id: 'new-document', group: 'Belge', label: 'Yeni belge', run: handleAddDocument },
@@ -1728,9 +1852,17 @@ export default function App() {
         }
       }
     },
+    { id: 'pdf-search', group: 'PDF', label: 'PDF içinde ara', run: () => runPdfViewerCommand('togglePdfSearch', 'PDF arama açıldı') },
+    { id: 'pdf-thumbnails', group: 'PDF', label: 'PDF küçük resimler', run: () => runPdfViewerCommand('toggleThumbs', 'PDF küçük resimler açıldı') },
+    { id: 'pdf-outline', group: 'PDF', label: 'PDF içerik tablosu', run: () => runPdfViewerCommand('toggleOutline', 'PDF içerik tablosu açıldı') },
+    { id: 'pdf-annotations', group: 'PDF', label: 'PDF notlar ve highlightlar', run: () => runPdfViewerCommand('togglePdfAnnotations', 'PDF not paneli açıldı') },
+    { id: 'pdf-related', group: 'PDF', label: 'PDF benzer çalışmalar', run: () => runPdfViewerCommand('togglePdfRelated', 'PDF benzer çalışmalar açıldı') },
+    { id: 'pdf-fullscreen', group: 'PDF', label: 'PDF tam ekran', run: () => runPdfViewerCommand('togglePdfFullscreen', 'PDF tam ekran değiştirildi') },
+    { id: 'pdf-ocr', group: 'PDF', label: 'PDF OCR çalıştır', run: () => runPdfViewerCommand('runPdfOcrExtractionNow', 'PDF OCR başlatıldı') },
     { id: 'export-pdf', group: 'Export', label: 'PDF dışa aktar', run: handleExportPDF },
     { id: 'export-docx', group: 'Export', label: 'DOCX dışa aktar', run: handleExportDOCX },
     { id: 'insert-citation', group: 'Editor', label: 'Atıf ekle', run: handleInsertCitation },
+    { id: 'link-plain-citations', group: 'Editor', label: 'Düz atıfları kaynaklara bağla', run: handleOpenPlainCitationLinking },
     { id: 'insert-bibliography', group: 'Editor', label: 'Kaynakça ekle/güncelle', run: () => editorRef.current?.insertBibliography() },
     { id: 'history', group: 'Belge', label: 'Belge geçmişi', run: () => setFeatureModal('history') },
     { id: 'matrix', group: 'Literatür', label: 'Literatür matrisini a?', run: handleOpenMatrix },

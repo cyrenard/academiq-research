@@ -146,6 +146,9 @@ mod tests {
 
     #[test]
     fn panic_event_json_escapes_payloads() {
-        assert_eq!(json_string("a \"quoted\" panic"), "\"a \\\"quoted\\\" panic\"");
+        assert_eq!(
+            json_string("a \"quoted\" panic"),
+            "\"a \\\"quoted\\\" panic\""
+        );
     }
 }

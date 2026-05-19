@@ -123,9 +123,43 @@ function decodeWordBytes(bytes: ArrayBuffer) {
   return '';
 }
 
+function wordImportMammothOptions() {
+  return {
+    styleMap: [
+      "p[style-name='Title'] => h1:fresh",
+      "p[style-name='Subtitle'] => h2:fresh",
+      "p[style-name='Heading 1'] => h1:fresh",
+      "p[style-name='Heading 2'] => h2:fresh",
+      "p[style-name='Heading 3'] => h3:fresh",
+      "p[style-name='Heading 4'] => h4:fresh",
+      "p[style-name='Heading 5'] => h5:fresh",
+      "p[style-name='Başlık 1'] => h1:fresh",
+      "p[style-name='Başlık 2'] => h2:fresh",
+      "p[style-name='Başlık 3'] => h3:fresh",
+      "p[style-name='Başlık 4'] => h4:fresh",
+      "p[style-name='Başlık 5'] => h5:fresh",
+      "p[style-name='Baslik 1'] => h1:fresh",
+      "p[style-name='Baslik 2'] => h2:fresh",
+      "p[style-name='Baslik 3'] => h3:fresh",
+      "p[style-name='Baslik 4'] => h4:fresh",
+      "p[style-name='Baslik 5'] => h5:fresh"
+    ],
+    includeDefaultStyleMap: true
+  };
+}
+
 async function persistImportedWordDocument(onStatus?: StatusFn) {
   const win = legacyWin();
   const w = win as any;
+  const editorHTML = currentImportedEditorHTML(win);
+  if (editorHTML) {
+    patchLegacyActiveDocumentHTML(win, editorHTML);
+    try {
+      window.dispatchEvent(new CustomEvent('aq:word-import-committed', {
+        detail: { html: editorHTML }
+      }));
+    } catch (_error) {}
+  }
   try { if (typeof win.save === 'function') win.save(); } catch (_error) {}
   try {
     if (typeof win.runEditorMutationEffects === 'function') {
@@ -156,6 +190,34 @@ async function persistImportedWordDocument(onStatus?: StatusFn) {
   }
 
   syncReactFromLegacy();
+}
+
+function currentImportedEditorHTML(win: Window & Record<string, any>) {
+  try {
+    const editor = win.getActiveEditorInstance?.() || win.editor;
+    const html = editor?.getHTML?.();
+    if (typeof html === 'string' && html.trim()) return html;
+  } catch (_error) {}
+  try {
+    const host = document.getElementById('apaed');
+    const html = host?.innerHTML || '';
+    if (html.trim()) return html;
+  } catch (_error) {}
+  return '';
+}
+
+function patchLegacyActiveDocumentHTML(win: Window & Record<string, any>, html: string) {
+  const state = win.S;
+  if (!state || typeof state !== 'object' || !html) return;
+  const docId = String(state.curDoc || '');
+  state.doc = html;
+  if (Array.isArray(state.docs)) {
+    state.docs = state.docs.map((doc: any) => (
+      doc && String(doc.id || '') === docId
+        ? { ...doc, content: html }
+        : doc
+    ));
+  }
 }
 
 function scheduleImportedWordPersist(onStatus: StatusFn) {
@@ -235,7 +297,7 @@ export async function importWordFileDirect(event: ChangeEvent<HTMLInputElement>,
       const mammoth = (legacyWin() as any).mammoth;
       if (typeof mammoth?.convertToHtml === 'function') {
         const arrayBuffer = await file.arrayBuffer();
-        const result = await mammoth.convertToHtml({ arrayBuffer });
+        const result = await mammoth.convertToHtml({ arrayBuffer }, wordImportMammothOptions());
         html = String(result?.value || '');
       }
     }
@@ -300,5 +362,49 @@ export async function importBibliographyFile(event: ChangeEvent<HTMLInputElement
     onStatus('BibTeX/RIS aktarılamadı');
   } finally {
     input.value = '';
+  }
+}
+
+function fileInputEvent(file: File) {
+  const target = { files: [file], value: '' };
+  return {
+    currentTarget: target,
+    target,
+    nativeEvent: { target }
+  } as unknown as ChangeEvent<HTMLInputElement>;
+}
+
+export async function insertImageFileObject(file: File, onStatus: StatusFn) {
+  await insertImageFile(fileInputEvent(file), onStatus);
+}
+
+export async function importWordFileObject(file: File, onStatus: StatusFn) {
+  await importWordFileDirect(fileInputEvent(file), onStatus);
+}
+
+export async function importBibliographyFileObject(file: File, onStatus: StatusFn) {
+  await importBibliographyFile(fileInputEvent(file), onStatus);
+}
+
+export function importZoteroFileObject(file: File, onStatus: StatusFn) {
+  const win = legacyWin() as any;
+  const target = { files: [file], value: '' };
+  const importer = win.__importFromFileInput || win.importZotero;
+  if (typeof importer !== 'function') {
+    onStatus('Zotero aktarımı hazır değil');
+    return false;
+  }
+  try {
+    if (importer === win.__importFromFileInput) {
+      importer({ target }, { allowJson: true, prefix: 'Zotero aktarımı' });
+    } else {
+      importer({ target });
+    }
+    [500, 1500, 3500].forEach((delay) => window.setTimeout(syncReactFromLegacy, delay));
+    return true;
+  } catch (error) {
+    console.error('[zotero-import]', error);
+    onStatus('Zotero aktarımı çalıştırılamadı');
+    return false;
   }
 }

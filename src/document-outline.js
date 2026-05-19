@@ -147,12 +147,20 @@
   function blockNeedsAQOutlineId(block){
     if(!block) return false;
     if(block.type === 'image' || block.type === 'table') return true;
-    if(block.headingLevel){
+    if(getBlockHeadingLevel(block)){
       var text = runsText(block.runs || [{ text: block.text || '' }]);
       if(shouldSkipHeading(text) || block._isBibHeading || block._isAppendixHeading) return false;
       return true;
     }
     return false;
+  }
+
+  function getBlockHeadingLevel(block){
+    if(!block) return 0;
+    var raw = block.headingLevel || block.level || (block.attrs && block.attrs.level);
+    if(!raw && block.type !== 'heading') return 0;
+    var level = parseInt(raw || 1, 10) || 1;
+    return Math.max(1, Math.min(5, level));
   }
 
   function ensureAQOutlineIds(editor){
@@ -199,13 +207,14 @@
       if(!block) return;
       var attrs = block.attrs || {};
       var id = normalizeText(attrs.refId || block._refId || '');
-      if(block.headingLevel){
+      var headingLevel = getBlockHeadingLevel(block);
+      if(headingLevel){
         var text = runsText(block.runs || [{ text: block.text || '' }]);
         if(shouldSkipHeading(text) || block._isBibHeading || block._isAppendixHeading) return;
         entries.push({
           id: id || makeAQOutlineId('heading', index),
           type: 'heading',
-          level: Math.max(1, Math.min(5, parseInt(block.headingLevel, 10) || 1)),
+          level: headingLevel,
           label: text,
           title: text,
           blockIndex: index,
@@ -349,7 +358,7 @@
   function collectEntries(options){
     options = options || {};
     var aqEntries = collectAQEngineEntries(getActiveEditor(options));
-    if(Array.isArray(aqEntries)) return aqEntries;
+    if(Array.isArray(aqEntries) && aqEntries.length) return aqEntries;
     var rootNode = getRoot(options);
     if(!rootNode) return [];
     var academicApi = getAcademicApi(options);

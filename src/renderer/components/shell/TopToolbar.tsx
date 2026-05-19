@@ -36,8 +36,9 @@ import {
   removeAppendixFromHTML as removeAppendixFromHTMLLib
 } from '../../lib/auxiliary-page-html';
 import { scrollToBibliographyBlock } from '../../lib/bibliography-navigation';
-import { openDocumentOutline, openCaptionManager } from '../../lib/outline-modals';
+import { openDocumentOutline } from '../../lib/outline-modals';
 import { computeActiveMarks, activeMarksEqual, type ActiveMarks } from '../../lib/editor-active-marks';
+import { SectionTabs } from './SectionTabs';
 import {
   getActiveDocRecord,
   commitEditorHTMLToLegacyState as commitEditorHTMLToLegacyStateLib,
@@ -524,6 +525,20 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     } catch (_error) {}
   };
 
+  const getCurrentTrackChangesDocument = () => {
+    const win = window as any;
+    return typeof win.getCurrentDocument === 'function'
+      ? win.getCurrentDocument()
+      : win.S?.docs?.find?.((item: any) => item?.id === win.S?.curDoc);
+  };
+
+  const syncTrackChangesUI = (enabled?: boolean) => {
+    const doc = getCurrentTrackChangesDocument();
+    const next = typeof enabled === 'boolean' ? enabled : Boolean(doc?.trackChangesEnabled);
+    setTrackChangesActive(next);
+    window.dispatchEvent(new CustomEvent('aq:track-changes-toggle', { detail: { enabled: next } }));
+  };
+
   const moduleAction = (moduleName: string, methodName: string, ...args: unknown[]) => {
     preserveEditorSelection();
     const mod = (window as any)[moduleName];
@@ -544,18 +559,41 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
 
   const toggleTrackChanges = () => {
     preserveEditorSelection();
-    const toggled = callLegacy('toggleTrackChangesMode');
-    if (!toggled) {
-      const win = window as any;
-      const doc = typeof win.getCurrentDocument === 'function'
-        ? win.getCurrentDocument()
-        : win.S?.docs?.find?.((item: any) => item?.id === win.S?.curDoc);
-      if (doc) doc.trackChangesEnabled = !doc.trackChangesEnabled;
-      window.dispatchEvent(new CustomEvent('aq:track-changes-toggle', { detail: { enabled: Boolean(doc?.trackChangesEnabled) } }));
-      activeNotifySave();
+    const win = window as any;
+    let nextEnabled: boolean | null = null;
+    if (typeof win.toggleTrackChangesMode === 'function') {
+      try {
+        nextEnabled = Boolean(win.toggleTrackChangesMode());
+      } catch (error) {
+        console.error('[track-changes] toggle failed', error);
+      }
     }
+    if (nextEnabled == null) {
+      const doc = getCurrentTrackChangesDocument();
+      nextEnabled = !Boolean(doc?.trackChangesEnabled);
+      if (doc) doc.trackChangesEnabled = nextEnabled;
+      if (win.AQTipTapWordCommands && typeof win.AQTipTapWordCommands.setTrackChangesEnabled === 'function') {
+        try {
+          nextEnabled = Boolean(win.AQTipTapWordCommands.setTrackChangesEnabled(nextEnabled, { source: 'react-toolbar' }));
+        } catch (_error) {}
+      }
+      document.body?.classList?.toggle('aq-track-changes-on', nextEnabled);
+    }
+    syncTrackChangesUI(nextEnabled);
+    activeNotifySave();
     window.setTimeout(refreshTrackChangesState, 0);
     window.setTimeout(refreshTrackChangesState, 120);
+    focusEditor();
+  };
+
+  const runTrackChangeAction = (fn: string) => {
+    preserveEditorSelection();
+    const ok = callLegacy(fn);
+    if (!ok) runEditorCommand(fn.replace(/TrackedChange$/, 'TrackChange').replace(/TrackedChanges$/, 'TrackChanges'));
+    activeNotifySave();
+    window.setTimeout(refreshTrackChangesState, 0);
+    window.setTimeout(refreshTrackChangesState, 120);
+    focusEditor();
   };
 
   const selectAction = (event: ChangeEvent<HTMLSelectElement>, run: (value: string) => void) => {
@@ -671,6 +709,14 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     }, 30);
   };
 
+  const openPlainCitationLinking = () => {
+    preserveEditorSelection();
+    if (!callLegacy('openPlainCitationLinking')) {
+      callLegacy('linkHighConfidencePlainCitations');
+    }
+    focusEditor();
+  };
+
   const executeFind = (value = findQuery) => {
     const api = (window as any).AQTipTapWordFind;
     const editor = (window as any).editor || null;
@@ -739,15 +785,41 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
     <div
       className="aq-editor-toolbars space-y-1.5 bg-transparent px-2 py-1.5"
     >
+      <SectionTabs />
       <div className="flex h-8 w-full items-center overflow-hidden rounded-md border border-aq-line bg-white shadow-sm">
         <TopBarButton id="outlineOpenBtn" onClick={openDocumentOutline} title="Belge anahatı">
           <BookOpen size={15} strokeWidth={1.8} />
           Anahat
         </TopBarButton>
-        <TopBarButton id="captionManagerOpenBtn" onClick={openCaptionManager} title="Başlık listesi">
-          <List size={15} strokeWidth={1.8} />
-          Başlıklar
-        </TopBarButton>
+        <div className="relative flex h-full shrink-0 items-center gap-1 px-1.5 after:absolute after:right-0 after:top-1/2 after:h-4 after:w-px after:-translate-y-1/2 after:bg-aq-line">
+          <button
+            type="button"
+            title="Değişiklikleri izle"
+            aria-pressed={trackChangesActive || undefined}
+            onClick={toggleTrackChanges}
+            className={[
+              'inline-flex h-[29px] items-center gap-1 rounded px-2 text-[12px] leading-none text-aq-ink transition hover:bg-aq-panel active:translate-y-px',
+              trackChangesActive ? 'bg-aq-navy/10 font-semibold text-aq-navy shadow-[inset_0_0_0_1px_rgba(30,58,95,0.18)]' : ''
+            ].join(' ')}
+          >
+            <PenLine size={14} />
+            İzle
+          </button>
+          <select
+            defaultValue=""
+            onChange={(event) => selectAction(event, runTrackChangeAction)}
+            className="h-[29px] w-[82px] rounded border-0 bg-transparent px-1 text-[12px] leading-none text-aq-ink outline-none hover:bg-aq-panel"
+            title="Değişiklik izleme işlemleri"
+          >
+            <option value="">Değişiklik</option>
+            <option value="focusPrevTrackedChange">Önceki</option>
+            <option value="focusNextTrackedChange">Sonraki</option>
+            <option value="acceptCurrentTrackedChange">Kabul</option>
+            <option value="rejectCurrentTrackedChange">Reddet</option>
+            <option value="acceptTrackedChanges">Tümünü kabul</option>
+            <option value="rejectTrackedChanges">Tümünü reddet</option>
+          </select>
+        </div>
 
         <div className="relative flex h-full shrink-0 items-center gap-1 px-2 after:absolute after:right-0 after:top-1/2 after:h-4 after:w-px after:-translate-y-1/2 after:bg-aq-line">
           <span className="text-[13px] text-aq-ink">×=</span>
@@ -948,6 +1020,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
             defaultValue=""
             onChange={(event) => selectAction(event, (value) => {
               if (value === 'figure') action('insFig');
+              else if (value === 'plainCitationLinking') openPlainCitationLinking();
               else if (value === 'footnote') moduleAction('AQFootnotes', 'insertFootnote', 'footnote');
               else if (value === 'endnote') moduleAction('AQFootnotes', 'insertFootnote', 'endnote');
               else if (value === 'crossref') moduleAction('AQFootnotes', 'showCrossRefDialog');
@@ -962,6 +1035,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
             title="Diğer ekle"
           >
             <option value="">Diğer</option>
+            <option value="plainCitationLinking">Düz atıfları bağla</option>
             <option value="figure">Şekil</option>
             <option value="insBlkQ">Blok alıntı</option>
             <option value="insCover">Kapak</option>
@@ -978,7 +1052,6 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
         <ToolbarGroup label="Medya & Not">
           <ToolbarButton label="Kenar notu ekle" onClick={marginNoteAction}>+ Not</ToolbarButton>
           <IconButton icon={<Eye size={13} />} label="Kenar notlarını göster/gizle" onClick={() => moduleAction('AQMarginNotes', 'toggleMnVisible')} className="h-7 w-7" />
-          <IconButton icon={<PenLine size={13} />} label="Değişiklikleri izle" active={trackChangesActive} onClick={toggleTrackChanges} className="h-7 w-7" />
         </ToolbarGroup>
 
         <ToolbarGroup label="Dönüşüm">

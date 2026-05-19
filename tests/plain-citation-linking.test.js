@@ -161,3 +161,33 @@ test('analyzeImportedDocument summarizes citations, bibliography lines and headi
   assert.equal(analysis.bibliographyLines.length, 1);
   assert.ok(analysis.headingCandidateCount >= 2);
 });
+
+test('runtime listens for the Tauri word import committed event', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'plain-citation-linking.js'), 'utf8');
+  assert.match(source, /aq:word-import-committed/);
+  assert.match(source, /window\.openPlainCitationLinking/);
+  assert.match(source, /window\.linkHighConfidencePlainCitations/);
+});
+
+test('context menu can resolve AQ Engine offsets from point hit-testing', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'plain-citation-linking.js'), 'utf8');
+  assert.match(source, /AQEngineSelection/);
+  assert.match(source, /pointToOffset\(stage,\s*event\.clientX/);
+  assert.match(source, /textarea:not\(\.aq-input-capture\)/);
+});
+
+test('plain citation linking also opens from normal text click and toolbar', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'plain-citation-linking.js'), 'utf8');
+  const toolbar = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'components', 'shell', 'TopToolbar.tsx'), 'utf8');
+  assert.match(source, /function showEditorClickSuggestion/);
+  assert.match(source, /document\.addEventListener\('click', showEditorClickSuggestion, true\)/);
+  assert.match(source, /findPlainMatchAtOffset\(editor, currentWorkspaceReferences\(\), offset\)/);
+  assert.match(toolbar, /openPlainCitationLinking/);
+  assert.match(toolbar, /callLegacy\('openPlainCitationLinking'\)/);
+});

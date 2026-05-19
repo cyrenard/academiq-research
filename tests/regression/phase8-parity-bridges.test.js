@@ -35,10 +35,11 @@ test('toolbar exposes track changes, footnote and margin note bridge actions', (
   assert.match(toolbar, /Değişiklikleri izle/);
 });
 
-test('AppShell exposes matrix nav and APA status opens lean linter before fallback', () => {
+test('APA status opens React quality surface instead of the removed lean linter panel', () => {
   const shell = read('src/renderer/components/shell/AppShell.tsx');
   const app = read('src/renderer/App.tsx');
-  assert.match(shell, /navButton\('matrix', 'Matris'\)/);
-  assert.match(app, /openLeanSidePanel\('linter'\)/);
+  assert.doesNotMatch(shell, /navButton\('matrix', 'Matris'\)/);
+  assert.doesNotMatch(app, /openLeanSidePanel\('linter'\)/);
+  assert.match(app, /aq:open-quality-surface/);
   assert.match(app, /openShortcutHelp/);
 });

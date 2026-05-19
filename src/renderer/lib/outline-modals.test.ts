@@ -33,11 +33,16 @@ afterEach(() => {
 // ─── openDocumentOutline ─────────────────────────────────────────────────
 
 describe('openDocumentOutline', () => {
-  it('returns early when legacy openDocumentOutline returns truthy', () => {
+  it('renders the React outline even when legacy openDocumentOutline exists', () => {
     (window as any).openDocumentOutline = vi.fn(() => true);
+    (window as any).AQDocumentOutline = {
+      collectEntries: () => [{ id: 'h1', label: 'React Outline' }],
+      buildSummary: () => ({ headings: 1, tables: 0, figures: 0 })
+    };
     openDocumentOutline();
-    // .show NOT added because the legacy handler took over
-    expect(document.getElementById('docOutlineModal')!.classList.contains('show')).toBe(false);
+    expect((window as any).openDocumentOutline).not.toHaveBeenCalled();
+    expect(document.getElementById('docOutlineModal')!.classList.contains('show')).toBe(true);
+    expect(document.getElementById('docOutlineList')!.textContent).toContain('React Outline');
   });
 
   it('does not crash when modal DOM is missing', () => {
@@ -65,7 +70,7 @@ describe('openDocumentOutline', () => {
   it('shows empty state when no entries collected', () => {
     (window as any).AQDocumentOutline = { collectEntries: () => [] };
     openDocumentOutline();
-    expect(document.getElementById('docOutlineList')!.innerHTML).toMatch(/Belgede başlık yok/);
+    expect(document.getElementById('docOutlineList')!.innerHTML).toMatch(/Belgede başlık, tablo veya şekil yok/);
   });
 
   it('clicking an entry triggers scrollToEntry + closes modal', () => {

@@ -19,7 +19,7 @@ type FeatureModalsProps = {
   onClose: () => void;
   onStatus: (message: string) => void;
   onUpdateReference: (referenceId: string, patch: Record<string, unknown>) => void;
-  onDeleteReference: (referenceId: string) => void;
+  onDeleteReference: (referenceId: string, options?: { skipConfirm?: boolean }) => void;
   onRestoreState: () => void;
 };
 
@@ -41,6 +41,7 @@ export function FeatureModals({
   const [settingsTab, setSettingsTab] = useState<'recovery' | 'history' | 'capture' | 'matrixAssistant' | 'spellcheck' | 'sync' | 'storage' | 'updates' | 'about'>('recovery');
   const [updateUrl, setUpdateUrl] = useState('');
   const [loadingAction, setLoadingAction] = useState('');
+  const [captureActionMessage, setCaptureActionMessage] = useState('');
   const spellcheck = useSpellcheck();
 
   const refreshHistory = () => {
@@ -142,21 +143,68 @@ export function FeatureModals({
       })
       .catch(() => onStatus('Yerel Matrix yardımcısı kaydedilemedi'));
   };
+  const getCaptureBrowserFamily = () => {
+    const current = asRecord(browserStatus);
+    const settings = asRecord(current.settings);
+    return String(current.browserFamily || settings.browserFamily || 'chromium') === 'firefox' ? 'firefox' : 'chromium';
+  };
+
   const runCaptureAction = (action: string, success: string, failure: string) => {
     setLoadingAction(action);
-    window.electronAPI.runBrowserCaptureAction(action)
+    setCaptureActionMessage(`${success}...`);
+    const browserFamily = getCaptureBrowserFamily();
+    const run = action === 'install' || action === 'repair' || action === 'update'
+      ? window.electronAPI.updateBrowserCapturePrefs({ enabled: true, setupPromptSeen: true, browserFamily })
+          .then((result) => {
+            setBrowserStatus(result);
+            return window.electronAPI.runBrowserCaptureAction(action, browserFamily);
+          })
+      : window.electronAPI.runBrowserCaptureAction(action, browserFamily);
+    run
       .then((result) => {
         setBrowserStatus(result);
+        if (result && typeof result === 'object' && (result as { ok?: unknown }).ok === false) {
+          const error = 'error' in result ? String((result as { error?: unknown }).error || '') : '';
+          const message = 'message' in result ? String((result as { message?: unknown }).message || '') : '';
+          throw new Error(error || message || failure);
+        }
         const message = result && typeof result === 'object' && 'message' in result
           ? String((result as { message?: unknown }).message || '')
           : '';
         const installDir = result && typeof result === 'object' && 'installDir' in result
           ? String((result as { installDir?: unknown }).installDir || '')
           : '';
-        onStatus(message || (installDir ? `${success}: ${installDir}` : success));
+        const finalMessage = message || (installDir ? `${success}: ${installDir}` : success);
+        setCaptureActionMessage(finalMessage);
+        onStatus(finalMessage);
       })
-      .catch(() => onStatus(failure))
+      .catch((error) => {
+        const finalMessage = `${failure}: ${error instanceof Error ? error.message : String(error || 'Bilinmeyen hata')}`;
+        setCaptureActionMessage(finalMessage);
+        onStatus(finalMessage);
+      })
       .finally(() => setLoadingAction(''));
+  };
+
+  const runCaptureCommand = <T,>(command: Promise<T>, success: string, failure: string) => {
+    setCaptureActionMessage(`${success}...`);
+    command
+      .then((result: any) => {
+        setBrowserStatus(result);
+        if (result && typeof result === 'object' && result.ok === false) {
+          throw new Error(String(result.error || result.message || failure));
+        }
+        const message = result && typeof result === 'object' && result.message
+          ? String(result.message)
+          : success;
+        setCaptureActionMessage(message);
+        onStatus(message);
+      })
+      .catch((error) => {
+        const finalMessage = `${failure}: ${error instanceof Error ? error.message : String(error || 'Bilinmeyen hata')}`;
+        setCaptureActionMessage(finalMessage);
+        onStatus(finalMessage);
+      });
   };
 
   const restoreSnapshot = async (snapshotId: string) => {
@@ -183,6 +231,36 @@ export function FeatureModals({
       .finally(() => setLoadingAction(''));
   };
 
+  const toggleCaptureEnabled = () => {
+    const nextEnabled = !capture.enabled;
+    const browserFamily = getCaptureBrowserFamily();
+    setLoadingAction('capture-toggle');
+    setCaptureActionMessage(nextEnabled ? 'Capture açılıyor...' : 'Capture kapatılıyor...');
+    window.electronAPI.updateBrowserCapturePrefs({ enabled: nextEnabled, setupPromptSeen: true, browserFamily })
+      .then((result) => {
+        setBrowserStatus(result);
+        if (!nextEnabled) {
+          setCaptureActionMessage('Capture kapatıldı');
+          onStatus('Capture kapatıldı');
+          return null;
+        }
+        setCaptureActionMessage('Capture açılıyor...');
+        onStatus('Capture açılıyor...');
+        return window.electronAPI.runBrowserCaptureAction('install', browserFamily)
+          .then((installResult) => {
+            setBrowserStatus(installResult);
+            setCaptureActionMessage('Capture aktif edildi');
+            onStatus('Capture aktif edildi');
+          });
+      })
+      .catch((error) => {
+        const finalMessage = `Capture tercihi güncellenemedi: ${error instanceof Error ? error.message : String(error || 'Bilinmeyen hata')}`;
+        setCaptureActionMessage(finalMessage);
+        onStatus(finalMessage);
+      })
+      .finally(() => setLoadingAction(''));
+  };
+
   const capture = asRecord(browserStatus);
   const meta = asRecord(loadMeta);
   const sync = asRecord(syncInfo);
@@ -193,6 +271,8 @@ export function FeatureModals({
   const latestSnapshot = history[0] || null;
   const currentDoc = state.docs.find((doc) => doc.id === state.curDoc);
   const captureUpdateAvailable = capture.lifecycleState === 'update_available' || capture.updateAvailable === true;
+  const captureSettings = asRecord(capture.settings);
+  const captureBrowserFamily = String(capture.browserFamily || captureSettings.browserFamily || 'chromium') === 'firefox' ? 'firefox' : 'chromium';
 
   return (
     <>
@@ -381,6 +461,24 @@ export function FeatureModals({
                     <div className="rounded-md bg-white p-3"><b>Extension</b><br />{String(capture.installedExtensionVersion || '-')}</div>
                     <div className="rounded-md bg-white p-3"><b>Son bağlantı</b><br />{formatDate(capture.lastConnectedAt || capture.lastHelloAt)}</div>
                   </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    {[
+                      ['chromium', 'Chromium / Chrome / Edge'],
+                      ['firefox', 'Firefox / Mozilla']
+                    ].map(([family, label]) => (
+                      <button
+                        type="button"
+                        key={family}
+                        className={[
+                          'rounded-md border px-3 py-2 text-left font-semibold',
+                          captureBrowserFamily === family ? 'border-aq-navy bg-aq-navy text-white' : 'border-aq-line bg-white text-aq-ink'
+                        ].join(' ')}
+                        onClick={() => runCaptureCommand(window.electronAPI.updateBrowserCapturePrefs({ browserFamily: family }), `${label} seçildi`, 'Tarayıcı tipi güncellenemedi')}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                   {captureUpdateAvailable ? (
                     <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
                       <div className="font-semibold">Capture extension güncellemesi hazır.</div>
@@ -396,21 +494,26 @@ export function FeatureModals({
                     </div>
                   ) : null}
                   <div className="mt-3 grid grid-cols-3 gap-2">
-                    <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureAction('install', 'Capture kurulumu hazırlandı', 'Capture kurulumu hazırlanamadı')}>{loadingAction === 'install' ? 'Hazırlanıyor...' : 'Kurulumu hazırla'}</button>
-                    <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureAction('repair', 'Capture kurulumu onarıldı', 'Capture onarılamadı')}>Onar</button>
-                    <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => window.electronAPI.testBrowserCaptureConnection().then((result) => { setBrowserStatus(result); onStatus('Capture test edildi'); }).catch(() => onStatus('Capture test edilemedi'))}>Test et</button>
-                    <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => window.electronAPI.openBrowserCaptureInstallDir().catch(() => onStatus('Kurulum klasörü açılamadı'))}>Klasörü aç</button>
-                    <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => window.electronAPI.openBrowserCaptureGuide().catch(() => onStatus('Rehber açılamadı'))}>Rehberi aç</button>
-                    <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={refreshCaptureStatus}>Yenile</button>
+                    <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureAction('install', 'Capture kurulumu hazırlandı', 'Capture kurulumu hazırlanamadı')}>{loadingAction === 'install' ? 'Hazırlanıyor...' : 'Kurulumu hazırla'}</button>
+                    <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureAction('repair', 'Capture kurulumu onarıldı', 'Capture onarılamadı')}>Onar</button>
+                    <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureCommand(window.electronAPI.testBrowserCaptureConnection(), 'Capture test edildi', 'Capture test edilemedi')}>Test et</button>
+                    <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureCommand(window.electronAPI.openBrowserCaptureInstallDir(captureBrowserFamily), 'Kurulum klasörü açıldı', 'Kurulum klasörü açılamadı')}>Klasörü aç</button>
+                    <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureCommand(window.electronAPI.openBrowserCaptureGuide(captureBrowserFamily), 'Rehber açıldı', 'Rehber açılamadı')}>Rehberi aç</button>
+                    <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={refreshCaptureStatus}>Yenile</button>
                   </div>
+                  {captureActionMessage ? (
+                    <div className="mt-3 rounded-md border border-aq-line bg-white px-3 py-2 text-xs leading-5 text-aq-muted">
+                      {captureActionMessage}
+                    </div>
+                  ) : null}
                 </section>
                 <section className="rounded-lg border border-aq-line bg-aq-paper p-3">
                   <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-aq-muted">Preferences</div>
                   <div className="grid grid-cols-2 gap-2">
-                    <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => window.electronAPI.updateBrowserCapturePrefs({ enabled: !capture.enabled }).then((result) => { setBrowserStatus(result); onStatus('Capture tercihleri güncellendi'); }).catch(() => onStatus('Capture tercihleri güncellenemedi'))}>{capture.enabled ? 'Capture kapat' : 'Capture aktif et'}</button>
-                    <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => window.electronAPI.updateBrowserCapturePrefs({ autoAttachPdfUrl: capture.autoAttachPdfUrl === false }).then((result) => { setBrowserStatus(result); onStatus('PDF URL tercihi güncellendi'); }).catch(() => onStatus('Tercih güncellenemedi'))}>PDF URL auto attach: {capture.autoAttachPdfUrl === false ? 'kapalı' : 'açık'}</button>
-                    <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => window.electronAPI.updateBrowserCapturePrefs({ focusImportedWorkspace: !capture.focusImportedWorkspace }).then((result) => { setBrowserStatus(result); onStatus('Workspace odak tercihi güncellendi'); }).catch(() => onStatus('Tercih güncellenemedi'))}>İçeri aktarılan workspace odağı: {capture.focusImportedWorkspace ? 'açık' : 'kapalı'}</button>
-                    <button className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureAction('update', 'Extension dosyaları güncellendi', 'Capture extension güncellenemedi')}>{loadingAction === 'update' ? 'Güncelleniyor...' : 'Extension güncelle'}</button>
+                    <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={toggleCaptureEnabled}>{loadingAction === 'capture-toggle' ? 'Güncelleniyor...' : capture.enabled ? 'Capture kapat' : 'Capture aktif et'}</button>
+                    <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureCommand(window.electronAPI.updateBrowserCapturePrefs({ autoAttachPdfUrl: capture.autoAttachPdfUrl === false }), 'PDF URL tercihi güncellendi', 'Tercih güncellenemedi')}>PDF URL auto attach: {capture.autoAttachPdfUrl === false ? 'kapalı' : 'açık'}</button>
+                    <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureCommand(window.electronAPI.updateBrowserCapturePrefs({ focusImportedWorkspace: !capture.focusImportedWorkspace }), 'Workspace odak tercihi güncellendi', 'Tercih güncellenemedi')}>İçeri aktarılan workspace odağı: {capture.focusImportedWorkspace ? 'açık' : 'kapalı'}</button>
+                    <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureAction('update', 'Extension dosyaları güncellendi', 'Capture extension güncellenemedi')}>{loadingAction === 'update' ? 'Güncelleniyor...' : 'Extension güncelle'}</button>
                   </div>
                 </section>
               </div>

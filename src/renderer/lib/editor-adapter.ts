@@ -107,19 +107,43 @@ type LegacyWindow = Window & {
 let activeEditor: any = null;
 let activeMount: HTMLElement | null = null;
 let activeNotify: (() => void) | null = null;
+let activeDetachUpdate: (() => void) | null = null;
 
 function normalizeHTML(value: unknown) {
   const html = String(value || '').trim();
   return html || '<p></p>';
 }
 
-function repairPersistedWordHTML(win: LegacyWindow, value: unknown) {
+const repairedWordHTMLCache = new Map<string, string>();
+const MAX_REPAIRED_WORD_HTML_CACHE = 8;
+
+function repairCacheKey(docId: string, html: string) {
+  return `${docId}:${html.length}:${html.slice(0, 96)}:${html.slice(-96)}`;
+}
+
+function rememberRepairedWordHTML(key: string, html: string) {
+  if (repairedWordHTMLCache.has(key)) repairedWordHTMLCache.delete(key);
+  repairedWordHTMLCache.set(key, html);
+  while (repairedWordHTMLCache.size > MAX_REPAIRED_WORD_HTML_CACHE) {
+    const oldest = repairedWordHTMLCache.keys().next().value;
+    if (!oldest) break;
+    repairedWordHTMLCache.delete(oldest);
+  }
+}
+
+function repairPersistedWordHTML(win: LegacyWindow, docId: string, value: unknown) {
   const html = normalizeHTML(value);
+  const key = repairCacheKey(docId, html);
+  const cached = repairedWordHTMLCache.get(key);
+  if (cached) return cached;
   if (win.AQTipTapWordIO && typeof win.AQTipTapWordIO.repairWordImportHTML === 'function') {
     try {
-      return normalizeHTML(win.AQTipTapWordIO.repairWordImportHTML(html));
+      const repaired = normalizeHTML(win.AQTipTapWordIO.repairWordImportHTML(html));
+      rememberRepairedWordHTML(key, repaired);
+      return repaired;
     } catch (_error) {}
   }
+  rememberRepairedWordHTML(key, html);
   return html;
 }
 
@@ -258,6 +282,19 @@ function installLegacySaveBridge(win: LegacyWindow, docId: string, onChange?: Cr
     window.clearTimeout(saveTimer);
     runSave();
   };
+}
+
+function attachEditorUpdateBridge(editor: any) {
+  activeDetachUpdate?.();
+  activeDetachUpdate = null;
+  if (!editor || typeof editor.on !== 'function') return;
+  const handler = () => activeNotify?.();
+  try {
+    editor.on('update', handler);
+    activeDetachUpdate = () => {
+      try { editor.off?.('update', handler); } catch (_error) {}
+    };
+  } catch (_error) {}
 }
 
 function getEditorHTML(win: LegacyWindow) {
@@ -615,6 +652,8 @@ function installReferenceBridge(win: LegacyWindow) {
 
 function destroyLegacyEditor(win: LegacyWindow) {
   try { if (typeof (win as any).__aqFlushSaveBridge === 'function') (win as any).__aqFlushSaveBridge(); } catch (_error) {}
+  activeDetachUpdate?.();
+  activeDetachUpdate = null;
   const editor = activeEditor || win.editor;
   if (editor && typeof editor.destroy === 'function') {
     try { editor.destroy(); } catch (_error) {}
@@ -629,7 +668,7 @@ function destroyLegacyEditor(win: LegacyWindow) {
 function hydrateInitialDocument(win: LegacyWindow, docId: string, initialState: unknown) {
   const source = initialState && typeof initialState === 'object' ? initialState as any : {};
   const rawHTML = readPersistedDoc(docId, source);
-  const html = repairPersistedWordHTML(win, rawHTML);
+  const html = repairPersistedWordHTML(win, docId, rawHTML);
   const sourceDocs = Array.isArray(source.docs) && source.docs.length ? source.docs : [{ id: docId, content: html }];
   const docs = sourceDocs.map((doc: any) => doc && doc.id === docId ? { ...doc, content: html } : doc);
   win.S = Object.assign({}, win.S || {}, source, {
@@ -682,6 +721,7 @@ export function createAcademiqEditor(options: CreateAcademiqEditorOptions): Acad
   activeEditor = win.AQTipTapWordInit && typeof win.AQTipTapWordInit.init === 'function'
     ? win.AQTipTapWordInit.init()
     : null;
+  attachEditorUpdateBridge(activeEditor);
   markWritingAssistSurface(options.mount);
   window.setTimeout(() => markWritingAssistSurface(options.mount), 0);
   win.editor = activeEditor;

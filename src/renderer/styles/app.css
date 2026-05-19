@@ -649,9 +649,21 @@ body.aq-matrix-fullscreen .aq-legacy-pdf-panel.open {
   box-shadow: 0 -6px 18px rgba(31, 42, 68, 0.06);
 }
 
+.aq-soft-shell,
+.aq-soft-shell * {
+  -webkit-app-region: no-drag;
+}
+
 .aq-titlebar {
-  -webkit-app-region: drag;
   user-select: none;
+}
+
+.aq-titlebar-drag-zone {
+  -webkit-app-region: drag;
+}
+
+.aq-titlebar-drag-zone * {
+  -webkit-app-region: drag;
 }
 
 .aq-titlebar button,
@@ -1687,14 +1699,14 @@ body.aq-matrix-fullscreen .aq-legacy-pdf-panel.open {
 
 #matrixView {
   position: fixed;
-  inset: 58px 24px 28px;
-  z-index: 420;
+  inset: 76px 26px 42px;
+  z-index: 940;
   display: none;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid rgba(222, 216, 205, 0.92);
   border-radius: 14px;
-  background: rgba(251, 250, 247, 0.98);
+  background: #fbfaf7;
   box-shadow: 0 28px 90px rgba(22, 27, 34, 0.24);
   backdrop-filter: blur(18px);
 }
@@ -1707,14 +1719,16 @@ body.aq-matrix-fullscreen .aq-legacy-pdf-panel.open {
 #matrixToolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.84);
-  padding: 12px;
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 10px 12px;
   box-shadow: 0 1px 0 rgba(222, 216, 205, 0.72), 0 10px 24px rgba(22, 27, 34, 0.05);
 }
 
 #matrixToolbar input {
-  min-width: 0;
+  min-width: min(320px, 100%);
   flex: 1;
   height: 34px;
   border: 1px solid #ddd7cc;
@@ -1747,6 +1761,9 @@ body.aq-matrix-fullscreen .aq-legacy-pdf-panel.open {
 }
 
 #matrixFilterPanel {
+  flex: 0 0 auto;
+  max-height: 34vh;
+  overflow: auto;
   border-bottom: 1px solid rgba(222, 216, 205, 0.62);
   background: rgba(255, 255, 255, 0.72);
   padding: 8px 12px;
@@ -1985,7 +2002,7 @@ body.aq-matrix-fullscreen .aq-legacy-pdf-panel.open {
 
 body.aq-matrix-fullscreen #matrixView {
   inset: 10px;
-  z-index: 900;
+  z-index: 970;
   border-radius: 16px;
 }
 
@@ -1998,6 +2015,7 @@ body.aq-matrix-fullscreen #matrixView {
 #matrixTableWrap {
   min-height: 0;
   flex: 1;
+  overscroll-behavior: contain;
   overflow: auto;
   padding: 12px;
 }
@@ -2040,6 +2058,14 @@ body.aq-matrix-fullscreen #matrixView {
   border-right: 1px solid rgba(222, 216, 205, 0.46);
   background: rgba(255, 255, 255, 0.72);
   padding: 9px;
+}
+
+body.aq-matrix-open .aq-status-bar {
+  z-index: 120;
+}
+
+body.aq-matrix-open {
+  overflow: hidden;
 }
 
 #matrixTable .mx-author-cell {

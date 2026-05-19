@@ -3,22 +3,18 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserCaptureModal } from './BrowserCaptureModal';
 
-const ipcCalls: { fn: string; args: any[] }[] = [];
 let originalElectronAPI: any;
 
 beforeEach(() => {
-  ipcCalls.length = 0;
   originalElectronAPI = (window as any).electronAPI;
   (window as any).electronAPI = {
-    getBrowserCaptureStatus: vi.fn(async () => {
-      ipcCalls.push({ fn: 'getBrowserCaptureStatus', args: [] });
-      return { ok: true, lifecycleState: 'ready' };
-    }),
-    prepareBrowserCaptureSetup: vi.fn(async () => { ipcCalls.push({ fn: 'prepare', args: [] }); return { ok: true }; }),
-    openBrowserCaptureInstallDir: vi.fn(async () => { ipcCalls.push({ fn: 'openInstallDir', args: [] }); return { ok: true }; }),
-    openBrowserCaptureGuide: vi.fn(async () => { ipcCalls.push({ fn: 'openGuide', args: [] }); return { ok: true }; }),
-    testBrowserCaptureConnection: vi.fn(async () => { ipcCalls.push({ fn: 'test', args: [] }); return { ok: true, lifecycleState: 'ready', port: 27183 }; }),
-    updateBrowserCapturePrefs: vi.fn(async (prefs) => { ipcCalls.push({ fn: 'updatePrefs', args: [prefs] }); return { ok: true, ...prefs }; })
+    getBrowserCaptureStatus: vi.fn(async () => ({ ok: true, lifecycleState: 'ready' })),
+    prepareBrowserCaptureSetup: vi.fn(async (_browserFamily?: string) => ({ ok: true })),
+    runBrowserCaptureAction: vi.fn(async (_action: string, _browserFamily?: string) => ({ ok: true })),
+    openBrowserCaptureInstallDir: vi.fn(async () => ({ ok: true })),
+    openBrowserCaptureGuide: vi.fn(async () => ({ ok: true })),
+    testBrowserCaptureConnection: vi.fn(async () => ({ ok: true, lifecycleState: 'ready', port: 27183 })),
+    updateBrowserCapturePrefs: vi.fn(async (prefs) => ({ ok: true, ...prefs }))
   };
 });
 
@@ -46,7 +42,7 @@ describe('BrowserCaptureModal', () => {
     const onStatus = vi.fn();
     render(<BrowserCaptureModal open onClose={() => {}} onStatus={onStatus} />);
     await waitFor(() => {
-      expect(onStatus).toHaveBeenCalledWith('Capture durumu alınamadı');
+      expect(onStatus).toHaveBeenCalledWith('Capture durumu alınamadı: boom');
     });
   });
 
@@ -59,12 +55,23 @@ describe('BrowserCaptureModal', () => {
     expect(screen.getByRole('button', { name: 'Capture aktif et' })).toBeInTheDocument();
   });
 
-  it('"Kurulumu hazırla" calls prepareBrowserCaptureSetup + reports success', async () => {
+  it('"Kurulumu hazırla" calls run action + reports success', async () => {
     const onStatus = vi.fn();
     render(<BrowserCaptureModal open onClose={() => {}} onStatus={onStatus} />);
     await userEvent.click(screen.getByRole('button', { name: 'Kurulumu hazırla' }));
     await waitFor(() => {
-      expect((window as any).electronAPI.prepareBrowserCaptureSetup).toHaveBeenCalled();
+      expect((window as any).electronAPI.runBrowserCaptureAction).toHaveBeenCalledWith('install', 'chromium');
+      expect(onStatus).toHaveBeenCalledWith('Capture kurulumu hazırlandı');
+    });
+  });
+
+  it('"Kurulumu hazırla" falls back to legacy prepareBrowserCaptureSetup', async () => {
+    delete (window as any).electronAPI.runBrowserCaptureAction;
+    const onStatus = vi.fn();
+    render(<BrowserCaptureModal open onClose={() => {}} onStatus={onStatus} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Kurulumu hazırla' }));
+    await waitFor(() => {
+      expect((window as any).electronAPI.prepareBrowserCaptureSetup).toHaveBeenCalledWith('chromium');
       expect(onStatus).toHaveBeenCalledWith('Capture kurulumu hazırlandı');
     });
   });
@@ -83,12 +90,16 @@ describe('BrowserCaptureModal', () => {
     });
   });
 
-  it('"Capture aktif et" sends prefs patch with enabled:true', async () => {
+  it('"Capture aktif et" enables capture and remembers setup prompt state', async () => {
     render(<BrowserCaptureModal open onClose={() => {}} onStatus={() => {}} />);
     await userEvent.click(screen.getByRole('button', { name: 'Capture aktif et' }));
     await waitFor(() => {
-      const call = ((window as any).electronAPI.updateBrowserCapturePrefs as any).mock.calls[0];
-      expect(call[0]).toEqual({ enabled: true });
+      expect((window as any).electronAPI.updateBrowserCapturePrefs).toHaveBeenCalledWith({
+        enabled: true,
+        setupPromptSeen: true,
+        browserFamily: 'chromium'
+      });
+      expect((window as any).electronAPI.runBrowserCaptureAction).toHaveBeenCalledWith('install', 'chromium');
     });
   });
 

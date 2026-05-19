@@ -35,6 +35,31 @@ function base64ToArrayBuffer(base64) {
   return bytes.buffer;
 }
 
+function wordImportMammothOptions() {
+  return {
+    styleMap: [
+      "p[style-name='Title'] => h1:fresh",
+      "p[style-name='Subtitle'] => h2:fresh",
+      "p[style-name='Heading 1'] => h1:fresh",
+      "p[style-name='Heading 2'] => h2:fresh",
+      "p[style-name='Heading 3'] => h3:fresh",
+      "p[style-name='Heading 4'] => h4:fresh",
+      "p[style-name='Heading 5'] => h5:fresh",
+      "p[style-name='Başlık 1'] => h1:fresh",
+      "p[style-name='Başlık 2'] => h2:fresh",
+      "p[style-name='Başlık 3'] => h3:fresh",
+      "p[style-name='Başlık 4'] => h4:fresh",
+      "p[style-name='Başlık 5'] => h5:fresh",
+      "p[style-name='Baslik 1'] => h1:fresh",
+      "p[style-name='Baslik 2'] => h2:fresh",
+      "p[style-name='Baslik 3'] => h3:fresh",
+      "p[style-name='Baslik 4'] => h4:fresh",
+      "p[style-name='Baslik 5'] => h5:fresh"
+    ],
+    includeDefaultStyleMap: true
+  };
+}
+
 async function wordToHtmlViaMammoth(filePath) {
   const payload = await invokeCommand('word_to_html', { filePath: asString(filePath, 4096) });
   if (!payload || payload.ok !== true || !payload.base64) return payload;
@@ -46,7 +71,10 @@ async function wordToHtmlViaMammoth(filePath) {
       filePath: payload.filePath || filePath
     };
   }
-  const result = await mammoth.convertToHtml({ arrayBuffer: base64ToArrayBuffer(payload.base64) });
+  const result = await mammoth.convertToHtml(
+    { arrayBuffer: base64ToArrayBuffer(payload.base64) },
+    wordImportMammothOptions()
+  );
   return {
     ok: true,
     html: result && typeof result.value === 'string' ? result.value : '',
@@ -72,11 +100,73 @@ function pickWsContext(ws) {
   if (!ws || typeof ws !== 'object') return null;
   const id = asString(ws.id, 128).trim();
   if (!id) return null;
-  return { id, name: asString(ws.name, 256) };
+  return { id, name: asString(ws.name, 256), title: asString(ws.title, 512) };
 }
 
 function pickObject(value) {
   return value && typeof value === 'object' ? value : {};
+}
+
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer || 0);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  return window.btoa(binary);
+}
+
+async function buildPdfBase64FromHtml(html, options) {
+  const html2pdf = typeof window !== 'undefined' ? window.html2pdf : null;
+  if (!html2pdf || typeof html2pdf !== 'function') {
+    throw new Error('PDF oluşturucu yüklenmedi');
+  }
+  const sourceHtml = String(html || '').trim();
+  if (!sourceHtml) throw new Error('PDF içeriği boş');
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = sourceHtml;
+  const exportRoot = wrapper.querySelector && wrapper.querySelector('.aq-export-root');
+  const source = exportRoot || wrapper;
+  source.style.background = '#ffffff';
+  source.style.color = '#000000';
+  const host = document.createElement('div');
+  host.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;background:#fff;color:#000;z-index:-1;';
+  host.appendChild(source);
+  document.body.appendChild(host);
+  try {
+    const basePdfOptions = window.AQTipTapWordIO && typeof window.AQTipTapWordIO.buildPDFExportOptions === 'function'
+      ? window.AQTipTapWordIO.buildPDFExportOptions()
+      : {
+          margin: options && options.marginMode === 'none' ? [0, 0, 0, 0] : [0, 0, 0, 0],
+          filename: asString(options && options.defaultPath, 512) || 'academiq-document.pdf',
+          image: { type: 'jpeg', quality: 0.99 },
+          html2canvas: { scale: 3, useCORS: true, backgroundColor: '#ffffff', letterRendering: true, scrollX: 0, scrollY: 0 },
+          jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['css', 'legacy'], avoid: ['blockquote', 'table', 'tr', 'img', 'h1', 'h2', 'h3', 'h4', 'h5', '.toc-container'] }
+        };
+    const estimatedPixels = Math.max(1, source.scrollHeight || host.scrollHeight || 1200) * Math.max(1, source.scrollWidth || host.scrollWidth || 794);
+    const adaptiveScale = estimatedPixels > 2400000 ? 1.25 : estimatedPixels > 1200000 ? 1.6 : 2;
+    const pdfOptions = {
+      ...basePdfOptions,
+      html2canvas: {
+        ...(basePdfOptions && basePdfOptions.html2canvas ? basePdfOptions.html2canvas : {}),
+        scale: Math.min(Number(basePdfOptions && basePdfOptions.html2canvas && basePdfOptions.html2canvas.scale) || adaptiveScale, adaptiveScale),
+        backgroundColor: '#ffffff',
+        letterRendering: false,
+        useCORS: true,
+        scrollX: 0,
+        scrollY: 0
+      }
+    };
+    await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    const worker = html2pdf().set(pdfOptions).from(source).toPdf();
+    const blob = await worker.outputPdf('blob');
+    return arrayBufferToBase64(await blob.arrayBuffer());
+  } finally {
+    try { host.remove(); } catch (_e) {}
+  }
 }
 
 function listen(_channel, _callback) {
@@ -151,7 +241,13 @@ const electronAPI = {
   saveEditorDraft: (json) => invokeCommand('data_save_draft', { json: typeof json === 'string' ? json : JSON.stringify(json || {}) }),
 
   savePDF: (refId, buf, ws) => invokeCommand('pdf_save', { refId: asRefId(refId), buffer: buf, ws: pickWsContext(ws) }),
-  loadPDF: (refId, ws) => invokeCommand('pdf_load', { refId: asRefId(refId), ws: pickWsContext(ws) }),
+  loadPDF: async (refId, ws) => {
+    const result = await invokeCommand('pdf_load', { refId: asRefId(refId), ws: pickWsContext(ws) });
+    if (result && typeof result === 'object' && result.ok && result.data && !result.buffer) {
+      return { ...result, buffer: result.data };
+    }
+    return result;
+  },
   pdfExists: (refId, ws) => invokeCommand('pdf_exists', { refId: asRefId(refId), ws: pickWsContext(ws) }),
   deletePDF: (refId, ws) => invokeCommand('pdf_delete', { refId: asRefId(refId), ws: pickWsContext(ws) }),
   showPdfInExplorer: (refId, ws) => invokeCommand('pdf_show_in_explorer', { refId: asRefId(refId), ws: pickWsContext(ws) }),
@@ -164,8 +260,22 @@ const electronAPI = {
 
   openPDFDialog: () => invokeCommand('dialog_open_pdf'),
   wordToHtml: (filePath) => wordToHtmlViaMammoth(filePath),
-  exportPDF: (options) => {
+  exportPDF: async (options) => {
     const payload = pickObject(options);
+    if (typeof payload.exportHTML === 'string' && !payload.pdfBase64 && !payload.layoutJson && !payload.layout_json) {
+      try {
+        const pdfBase64 = await buildPdfBase64FromHtml(payload.exportHTML, payload);
+        return invokeCommand('export_pdf', {
+          options: { ...payload, exportHTML: undefined, pdfBase64 }
+        });
+      } catch (error) {
+        return {
+          ok: false,
+          error: error && error.message ? String(error.message) : String(error || 'PDF oluşturulamadı'),
+          stage: 'browser_pdf_render'
+        };
+      }
+    }
     return invokeCommand('export_pdf', {
       layoutJson: typeof payload.layoutJson === 'string' ? payload.layoutJson : undefined,
       options: payload
@@ -187,12 +297,12 @@ const electronAPI = {
   restoreDocumentHistorySnapshot: (docId, snapshotId) => invokeCommand('doc_history_restore', { docId: asString(docId, 320), snapshotId: asString(snapshotId, 128) }),
 
   getBrowserCaptureStatus: () => invokeCommand('browser_capture_get_status'),
-  prepareBrowserCaptureSetup: () => invokeCommand('browser_capture_prepare_setup'),
-  runBrowserCaptureAction: (action) => invokeCommand('browser_capture_run_action', { action: asString(action, 64) }),
+  prepareBrowserCaptureSetup: (browserFamily) => invokeCommand('browser_capture_prepare_setup', { browserFamily: asString(browserFamily, 32) || undefined }),
+  runBrowserCaptureAction: (action, browserFamily) => invokeCommand('browser_capture_run_action', { action: asString(action, 64), browserFamily: asString(browserFamily, 32) || undefined }),
   testBrowserCaptureConnection: () => invokeCommand('browser_capture_test_connection'),
   lookupBrowserCaptureTarget: (payload) => invokeCommand('browser_capture_lookup', { payload: pickObject(payload) }),
-  openBrowserCaptureInstallDir: () => invokeCommand('browser_capture_open_install_dir'),
-  openBrowserCaptureGuide: () => invokeCommand('browser_capture_open_guide'),
+  openBrowserCaptureInstallDir: (browserFamily) => invokeCommand('browser_capture_open_install_dir', { browserFamily: asString(browserFamily, 32) || undefined }),
+  openBrowserCaptureGuide: (browserFamily) => invokeCommand('browser_capture_open_guide', { browserFamily: asString(browserFamily, 32) || undefined }),
   updateBrowserCapturePrefs: (prefs) => invokeCommand('browser_capture_update_prefs', { prefs: pickObject(prefs) }),
   createBrowserCaptureWorkspace: (name) => invokeCommand('browser_capture_create_workspace', { name: asString(name, 256) }),
   browserCaptureRendererReady: () => invokeCommand('browser_capture_renderer_ready'),

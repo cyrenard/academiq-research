@@ -91,6 +91,49 @@ test('document outline collects headings, tables and figures in document order',
   assert.equal(entries[3].label, 'Sekil 1');
 });
 
+test('document outline collects AQ Engine heading blocks imported from Word', () => {
+  const blocks = [
+    { type: 'heading', level: 1, runs: [{ text: 'Giris' }] },
+    { type: 'paragraph', runs: [{ text: 'Metin' }] },
+    { type: 'heading', attrs: { level: 2 }, runs: [{ text: 'Yontem' }] },
+    { type: 'table', attrs: { label: 'Tablo 1', title: 'Ornek tablo' }, rows: [] }
+  ];
+  const editor = {
+    _aqEngine: true,
+    _docModel: {
+      get(){ return { blocks }; },
+      replace(nextBlocks){ blocks.splice(0, blocks.length, ...nextBlocks); }
+    },
+    _reflow(){}
+  };
+
+  const entries = documentOutline.collectEntries({ editor });
+
+  assert.deepEqual(entries.map((entry) => entry.type), ['heading', 'heading', 'table']);
+  assert.equal(entries[0].level, 1);
+  assert.equal(entries[1].level, 2);
+  assert.equal(entries[2].label, 'Tablo 1');
+  assert.ok(blocks[0].attrs.refId);
+  assert.ok(blocks[2].attrs.refId);
+});
+
+test('document outline falls back to DOM when AQ Engine has no outline entries', () => {
+  const heading = createNode(1, 'H1', 'DOM Giris');
+  const root = createRoot({ 'h1,h2,h3,h4,h5': [heading] });
+  heading.parentNode = root;
+  const editor = {
+    _aqEngine: true,
+    _docModel: {
+      get(){ return { blocks: [{ type: 'paragraph', runs: [{ text: 'Metin' }] }] }; }
+    }
+  };
+
+  const entries = documentOutline.collectEntries({ editor, root });
+
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].label, 'DOM Giris');
+});
+
 test('document outline filters and summarizes conservatively', () => {
   const entries = [
     { id: 'h1', type: 'heading', level: 1, label: 'Giris', title: 'Giris' },
