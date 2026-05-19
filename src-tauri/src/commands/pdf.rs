@@ -13,6 +13,30 @@ use crate::pdf::{
     extract, metadata, render,
     url_fallback::{fetch_pdf_with_fallback, sanitize_options},
 };
+use crate::telemetry;
+
+/// Extract the host of a URL for telemetry without leaking full query strings.
+/// Plain string slicing rather than pulling in the full `url` crate — we only
+/// need the authority portion, and we don't want to track every redirect URL
+/// in user logs. Falls back to a short prefix of the raw URL when no scheme
+/// is present so we still see the shape of the attempt in the log.
+fn host_for_telemetry(url: &str) -> String {
+    if let Some(after_scheme) = url.split_once("://").map(|(_, rest)| rest) {
+        let authority = after_scheme
+            .split(|c: char| c == '/' || c == '?' || c == '#')
+            .next()
+            .unwrap_or("");
+        // strip optional userinfo@ and trailing :port
+        let after_userinfo = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
+        let host_only = after_userinfo
+            .rsplit_once(':')
+            .map_or(after_userinfo, |(h, _)| h);
+        if !host_only.is_empty() {
+            return host_only.to_ascii_lowercase();
+        }
+    }
+    url.chars().take(80).collect()
+}
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -964,6 +988,15 @@ pub async fn pdf_download(
     let outcome = match fetch_pdf_with_fallback(&url, &download_options).await {
         Ok(outcome) => outcome,
         Err(failure) => {
+            telemetry::record_event(
+                "pdf_download_failed",
+                json!({
+                    "host": host_for_telemetry(&url),
+                    "error": &failure.error,
+                    "status": failure.status,
+                    "contentType": &failure.content_type,
+                }),
+            );
             return Ok(json!({
                 "ok": false,
                 "error": failure.error,
@@ -973,6 +1006,14 @@ pub async fn pdf_download(
             }));
         }
     };
+    telemetry::record_event(
+        "pdf_download_succeeded",
+        json!({
+            "host": host_for_telemetry(&url),
+            "size_bytes": outcome.bytes.len(),
+            "status": outcome.status,
+        }),
+    );
     let ws = options
         .get("ws")
         .and_then(|value| serde_json::from_value::<WorkspaceContext>(value.clone()).ok());

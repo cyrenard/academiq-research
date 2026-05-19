@@ -6,6 +6,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::telemetry;
+
 const INIT_SQL: &str = include_str!("../../migrations/0001_init.sql");
 const DB_FILE: &str = "academiq.sqlite";
 const LEGACY_FILE: &str = "academiq-data.json";
@@ -245,15 +247,43 @@ fn reference_merge_keys(reference: &Value) -> Vec<String> {
 
 pub fn save_state(app_data_dir: &Path, raw: &str, source: &str) -> Result<Value, String> {
     if raw.as_bytes().len() > MAX_DATA_JSON_BYTES {
+        telemetry::record_event(
+            "state_save_rejected",
+            json!({ "reason": "size_limit", "size_bytes": raw.len(), "source": source }),
+        );
         return Err("Veri boyutu sınırı aşıldı".to_string());
     }
     parse_json(raw)?;
     let db_paths = init_or_migrate(app_data_dir)?;
     let guarded_raw = preserve_reference_libraries_on_save(raw, &db_paths.db_path, source)?;
-    let mut conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
-    let tx = conn.transaction().map_err(|e| e.to_string())?;
-    save_state_blob_tx(&tx, &guarded_raw, source)?;
-    tx.commit().map_err(|e| e.to_string())?;
+    let mut conn = Connection::open(&db_paths.db_path).map_err(|e| {
+        telemetry::record_event(
+            "state_save_failed",
+            json!({ "stage": "open", "error": e.to_string(), "source": source }),
+        );
+        e.to_string()
+    })?;
+    let tx = conn.transaction().map_err(|e| {
+        telemetry::record_event(
+            "state_save_failed",
+            json!({ "stage": "begin_tx", "error": e.to_string(), "source": source }),
+        );
+        e.to_string()
+    })?;
+    if let Err(e) = save_state_blob_tx(&tx, &guarded_raw, source) {
+        telemetry::record_event(
+            "state_save_failed",
+            json!({ "stage": "write_blob", "error": &e, "source": source }),
+        );
+        return Err(e);
+    }
+    tx.commit().map_err(|e| {
+        telemetry::record_event(
+            "state_save_failed",
+            json!({ "stage": "commit", "error": e.to_string(), "source": source }),
+        );
+        e.to_string()
+    })?;
     Ok(json!({ "ok": true, "savedAt": now_millis(), "storage": "sqlite" }))
 }
 

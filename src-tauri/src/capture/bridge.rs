@@ -8,6 +8,8 @@ use std::{
     },
 };
 use tauri::{AppHandle, Emitter, Manager};
+
+use crate::telemetry;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::{Child, Command},
@@ -48,6 +50,13 @@ impl CaptureSidecarState {
             match sidecar.call(method, params.clone()).await {
                 Ok(value) => return Ok(value),
                 Err(err) if attempt == 0 && is_transport_failure(&err) => {
+                    telemetry::record_event(
+                        "sidecar_respawn",
+                        json!({
+                            "reason": err,
+                            "method": method,
+                        }),
+                    );
                     self.drop_stale().await;
                     continue;
                 }
@@ -120,7 +129,13 @@ impl CaptureSidecar {
             .stderr(std::process::Stdio::null())
             .kill_on_drop(true)
             .spawn()
-            .map_err(|e| format!("capture_sidecar_spawn_failed: {e}"))?;
+            .map_err(|e| {
+                telemetry::record_event(
+                    "sidecar_spawn_failed",
+                    json!({ "error": e.to_string(), "is_binary": command.is_binary }),
+                );
+                format!("capture_sidecar_spawn_failed: {e}")
+            })?;
 
         let stdin = child
             .stdin

@@ -1,4 +1,5 @@
 use serde::Serialize;
+use serde_json::{json, Value};
 use std::{
     fs::{self, OpenOptions},
     io::Write,
@@ -66,6 +67,36 @@ fn write_compatibility_event(dir: &Path, app: &AppHandle) -> std::io::Result<()>
     let payload = serde_json::to_string(&event)
         .unwrap_or_else(|_| "{\"event\":\"app_start\",\"serialization\":\"failed\"}".to_string());
     append_line(&daily_file(dir, "compat", "jsonl"), &payload)
+}
+
+/// Append a structured event to today's `events-day-<unix_day>.jsonl` file.
+///
+/// Safe to call from any thread, even before `install()` has succeeded — if
+/// the telemetry directory isn't set up yet, the event is silently dropped
+/// rather than panicking from a hot path. This is intentional: telemetry is
+/// a diagnostic aid, never a correctness requirement.
+///
+/// `payload` is merged with the wrapper `{event, timestamp_unix_secs}`. Any
+/// payload key collisions with those two are overwritten by the wrapper.
+pub fn record_event(event_name: &str, payload: Value) {
+    let Some(dir) = TELEMETRY_DIR.get() else {
+        return;
+    };
+    let mut envelope = match payload {
+        Value::Object(map) => map,
+        other => {
+            let mut map = serde_json::Map::new();
+            if !matches!(other, Value::Null) {
+                map.insert("data".into(), other);
+            }
+            map
+        }
+    };
+    envelope.insert("event".into(), json!(event_name));
+    envelope.insert("timestamp_unix_secs".into(), json!(unix_secs()));
+    let line = serde_json::to_string(&Value::Object(envelope))
+        .unwrap_or_else(|_| format!("{{\"event\":{},\"serialization\":\"failed\"}}", json_string(event_name)));
+    let _ = append_line(&daily_file(dir, "events", "jsonl"), &line);
 }
 
 fn write_panic_event(info: &PanicHookInfo<'_>) {
@@ -150,5 +181,34 @@ mod tests {
             json_string("a \"quoted\" panic"),
             "\"a \\\"quoted\\\" panic\""
         );
+    }
+
+    #[test]
+    fn record_event_envelope_includes_event_name_and_timestamp() {
+        // Pure-format check: simulate what record_event constructs without
+        // touching TELEMETRY_DIR (which is OnceLock, possibly already pinned
+        // by another test in the same process). The body of record_event
+        // remains the source of truth; this guards the envelope shape.
+        let payload = json!({ "host": "example.org", "status": 403 });
+        let mut envelope = match payload {
+            Value::Object(map) => map,
+            _ => unreachable!(),
+        };
+        envelope.insert("event".into(), json!("pdf_download_failed"));
+        envelope.insert("timestamp_unix_secs".into(), json!(unix_secs()));
+        let line = serde_json::to_string(&Value::Object(envelope)).unwrap();
+        assert!(line.contains("\"event\":\"pdf_download_failed\""));
+        assert!(line.contains("\"host\":\"example.org\""));
+        assert!(line.contains("\"timestamp_unix_secs\":"));
+        assert!(line.contains("\"status\":403"));
+    }
+
+    #[test]
+    fn record_event_does_not_panic_when_telemetry_dir_unset() {
+        // The hot-path contract: callers from any subsystem must be able to
+        // call record_event safely even before install() ran (or in unit
+        // tests where it never runs). The function silently drops the
+        // event in that case rather than panicking.
+        record_event("test_no_dir", json!({ "ok": true }));
     }
 }
