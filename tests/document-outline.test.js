@@ -102,9 +102,9 @@ test('document outline collects AQ Engine heading blocks imported from Word', ()
     _aqEngine: true,
     _docModel: {
       get(){ return { blocks }; },
-      replace(nextBlocks){ blocks.splice(0, blocks.length, ...nextBlocks); }
+      replace(){ throw new Error('collectEntries must not mutate the editor while tracking caret'); }
     },
-    _reflow(){}
+    _reflow(){ throw new Error('collectEntries must not reflow the editor while tracking caret'); }
   };
 
   const entries = documentOutline.collectEntries({ editor });
@@ -113,8 +113,8 @@ test('document outline collects AQ Engine heading blocks imported from Word', ()
   assert.equal(entries[0].level, 1);
   assert.equal(entries[1].level, 2);
   assert.equal(entries[2].label, 'Tablo 1');
-  assert.ok(blocks[0].attrs.refId);
-  assert.ok(blocks[2].attrs.refId);
+  assert.equal(blocks[0].attrs, undefined);
+  assert.equal(blocks[2].attrs.refId, undefined);
 });
 
 test('document outline falls back to DOM when AQ Engine has no outline entries', () => {

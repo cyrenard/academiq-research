@@ -564,6 +564,8 @@
           isLastLineOfBlock: isLastLineOfBlock,
           isFirstLineOfBlock: isFirstLineOfBlock,
           blockIndex: b,
+          blockType: block.type || 'paragraph',
+          headingLevel: block.type === 'heading' ? (block.level || (block.attrs && block.attrs.level) || 1) : 0,
           isAppendixHeading: !!block._isAppendixHeading,
           appendixId: block._appendixId || null,
           refId: (block.attrs && block.attrs.refId) || block._refId || null,
@@ -803,6 +805,11 @@
         lineEl.dataset.lineOffsetEnd   = line.offsetEnd;
         lineEl.dataset.blockIndex      = line.blockIndex;
         if(line.refId) lineEl.dataset.refId = line.refId;
+        if(line.blockType) lineEl.dataset.blockType = line.blockType;
+        if(line.headingLevel) {
+          lineEl.dataset.refType = 'heading';
+          lineEl.dataset.headingLevel = String(line.headingLevel);
+        }
 
         // List marker — drawn outside the line content area, non-interactive.
         // Mirror the layout of the surrounding lineEl exactly so the marker

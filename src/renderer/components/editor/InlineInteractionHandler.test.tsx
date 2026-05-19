@@ -33,8 +33,27 @@ describe('InlineInteractionHandler', () => {
   it('exposes footnote, cross-reference, image and table click routes', () => {
     const source = InlineInteractionHandler.toString();
     expect(source).toContain('.aq-fn-ref, [data-fnid]');
-    expect(source).toContain('.aq-cross-ref, [data-ref-id]');
+    expect(source).toContain('closestCrossReference');
     expect(source).toContain('.aq-engine-image, img');
     expect(source).toContain('.aq-engine-table-cell, td, th');
+  });
+
+  it('opens cross-reference actions for actual cross-reference anchors', () => {
+    document.body.innerHTML = '<a class="cross-ref" data-ref-id="target-1">bkz. Tablo 1</a>';
+    render(<InlineInteractionHandler />);
+
+    fireEvent.click(document.querySelector('.cross-ref') as HTMLElement, { clientX: 24, clientY: 32 });
+
+    expect(screen.getByRole('menu', { name: 'Çapraz referans' })).toBeTruthy();
+  });
+
+  it('does not treat editable headings with data-ref-id as cross-reference clicks', () => {
+    document.body.innerHTML = '<h1 data-ref-id="aq-outline-heading-1">Giriş</h1><div class="aq-engine-line" data-ref-id="aq-outline-heading-2" data-ref-type="heading" data-heading-level="1">Yöntem</div>';
+    render(<InlineInteractionHandler />);
+
+    fireEvent.click(document.querySelector('h1') as HTMLElement, { clientX: 24, clientY: 32 });
+    fireEvent.click(document.querySelector('.aq-engine-line') as HTMLElement, { clientX: 24, clientY: 32 });
+
+    expect(screen.queryByRole('menu', { name: 'Çapraz referans' })).toBeNull();
   });
 });

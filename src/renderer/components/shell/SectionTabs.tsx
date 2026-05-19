@@ -56,13 +56,15 @@ function restoreRange(editor: any, from: number, to = from) {
   editor._restoreSelection({ type: 'aq', from, to, anchor: from, focus: to });
 }
 
-function scrollAQBlockIntoView(editor: any, entry: OutlineEntry): boolean {
-  if (typeof entry.blockIndex !== 'number') return false;
-  const stage = editor?._stageEl || document.querySelector('.aq-engine-stage, .aq-engine-root');
-  if (!stage || typeof stage.querySelector !== 'function') return false;
-  const node = stage.querySelector(`.aq-engine-line[data-block-index="${entry.blockIndex}"]`);
-  if (!node || typeof node.scrollIntoView !== 'function') return false;
-  node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+function cssEscape(value: string): string {
+  const api = (window as any).CSS;
+  if (api && typeof api.escape === 'function') return api.escape(value);
+  return value.replace(/([ !"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, '\\$1');
+}
+
+function scrollNodeIntoView(node: Element) {
+  if (typeof (node as HTMLElement).scrollIntoView !== 'function') return false;
+  (node as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
   node.classList?.add?.('aq-outline-target-flash');
   window.setTimeout(() => {
     try {
@@ -70,6 +72,25 @@ function scrollAQBlockIntoView(editor: any, entry: OutlineEntry): boolean {
     } catch (_error) {}
   }, 1500);
   return true;
+}
+
+function scrollAQBlockIntoView(editor: any, entry: OutlineEntry): boolean {
+  if (typeof entry.blockIndex !== 'number') return false;
+  const stage = editor?._stageEl || document.querySelector('.aq-engine-stage, .aq-engine-root');
+  if (!stage || typeof stage.querySelector !== 'function') return false;
+  const selectors = [
+    `.aq-engine-line[data-block-index="${entry.blockIndex}"]`,
+    `[data-block-index="${entry.blockIndex}"]`,
+    entry.id ? `[data-ref-id="${cssEscape(entry.id)}"]` : '',
+    entry.id ? `#${cssEscape(entry.id)}` : ''
+  ].filter(Boolean);
+  for (const selector of selectors) {
+    try {
+      const node = stage.querySelector(selector);
+      if (node && scrollNodeIntoView(node)) return true;
+    } catch (_error) {}
+  }
+  return false;
 }
 
 function scrollEntryIntoView(entry: OutlineEntry) {

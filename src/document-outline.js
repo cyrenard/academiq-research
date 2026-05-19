@@ -200,7 +200,7 @@
 
   function collectAQEngineEntries(editor){
     if(!isAQEngineEditor(editor)) return null;
-    var blocks = ensureAQOutlineIds(editor);
+    var blocks = getAQBlocks(editor);
     var pageByBlock = collectAQPageByBlock(editor);
     var entries = [];
     blocks.forEach(function(block, index){

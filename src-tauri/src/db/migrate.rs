@@ -132,6 +132,15 @@ fn recover_state_blob_from_legacy_if_richer(
     db_path: &Path,
     current_raw: Option<&str>,
 ) -> Result<Option<String>, String> {
+    let current_source = kv_get_from_db(db_path, "state_source")?;
+    let can_recover_from_legacy = current_raw.is_none()
+        || matches!(
+            current_source.as_deref(),
+            Some("bad-overwrite" | "legacy-empty-overwrite")
+        );
+    if !can_recover_from_legacy {
+        return Ok(None);
+    }
     let current_ref_count = current_raw.map(count_state_references).unwrap_or(0);
     if current_ref_count > 0 {
         return Ok(None);
@@ -173,6 +182,21 @@ fn recover_state_blob_from_legacy_if_richer(
     tx.commit().map_err(|e| e.to_string())?;
     copy_legacy_assets(app_data_dir, &legacy_dir)?;
     Ok(Some(legacy_raw))
+}
+
+fn kv_get_from_db(db_path: &Path, key: &str) -> Result<Option<String>, String> {
+    if !db_path.exists() {
+        return Ok(None);
+    }
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    ensure_schema(&conn)?;
+    conn.query_row(
+        "SELECT value FROM kv WHERE key = ?1",
+        params![key],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map_err(|e| e.to_string())
 }
 
 fn count_state_references(raw: &str) -> usize {
@@ -312,10 +336,16 @@ fn preserve_reference_libraries_on_save(
     let next_workspace_count = count_state_array(raw, "wss");
     let current_doc_count = count_state_array(&current_raw, "docs");
     let next_doc_count = count_state_array(raw, "docs");
-    if (current_workspace_count > next_workspace_count && current_workspace_count > 1)
-        || (current_doc_count > next_doc_count && current_doc_count > 1)
-    {
-        return Ok(current_raw);
+    let collection_shrank = (current_workspace_count > next_workspace_count
+        && current_workspace_count > 1)
+        || (current_doc_count > next_doc_count && current_doc_count > 1);
+    if collection_shrank {
+        if is_partial_editor_save_source(source) {
+            return merge_missing_state_collections(raw, &current_raw);
+        }
+        if source != "persistState" {
+            return Ok(current_raw);
+        }
     }
     let current_reference_count = count_state_references(&current_raw);
     let next_reference_count = count_state_references(raw);
@@ -412,6 +442,52 @@ fn preserve_reference_libraries_on_save(
     } else {
         Ok(raw.to_string())
     }
+}
+
+fn is_partial_editor_save_source(source: &str) -> bool {
+    matches!(
+        source,
+        "editor-autosave"
+            | "flush-editor"
+            | "beforeunload"
+            | "pagehide"
+            | "visibility-hidden"
+            | "word-import-commit"
+            | "draft-promote"
+    )
+}
+
+fn merge_missing_state_collections(raw: &str, current_raw: &str) -> Result<String, String> {
+    let mut next = parse_json(raw)?;
+    let current = parse_json(current_raw)?;
+    merge_array_by_id(&mut next, &current, "docs")?;
+    merge_array_by_id(&mut next, &current, "wss")?;
+    stable_json(&next)
+}
+
+fn merge_array_by_id(next: &mut Value, current: &Value, key: &str) -> Result<(), String> {
+    let Some(next_items) = next.get_mut(key).and_then(Value::as_array_mut) else {
+        return Err(format!("state_missing_{key}"));
+    };
+    let current_items = current
+        .get(key)
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut seen = next_items
+        .iter()
+        .filter_map(|item| item.get("id").and_then(Value::as_str))
+        .map(str::to_string)
+        .collect::<HashSet<_>>();
+    for item in current_items {
+        let Some(id) = item.get("id").and_then(Value::as_str) else {
+            continue;
+        };
+        if seen.insert(id.to_string()) {
+            next_items.push(item);
+        }
+    }
+    Ok(())
 }
 
 pub fn save_draft(app_data_dir: &Path, raw: &str) -> Result<Value, String> {
@@ -1817,6 +1893,60 @@ mod tests {
     }
 
     #[test]
+    fn load_state_does_not_recover_legacy_after_explicit_empty_workspace_save() {
+        let dir = temp_dir("state-blob-no-legacy-recovery-after-user-save");
+        let legacy_dir = temp_dir("legacy-reference-source-after-user-save");
+        fs::write(legacy_dir.join(LEGACY_FILE), sample_state()).unwrap();
+
+        let single_empty_workspace = json!({
+            "schemaVersion": 3,
+            "cur": "ws1",
+            "curDoc": "doc1",
+            "doc": "<p>User kept one workspace</p>",
+            "docs": [{ "id": "doc1", "name": "Doc", "content": "<p>User kept one workspace</p>" }],
+            "wss": [{ "id": "ws1", "name": "Only Workspace", "lib": [] }],
+            "notes": []
+        })
+        .to_string();
+        save_state(&dir, &single_empty_workspace, "persistState").unwrap();
+        let conn = Connection::open(dir.join(DB_FILE)).unwrap();
+        conn.execute(
+            "INSERT OR REPLACE INTO kv(key, value) VALUES (?1, ?2)",
+            params![
+                "legacy_source_path",
+                legacy_dir.to_string_lossy().to_string()
+            ],
+        )
+        .unwrap();
+        drop(conn);
+
+        let loaded = parse_json(&load_state(&dir).unwrap().unwrap()).unwrap();
+        assert_eq!(
+            loaded.get("wss").and_then(Value::as_array).map(Vec::len),
+            Some(1)
+        );
+        let lib = loaded
+            .get("wss")
+            .and_then(Value::as_array)
+            .and_then(|workspaces| workspaces.first())
+            .and_then(|workspace| workspace.get("lib"))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert!(lib.is_empty());
+
+        let conn = Connection::open(dir.join(DB_FILE)).unwrap();
+        let source: String = conn
+            .query_row(
+                "SELECT value FROM kv WHERE key = 'state_source'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(source, "persistState");
+    }
+
+    #[test]
     fn save_state_preserves_existing_references_when_empty_library_overwrite_arrives() {
         let dir = temp_dir("state-blob-empty-library-overwrite");
         save_state(&dir, &sample_state(), "reference-test").unwrap();
@@ -1979,6 +2109,118 @@ mod tests {
             Some(2)
         );
         assert_eq!(loaded.get("cur").and_then(Value::as_str), Some("ws2"));
+    }
+
+    #[test]
+    fn editor_autosave_merges_missing_collections_and_keeps_new_content() {
+        let dir = temp_dir("state-blob-editor-partial-merge");
+        let richer = json!({
+            "schemaVersion": 3,
+            "cur": "ws2",
+            "curDoc": "doc2",
+            "doc": "<p>Doc 2 original</p>",
+            "docs": [
+                { "id": "doc1", "name": "Doc 1", "content": "<p>Doc 1</p>" },
+                { "id": "doc2", "name": "Doc 2", "content": "<p>Doc 2 original</p>" }
+            ],
+            "wss": [
+                { "id": "ws1", "name": "Workspace 1", "docId": "doc1", "lib": [] },
+                { "id": "ws2", "name": "Workspace 2", "docId": "doc2", "lib": [] }
+            ],
+            "notes": []
+        })
+        .to_string();
+        save_state(&dir, &richer, "initial-rich-state").unwrap();
+
+        let partial_editor_save = json!({
+            "schemaVersion": 3,
+            "cur": "ws2",
+            "curDoc": "doc2",
+            "doc": "<p>Doc 2 changed by autosave</p>",
+            "docs": [
+                { "id": "doc2", "name": "Doc 2", "content": "<p>Doc 2 changed by autosave</p>" }
+            ],
+            "wss": [
+                { "id": "ws2", "name": "Workspace 2", "docId": "doc2", "lib": [] }
+            ],
+            "notes": []
+        })
+        .to_string();
+        save_state(&dir, &partial_editor_save, "editor-autosave").unwrap();
+
+        let loaded = parse_json(&load_state(&dir).unwrap().unwrap()).unwrap();
+        assert_eq!(
+            loaded.get("docs").and_then(Value::as_array).map(Vec::len),
+            Some(2)
+        );
+        assert_eq!(
+            loaded.get("wss").and_then(Value::as_array).map(Vec::len),
+            Some(2)
+        );
+        assert_eq!(
+            loaded.get("doc").and_then(Value::as_str),
+            Some("<p>Doc 2 changed by autosave</p>")
+        );
+        let doc2 = loaded
+            .get("docs")
+            .and_then(Value::as_array)
+            .and_then(|docs| {
+                docs.iter()
+                    .find(|doc| doc.get("id").and_then(Value::as_str) == Some("doc2"))
+            })
+            .unwrap();
+        assert_eq!(
+            doc2.get("content").and_then(Value::as_str),
+            Some("<p>Doc 2 changed by autosave</p>")
+        );
+
+        let history = get_document_history(&dir, "doc2", 10).unwrap();
+        let snapshots = history
+            .get("snapshots")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert!(snapshots.iter().any(|snapshot| {
+            snapshot.get("content").and_then(Value::as_str)
+                == Some("<p>Doc 2 changed by autosave</p>")
+        }));
+    }
+
+    #[test]
+    fn explicit_persist_state_allows_document_count_shrink() {
+        let dir = temp_dir("state-blob-explicit-doc-delete");
+        let richer = json!({
+            "schemaVersion": 3,
+            "cur": "ws1",
+            "curDoc": "doc1",
+            "doc": "<p>Doc 1</p>",
+            "docs": [
+                { "id": "doc1", "name": "Doc 1", "content": "<p>Doc 1</p>" },
+                { "id": "doc2", "name": "Doc 2", "content": "<p>Doc 2</p>" }
+            ],
+            "wss": [{ "id": "ws1", "name": "Workspace 1", "docId": "doc1", "lib": [] }],
+            "notes": []
+        })
+        .to_string();
+        save_state(&dir, &richer, "initial-rich-state").unwrap();
+
+        let deleted = json!({
+            "schemaVersion": 3,
+            "cur": "ws1",
+            "curDoc": "doc1",
+            "doc": "<p>Doc 1</p>",
+            "docs": [{ "id": "doc1", "name": "Doc 1", "content": "<p>Doc 1</p>" }],
+            "wss": [{ "id": "ws1", "name": "Workspace 1", "docId": "doc1", "lib": [] }],
+            "notes": []
+        })
+        .to_string();
+        save_state(&dir, &deleted, "persistState").unwrap();
+
+        let loaded = parse_json(&load_state(&dir).unwrap().unwrap()).unwrap();
+        assert_eq!(
+            loaded.get("docs").and_then(Value::as_array).map(Vec::len),
+            Some(1)
+        );
     }
 
     #[test]

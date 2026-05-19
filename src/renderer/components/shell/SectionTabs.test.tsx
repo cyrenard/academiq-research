@@ -69,7 +69,7 @@ describe('SectionTabs', () => {
   it('jumps to the selected H1 tab', () => {
     const editor = makeEditor();
     const scrollToEntry = vi.fn();
-    editor._stageEl = document.getElementById('apaed');
+    (editor as any)._stageEl = document.getElementById('apaed');
     const line = document.createElement('div');
     line.className = 'aq-engine-line';
     line.dataset.blockIndex = '1';
@@ -91,6 +91,30 @@ describe('SectionTabs', () => {
     expect(scrollToEntry).not.toHaveBeenCalled();
     expect(editor._restoreSelection).toHaveBeenCalledWith(expect.objectContaining({ from: 6, to: 6 }));
     expect(editor.commands.focus).toHaveBeenCalled();
+  });
+
+  it('can jump by outline ref id when the rendered line wrapper changed', () => {
+    const editor = makeEditor();
+    const scrollToEntry = vi.fn();
+    (editor as any)._stageEl = document.getElementById('apaed');
+    const heading = document.createElement('h1');
+    heading.dataset.refId = 'h1-a';
+    heading.scrollIntoView = vi.fn();
+    document.getElementById('apaed')?.appendChild(heading);
+    (window as any).editor = editor;
+    (window as any).AQDocumentOutline = {
+      collectEntries: vi.fn(() => [
+        { id: 'h1-a', type: 'heading', level: 1, label: 'BÃ¶lÃ¼m 1', blockIndex: 1 }
+      ]),
+      findActiveEntry: vi.fn(() => null),
+      scrollToEntry
+    };
+
+    render(<SectionTabs />);
+    fireEvent.click(screen.getByText('BÃ¶lÃ¼m 1'));
+
+    expect(heading.scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: 'center' }));
+    expect(scrollToEntry).not.toHaveBeenCalled();
   });
 
   it('adds a new H1 section from the plus button and selects its title', () => {

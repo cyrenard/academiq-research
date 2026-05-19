@@ -915,3 +915,48 @@ System Times New Roman gate:
   "worst": null
 }
 ```
+
+## Phase 5 Font Metrics - 2026-05-19T12:11:54.088Z
+
+System Times New Roman gate:
+
+```json
+{
+  "source": "system-times-new-roman",
+  "fontDir": "C:\\WINDOWS\\Fonts",
+  "max_diff": 0,
+  "avg_diff": 0,
+  "p99_diff": 0,
+  "worst": null
+}
+```
+
+## Phase 5 Font Metrics - 2026-05-19T20:32:50.124Z
+
+System Times New Roman gate:
+
+```json
+{
+  "source": "system-times-new-roman",
+  "fontDir": "C:\\WINDOWS\\Fonts",
+  "max_diff": 0,
+  "avg_diff": 0,
+  "p99_diff": 0,
+  "worst": null
+}
+```
+
+## Phase 5 Font Metrics - 2026-05-19T20:37:13.191Z
+
+System Times New Roman gate:
+
+```json
+{
+  "source": "system-times-new-roman",
+  "fontDir": "C:\\WINDOWS\\Fonts",
+  "max_diff": 0,
+  "avg_diff": 0,
+  "p99_diff": 0,
+  "worst": null
+}
+```

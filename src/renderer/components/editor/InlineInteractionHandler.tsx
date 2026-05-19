@@ -29,6 +29,18 @@ function attr(el: HTMLElement | null, names: string[]) {
   return '';
 }
 
+function isEditableHeading(target: EventTarget | null) {
+  return Boolean(closest(target, 'h1,h2,h3,h4,h5,[data-heading-level],.aq-engine-line[data-heading-level],[data-ref-type="heading"]'));
+}
+
+function closestCrossReference(target: EventTarget | null) {
+  const candidate = closest(target, '.aq-cross-ref, a.cross-ref, [data-cross-ref], [data-ref-type][data-ref-id]');
+  if (!candidate) return null;
+  if (candidate.matches('a.cross-ref, .aq-cross-ref, [data-cross-ref]')) return candidate;
+  if (isEditableHeading(target)) return null;
+  return candidate.hasAttribute('data-ref-type') ? candidate : null;
+}
+
 function callWindow(name: string, ...args: unknown[]) {
   const fn = (window as any)[name];
   if (typeof fn !== 'function') return false;
@@ -103,7 +115,7 @@ export function InlineInteractionHandler() {
         return;
       }
 
-      const crossRef = closest(target, '.aq-cross-ref, [data-ref-id]');
+      const crossRef = closestCrossReference(target);
       if (crossRef && !closest(target, '.mh-card,.ref-card,.refe')) {
         event.preventDefault();
         event.stopPropagation();

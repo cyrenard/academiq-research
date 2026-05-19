@@ -684,6 +684,14 @@ test('AQ Engine appendix headings expose hover delete controls', () => {
   assert.match(source, /pointerEvents = 'none'/);
 });
 
+test('AQ Engine heading lines expose heading metadata without becoming cross-ref popups', () => {
+  const engine = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'engine.js'), 'utf8');
+  assert.match(engine, /blockType: block\.type \|\| 'paragraph'/);
+  assert.match(engine, /headingLevel: block\.type === 'heading'/);
+  assert.match(engine, /lineEl\.dataset\.refType = 'heading'/);
+  assert.match(engine, /lineEl\.dataset\.headingLevel = String\(line\.headingLevel\)/);
+});
+
 test('React Word import persists imported document through legacy storage', () => {
   // Word-import flow was extracted from LegacyCompatibilityHost.tsx to
   // src/renderer/lib/file-import.ts in the audit-followthrough refactor.
