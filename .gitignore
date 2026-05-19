@@ -36,3 +36,10 @@ scripts/*.pfx
 # (runs as postinstall). Source is MIT and pinned via package.json so
 # committing the 9 MB blob would just duplicate it.
 public/dictionary/
+
+# Local-only SQLite recovery snapshots. The migration code (Phase 8 hotfix)
+# writes academiq.sqlite.before-<reason>.<timestamp> next to the live DB when
+# it rewrites historical revisions. These are device-local safety nets, not
+# repo content.
+academiq.sqlite.before-*
+*.sqlite.before-*
