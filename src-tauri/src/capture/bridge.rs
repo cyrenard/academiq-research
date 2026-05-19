@@ -37,8 +37,24 @@ impl CaptureSidecarState {
         method: &str,
         params: Value,
     ) -> Result<Value, String> {
-        let sidecar = self.get_or_spawn(app).await?;
-        sidecar.call(method, params).await
+        // The sidecar is a Node child process. If it crashes or wedges, the
+        // first call after the crash sees a closed stdin/stdout pair and
+        // returns a transport-shaped error. Treat that as recoverable: drop
+        // the stale handle, respawn once, and retry the same request. Real
+        // protocol errors from the sidecar itself (e.g. "not_implemented")
+        // do not match `is_transport_failure` and are surfaced immediately.
+        for attempt in 0..2 {
+            let sidecar = self.get_or_spawn(app).await?;
+            match sidecar.call(method, params.clone()).await {
+                Ok(value) => return Ok(value),
+                Err(err) if attempt == 0 && is_transport_failure(&err) => {
+                    self.drop_stale().await;
+                    continue;
+                }
+                Err(err) => return Err(err),
+            }
+        }
+        Err("capture_sidecar_unrecoverable".into())
     }
 
     async fn get_or_spawn(&self, app: &AppHandle) -> Result<Arc<CaptureSidecar>, String> {
@@ -49,6 +65,20 @@ impl CaptureSidecarState {
         let sidecar = Arc::new(CaptureSidecar::spawn(app.clone()).await?);
         *guard = Some(sidecar.clone());
         Ok(sidecar)
+    }
+
+    /// Drop the cached sidecar handle and kill its child process, if any.
+    /// The next call to `get_or_spawn` will start a fresh sidecar.
+    async fn drop_stale(&self) {
+        let stale = {
+            let mut guard = self.inner.lock().await;
+            guard.take()
+        };
+        if let Some(stale) = stale {
+            // Best-effort kill: the child may already be dead, in which case
+            // tokio returns Err and we ignore it.
+            let _ = stale.child.lock().await.kill().await;
+        }
     }
 
     pub async fn shutdown(&self) {
@@ -180,6 +210,19 @@ impl CaptureSidecar {
             }
         }
     }
+}
+
+/// Categorises the transport-shaped failure strings emitted by
+/// `CaptureSidecar::call`. Any of these mean the sidecar process or its
+/// stdio is no longer reachable; the caller should respawn before retrying.
+/// New variants here should match new error strings emitted in `call()`.
+fn is_transport_failure(err: &str) -> bool {
+    matches!(
+        err,
+        "capture_sidecar_write_failed"
+            | "capture_sidecar_response_closed"
+            | "capture_sidecar_timeout"
+    )
 }
 
 struct SidecarCommand {
