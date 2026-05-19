@@ -65,6 +65,7 @@ import {
   buildNoteInsertHTML,
   collectReferenceIdsFromHTML
 } from './lib/note-insert';
+import { publishStateToLegacyWindow } from './lib/legacy-state-bridge';
 
 const CommandPalette = lazy(() => import('./components/shell/CommandPalette').then((module) => ({ default: module.CommandPalette })));
 const FeatureModals = lazy(() => import('./components/shell/FeatureModals').then((module) => ({ default: module.FeatureModals })));
@@ -264,7 +265,7 @@ export default function App() {
   }, [appState]);
 
   useEffect(() => {
-    (window as any).S = { ...((window as any).S || {}), ...appState };
+    publishStateToLegacyWindow(appState);
   }, [appState]);
 
   useEffect(() => {
@@ -388,8 +389,8 @@ export default function App() {
   const persistEditorDraft = useCallback(async (nextState: AcademiqAppState) => {
     if ((window as any).__aqBackupRestoreInProgress) return;
     appStateRef.current = nextState;
+    publishStateToLegacyWindow(nextState);
     const win = window as any;
-    win.S = { ...(win.S || {}), ...nextState };
     scheduleFullAutosave(nextState);
     await new Promise<void>((resolve) => {
       const run = async () => {
@@ -436,8 +437,7 @@ export default function App() {
     const nextState = currentHTML ? updateActiveDocumentHTML(appStateRef.current, currentHTML) : appStateRef.current;
     appStateRef.current = nextState;
     setAppState(nextState);
-    const win = window as any;
-    win.S = { ...(win.S || {}), ...nextState };
+    publishStateToLegacyWindow(nextState);
     await saveDataChecked(nextState, 'flush-editor');
     return nextState;
   }, [saveDataChecked]);
@@ -1223,8 +1223,8 @@ export default function App() {
     try {
       if (action === 'open') {
         setActiveReferenceId(referenceId);
+        publishStateToLegacyWindow(appStateRef.current, { cur: workspace.id });
         const win = window as any;
-        win.S = { ...(win.S || {}), ...appStateRef.current, cur: workspace.id };
         win.__aqCurrentPdfReference = ref;
         let opened = false;
         if (typeof win.openRef === 'function') {
@@ -1782,8 +1782,8 @@ export default function App() {
   };
 
   const handleOpenMatrix = () => {
+    publishStateToLegacyWindow(appStateRef.current);
     const win = window as any;
-    win.S = { ...(win.S || {}), ...appStateRef.current };
     if (callLegacy('openLiteratureMatrix')) {
       window.setTimeout(() => {
         try {
