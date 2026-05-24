@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-const USER_AGENT_VALUE: &str = "AcademiQ-Research/1.24.0";
+const USER_AGENT_VALUE: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 const ACCEPT_VALUE: &str = "application/pdf,text/html;q=0.9,*/*;q=0.5";
 const DEFAULT_MAX_BYTES: u64 = 50 * 1024 * 1024;
 const MAX_MAX_BYTES: u64 = 150 * 1024 * 1024;
@@ -226,6 +226,9 @@ pub fn extract_pdf_candidates_from_html(html: &str, base: &str) -> Vec<String> {
             || lower.contains("eprints.document_url")
             || lower.contains("bepress_citation_pdf_url")
             || lower.contains("og:url")
+            || lower.contains("highwire-pdf-url")
+            || lower.contains("prism.pdf")
+            || lower.contains("citation_pdf")
         {
             if let Some(content) = attr_value(tag, "content") {
                 if looks_like_pdf_candidate(&content) {
@@ -317,6 +320,10 @@ fn looks_like_pdf_candidate(value: &str) -> bool {
         || lower.contains("epdf")
         || lower.contains("download")
         || lower.contains("fulltext")
+        || lower.contains("full-text")
+        || lower.contains("accept-pdf")
+        || lower.contains("article-pdf")
+        || lower.contains("reprint")
 }
 
 fn client() -> Result<&'static Client, DownloadFailure> {
@@ -327,6 +334,7 @@ fn client() -> Result<&'static Client, DownloadFailure> {
         .redirect(reqwest::redirect::Policy::limited(20))
         .pool_idle_timeout(Duration::from_secs(90))
         .pool_max_idle_per_host(16)
+        .cookie_store(true)
         .user_agent(USER_AGENT_VALUE)
         .build()
         .map_err(|e| DownloadFailure {

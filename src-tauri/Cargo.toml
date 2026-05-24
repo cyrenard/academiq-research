@@ -21,7 +21,7 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 lopdf = "0.34"
 pdfium-render = { version = "0.8", features = ["thread_safe"] }
 printpdf = "0.7"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip", "deflate", "brotli", "http2"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip", "deflate", "brotli", "http2", "cookies"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

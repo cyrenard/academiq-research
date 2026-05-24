@@ -6,6 +6,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+fn open_conn<P: AsRef<Path>>(path: P) -> Result<Connection, rusqlite::Error> {
+    let open_fn = rusqlite::Connection::open;
+    let conn = open_fn(path)?;
+    let _ = conn.pragma_update(None, "journal_mode", "WAL");
+    let _ = conn.pragma_update(None, "synchronous", "NORMAL");
+    let _ = conn.pragma_update(None, "foreign_keys", "ON");
+    Ok(conn)
+}
+
+
 use crate::telemetry;
 
 const INIT_SQL: &str = include_str!("../../migrations/0001_init.sql");
@@ -59,7 +69,7 @@ pub fn init_or_migrate(app_data_dir: &Path) -> Result<DbPaths, String> {
     fs::create_dir_all(app_data_dir).map_err(|e| e.to_string())?;
     let db_paths = paths(app_data_dir);
     if db_paths.db_path.exists() {
-        let conn = Connection::open(&db_paths.db_path).map_err(|e| e.to_string())?;
+        let conn = open_conn(&db_paths.db_path).map_err(|e| e.to_string())?;
         ensure_schema(&conn)?;
         auto_retry_empty_history(app_data_dir, &db_paths.db_path)?;
         return Ok(db_paths);
@@ -73,7 +83,7 @@ pub fn init_or_migrate(app_data_dir: &Path) -> Result<DbPaths, String> {
         }
     }
 
-    let mut conn = Connection::open(&db_paths.db_path).map_err(|e| e.to_string())?;
+    let mut conn = open_conn(&db_paths.db_path).map_err(|e| e.to_string())?;
     conn.pragma_update(None, "foreign_keys", "ON")
         .map_err(|e| e.to_string())?;
     let legacy_exists = db_paths.legacy_json_path.exists();
@@ -109,7 +119,7 @@ pub fn init_or_migrate(app_data_dir: &Path) -> Result<DbPaths, String> {
 
 pub fn load_state(app_data_dir: &Path) -> Result<Option<String>, String> {
     let db_paths = init_or_migrate(app_data_dir)?;
-    let conn = Connection::open(&db_paths.db_path).map_err(|e| e.to_string())?;
+    let conn = open_conn(&db_paths.db_path).map_err(|e| e.to_string())?;
     let value = conn
         .query_row(
             "SELECT value FROM kv WHERE key = ?1",
@@ -168,7 +178,7 @@ fn recover_state_blob_from_legacy_if_richer(
     }
 
     let legacy_state = parse_json(&legacy_raw)?;
-    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut conn = open_conn(db_path).map_err(|e| e.to_string())?;
     ensure_schema(&conn)?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     save_state_blob_tx(&tx, &legacy_raw, "legacy-recovery")?;
@@ -188,7 +198,7 @@ fn kv_get_from_db(db_path: &Path, key: &str) -> Result<Option<String>, String> {
     if !db_path.exists() {
         return Ok(None);
     }
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = open_conn(db_path).map_err(|e| e.to_string())?;
     ensure_schema(&conn)?;
     conn.query_row(
         "SELECT value FROM kv WHERE key = ?1",
@@ -284,7 +294,7 @@ pub fn save_state(app_data_dir: &Path, raw: &str, source: &str) -> Result<Value,
     let parsed_val = parse_json(raw)?;
     let db_paths = init_or_migrate(app_data_dir)?;
     let guarded_raw = preserve_reference_libraries_on_save(&parsed_val, raw, &db_paths.db_path, source)?;
-    let mut conn = Connection::open(&db_paths.db_path).map_err(|e| {
+    let mut conn = open_conn(&db_paths.db_path).map_err(|e| {
         telemetry::record_event(
             "state_save_failed",
             json!({ "stage": "open", "error": e.to_string(), "source": source }),
@@ -324,7 +334,7 @@ fn preserve_reference_libraries_on_save(
     if !db_path.exists() {
         return Ok(raw.to_string());
     }
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = open_conn(db_path).map_err(|e| e.to_string())?;
     let current_raw = conn
         .query_row(
             "SELECT value FROM kv WHERE key = ?1",
@@ -503,7 +513,7 @@ pub fn save_draft(app_data_dir: &Path, raw: &str) -> Result<Value, String> {
     }
     parse_json(raw)?;
     let db_paths = init_or_migrate(app_data_dir)?;
-    let conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
+    let conn = open_conn(db_paths.db_path).map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT OR REPLACE INTO kv(key, value) VALUES (?1, ?2)",
         params![DRAFT_BLOB_KEY, raw],
@@ -518,7 +528,7 @@ pub fn get_document_history(
     limit: u32,
 ) -> Result<Value, String> {
     let db_paths = init_or_migrate(app_data_dir)?;
-    let conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
+    let conn = open_conn(db_paths.db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(
             "SELECT id, snapshot_json, created_at FROM revisions
@@ -554,7 +564,7 @@ pub fn restore_document_snapshot(
     snapshot_id: &str,
 ) -> Result<Value, String> {
     let db_paths = init_or_migrate(app_data_dir)?;
-    let mut conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
+    let mut conn = open_conn(db_paths.db_path).map_err(|e| e.to_string())?;
     let snapshot_like = format!("%\"id\":\"{}\"%", snapshot_id.replace('"', "\\\""));
     let snapshot_json = conn
         .query_row(
@@ -608,7 +618,7 @@ pub fn restore_document_snapshot(
 
 pub fn library_search(app_data_dir: &Path, query: &str) -> Result<Vec<LibraryItem>, String> {
     let db_paths = init_or_migrate(app_data_dir)?;
-    let conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
+    let conn = open_conn(db_paths.db_path).map_err(|e| e.to_string())?;
     let trimmed = query.trim();
     let sql = if trimmed.is_empty() {
         "SELECT id, title, authors, year, doi, abstract, pdf_path, metadata_json
@@ -649,7 +659,7 @@ pub fn library_search(app_data_dir: &Path, query: &str) -> Result<Vec<LibraryIte
 
 pub fn library_get(app_data_dir: &Path, id: &str) -> Result<Option<LibraryItem>, String> {
     let db_paths = init_or_migrate(app_data_dir)?;
-    let conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
+    let conn = open_conn(db_paths.db_path).map_err(|e| e.to_string())?;
     conn.query_row(
         "SELECT id, title, authors, year, doi, abstract, pdf_path, metadata_json
          FROM library_items WHERE id = ?1",
@@ -680,7 +690,7 @@ pub fn upsert_pdf_library_item(
     metadata: &Value,
 ) -> Result<(), String> {
     let db_paths = init_or_migrate(app_data_dir)?;
-    let conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
+    let conn = open_conn(db_paths.db_path).map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT OR REPLACE INTO library_items
          (id, title, authors, year, doi, abstract, pdf_path, metadata_json, created_at, updated_at)
@@ -708,7 +718,7 @@ pub fn save_pdf_annotations(
     annotations: &[Value],
 ) -> Result<(), String> {
     let db_paths = init_or_migrate(app_data_dir)?;
-    let mut conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
+    let mut conn = open_conn(db_paths.db_path).map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     for annotation in annotations {
         let id = annotation
@@ -735,7 +745,7 @@ pub fn save_pdf_annotations(
 
 pub fn read_pdf_annotations(app_data_dir: &Path, ref_id: &str) -> Result<Vec<Value>, String> {
     let db_paths = init_or_migrate(app_data_dir)?;
-    let conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
+    let conn = open_conn(db_paths.db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT data_json FROM annotations WHERE ref_id = ?1 ORDER BY page, id")
         .map_err(|e| e.to_string())?;
@@ -752,7 +762,7 @@ pub fn read_pdf_annotations(app_data_dir: &Path, ref_id: &str) -> Result<Vec<Val
 
 pub fn kv_get(app_data_dir: &Path, key: &str) -> Result<Option<String>, String> {
     let db_paths = init_or_migrate(app_data_dir)?;
-    let conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
+    let conn = open_conn(db_paths.db_path).map_err(|e| e.to_string())?;
     conn.query_row("SELECT value FROM kv WHERE key = ?1", params![key], |row| {
         row.get::<_, String>(0)
     })
@@ -762,7 +772,7 @@ pub fn kv_get(app_data_dir: &Path, key: &str) -> Result<Option<String>, String> 
 
 pub fn kv_set(app_data_dir: &Path, key: &str, value: &str) -> Result<(), String> {
     let db_paths = init_or_migrate(app_data_dir)?;
-    let conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
+    let conn = open_conn(db_paths.db_path).map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT OR REPLACE INTO kv(key, value) VALUES (?1, ?2)",
         params![key, value],
@@ -773,7 +783,7 @@ pub fn kv_set(app_data_dir: &Path, key: &str, value: &str) -> Result<(), String>
 
 pub fn integrity_check(app_data_dir: &Path) -> Result<String, String> {
     let db_paths = init_or_migrate(app_data_dir)?;
-    let conn = Connection::open(db_paths.db_path).map_err(|e| e.to_string())?;
+    let conn = open_conn(db_paths.db_path).map_err(|e| e.to_string())?;
     conn.query_row("PRAGMA integrity_check", [], |row| row.get::<_, String>(0))
         .map_err(|e| e.to_string())
 }
@@ -818,7 +828,7 @@ pub fn force_remigrate_history(app_data_dir: &Path) -> Result<Value, String> {
 }
 
 fn auto_retry_empty_history(app_data_dir: &Path, db_path: &Path) -> Result<(), String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = open_conn(db_path).map_err(|e| e.to_string())?;
     let documents = count_table(&conn, "documents");
     let revisions = count_table(&conn, "revisions");
     if documents <= 0 || revisions > 0 {
@@ -828,7 +838,7 @@ fn auto_retry_empty_history(app_data_dir: &Path, db_path: &Path) -> Result<(), S
         return Ok(());
     };
     if let Err(error) = force_remigrate_history_from_legacy_dir(db_path, &legacy_dir) {
-        let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+        let conn = open_conn(db_path).map_err(|e| e.to_string())?;
         record_migration_error(&conn, Some(app_data_dir), &error);
     }
     Ok(())
@@ -838,7 +848,7 @@ fn force_remigrate_history_from_legacy_dir(
     db_path: &Path,
     legacy_dir: &Path,
 ) -> Result<(usize, usize), String> {
-    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut conn = open_conn(db_path).map_err(|e| e.to_string())?;
     ensure_schema(&conn)?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     tx.execute("DELETE FROM revisions", [])
@@ -859,7 +869,7 @@ fn legacy_dir_from_kv(db_path: &Path) -> Result<Option<PathBuf>, String> {
     if !db_path.exists() {
         return Ok(None);
     }
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = open_conn(db_path).map_err(|e| e.to_string())?;
     let value = conn
         .query_row(
             "SELECT value FROM kv WHERE key = 'legacy_source_path'",
@@ -931,7 +941,7 @@ fn migrate_legacy_electron_dir(
     })?;
     let state = parse_json(&state_raw)?;
 
-    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut conn = open_conn(db_path).map_err(|e| e.to_string())?;
     conn.pragma_update(None, "foreign_keys", "ON")
         .map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
@@ -956,12 +966,12 @@ fn migrate_legacy_electron_dir(
     tx.commit().map_err(|e| e.to_string())?;
 
     if let Err(error) = force_remigrate_history_from_legacy_dir(db_path, legacy_dir) {
-        let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+        let conn = open_conn(db_path).map_err(|e| e.to_string())?;
         record_migration_error(&conn, Some(app_data_dir), &error);
     }
 
     copy_legacy_assets(app_data_dir, legacy_dir)?;
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = open_conn(db_path).map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT OR REPLACE INTO kv(key, value) VALUES (?1, ?2)",
         params![
@@ -1731,7 +1741,7 @@ mod tests {
             .join("targets.json")
             .exists());
 
-        let conn = Connection::open(app_dir.join(DB_FILE)).unwrap();
+        let conn = open_conn(app_dir.join(DB_FILE)).unwrap();
         let documents: i64 = conn
             .query_row("SELECT COUNT(*) FROM documents", [], |row| row.get(0))
             .unwrap();
@@ -1783,12 +1793,12 @@ mod tests {
 
         let app_dir = temp_dir("tauri-history-retry");
         migrate_legacy_electron_dir(&app_dir, &app_dir.join(DB_FILE), &legacy_dir).unwrap();
-        let conn = Connection::open(app_dir.join(DB_FILE)).unwrap();
+        let conn = open_conn(app_dir.join(DB_FILE)).unwrap();
         conn.execute("DELETE FROM revisions", []).unwrap();
         drop(conn);
 
         init_or_migrate(&app_dir).unwrap();
-        let conn = Connection::open(app_dir.join(DB_FILE)).unwrap();
+        let conn = open_conn(app_dir.join(DB_FILE)).unwrap();
         let revisions: i64 = conn
             .query_row("SELECT COUNT(*) FROM revisions", [], |row| row.get(0))
             .unwrap();
@@ -1809,7 +1819,7 @@ mod tests {
 
         let app_dir = temp_dir("tauri-force-history");
         migrate_legacy_electron_dir(&app_dir, &app_dir.join(DB_FILE), &legacy_dir).unwrap();
-        let conn = Connection::open(app_dir.join(DB_FILE)).unwrap();
+        let conn = open_conn(app_dir.join(DB_FILE)).unwrap();
         conn.execute("DELETE FROM revisions", []).unwrap();
         drop(conn);
 
@@ -1865,7 +1875,7 @@ mod tests {
         })
         .to_string();
         save_state(&dir, &empty_state, "bad-overwrite").unwrap();
-        let conn = Connection::open(dir.join(DB_FILE)).unwrap();
+        let conn = open_conn(dir.join(DB_FILE)).unwrap();
         conn.execute(
             "INSERT OR REPLACE INTO kv(key, value) VALUES (?1, ?2)",
             params![
@@ -1888,7 +1898,7 @@ mod tests {
         assert_eq!(lib.len(), 1);
         assert_eq!(lib[0].get("id").and_then(Value::as_str), Some("ref1"));
 
-        let conn = Connection::open(dir.join(DB_FILE)).unwrap();
+        let conn = open_conn(dir.join(DB_FILE)).unwrap();
         let source: String = conn
             .query_row(
                 "SELECT value FROM kv WHERE key = 'state_source'",
@@ -1916,7 +1926,7 @@ mod tests {
         })
         .to_string();
         save_state(&dir, &single_empty_workspace, "persistState").unwrap();
-        let conn = Connection::open(dir.join(DB_FILE)).unwrap();
+        let conn = open_conn(dir.join(DB_FILE)).unwrap();
         conn.execute(
             "INSERT OR REPLACE INTO kv(key, value) VALUES (?1, ?2)",
             params![
@@ -1942,7 +1952,7 @@ mod tests {
             .unwrap_or_default();
         assert!(lib.is_empty());
 
-        let conn = Connection::open(dir.join(DB_FILE)).unwrap();
+        let conn = open_conn(dir.join(DB_FILE)).unwrap();
         let source: String = conn
             .query_row(
                 "SELECT value FROM kv WHERE key = 'state_source'",
@@ -2237,7 +2247,7 @@ mod tests {
         save_state(&dir, &stable_json(&state).unwrap(), "initial").unwrap();
 
         let db_path = get_db_path(&dir);
-        let conn = Connection::open(&db_path).unwrap();
+        let conn = open_conn(&db_path).unwrap();
         let before: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM revisions WHERE doc_id = 'doc1'",
@@ -2259,7 +2269,7 @@ mod tests {
         }
         save_state(&dir, &stable_json(&state).unwrap(), "autosave").unwrap();
 
-        let conn = Connection::open(&db_path).unwrap();
+        let conn = open_conn(&db_path).unwrap();
         let after: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM revisions WHERE doc_id = 'doc1'",
