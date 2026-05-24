@@ -44,10 +44,10 @@ export function VirtualList<T>({
   };
 
   const totalHeight = items.length * itemHeight;
-  const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - 2); // 2 items buffer
+  const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - 5); // 5 items buffer
   const endIndex = Math.min(
     items.length,
-    Math.ceil((scrollTop + containerHeightPx) / itemHeight) + 2 // 2 items buffer
+    Math.ceil((scrollTop + containerHeightPx) / itemHeight) + 5 // 5 items buffer
   );
 
   const visibleItems = items.slice(startIndex, endIndex);
