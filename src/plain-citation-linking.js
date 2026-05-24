@@ -1002,7 +1002,22 @@
     if(document.__aqPlainCitationContextInstalled) return true;
     document.__aqPlainCitationContextInstalled = true;
     document.addEventListener('contextmenu', showEditorContextMenu, true);
-    document.addEventListener('click', showEditorClickSuggestion, true);
+    // beta.8 hotfix: showEditorClickSuggestion was registered as a global
+    // capture-phase click listener and was hijacking *every* click inside
+    // the editor — every left click anywhere in the document tried to
+    // resolve a "plain citation match" at that offset and, on a positive,
+    // opened the single-link modal. Combined with the live citation
+    // auditor introduced in beta.7 this made the editor unusable: after
+    // typing one inline citation any subsequent click reopened the
+    // linker modal. The functionality is still available through the
+    // toolbar (FeatureModals → plainCitationLinker) and the right-click
+    // context menu (showEditorContextMenu) above, so removing the
+    // ambient click trap restores the editor without losing the feature.
+    //
+    // If we ever bring this back, gate it behind a settings opt-in or
+    // restrict the capture to a double-click on an unlinked-citation
+    // span, never a single click on arbitrary editor text.
+    // document.addEventListener('click', showEditorClickSuggestion, true);
     document.addEventListener('mousedown', function(event){
       var target = event.target;
       if(target && target.closest && target.closest('#plainCitationContextMenu')) return;

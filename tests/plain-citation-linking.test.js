@@ -180,14 +180,40 @@ test('context menu can resolve AQ Engine offsets from point hit-testing', () => 
   assert.match(source, /textarea:not\(\.aq-input-capture\)/);
 });
 
-test('plain citation linking also opens from normal text click and toolbar', () => {
+test('plain citation linker opens from toolbar; ambient click capture stays disabled (beta.8 hotfix)', () => {
+  // Background: showEditorClickSuggestion used to be registered as a
+  // global capture-phase click listener and hijacked every left click
+  // in the editor — after typing one inline citation, every subsequent
+  // click reopened the single-link modal, making the editor unusable.
+  // beta.8 removes the ambient registration but keeps the function so
+  // the right-click context menu and the toolbar entry continue to
+  // work. This test pins both facts.
   const fs = require('node:fs');
   const path = require('node:path');
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'plain-citation-linking.js'), 'utf8');
   const toolbar = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'components', 'shell', 'TopToolbar.tsx'), 'utf8');
+
+  // The reachable-from-context-menu entry point still exists.
   assert.match(source, /function showEditorClickSuggestion/);
-  assert.match(source, /document\.addEventListener\('click', showEditorClickSuggestion, true\)/);
   assert.match(source, /findPlainMatchAtOffset\(editor, currentWorkspaceReferences\(\), offset\)/);
+
+  // The ambient document-level click registration must NOT be active.
+  // We allow the line to live in the source as a commented-out
+  // historical record, but it must not be eligible for execution.
+  const installBlock = source.match(/function installContextMenu\(\)\{[\s\S]*?return true;\s*\}/);
+  assert.ok(installBlock, 'expected installContextMenu function to exist');
+  const installBody = installBlock[0];
+  const activeClickRegistration = installBody
+    .split('\n')
+    .some((line) => /document\.addEventListener\('click', showEditorClickSuggestion, true\)/.test(line)
+      && !/^\s*\/\//.test(line));
+  assert.equal(
+    activeClickRegistration,
+    false,
+    'showEditorClickSuggestion must not be registered as a live document click listener — it hijacks the editor (beta.8 hotfix)'
+  );
+
+  // Toolbar still offers the explicit entry point.
   assert.match(toolbar, /openPlainCitationLinking/);
   assert.match(toolbar, /callLegacy\('openPlainCitationLinking'\)/);
 });
