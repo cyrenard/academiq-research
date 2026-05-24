@@ -1,5 +1,45 @@
 # Changelog
 
+## 1.24.0-beta.8 - 2026-05-24
+
+Soak-test hotfix for two beta.7 user-visible regressions.
+
+- **Editor click hijack removed.** `plain-citation-linking.js` was
+  registering a global capture-phase `click` listener that, after a
+  user typed any inline citation, treated every subsequent left
+  click as a candidate for the single-link modal and reopened it
+  with preventDefault — the editor became unusable. The ambient
+  registration is gone; the right-click context menu and the
+  toolbar's `openPlainCitationLinking` entry continue to work.
+  Strengthened regression test now fails if the ambient listener is
+  re-added.
+- **CrossRef modal routed to the React shell with a cosmetic backup.**
+  `tiptap-word-footnotes.js::showCrossRefDialog` now defers to
+  `window.__aqOpenReactCrossRefModal` when the React shell has
+  registered it (App.tsx installs the hook on mount, eliminating the
+  ~1s race window where the legacy HTML modal would still appear).
+  The legacy renderer is kept as a fallback and now ships with
+  inline styles so its filter chips and format previews remain
+  readable even when the `aq-crd-*` CSS rules don't reach the page.
+
+beta.7 installer preserved as `.bak` for rollback.
+
+## 1.24.0-beta.7 - 2026-05-24
+
+Four new major features landed in one tour: WinRT-based native
+Windows OCR (alternative to tesseract.js), startup rolling backup
+of the SQLite database, Cargo release-profile size optimisations,
+and a live citation auditor with new CrossRef, PlainCitationLinker,
+and ReferenceImport modals. Spell engine expanded with Turkish
+morphology + custom rules.
+
+## 1.24.0-beta.6 - 2026-05-19
+
+Stabilisation and test-repair pass: 250-line robustness expansion
+in `db::migrate`, polish on `InlineInteractionHandler` and
+`SectionTabs`, minor aq-engine patches, four test-suite repairs,
+and refreshed manual-smoke checklist.
+
 ## 1.24.0-beta.5 - 2026-05-18
 
 Stabilisation + polish pass on top of beta.4. No new user-facing
