@@ -57,6 +57,8 @@ import {
 
 type TopToolbarProps = {
   selectedReferenceId?: string;
+  onOpenAudit?: () => void;
+  onOpenFeatureModal?: (modal: 'settings' | 'recovery' | 'history' | 'browserCapture' | 'referenceEdit' | 'crossRef' | 'referenceImport' | 'plainCitationLinker' | null) => void;
 };
 
 type ToolbarButtonProps = {
@@ -108,7 +110,7 @@ function ToolbarGroup({ label, children, wide }: { label: string; children: Reac
   );
 }
 
-export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
+export function TopToolbar({ selectedReferenceId, onOpenAudit, onOpenFeatureModal }: TopToolbarProps) {
   const editorRef = useEditorCommands();
   const findStateRef = useRef<{ matches: unknown[]; index: number; editorRanges?: unknown[] }>({ matches: [], index: -1 });
   const findTimerRef = useRef<number | null>(null);
@@ -610,7 +612,8 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
       reset: () => action('resetBibliographyManual'),
       external: () => openExternalReferenceImport(),
       duplicates: () => openDuplicateReview(),
-      health: () => openMetadataHealth()
+      health: () => openMetadataHealth(),
+      audit: () => onOpenAudit?.()
     };
     actions[value]?.();
   };
@@ -635,18 +638,24 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
 
   const openExternalReferenceImport = () => {
     preserveEditorSelection();
-    const openedByLegacy = callLegacy('openExternalReferenceImportModal');
-    const modal = document.getElementById('externalReferenceImportModal');
-    if (modal) {
-      modal.classList.add('show');
-      modal.addEventListener('mousedown', closeLegacyModalOnBackdrop);
-      const status = document.getElementById('externalReferenceImportStatus');
-      if (status) status.textContent = '';
-      window.setTimeout(() => {
-        (document.getElementById('externalReferenceTextInput') as HTMLTextAreaElement | null)?.focus();
-      }, 40);
-    } else if (!openedByLegacy) {
-      console.warn('[external-reference-import] modal not found');
+    if (onOpenFeatureModal) {
+      onOpenFeatureModal('referenceImport');
+      // Keep legacy call as fallback
+      // callLegacy('openExternalReferenceImportModal')
+    } else {
+      const openedByLegacy = callLegacy('openExternalReferenceImportModal');
+      const modal = document.getElementById('externalReferenceImportModal');
+      if (modal) {
+        modal.classList.add('show');
+        modal.addEventListener('mousedown', closeLegacyModalOnBackdrop);
+        const status = document.getElementById('externalReferenceImportStatus');
+        if (status) status.textContent = '';
+        window.setTimeout(() => {
+          (document.getElementById('externalReferenceTextInput') as HTMLTextAreaElement | null)?.focus();
+        }, 40);
+      } else if (!openedByLegacy) {
+        console.warn('[external-reference-import] modal not found');
+      }
     }
   };
 
@@ -711,8 +720,14 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
 
   const openPlainCitationLinking = () => {
     preserveEditorSelection();
-    if (!callLegacy('openPlainCitationLinking')) {
-      callLegacy('linkHighConfidencePlainCitations');
+    if (onOpenFeatureModal) {
+      onOpenFeatureModal('plainCitationLinker');
+      // Keep legacy call as fallback
+      // callLegacy('openPlainCitationLinking')
+    } else {
+      if (!callLegacy('openPlainCitationLinking')) {
+        callLegacy('linkHighConfidencePlainCitations');
+      }
     }
     focusEditor();
   };
@@ -871,6 +886,7 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
             <option value="external">Dışarıdan Kaynakça Ekle</option>
             <option value="duplicates">Duplicate Bul</option>
             <option value="health">Metadata Health</option>
+            <option value="audit">Atıfları Denetle</option>
           </select>
         </div>
 
@@ -1023,7 +1039,13 @@ export function TopToolbar({ selectedReferenceId }: TopToolbarProps) {
               else if (value === 'plainCitationLinking') openPlainCitationLinking();
               else if (value === 'footnote') moduleAction('AQFootnotes', 'insertFootnote', 'footnote');
               else if (value === 'endnote') moduleAction('AQFootnotes', 'insertFootnote', 'endnote');
-              else if (value === 'crossref') moduleAction('AQFootnotes', 'showCrossRefDialog');
+              else if (value === 'crossref') {
+                if (onOpenFeatureModal) {
+                  onOpenFeatureModal('crossRef');
+                } else {
+                  moduleAction('AQFootnotes', 'showCrossRefDialog');
+                }
+              }
               else if (value === 'wordImport') importWord();
               else if (value === 'insCover') openCoverDialog();
               else if (value === 'insAbstract') openAbstractDialog();

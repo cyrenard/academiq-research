@@ -129,7 +129,7 @@ describe('checkLoaded', () => {
 
   it('caps suggestions to maxSuggestions', () => {
     _setSpellInstanceForTests(fakeSpell({
-      suggestionsFor: { 'foo': ['a', 'b', 'c', 'd', 'e', 'f'] }
+      suggestionsFor: { 'foo': ['foa', 'fob', 'foc', 'fod', 'foe', 'fof'] }
     }));
     const matches = checkLoaded('Foo', { maxSuggestions: 2 });
     expect(matches[0]!.replacements).toHaveLength(2);
@@ -181,6 +181,48 @@ describe('checkLoaded', () => {
     expect((await suggestWord('yanlis'))[0]).toBe('yanlış');
     expect((await suggestWord('calisma'))[0]).toBe('çalışma');
   });
+
+  it('suppresses weak shorter ASCII suggestions when a de-asciified correction exists', async () => {
+    _setSpellInstanceForTests(fakeSpell({
+      knownWords: ['yanl\u0131\u015f', 'yanis'],
+      suggestionsFor: { yanlis: ['yanis', 'yanl\u0131\u015f'] }
+    }));
+
+    const suggestions = await suggestWord('yanlis');
+    expect(suggestions[0]).toBe('yanl\u0131\u015f');
+    expect(suggestions).not.toContain('yanis');
+  });
+
+  it('does not flag common academic terms when the base dictionary misses them', () => {
+    _setSpellInstanceForTests(fakeSpell({ knownWords: ['ve'] }));
+
+    const matches = checkLoaded('Regresyon korelasyon psikometrik Likert Cronbach ve fenomenolojik');
+
+    expect(matches).toEqual([]);
+  });
+
+  it('still suggests obvious Turkish spelling fixes in academic prose', async () => {
+    _setSpellInstanceForTests(fakeSpell({
+      knownWords: ['ara\u015ft\u0131rma', '\u00f6\u011frenci', '\u00f6l\u00e7\u00fct', 'sonu\u00e7']
+    }));
+
+    expect((await suggestWord('arastirma'))[0]).toBe('ara\u015ft\u0131rma');
+    expect((await suggestWord('ogrenci'))[0]).toBe('\u00f6\u011frenci');
+    expect((await suggestWord('olcut'))[0]).toBe('\u00f6l\u00e7\u00fct');
+    expect((await suggestWord('sonuc'))[0]).toBe('sonu\u00e7');
+  });
+
+  it('suggests morphological typos like geliyom -> geliyorum and yazicam -> yazacağım', async () => {
+    _setSpellInstanceForTests(fakeSpell({
+      knownWords: ['geliyorum', 'yazacağım']
+    }));
+
+    const suggestions1 = await suggestWord('geliyom');
+    expect(suggestions1).toContain('geliyorum');
+
+    const suggestions2 = await suggestWord('yazıcam');
+    expect(suggestions2).toContain('yazacağım');
+  });
 });
 
 // ─── checkText (load + check convenience) ──────────────────────────────────
@@ -195,5 +237,21 @@ describe('checkText', () => {
       affUrl: 'a', dicUrl: 'd', fetchImpl
     });
     expect(matches.map((m) => m.text)).toEqual(['xyzz']);
+  });
+
+  it('passes workspace id to native spellcheck and suggestions', async () => {
+    const original = (window as any).electronAPI;
+    const check = vi.fn(async () => []);
+    const suggest = vi.fn(async () => ['yanlış']);
+    (window as any).electronAPI = { spell: { check, suggest } };
+    try {
+      await checkText('yanlis', { preferNative: true, workspaceId: 'ws-2' });
+      await suggestWord('yanlis', { preferNative: true, workspaceId: 'ws-2' });
+    } finally {
+      (window as any).electronAPI = original;
+    }
+
+    expect(check).toHaveBeenCalledWith('yanlis', 'tr', 'ws-2');
+    expect(suggest).toHaveBeenCalledWith('yanlis', 'tr', 'ws-2');
   });
 });

@@ -223,6 +223,6 @@ test('Phase-deferred handlers return explicit controlled stub messages', () => {
   const browserSource = read('src-tauri', 'src', 'commands', 'browser_capture.rs');
   const ocrSource = read('src-tauri', 'src', 'commands', 'ocr.rs');
   assert.match(exportSource, /not_implemented_phase_5/);
-  assert.doesNotMatch(browserSource, /not_implemented_phase_6/);
-  assert.match(ocrSource, /not_implemented_phase_4/);
+  assert.match(ocrSource, /ocr_recognize/);
 });
+

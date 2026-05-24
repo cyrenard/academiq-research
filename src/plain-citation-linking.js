@@ -866,7 +866,11 @@
       var state = menu.__aqContextState || {};
       var action = btn.getAttribute('data-pcc-action');
       if(action === 'link' || action === 'change'){
-        openSingleLinkModal(state.match || null, state.citation || null);
+        if(root.AQPlainCitationLinking && typeof root.AQPlainCitationLinking.openSingleLinkModal === 'function') {
+          root.AQPlainCitationLinking.openSingleLinkModal(state.match || null, state.citation || null);
+        } else {
+          openSingleLinkModal(state.match || null, state.citation || null);
+        }
       }else if(action === 'unlink'){
         if(unlinkCitationAtOffset(getActiveEditor(), state.offset)) toast('Atıf bağlantısı kaldırıldı.', 'ok');
       }else if(action === 'delete'){
@@ -973,7 +977,11 @@
     if(!match) return;
     event.preventDefault();
     event.stopPropagation();
-    openSingleLinkModal(match, null);
+    if(root.AQPlainCitationLinking && typeof root.AQPlainCitationLinking.openSingleLinkModal === 'function') {
+      root.AQPlainCitationLinking.openSingleLinkModal(match, null);
+    } else {
+      openSingleLinkModal(match, null);
+    }
   }
 
   function openSingleLinkModal(match, citation){
@@ -1085,6 +1093,7 @@
     linkHighConfidence: linkHighConfidence,
     summarizeMatches: summarizeMatches,
     openReviewModal: openReviewModal,
+    openSingleLinkModal: openSingleLinkModal,
     closeReviewModal: closeReviewModal,
     openImportCleanupModal: openImportCleanupModal,
     closeImportCleanupModal: closeImportCleanupModal,

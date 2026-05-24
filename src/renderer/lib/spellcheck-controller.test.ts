@@ -5,6 +5,7 @@ import {
   subscribeSpellcheck,
   scheduleRecheck,
   runCheckNow,
+  setSpellcheckScope,
   shutdownSpellcheck
 } from './spellcheck-controller';
 import { _setSpellInstanceForTests } from './spellcheck';
@@ -41,6 +42,7 @@ beforeEach(() => {
   shutdownSpellcheck();
   _setSpellInstanceForTests(null);
   document.body.innerHTML = '';
+  delete (window as any).S;
 });
 
 afterEach(() => {
@@ -130,6 +132,64 @@ describe('runCheckNow / applyMarkers', () => {
     runCheckNow();
     expect(getSpellcheckState().matches).toEqual([]);
     expect(document.body.querySelectorAll('.aq-spell-error').length).toBe(0);
+  });
+
+  it('clears matches and markers when the workspace scope changes', () => {
+    _setSpellInstanceForTests(fakeSpell({ knownWords: ['merhaba'] }));
+    setSpellcheckScope({ workspaceId: 'ws-1', docId: 'doc-1' });
+    paintDocument('merhaba xyzz');
+    setSpellcheckEnabled(true);
+    expect(getSpellcheckState()).toMatchObject({ workspaceId: 'ws-1', docId: 'doc-1' });
+    expect(getSpellcheckState().matches.map((m) => m.text)).toEqual(['xyzz']);
+    expect(document.body.querySelectorAll('.aq-spell-error').length).toBe(1);
+
+    setSpellcheckScope({ workspaceId: 'ws-2', docId: 'doc-2' });
+
+    expect(getSpellcheckState()).toMatchObject({ workspaceId: 'ws-2', docId: 'doc-2', matches: [] });
+    expect(document.body.querySelectorAll('.aq-spell-error').length).toBe(0);
+  });
+
+  it('combines dictionary typos with local Turkish language rules', () => {
+    _setSpellInstanceForTests(fakeSpell({ knownWords: ['her\u015fey', 'xyzz'] }));
+    paintDocument('her\u015fey xyzz');
+    setSpellcheckEnabled(true);
+
+    const matches = getSpellcheckState().matches;
+    expect(matches.map((m) => m.ruleId)).toContain('AQ_TR_HER_SEY');
+    expect(matches.map((m) => m.ruleId)).not.toContain('NSPELL_TR');
+    expect(matches[0]?.replacements[0]?.value).toBe('her \u015fey');
+  });
+
+  it('does not flag author names from the active reference library', () => {
+    (window as any).S = {
+      cur: 'ws-1',
+      wss: [{
+        id: 'ws-1',
+        lib: [
+          { id: 'r1', title: 'Social cognitive theory', authors: ['Albert Bandura'] },
+          { id: 'r2', title: 'Cultural historical theory', authors: ['Lev Vygotsky'] }
+        ]
+      }]
+    };
+    _setSpellInstanceForTests(fakeSpell({ knownWords: ['ve'] }));
+    setSpellcheckScope({ workspaceId: 'ws-1', docId: 'doc-1' });
+    paintDocument('Bandura ve Vygotsky xyzz');
+    setSpellcheckEnabled(true);
+
+    expect(getSpellcheckState().matches.map((m) => m.text)).toEqual(['xyzz']);
+    expect(document.body.querySelectorAll('.aq-spell-error').length).toBe(1);
+  });
+
+  it('does not flag rendered citation surnames even when the library is not reachable', () => {
+    _setSpellInstanceForTests(fakeSpell({ knownWords: ['metin'] }));
+    paintDocument('Y\u0131lmaz metin xyzz');
+    const citation = document.createElement('span');
+    citation.className = 'cit';
+    citation.textContent = '(Y\u0131lmaz, 2020)';
+    document.body.appendChild(citation);
+    setSpellcheckEnabled(true);
+
+    expect(getSpellcheckState().matches.map((m) => m.text)).toEqual(['xyzz']);
   });
 });
 

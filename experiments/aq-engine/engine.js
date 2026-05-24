@@ -102,7 +102,14 @@
     var hit = _textMeasureCache.get(key);
     if(hit) return hit;
     var measured = measureText(text, fontSpec);
-    if(_textMeasureCache.size > 8000) _textMeasureCache.clear();
+    if(_textMeasureCache.size > 16000){
+      var count = 0;
+      for(var k of _textMeasureCache.keys()){
+        _textMeasureCache.delete(k);
+        count++;
+        if(count > 8000) break;
+      }
+    }
     _textMeasureCache.set(key, measured);
     return measured;
   }
@@ -300,7 +307,7 @@
     return lines;
   }
 
-  function blockLayoutCacheKey(block, blockFont, width, docOffset){
+  function blockLayoutCacheKey(block, blockFont, width){
     var runs = Array.isArray(block.runs) && block.runs.length ? block.runs : [{ text: block.text || '' }];
     var runKey = runs.map(function(run){
       run = run || {};
@@ -325,7 +332,6 @@
     }).join('\u0003');
     return [
       width,
-      docOffset,
       block.type || 'paragraph',
       block.level || '',
       block.align || '',
@@ -342,6 +348,20 @@
     return (lines || []).map(function(line){
       var out = Object.assign({}, line);
       out.items = (line.items || []).map(function(item){ return Object.assign({}, item, { font: item.font ? Object.assign({}, item.font) : item.font }); });
+      return out;
+    });
+  }
+
+  function cloneLinesAndShiftOffsets(lines, docOffset){
+    return (lines || []).map(function(line){
+      var out = Object.assign({}, line);
+      out.items = (line.items || []).map(function(item){
+        return Object.assign({}, item, {
+          font: item.font ? Object.assign({}, item.font) : item.font,
+          offsetStart: item.offsetStart + docOffset,
+          offsetEnd: item.offsetEnd + docOffset
+        });
+      });
       return out;
     });
   }
@@ -461,7 +481,27 @@
             var cellRuns = cell.runs || [{ text: '' }];
             var cellTextLen = 0;
             for(var cr = 0; cr < cellRuns.length; cr++) cellTextLen += String(cellRuns[cr].text || '').length;
-            var cl = breakParagraphIntoLines({ runs: cellRuns }, colWidth - cellPad * 2, opts.baseFont, docOffset);
+            
+            var cellPara = { runs: cellRuns, type: 'paragraph' };
+            var cellCacheKey = blockLayoutCacheKey(cellPara, opts.baseFont, colWidth - cellPad * 2);
+            var cachedCellLines = lineCache.get(cellCacheKey);
+            var cl;
+            if(cachedCellLines){
+              cl = cloneLinesAndShiftOffsets(cachedCellLines, docOffset);
+            }else{
+              var rawCellLines = breakParagraphIntoLines(cellPara, colWidth - cellPad * 2, opts.baseFont, 0);
+              if(lineCache.size > 2000){
+                var count = 0;
+                for(var k of lineCache.keys()){
+                  lineCache.delete(k);
+                  count++;
+                  if(count > 1000) break;
+                }
+              }
+              lineCache.set(cellCacheKey, cloneLines(rawCellLines));
+              cl = cloneLinesAndShiftOffsets(rawCellLines, docOffset);
+            }
+            
             cellLines.push({ lines: cl, textLen: cellTextLen });
             var ch = cl.length * baseLineHeightPx + cellPad * 2;
             if(ch > rowHeight) rowHeight = ch;
@@ -527,12 +567,23 @@
       }
       block._markerText = markerText;
       block._leftIndentPx = leftIndentPx;
-      var cacheKey = blockLayoutCacheKey(block, blockFont, blockContentWidth, docOffset);
+      var cacheKey = blockLayoutCacheKey(block, blockFont, blockContentWidth);
       var cachedLines = lineCache.get(cacheKey);
-      var lines = cachedLines ? cloneLines(cachedLines) : breakParagraphIntoLines(block, blockContentWidth, blockFont, docOffset);
-      if(!cachedLines){
-        if(lineCache.size > 2000) lineCache.clear();
-        lineCache.set(cacheKey, cloneLines(lines));
+      var lines;
+      if(cachedLines){
+        lines = cloneLinesAndShiftOffsets(cachedLines, docOffset);
+      }else{
+        var rawLines = breakParagraphIntoLines(block, blockContentWidth, blockFont, 0);
+        if(lineCache.size > 2000){
+          var count = 0;
+          for(var k of lineCache.keys()){
+            lineCache.delete(k);
+            count++;
+            if(count > 1000) break;
+          }
+        }
+        lineCache.set(cacheKey, cloneLines(rawLines));
+        lines = cloneLinesAndShiftOffsets(rawLines, docOffset);
       }
 
       // Widow/orphan: if only 1 line of a multi-line paragraph fits on the

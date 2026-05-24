@@ -7,7 +7,7 @@ declare global {
   interface Window {
     electronAPI: {
       loadData: () => IpcResult<{ ok: boolean; data?: string; dir?: string; error?: string }>;
-      saveData: (json: string | Record<string, unknown>) => IpcResult<unknown>;
+      saveData: (json: string | Record<string, unknown>, source?: string) => IpcResult<unknown>;
       saveEditorDraft: (json: string | Record<string, unknown>) => IpcResult<unknown>;
       savePDF: (refId: string, buf: ArrayBuffer | Uint8Array, ws?: unknown) => IpcResult<unknown>;
       loadPDF: (refId: string, ws?: unknown) => IpcResult<unknown>;
@@ -65,10 +65,10 @@ declare global {
         rollbackToLegacyJson?: () => IpcResult<unknown>;
       };
       spell?: {
-        check: (text: string, lang?: string) => IpcResult<Array<{ offset: number; length: number; word: string; suggestions: string[] }>>;
-        suggest: (word: string, lang?: string) => IpcResult<string[]>;
-        addUserWord: (word: string, lang?: string) => IpcResult<void>;
-        getUserDictionary: (lang?: string) => IpcResult<string[]>;
+        check: (text: string, lang?: string, wsId?: string) => IpcResult<Array<{ offset: number; length: number; word: string; suggestions: string[] }>>;
+        suggest: (word: string, lang?: string, wsId?: string) => IpcResult<string[]>;
+        addUserWord: (word: string, lang?: string, wsId?: string) => IpcResult<void>;
+        getUserDictionary: (lang?: string, wsId?: string) => IpcResult<string[]>;
       };
     };
     ocrAPI: {

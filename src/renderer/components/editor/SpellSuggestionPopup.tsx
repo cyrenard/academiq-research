@@ -40,9 +40,14 @@ function spellTargetFromEvent(target: EventTarget | null): HTMLElement | null {
 
 function suggestionsFromMatch(match: ReturnType<typeof getSpellcheckState>['matches'][number] | null): string[] {
   if (!match || !Array.isArray(match.replacements)) return [];
+  const seen = new Set<string>();
   return match.replacements
     .map((item) => String(item?.value || '').trim())
-    .filter(Boolean);
+    .filter((value) => {
+      if (!value || seen.has(value)) return false;
+      seen.add(value);
+      return true;
+    });
 }
 
 export function SpellSuggestionPopup({ editorRef }: SpellSuggestionPopupProps) {
@@ -70,33 +75,32 @@ export function SpellSuggestionPopup({ editorRef }: SpellSuggestionPopupProps) {
       if (!word) return;
       event.preventDefault();
       event.stopPropagation();
+      const fallbackSuggestions = suggestionsFromMatch(resolvedMatch);
       const base: PopupState = {
         word,
         x: event.clientX,
         y: event.clientY,
         target,
-        suggestions: [],
-        loading: true
+        suggestions: fallbackSuggestions,
+        loading: fallbackSuggestions.length === 0
       };
       setPopup(base);
-      const fallbackSuggestions = suggestionsFromMatch(resolvedMatch);
-      suggestWord(word, { maxSuggestions: 8 })
+      if (fallbackSuggestions.length > 0) return;
+      suggestWord(word, { maxSuggestions: 8, preferNative: true, workspaceId: getSpellcheckState().workspaceId ?? undefined })
         .then((suggestions) => {
           if (!cancelled) {
-            const nextSuggestions = Array.isArray(suggestions) && suggestions.length ? suggestions : fallbackSuggestions;
-            setPopup({ ...base, suggestions: nextSuggestions, loading: false });
+            setPopup({ ...base, suggestions: Array.isArray(suggestions) ? suggestions : [], loading: false });
           }
         })
         .catch(() => {
-          Promise.resolve(window.electronAPI?.spell?.suggest?.(word, 'tr') || fallbackSuggestions)
+          Promise.resolve(window.electronAPI?.spell?.suggest?.(word, 'tr', getSpellcheckState().workspaceId ?? undefined) || [])
             .then((suggestions) => {
               if (!cancelled) {
-                const nextSuggestions = Array.isArray(suggestions) && suggestions.length ? suggestions : fallbackSuggestions;
-                setPopup({ ...base, suggestions: nextSuggestions, loading: false });
+                setPopup({ ...base, suggestions: Array.isArray(suggestions) ? suggestions.map(String) : [], loading: false });
               }
             })
             .catch(() => {
-              if (!cancelled) setPopup({ ...base, suggestions: fallbackSuggestions, loading: false });
+              if (!cancelled) setPopup({ ...base, suggestions: [], loading: false });
             });
         });
     };

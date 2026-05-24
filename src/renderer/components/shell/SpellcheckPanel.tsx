@@ -118,7 +118,11 @@ export function SpellcheckPanel({ open, onClose }: SpellcheckPanelProps) {
     if (!open) return;
     setDocText(takeEditorText());
     runCheckNow({ deep: true });
-  }, [open]);
+  }, [open, state.scopeKey]);
+
+  useEffect(() => {
+    setIgnored(new Set());
+  }, [state.scopeKey]);
 
   useEffect(() => {
     if (!open) return;

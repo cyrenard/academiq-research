@@ -24,9 +24,10 @@ pub async fn data_load(app: AppHandle) -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub async fn data_save(app: AppHandle, json: String) -> Result<Value, String> {
+pub async fn data_save(app: AppHandle, json: String, source: Option<String>) -> Result<Value, String> {
     let dir = data_dir(&app).await?;
-    task::spawn_blocking(move || migrate::save_state(&dir, &json, "autosave"))
+    let src = source.unwrap_or_else(|| "autosave".to_string());
+    task::spawn_blocking(move || migrate::save_state(&dir, &json, &src))
         .await
         .map_err(|e| e.to_string())?
 }

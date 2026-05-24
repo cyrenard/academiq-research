@@ -1053,6 +1053,8 @@
     createCrossRefMark: createCrossRefMark,
     insertFootnote: insertFootnote,
     showCrossRefDialog: showCrossRefDialog,
+    collectCrossRefTargets: collectCrossRefTargets,
+    insertCrossRef: insertCrossRef,
     syncFootnoteNumbers: syncFootnoteNumbers,
     renderFootnotePanel: renderFootnotePanel,
     hookGetHTML: hookGetHTML,

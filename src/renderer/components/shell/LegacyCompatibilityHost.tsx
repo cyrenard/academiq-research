@@ -2158,6 +2158,16 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     }
   };
 
+  const handlePrintPreview = () => {
+    const frame = document.getElementById('exportPreviewFrame') as HTMLIFrameElement | null;
+    if (frame && frame.contentWindow) {
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+    } else {
+      onStatus('Önizleme çerçevesi bulunamadı');
+    }
+  };
+
   return (
     <>
       <div className="hidden" aria-hidden="true">
@@ -2433,12 +2443,13 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
 
       <div className="modal-bg" id="exportPreviewModal">
         <div className="modal aq-legacy-modal-xl">
-          <div className="mt">PDF ?nizleme</div>
+          <div className="mt">PDF Önizleme</div>
           <div className="export-preview-meta" id="exportPreviewMeta">Temiz export yüzeyi hazırlanıyor...</div>
-          <div className="export-preview-frame"><iframe id="exportPreviewFrame" sandbox="allow-same-origin" title="PDF önizleme" /></div>
+          <div className="export-preview-frame"><iframe id="exportPreviewFrame" title="PDF önizleme" /></div>
           <div className="mb">
             <button className="mbtn s" id="exportPreviewRefreshBtn" type="button" onClick={() => call('refreshExportPreview')}>Yenile</button>
-            <button className="mbtn p" id="exportPreviewPdfBtn" type="button" onClick={() => call('expPDF')}>PDF Olarak Dışa Aktar</button>
+            <button className="mbtn p" id="exportPreviewPdfBtn" type="button" onClick={() => call('expPDF')}>PDF (Görüntü)</button>
+            <button className="mbtn p" id="exportPreviewPrintBtn" type="button" style={{ background: '#2e7d32', color: '#fff' }} onClick={handlePrintPreview}>Yüksek Kalite PDF (Yazdır)</button>
             <button className="mbtn s" id="exportPreviewCloseBtn" type="button" onClick={() => call('hideM', 'exportPreviewModal')}>Kapat</button>
           </div>
         </div>

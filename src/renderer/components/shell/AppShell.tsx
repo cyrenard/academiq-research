@@ -122,6 +122,7 @@ export function AppShell({
 
   const gridStyle = {
     gridTemplateColumns: `${leftVisible ? leftWidth : 0}px minmax(560px, 1fr) ${rightVisible ? rightWidth : 0}px`,
+    transition: 'grid-template-columns 200ms cubic-bezier(0.4, 0, 0.2, 1)',
     '--aq-left-sidebar-visible-width': `${leftVisible ? leftWidth : 0}px`,
     '--aq-right-sidebar-visible-width': `${rightVisible ? rightWidth : 0}px`
   } as CSSProperties;
@@ -131,9 +132,13 @@ export function AppShell({
       type="button"
       onClick={() => onViewChange(view)}
       className={[
-        'h-8 rounded-md px-3 transition hover:bg-aq-panel active:translate-y-px',
-        bordered ? 'border border-aq-line bg-white px-4 font-semibold text-aq-ink' : '',
-        activeView === view ? 'bg-aq-panel text-aq-ink' : ''
+        'relative h-8 rounded-md px-3 text-xs font-semibold transition-all duration-150 active:scale-95 select-none outline-none',
+        bordered ? 'border border-aq-line bg-white px-4 text-aq-ink shadow-sm hover:border-aq-line/90 hover:bg-aq-panel' : 'hover:bg-aq-panel text-aq-muted hover:text-aq-ink',
+        activeView === view
+          ? bordered
+            ? 'border-aq-navy/40 bg-aq-navy/5 text-aq-navy shadow-sm'
+            : 'bg-aq-navy/10 text-aq-navy shadow-[inset_0_0_0_1px_rgba(30,58,95,0.12)]'
+          : ''
       ].join(' ')}
     >
       {label}
@@ -147,7 +152,7 @@ export function AppShell({
       aria-label={title}
       onClick={action}
       className={[
-        'aq-window-control flex h-8 w-9 items-center justify-center rounded-md text-[14px] leading-none transition active:translate-y-px',
+        'aq-window-control flex h-8 w-9 items-center justify-center rounded-md text-[14px] leading-none transition-all duration-150 active:scale-90 outline-none',
         danger ? 'hover:bg-red-500 hover:text-white' : 'hover:bg-aq-panel hover:text-aq-ink'
       ].join(' ')}
     >
@@ -204,8 +209,8 @@ export function AppShell({
         {workspaceBar}
         <div className="hidden">{documentBar}</div>
       </div>
-      <main className="grid min-h-0" style={gridStyle}>
-        <div className="relative min-h-0 min-w-0 shadow-[8px_0_22px_rgba(31,42,68,0.08)]">
+      <main className="grid min-h-0 transition-[grid-template-columns] duration-200 ease-in-out" style={gridStyle}>
+        <div className={['relative min-h-0 min-w-0 transition-all duration-200 ease-in-out', leftVisible ? 'shadow-[8px_0_22px_rgba(31,42,68,0.08)]' : 'overflow-hidden'].join(' ')}>
           {leftVisible ? left : null}
           {leftVisible ? (
             <div
@@ -225,7 +230,7 @@ export function AppShell({
             {editor}
           </div>
         </section>
-        <div className="relative min-h-0 min-w-0 shadow-[-8px_0_22px_rgba(31,42,68,0.08)]">
+        <div className={['relative min-h-0 min-w-0 transition-all duration-200 ease-in-out', rightVisible ? 'shadow-[-8px_0_22px_rgba(31,42,68,0.08)]' : 'overflow-hidden'].join(' ')}>
           {rightVisible ? (
             <div
               role="separator"

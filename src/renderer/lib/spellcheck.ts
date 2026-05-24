@@ -49,6 +49,8 @@ export interface SpellLoaderOptions {
   fetchImpl?: typeof fetch;
   /** Use the Tauri/Rust spell command instead of the renderer quality layer. */
   preferNative?: boolean;
+  /** Scope native user dictionaries and caches to the active workspace. */
+  workspaceId?: string;
 }
 
 // nspell exposes `correct(word) → boolean` and `suggest(word) → string[]`.
@@ -142,6 +144,15 @@ export function isNativeSpellReady(): boolean {
  *
  * Numbers, punctuation, whitespace and emoji are skipped — the goal is
  * to send things that LOOK like Turkish words to nspell, not the entire
+
+// ─── Word tokenizer ────────────────────────────────────────────────────────
+
+/**
+ * Default word-token regex. Matches runs of letters (ASCII + Turkish
+ * diacritics) and apostrophes (so "kitap'ı" stays one token).
+ *
+ * Numbers, punctuation, whitespace and emoji are skipped — the goal is
+ * to send things that LOOK like Turkish words to nspell, not the entire
  * stream of glyphs.
  */
 const DEFAULT_WORD_RE = /[A-Za-zçğıöşüÇĞİÖŞÜ][A-Za-zçğıöşüÇĞİÖŞÜ'’]*/g;
@@ -157,13 +168,537 @@ const DEFAULT_WORD_RE = /[A-Za-zçğıöşüÇĞİÖŞÜ][A-Za-zçğıöşüÇĞ
  * prose checks in milliseconds; if you need to keep the UI thread fully
  * unblocked, run this inside a web worker.
  */
+const ACADEMIC_TERMS = [
+  "agorafobi",
+  "akademik",
+  "akademiq",
+  "alanyazın",
+  "altboyut",
+  "altboyutları",
+  "altboyutu",
+  "altölçeği",
+  "altölçek",
+  "altölçekleri",
+  "amacı",
+  "amaç",
+  "amigdala",
+  "analiz",
+  "analizi",
+  "analizler",
+  "analizleri",
+  "ancova",
+  "anket",
+  "anketi",
+  "anketler",
+  "anksiyete",
+  "anksiyolitik",
+  "anksiyöz",
+  "anova",
+  "antidepresan",
+  "antipsikotik",
+  "antipsikotikler",
+  "antisosyal",
+  "apa",
+  "apati",
+  "apatik",
+  "araştırma",
+  "araştırmacı",
+  "araştırmacılar",
+  "araştırmalar",
+  "atfedilen",
+  "atfedilmektedir",
+  "atfedilmiştir",
+  "atfetmektedir",
+  "atıf",
+  "atıflanmaktadır",
+  "atıflanmıştır",
+  "atıflar",
+  "atıflara",
+  "atıfları",
+  "atıfta",
+  "bağımlı",
+  "bağımlılık",
+  "bağımsız",
+  "betimleyici",
+  "betimsel",
+  "bibliyometrik",
+  "biliş",
+  "bilişsel",
+  "bilişsel-davranışçı",
+  "bilişselci",
+  "bilişselcilik",
+  "bilişüstü",
+  "bipolar",
+  "biyoistatistik",
+  "bonferroni",
+  "borderline",
+  "boylamsal",
+  "boyut",
+  "boyutları",
+  "boyutu",
+  "bulgu",
+  "bulgular",
+  "bulguları",
+  "cronbach",
+  "crossref",
+  "çalışma",
+  "çalışmalar",
+  "çalışmaları",
+  "çalışması",
+  "çıkarımsal",
+  "danışan",
+  "danışanın",
+  "danışanlar",
+  "danışman",
+  "danışmanlık",
+  "değerlendirme",
+  "değişken",
+  "değişkeni",
+  "değişkenler",
+  "değişkenleri",
+  "delüzyon",
+  "demografik",
+  "deney",
+  "deneyi",
+  "deneyler",
+  "deneysel",
+  "depersonalizasyon",
+  "depresif",
+  "depresyon",
+  "derealizasyon",
+  "dergi",
+  "dergiler",
+  "dergipark",
+  "dergisi",
+  "desen",
+  "deseni",
+  "desenleri",
+  "dezorganize",
+  "disfori",
+  "disforik",
+  "distimi",
+  "distimik",
+  "doi",
+  "doküman",
+  "dokümanlar",
+  "dokümantasyon",
+  "dopamin",
+  "dopaminerjik",
+  "durbin-watson",
+  "duygudurum",
+  "duygudurumsal",
+  "duygudurumu",
+  "düzey",
+  "düzeyi",
+  "düzeyleri",
+  "ego",
+  "ekler",
+  "empati",
+  "empatik",
+  "endnote",
+  "envanter",
+  "epistemoloji",
+  "epistemolojik",
+  "ergenlik",
+  "etiyoloji",
+  "etki",
+  "etkileri",
+  "etkililik",
+  "etkinlik",
+  "etkisi",
+  "evren",
+  "evrenden",
+  "evreni",
+  "f-testi",
+  "faktör",
+  "faktöriyel",
+  "faktörler",
+  "fark",
+  "farkı",
+  "farkındalık",
+  "farklar",
+  "fenomenoloji",
+  "fenomenolojik",
+  "fobi",
+  "fobik",
+  "frontal",
+  "geçerlik",
+  "geçerlilik",
+  "gelişimsel",
+  "gestalt",
+  "gestaltçı",
+  "gestaltçılık",
+  "görüşme",
+  "görüşmeler",
+  "grubu",
+  "grup",
+  "gruplar",
+  "grupları",
+  "güdü",
+  "güdülenme",
+  "güvenilirlik",
+  "güvenirlik",
+  "halüsinasyon",
+  "halüsinatif",
+  "hedef",
+  "hedefi",
+  "hermeneutik",
+  "heterojenlik",
+  "hezeyan",
+  "hipokampüs",
+  "hipomani",
+  "hipomanik",
+  "hipotez",
+  "hipotezler",
+  "hipotezleri",
+  "histeri",
+  "histerik",
+  "homojenlik",
+  "hümanist",
+  "hümanistik",
+  "ığdır",
+  "içerik",
+  "içgüdü",
+  "ilişki",
+  "ilişkiler",
+  "ilişkisi",
+  "illüzyon",
+  "imla",
+  "indeks",
+  "indeksler",
+  "isbn",
+  "istatistik",
+  "istatistiksel",
+  "işdoyumu",
+  "ithenticate",
+  "kapsam",
+  "kapsamı",
+  "karma",
+  "katarsis",
+  "katatoni",
+  "katatonik",
+  "katılımcı",
+  "katılımcılar",
+  "katılımcıların",
+  "katkı",
+  "katkısı",
+  "kavram",
+  "kavramlar",
+  "kavramsal",
+  "kaynakça",
+  "kesitsel",
+  "kısıt",
+  "kısıtlar",
+  "kısıtlılıklar",
+  "ki-kare",
+  "kikare",
+  "klinik",
+  "klinisyen",
+  "klostrofobi",
+  "kodlayıcı",
+  "kodlayıcılar",
+  "kolmogorov-smirnov",
+  "komorbidite",
+  "kompalsiyon",
+  "kompulsif",
+  "kompülsiyon",
+  "konferans",
+  "konferansı",
+  "kontrol",
+  "korelasyon",
+  "korteks",
+  "kruskal-wallis",
+  "kuram",
+  "kuramlar",
+  "kuramsal",
+  "libido",
+  "likert",
+  "likert-tipi",
+  "literatür",
+  "lob",
+  "madde",
+  "maddeler",
+  "maddeleri",
+  "maddesi",
+  "makale",
+  "makaleler",
+  "makalesi",
+  "mani",
+  "manik",
+  "manik-depresif",
+  "mann-whitney",
+  "manova",
+  "melankoli",
+  "melankolik",
+  "mendeley",
+  "meta",
+  "meta-analiz",
+  "metaanaliz",
+  "metodoloji",
+  "metodolojik",
+  "mizaç",
+  "model",
+  "modeli",
+  "modelleri",
+  "motivasyon",
+  "narsisistik",
+  "narsisizm",
+  "narsist",
+  "narsizm",
+  "nevrotik",
+  "nevroz",
+  "nicel",
+  "niceliksel",
+  "nitel",
+  "niteliksel",
+  "normallik",
+  "nörobilim",
+  "nörogörüntüleme",
+  "nöroloji",
+  "nörolojik",
+  "nöron",
+  "nöroplastisite",
+  "nöropsikiyatri",
+  "nöropsikiyatrik",
+  "nöropsikoloji",
+  "nöropsikolojik",
+  "nörotransmiter",
+  "obsesif",
+  "obsesif-kompulsif",
+  "obsesyon",
+  "odak",
+  "odak-grup",
+  "oksitosin",
+  "ontoloji",
+  "ontolojik",
+  "orcid",
+  "öfori",
+  "öforik",
+  "ölçeği",
+  "ölçeğin",
+  "ölçek",
+  "ölçekler",
+  "ölçekleri",
+  "ölçüm",
+  "ölçümler",
+  "ölçümleri",
+  "ölçümü",
+  "ölçüt",
+  "ölçütler",
+  "öneri",
+  "öneriler",
+  "örneklem",
+  "örneklemde",
+  "örnekleme",
+  "örneklemi",
+  "örneklemin",
+  "örneklemler",
+  "öz-yeterlik",
+  "özduyarlık",
+  "özdüzenleme",
+  "özfarkındalık",
+  "özgün",
+  "özgünlük",
+  "özgüven",
+  "özkıyım",
+  "özsaygı",
+  "özşefkat",
+  "özyeterlik",
+  "p-değeri",
+  "panik-atak",
+  "paradigma",
+  "parametrik",
+  "paranoid",
+  "paranoya",
+  "paranoyak",
+  "pedagog",
+  "pedagoğu",
+  "pedagoji",
+  "pedagojik",
+  "pekiştireç",
+  "pekiştirme",
+  "plagiarism",
+  "post-hoc",
+  "posthoc",
+  "posttest",
+  "posttestler",
+  "posttravmatik",
+  "pozitivist",
+  "pozitivizm",
+  "pretest",
+  "pretestler",
+  "prevalans",
+  "problem",
+  "problemi",
+  "prognoz",
+  "psikanalitik",
+  "psikanaliz",
+  "psikiyatri",
+  "psikiyatrik",
+  "psikoaktif",
+  "psikobiyoloji",
+  "psikobiyolojik",
+  "psikodrama",
+  "psikoeğitim",
+  "psikoeğitsel",
+  "psikofarmakoloji",
+  "psikofarmakolojik",
+  "psikofizik",
+  "psikofizyolojik",
+  "psikolog",
+  "psikoloğu",
+  "psikoloji",
+  "psikolojik",
+  "psikometrik",
+  "psikomotor",
+  "psikopat",
+  "psikopati",
+  "psikopatoloji",
+  "psikopatolojik",
+  "psikoseksüel",
+  "psikosomatik",
+  "psikososyal",
+  "psikoterapi",
+  "psikoterapist",
+  "psikotik",
+  "psikoz",
+  "puan",
+  "puanı",
+  "puanları",
+  "refleks",
+  "regresyon",
+  "rorschach",
+  "sanrı",
+  "scopus",
+  "sempozyum",
+  "sempozyumu",
+  "serotonerjik",
+  "serotonin",
+  "shapiro-wilk",
+  "sınır",
+  "sınırları",
+  "sınırlılık",
+  "sınırlılıklar",
+  "siklotimi",
+  "siklotimik",
+  "sinaps",
+  "sinaptik",
+  "sistematik",
+  "somatik",
+  "somatizasyon",
+  "soru",
+  "sorular",
+  "soruları",
+  "sosyodemografik",
+  "sosyofobi",
+  "standardizasyon",
+  "şekil",
+  "şekiller",
+  "şizofreni",
+  "şizoid",
+  "şizotipal",
+  "t-testi",
+  "tablo",
+  "tablolar",
+  "tanısal",
+  "tartışma",
+  "tema",
+  "temalar",
+  "tematik",
+  "teori",
+  "teorik",
+  "teoriler",
+  "terapi",
+  "terapisi",
+  "terapötik",
+  "tez",
+  "tezler",
+  "tolerans",
+  "travma",
+  "travmatik",
+  "triangülasyon",
+  "ttesti",
+  "turnitin",
+  "tükenmişlik",
+  "ulakbim",
+  "uygulama",
+  "uygulamalar",
+  "varoluşçu",
+  "varoluşçuluk",
+  "varsayım",
+  "varsayımlar",
+  "varyans",
+  "varyanslar",
+  "veri",
+  "veriler",
+  "verileri",
+  "verilerin",
+  "verimlilik",
+  "veris",
+  "verisi",
+  "wilcoxon",
+  "yapı",
+  "yapılandırılmış",
+  "yapılandırmacılık",
+  "yapısal",
+  "yapısı",
+  "yarı-yapılandırılmış",
+  "yarıdeneysel",
+  "yayın",
+  "yayınlar",
+  "yazar",
+  "yazarlar",
+  "yazım",
+  "yetişkinlik",
+  "yılmazlık",
+  "yoksunluk",
+  "yöntem",
+  "yöntemler",
+  "yöntemleri",
+  "yöntemsel",
+  "z-skoru",
+  "zotero"
+];
+
+const ACADEMIC_SUFFIXES = [
+  '', 'i', '\u0131', 'u', '\u00fc', 'e', 'a', 'de', 'da', 'den', 'dan',
+  'nin', 'n\u0131n', 'nun', 'n\u00fcn', 'in', '\u0131n', 'un', '\u00fcn',
+  'le', 'la', 'ler', 'lar', 'leri', 'lar\u0131', 'lerde', 'larda',
+  'lerden', 'lardan', 'sel', 'sal', 's\u0131', 'si', 'su', 's\u00fc'
+];
+
+const ACADEMIC_TERM_SET = new Set(ACADEMIC_TERMS.map((term) => term.toLocaleLowerCase('tr-TR')));
+
 function nativeSpellApi(): any | null {
   const api = typeof window !== 'undefined' ? (window as any).electronAPI?.spell : null;
   return api && typeof api.check === 'function' ? api : null;
 }
 
+function currentWorkspaceId(): string {
+  try {
+    return String((window as any)?.S?.cur || '');
+  } catch (_error) {
+    return '';
+  }
+}
+
 function canUseNativeSpell(options: SpellLoaderOptions = {}): boolean {
   return options.preferNative === true && !options.affUrl && !options.dicUrl && !options.fetchImpl && !!nativeSpellApi();
+}
+
+function isAcademicAllowlisted(word: string): boolean {
+  const lower = word
+    .toLocaleLowerCase('tr-TR')
+    .split(/['’]/)[0]!
+    .replace(/[^a-zçğıöşü]+/gi, '');
+  if (!lower || lower.length < 3) return false;
+  if (ACADEMIC_TERM_SET.has(lower)) return true;
+  for (const suffix of ACADEMIC_SUFFIXES) {
+    if (!suffix || !lower.endsWith(suffix)) continue;
+    const stem = lower.slice(0, -suffix.length);
+    if (stem.length >= 3 && ACADEMIC_TERM_SET.has(stem)) return true;
+  }
+  return false;
 }
 
 function normalizeNativeIssues(issues: any, maxSuggestions: number): SpellMatch[] {
@@ -199,7 +734,7 @@ export function checkLoaded(text: string, options: CheckOptions = {}): SpellMatc
 export async function checkText(text: string, options: CheckOptions & SpellLoaderOptions = {}): Promise<SpellMatch[]> {
   if (canUseNativeSpell(options)) {
     nativeReady = true;
-    const issues = await nativeSpellApi()!.check(String(text || ''), 'tr');
+    const issues = await nativeSpellApi()!.check(String(text || ''), 'tr', options.workspaceId || currentWorkspaceId());
     return normalizeNativeIssues(issues, options.maxSuggestions ?? 5);
   }
   const spell = await ensureSpellLoaded(options);
@@ -211,7 +746,7 @@ export async function suggestWord(word: string, options: CheckOptions & SpellLoa
   if (!clean) return [];
   const maxSug = Math.max(0, options.maxSuggestions ?? 8);
   if (canUseNativeSpell(options)) {
-    const native = await nativeSpellApi()!.suggest(clean, 'tr');
+    const native = await nativeSpellApi()!.suggest(clean, 'tr', options.workspaceId || currentWorkspaceId());
     return Array.isArray(native) ? native.slice(0, maxSug).map(String) : [];
   }
   const spell = await ensureSpellLoaded(options);
@@ -243,6 +778,14 @@ type EditKind = 'insert' | 'transpose' | 'delete' | 'substitute';
 interface EditCandidate {
   word: string;
   kind: EditKind;
+}
+
+type SuggestionSource = 'colloquial' | 'deascii' | 'nspell' | 'oneEdit';
+
+interface SuggestionPoolEntry {
+  display: string;
+  source: SuggestionSource;
+  kindWeight: number;
 }
 
 function oneEditCandidates(spell: NSpellInstance, word: string): EditCandidate[] {
@@ -331,6 +874,14 @@ function deasciiCandidates(spell: NSpellInstance, word: string): string[] {
   return out;
 }
 
+function hasTurkishDiacritic(value: string): boolean {
+  return /[çğıöşüÇĞİÖŞÜ]/.test(value);
+}
+
+function isAsciiLike(value: string): boolean {
+  return /^[A-Za-z'’]+$/.test(value);
+}
+
 /**
  * Damerau-Levenshtein (transpose dahil) edit distance — küçük dizgiler
  * için klasik DP. Önerileri benzerlik sırasına dizmek için kullanırız.
@@ -371,7 +922,7 @@ function damerauLevenshtein(a: string, b: string): number {
  * generator o boşluğu kapatır; merge sonrası gerçek edit-distance ile
  * sıralamak kullanıcının "en yakın doğru kelime" beklentisine uyar.
  */
-function mergedSuggestions(spell: NSpellInstance, word: string, maxSug: number): string[] {
+function mergedSuggestionsLegacy(spell: NSpellInstance, word: string, maxSug: number): string[] {
   if (maxSug <= 0) return [];
   const lowerSource = word.toLocaleLowerCase('tr-TR');
   // Havuz: key = lowercased, value = { display, kindWeight }.
@@ -416,6 +967,190 @@ function mergedSuggestions(spell: NSpellInstance, word: string, maxSug: number):
   return ranked.slice(0, maxSug).map((r) => r.display);
 }
 
+
+
+const COLLOQUIAL_MAPPINGS: Array<[string, string]> = [
+  // Continuous tense (-yor)
+  ["yom", "yorum"],
+  ["yosun", "yorsun"],
+  ["yon", "yorsun"],
+  ["yo", "yor"],
+  ["yoz", "yoruz"],
+  ["yonuz", "yorsunuz"],
+  ["yolar", "yorlar"],
+
+  // Future tense (-acak/-ecek)
+  // Type 1: with vowel prefix (-ıca/-ice)
+  ["ıcam", "acağım"],
+  ["ıcan", "acaksın"],
+  ["ıcak", "acak"],
+  ["ıcaz", "acağız"],
+  ["ıcanız", "acaksınız"],
+  ["ıcaklar", "acaklar"],
+  ["icem", "eceğim"],
+  ["icen", "eceksin"],
+  ["icek", "ecek"],
+  ["icez", "eceğiz"],
+  ["iceniz", "eceksiniz"],
+  ["icekler", "ecekler"],
+
+  // Type 2: without vowel prefix (-ca/-ce)
+  ["cam", "acağım"],
+  ["can", "acaksın"],
+  ["cak", "acak"],
+  ["caz", "acağız"],
+  ["canız", "acaksınız"],
+  ["caklar", "acaklar"],
+  ["cem", "eceğim"],
+  ["cen", "eceksin"],
+  ["cek", "ecek"],
+  ["cez", "eceğiz"],
+  ["ceniz", "eceksiniz"],
+  ["cekler", "ecekler"],
+
+  // Type 3: vowel-change colloquial forms (-ıyca/-iyce/-uyca/-üyce)
+  ["ıycam", "ayacağım"],
+  ["ıycan", "ayacaksın"],
+  ["ıycak", "ayacak"],
+  ["ıycaz", "ayacağız"],
+  ["ıycanız", "ayacaksınız"],
+  ["ıycaklar", "ayacaklar"],
+
+  ["iycem", "eyeceğim"],
+  ["iycen", "eyeceksin"],
+  ["iycek", "eyecek"],
+  ["iycez", "eyeceğiz"],
+  ["iyceniz", "eyeceksiniz"],
+  ["iycekler", "eyecekler"],
+
+  ["uycam", "uyacağım"],
+  ["uycan", "uyacaksın"],
+  ["uycak", "uyacak"],
+  ["uycaz", "uyacağız"],
+  ["uycanız", "uyacaksınız"],
+  ["uycaklar", "uyacaklar"],
+
+  ["üycem", "üyeceğim"],
+  ["üycen", "üyeceksin"],
+  ["üycek", "üyecek"],
+  ["üycez", "üyeceğiz"],
+  ["üyceniz", "üyeceksiniz"],
+  ["üycekler", "üyecekler"],
+
+  // vowel-ending stem + colloquial (-uca/-üce)
+  ["ucam", "uyacağım"],
+  ["ucan", "uyacaksın"],
+  ["ucak", "uyacak"],
+  ["ucaz", "uyacağız"],
+  ["ucanız", "uyacaksınız"],
+  ["ucaklar", "uyacaklar"],
+
+  ["ücem", "üyeceğim"],
+  ["ücen", "üyeceksin"],
+  ["ücek", "üyecek"],
+  ["ücez", "üyeceğiz"],
+  ["üceniz", "üyeceksiniz"],
+  ["ücekler", "üyecekler"],
+];
+
+function matchCasing(original: string, suggestion: string): string {
+  if (!original || !suggestion) return suggestion;
+  const firstChar = original.charAt(0);
+  if (firstChar === firstChar.toUpperCase() && /[A-ZÇĞİÖŞÜ]/.test(firstChar)) {
+    const firstSug = suggestion.charAt(0);
+    let firstUpper = firstSug.toUpperCase();
+    if (firstSug === 'i') firstUpper = 'İ';
+    else if (firstSug === 'ı') firstUpper = 'I';
+    return firstUpper + suggestion.slice(1);
+  }
+  return suggestion;
+}
+
+function colloquialCandidates(spell: NSpellInstance, word: string): string[] {
+  const lower = word.toLocaleLowerCase('tr-TR');
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+
+  for (const [suffix, replacement] of COLLOQUIAL_MAPPINGS) {
+    if (lower.endsWith(suffix) && lower.length > suffix.length) {
+      const stem = lower.slice(0, -suffix.length);
+      
+      // Standard candidate
+      const candidate1 = stem + replacement;
+      if (spell.correct(candidate1) && !seen.has(candidate1)) {
+        seen.add(candidate1);
+        candidates.push(matchCasing(word, candidate1));
+      }
+
+      // If stem ends with 't', try voicing to 'd' since replacement starts with a vowel
+      if (stem.endsWith('t')) {
+        const stemVoiced = stem.slice(0, -1) + 'd';
+        const candidate2 = stemVoiced + replacement;
+        if (spell.correct(candidate2) && !seen.has(candidate2)) {
+          seen.add(candidate2);
+          candidates.push(matchCasing(word, candidate2));
+        }
+      }
+    }
+  }
+  return candidates;
+}
+
+function mergedSuggestions(spell: NSpellInstance, word: string, maxSug: number): string[] {
+  if (maxSug <= 0) return [];
+  const lowerSource = word.toLocaleLowerCase('tr-TR');
+  const asciiInput = isAsciiLike(word);
+  const deascii = deasciiCandidates(spell, word);
+  const hasDeascii = deascii.length > 0;
+  const pool = new Map<string, SuggestionPoolEntry>();
+
+  function add(suggestion: string, source: SuggestionSource, kindWeight: number) {
+    if (!suggestion) return;
+    const key = suggestion.toLocaleLowerCase('tr-TR');
+    if (key === lowerSource) return;
+    if (hasDeascii && source !== 'deascii') {
+      if (suggestion.length < word.length) return;
+      if (asciiInput && !hasTurkishDiacritic(suggestion)) return;
+    }
+    const existing = pool.get(key);
+    if (!existing) {
+      pool.set(key, { display: suggestion, source, kindWeight });
+    } else if (kindWeight < existing.kindWeight) {
+      pool.set(key, { display: existing.display, source, kindWeight });
+    }
+  }
+
+  colloquialCandidates(spell, word).forEach((s, idx) => add(s, 'colloquial', 0 + idx * 0.001));
+  deascii.forEach((s, idx) => add(s, 'deascii', 1 + idx * 0.001));
+  try { spell.suggest(word).forEach((s, idx) => add(s, 'nspell', 2 + idx * 0.001)); } catch (_e) {}
+  oneEditCandidates(spell, word).forEach((c, idx) => add(c.word, 'oneEdit', 3 + KIND_WEIGHT[c.kind] + idx * 0.001));
+  if (pool.size === 0) return [];
+
+  const ranked = Array.from(pool.entries())
+    .map(([key, entry]) => ({
+      display: entry.display,
+      distance: damerauLevenshtein(lowerSource, key),
+      source: entry.source,
+      weight: entry.kindWeight,
+      lenDiff: Math.abs(entry.display.length - word.length)
+    }))
+    .filter((item) => {
+      if (item.source === 'deascii' || item.source === 'nspell' || item.source === 'colloquial') return true;
+      const maxDistance = word.length <= 5 ? 1 : word.length <= 8 ? 2 : 3;
+      return item.distance <= maxDistance;
+    })
+    .sort((a, b) => {
+      const pA = a.source === 'colloquial' ? 0 : a.source === 'deascii' ? 1 : 2;
+      const pB = b.source === 'colloquial' ? 0 : b.source === 'deascii' ? 1 : 2;
+      return pA - pB
+        || a.distance - b.distance
+        || a.weight - b.weight
+        || a.lenDiff - b.lenDiff
+        || a.display.localeCompare(b.display, 'tr-TR');
+    });
+  return ranked.slice(0, maxSug).map((r) => r.display);
+}
+
 function runCheck(spell: NSpellInstance, text: string, options: CheckOptions): SpellMatch[] {
   if (!text) return [];
   const maxSug = Math.max(0, options.maxSuggestions ?? 5);
@@ -432,7 +1167,7 @@ function runCheck(spell: NSpellInstance, text: string, options: CheckOptions): S
     // Skip ALL-CAPS tokens — usually acronyms (APA, DOI, ISBN) that
     // aren't in a generic dictionary. We'd rather not flag them.
     if (word === word.toUpperCase() && /[A-ZÇĞİÖŞÜ]/.test(word)) continue;
-    if (spell.correct(word)) continue;
+    if (isAcademicAllowlisted(word) || spell.correct(word)) continue;
     const suggestions = mergedSuggestions(spell, word, maxSug);
     matches.push({
       offset: m.index,

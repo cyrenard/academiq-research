@@ -60,6 +60,43 @@
   cursor: context-menu;
 }
 
+/* Premium citation status highlights */
+.aq-citation-error {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: hsl(16, 85%, 52%); /* modern high-end warning amber/red HSL */
+  text-decoration-thickness: 1.5px;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 2px;
+  background-color: hsla(16, 85%, 52%, 0.05); /* very soft matching background tint */
+  border-radius: 2px;
+  cursor: help;
+  transition: background-color 0.2s ease, text-decoration-color 0.2s ease;
+}
+
+.aq-citation-error:hover {
+  background-color: hsla(16, 85%, 52%, 0.12);
+  text-decoration-color: hsl(16, 95%, 48%);
+}
+
+.aq-citation-mismatch {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: hsl(38, 92%, 50%); /* premium warning amber HSL */
+  text-decoration-thickness: 1.5px;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 2px;
+  background-color: hsla(38, 92%, 50%, 0.05);
+  border-radius: 2px;
+  cursor: help;
+  transition: background-color 0.2s ease, text-decoration-color 0.2s ease;
+}
+
+.aq-citation-mismatch:hover {
+  background-color: hsla(38, 92%, 50%, 0.12);
+  text-decoration-color: hsl(38, 100%, 45%);
+}
+
 html,
 body,
 #root {

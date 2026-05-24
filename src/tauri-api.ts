@@ -29,14 +29,56 @@ function invokeCommand(command, args) {
 }
 
 function base64ToArrayBuffer(base64) {
-  const binary = window.atob(String(base64 || ''));
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
+  if (typeof window !== 'undefined' && typeof window.atob === 'function') {
+    const binary = window.atob(String(base64 || ''));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return bytes.buffer;
+  }
+  if (typeof Buffer !== 'undefined') {
+    const buf = Buffer.from(String(base64 || ''), 'base64');
+    const ab = new ArrayBuffer(buf.length);
+    const view = new Uint8Array(ab);
+    for (let i = 0; i < buf.length; ++i) {
+      view[i] = buf[i];
+    }
+    return ab;
+  }
+  return new ArrayBuffer(0);
+}
+
+function anyToBase64(buf) {
+  if (typeof buf === 'string') return buf;
+  if (!buf) return '';
+  let uint8;
+  if (buf instanceof Uint8Array) {
+    uint8 = buf;
+  } else if (buf instanceof ArrayBuffer) {
+    uint8 = new Uint8Array(buf);
+  } else if (Array.isArray(buf)) {
+    uint8 = new Uint8Array(buf);
+  } else if (buf.buffer && buf.buffer instanceof ArrayBuffer) {
+    uint8 = new Uint8Array(buf.buffer);
+  } else {
+    return buf;
+  }
+  if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+    const chunks = [];
+    const chunkSize = 0xffff;
+    for (let i = 0; i < uint8.length; i += chunkSize) {
+      chunks.push(String.fromCharCode.apply(null, uint8.subarray(i, i + chunkSize)));
+    }
+    return window.btoa(chunks.join(''));
+  }
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(uint8).toString('base64');
+  }
+  return '';
 }
 
 function wordImportMammothOptions() {
-  return {
+  const mammoth = typeof window !== 'undefined' ? window.mammoth : null;
+  const options = {
     styleMap: [
       "p[style-name='Title'] => h1:fresh",
       "p[style-name='Subtitle'] => h2:fresh",
@@ -58,6 +100,18 @@ function wordImportMammothOptions() {
     ],
     includeDefaultStyleMap: true
   };
+
+  if (mammoth && mammoth.images && typeof mammoth.images.imgElement === 'function') {
+    options.convertImage = mammoth.images.imgElement(function(image) {
+      return image.read("base64").then(function(imageBuffer) {
+        return {
+          src: "data:" + image.contentType + ";base64," + imageBuffer
+        };
+      });
+    });
+  }
+
+  return options;
 }
 
 async function wordToHtmlViaMammoth(filePath) {
@@ -237,14 +291,20 @@ try {
 
 const electronAPI = {
   loadData: () => invokeCommand('data_load'),
-  saveData: (json) => invokeCommand('data_save', { json: typeof json === 'string' ? json : JSON.stringify(json || {}) }),
+  saveData: (json, source) => invokeCommand('data_save', { json: typeof json === 'string' ? json : JSON.stringify(json || {}), source }),
   saveEditorDraft: (json) => invokeCommand('data_save_draft', { json: typeof json === 'string' ? json : JSON.stringify(json || {}) }),
 
-  savePDF: (refId, buf, ws) => invokeCommand('pdf_save', { refId: asRefId(refId), buffer: buf, ws: pickWsContext(ws) }),
+  savePDF: (refId, buf, ws) => invokeCommand('pdf_save', { refId: asRefId(refId), buffer: anyToBase64(buf), ws: pickWsContext(ws) }),
   loadPDF: async (refId, ws) => {
     const result = await invokeCommand('pdf_load', { refId: asRefId(refId), ws: pickWsContext(ws) });
-    if (result && typeof result === 'object' && result.ok && result.data && !result.buffer) {
-      return { ...result, buffer: result.data };
+    if (result && typeof result === 'object' && result.ok && result.data) {
+      if (result.isBase64 || typeof result.data === 'string') {
+        const decoded = base64ToArrayBuffer(result.data);
+        return { ...result, buffer: decoded };
+      }
+      if (!result.buffer) {
+        return { ...result, buffer: result.data };
+      }
     }
     return result;
   },
@@ -288,6 +348,7 @@ const electronAPI = {
   setSyncDir: () => invokeCommand('sync_set_sync_dir'),
   clearSyncDir: () => invokeCommand('sync_clear_sync_dir'),
   createBackup: () => invokeCommand('backup_create'),
+  createBackupAuto: () => invokeCommand('backup_create_auto'),
   restoreBackup: () => invokeCommand('backup_restore'),
   getLocalMatrixAssistantStatus: (settings) => invokeCommand('local_matrix_assistant_get_status', { settings: pickObject(settings) }),
   rankLocalMatrixCandidates: (payload) => invokeCommand('local_matrix_assistant_rank_candidates', { payload: pickObject(payload) }),
@@ -378,10 +439,10 @@ electronAPI.pdf = {
 };
 
 electronAPI.spell = {
-  check: (text, lang = 'tr') => invokeCommand('spell_check', { text: asString(text, 500000), lang: asString(lang, 16) || 'tr' }),
-  suggest: (word, lang = 'tr') => invokeCommand('spell_suggest', { word: asString(word, 256), lang: asString(lang, 16) || 'tr' }),
-  addUserWord: (word, lang = 'tr') => invokeCommand('spell_add_user_word', { word: asString(word, 256), lang: asString(lang, 16) || 'tr' }),
-  getUserDictionary: (lang = 'tr') => invokeCommand('spell_get_user_dictionary', { lang: asString(lang, 16) || 'tr' })
+  check: (text, lang = 'tr', wsId = '') => invokeCommand('spell_check', { text: asString(text, 500000), lang: asString(lang, 16) || 'tr', wsId: asString(wsId, 160) }),
+  suggest: (word, lang = 'tr', wsId = '') => invokeCommand('spell_suggest', { word: asString(word, 256), lang: asString(lang, 16) || 'tr', wsId: asString(wsId, 160) }),
+  addUserWord: (word, lang = 'tr', wsId = '') => invokeCommand('spell_add_user_word', { word: asString(word, 256), lang: asString(lang, 16) || 'tr', wsId: asString(wsId, 160) }),
+  getUserDictionary: (lang = 'tr', wsId = '') => invokeCommand('spell_get_user_dictionary', { lang: asString(lang, 16) || 'tr', wsId: asString(wsId, 160) })
 };
 
 electronAPI.export = {

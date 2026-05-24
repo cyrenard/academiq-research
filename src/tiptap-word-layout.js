@@ -8,6 +8,23 @@
   var APA_MARGIN_PX = 96; // 1 inch @ 96dpi
   var MIN_PAGE_GAP_PX = 24;
 
+  if(typeof window !== 'undefined' && typeof document !== 'undefined'){
+    var recordTyping = function(e){
+      var key = e && e.key;
+      if(key === 'Enter' || key === 'Backspace' || key === 'Delete'){
+        window.__aqLastTypingTime = 0;
+      }else{
+        window.__aqLastTypingTime = Date.now();
+      }
+    };
+    document.addEventListener('input', function(){
+      if(window.__aqLastTypingTime !== 0){
+        window.__aqLastTypingTime = Date.now();
+      }
+    }, true);
+    document.addEventListener('keydown', recordTyping, true);
+  }
+
   var state = {
     timer: null,
     zoom: 100,
@@ -401,9 +418,28 @@
     options = options || {};
     var page = options.page;
     var editorDom = options.editorDom;
+    if(!page || !editorDom) return 0;
+
+    // Rate limit layout cycles during high-frequency typing (Task 4)
+    if(typeof window !== 'undefined'){
+      var now = Date.now();
+      var lastTyping = window.__aqLastTypingTime || 0;
+      var isTyping = (now - lastTyping) < 1500;
+      if(isTyping){
+        var timeSinceLastRun = now - (state.lastMetricsRun || 0);
+        if(timeSinceLastRun < 1000){
+          clearTimeout(state.metricsTimer);
+          state.metricsTimer = setTimeout(function(){
+            syncPageMetrics(options);
+          }, 1000 - timeSinceLastRun + 50);
+          return 0;
+        }
+      }
+      state.lastMetricsRun = now;
+    }
+
     var scrollEl = options.scrollEl || null;
     var showPageNumbers = !!options.showPageNumbers;
-    if(!page || !editorDom) return 0;
     var metrics = resolvePageMetrics(options);
     var pageHeight = metrics.pageHeight;
     var pageContentHeight = metrics.pageContentHeight;

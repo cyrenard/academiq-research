@@ -179,6 +179,13 @@
     out = out.replace(/<(script|style)[^>]*>[\s\S]*?<\/\1\s*>/gi, '');
     // Drop self-closing or unclosed <meta>/<link> tags (no inner content)
     out = out.replace(/<\/?(script|style|link|meta)[^>]*>/gi, '');
+    // Cap and remove excessively large Base64 images (>2MB)
+    out = out.replace(/<img\b[^>]*\bsrc\s*=\s*(["'])data:image\/[^"']+?\1[^>]*>/gi, function(match) {
+      if (match.length > 2 * 1024 * 1024) {
+        return '<!-- Gecersiz buyuk gorsel kaldirildi (Base64 boyutu 2MB sinirini asiyor) -->';
+      }
+      return match;
+    });
     out = out
       .replace(/<head\b[\s\S]*?<\/head\s*>/gi, '')
       .replace(/<\/?(?:html|body)\b[^>]*>/gi, '')
@@ -240,6 +247,17 @@
 
     // Remove potentially dangerous and editor-hostile nodes first.
     div.querySelectorAll('script,style,link,meta,o\\:p').forEach(function(el){ el.remove(); });
+    div.querySelectorAll('img').forEach(function(img) {
+      var src = String(img.getAttribute('src') || '');
+      if (src.indexOf('data:image/') === 0 && src.length > 2 * 1024 * 1024) {
+        var placeholder = document.createComment('Gecersiz buyuk gorsel kaldirildi (Base64 boyutu 2MB sinirini asiyor)');
+        if (img.parentNode) {
+          img.parentNode.replaceChild(placeholder, img);
+        } else {
+          img.remove();
+        }
+      }
+    });
     div.querySelectorAll('html,head,body').forEach(function(node){
       if(!node.parentNode) return;
       while(node.firstChild) node.parentNode.insertBefore(node.firstChild, node);

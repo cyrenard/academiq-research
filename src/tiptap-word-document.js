@@ -331,7 +331,40 @@
       + '.aq-export-root .aq-keep-target{break-before:auto;page-break-before:auto;}'
       + '.aq-export-root .aq-table-block,.aq-export-root .aq-figure-block{margin:6pt 0 10pt 0;}'
       + '.aq-export-root .aq-table-note{margin-top:4pt;text-indent:0;font-size:10.5pt;line-height:1.6;}'
-      + '.aq-export-root .aq-cross-ref-export{color:#000;text-decoration:none;font-style:italic;}';
+      + '.aq-export-root .aq-cross-ref-export{color:#000;text-decoration:none;font-style:italic;}'
+      + '.aq-export-root table{border-top:1.5px solid #000;border-bottom:1.5px solid #000;border-left:none;border-right:none;}'
+      + '.aq-export-root td,.aq-export-root th{border-left:none;border-right:none;border-top:none;border-bottom:none;}'
+      + '.aq-export-root thead th,.aq-export-root tr.aq-table-header-row th{border-bottom:1.1px solid #000;}'
+      + '.aq-export-root img{max-width:100%;height:auto;}'
+      + '@media print{'
+      + '@page{size:A4;margin:2.54cm;}'
+      + 'body{background:#fff!important;padding:0!important;margin:0!important;}'
+      + '.aq-preview-page{width:auto!important;min-height:auto!important;margin:0!important;padding:0!important;box-shadow:none!important;background:transparent!important;}'
+      + '.aq-export-root{width:100%!important;max-width:none!important;margin:0!important;padding:0!important;}'
+      + '.aq-print-header{position:fixed;top:-1.7cm;left:0;right:0;height:0.8cm;display:flex!important;justify-content:space-between;font-family:"Times New Roman",Times,serif;font-size:10pt;color:#000;border-bottom:none;pointer-events:none;z-index:10000;}'
+      + '.aq-print-header .page-num::after{content:counter(page);}'
+      + '}'
+      + '@media screen{'
+      + '.aq-print-header{display:none!important;}'
+      + '}';
+  }
+
+  function getRunningHeadText(){
+    var doc = typeof window !== 'undefined' && typeof window.getCurrentDocRecord === 'function' ? window.getCurrentDocRecord() : null;
+    var title = '';
+    if(doc){
+      if(doc.title){
+        title = doc.title;
+      }else if(doc.coverHTML){
+        var m = doc.coverHTML.match(/font-weight:bold;">([^<]+)<\/p>/i);
+        if(m && m[1]) title = m[1];
+      }
+    }
+    title = String(title || 'AcademiQ Research').toUpperCase().trim();
+    if(title.length > 50){
+      title = title.substring(0, 47) + '...';
+    }
+    return title;
   }
 
   function docxHeadingInlineStyle(level){
@@ -368,16 +401,18 @@
 
   function buildExportPDFHTML(edHTML){
     var cleanHTML = buildCleanExportHTML(edHTML);
-    return '<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data: blob: file:; style-src \'unsafe-inline\'; font-src data:;"><title>AcademiQ Export</title><style>' + buildExportBaseCSS() + '</style></head><body><main class="aq-export-root">' + String(cleanHTML || '') + '</main></body></html>';
+    var runningHead = getRunningHeadText();
+    return '<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data: blob: file:; style-src \'unsafe-inline\'; font-src data:;"><title>AcademiQ Export</title><style>' + buildExportBaseCSS() + '</style></head><body><div class="aq-print-header"><span class="running-head-title">' + runningHead + '</span><span class="page-num"></span></div><main class="aq-export-root">' + String(cleanHTML || '') + '</main></body></html>';
   }
 
   function buildExportPreviewHTML(edHTML){
     var cleanHTML = buildCleanExportHTML(edHTML);
+    var runningHead = getRunningHeadText();
     var previewCSS = buildExportBaseCSS()
       + 'body{background:linear-gradient(180deg,#eff3f6 0%,#e6ebef 100%);padding:26px;}'
       + '.aq-preview-page{width:21cm;min-height:29.7cm;margin:0 auto;background:#fff;padding:2.54cm;box-shadow:0 18px 44px rgba(43,58,70,.16);}'
       + '.aq-export-root{width:100%;max-width:none;margin:0;}';
-    return '<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data: blob: file:; style-src \'unsafe-inline\'; font-src data:;"><title>AcademiQ Export Preview</title><style>' + previewCSS + '</style></head><body><div class="aq-preview-page"><main class="aq-export-root">' + String(cleanHTML || '') + '</main></div></body></html>';
+    return '<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data: blob: file:; style-src \'unsafe-inline\'; font-src data:;"><title>AcademiQ Export Preview</title><style>' + previewCSS + '</style></head><body><div class="aq-print-header"><span class="running-head-title">' + runningHead + '</span><span class="page-num"></span></div><div class="aq-preview-page"><main class="aq-export-root">' + String(cleanHTML || '') + '</main></div></body></html>';
   }
 
   function stripLegacyEditorArtifacts(html){

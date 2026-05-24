@@ -20,6 +20,7 @@ export type AcademiqEditorApi = {
   insertBibliography: () => void;
   setCitationStyle: (style: string) => void;
   exportSnapshot: () => unknown;
+  flush: () => void;
   destroy: () => void;
 };
 
@@ -330,6 +331,28 @@ function insertEditorHTML(win: LegacyWindow, html: string) {
   const next = String(html || '').trim();
   if (!next) return false;
   const editor = activeEditor || win.editor;
+
+  // Try direct transactional ProseMirror slice insertion with explicit history tracking first
+  if (editor && editor.view && editor.state) {
+    try {
+      const { state, view } = editor;
+      const parser = (view as any).domParser || (state.schema as any).domParser;
+      if (parser && typeof parser.parseSlice === 'function') {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = next;
+        const slice = parser.parseSlice(tempDiv, { preserveWhitespace: false });
+        const tr = state.tr.replaceSelection(slice);
+        tr.setMeta('addToHistory', true);
+        view.dispatch(tr);
+        if (typeof editor.emit === 'function') editor.emit('update');
+        activeNotify?.();
+        return true;
+      }
+    } catch (_error) {
+      console.warn('Direct transactional HTML insertion failed, falling back:', _error);
+    }
+  }
+
   if (win.AQEditorCore && typeof win.AQEditorCore.insertHTML === 'function') {
     try {
       if (win.AQEditorCore.insertHTML(next)) {
@@ -767,6 +790,11 @@ export function createAcademiqEditor(options: CreateAcademiqEditorOptions): Acad
       activeNotify?.();
     },
     exportSnapshot: () => exportEditorSnapshot(win),
+    flush: () => {
+      if (typeof (win as any).__aqFlushSaveBridge === 'function') {
+        try { (win as any).__aqFlushSaveBridge(); } catch (_e) {}
+      }
+    },
     destroy: () => destroyLegacyEditor(win)
   };
 }

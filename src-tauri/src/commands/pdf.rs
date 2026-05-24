@@ -661,7 +661,10 @@ pub async fn pdf_load(
         None => return Ok(json!({ "ok": false, "error": "not found" })),
     };
     match fs::read(path).await {
-        Ok(data) => Ok(json!({ "ok": true, "data": data })),
+        Ok(data) => {
+            let base64_data = general_purpose::STANDARD.encode(data);
+            Ok(json!({ "ok": true, "data": base64_data, "isBase64": true }))
+        }
         Err(err) => Ok(json!({ "ok": false, "error": err.to_string() })),
     }
 }

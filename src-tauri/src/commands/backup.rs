@@ -10,6 +10,15 @@ use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 
 const MANIFEST_PATH: &str = "manifest.json";
 
+fn compact_database_if_exists(data_dir: &Path) {
+    let db_path = data_dir.join("academiq.sqlite");
+    if db_path.exists() {
+        if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+            let _ = conn.execute("VACUUM", []);
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn backup_create(app: AppHandle) -> Result<Value, String> {
     let Some(target) = app
@@ -24,6 +33,10 @@ pub async fn backup_create(app: AppHandle) -> Result<Value, String> {
         return Ok(json!({ "ok": false, "canceled": true }));
     };
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    
+    // Compact SQLite database before backup
+    compact_database_if_exists(&data_dir);
+    
     let file = fs::File::create(path).map_err(|e| e.to_string())?;
     let mut zip = ZipWriter::new(file);
     let manifest = json!({
@@ -54,6 +67,85 @@ pub async fn backup_create(app: AppHandle) -> Result<Value, String> {
     Ok(json!({
         "ok": true,
         "filePath": path.to_string_lossy(),
+        "fileCount": file_count,
+        "totalBytes": total_bytes
+    }))
+}
+
+#[tauri::command]
+pub async fn backup_create_auto(app: AppHandle) -> Result<Value, String> {
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let backups_dir = data_dir.join("backups");
+    fs::create_dir_all(&backups_dir).map_err(|e| e.to_string())?;
+
+    // Compact database first
+    compact_database_if_exists(&data_dir);
+
+    // Create the auto backup file path
+    let timestamp = chrono_like_now();
+    let backup_filename = format!("autobackup_{}.aqbackup", timestamp);
+    let backup_path = backups_dir.join(&backup_filename);
+
+    let file = fs::File::create(&backup_path).map_err(|e| e.to_string())?;
+    let mut zip = ZipWriter::new(file);
+    let manifest = json!({
+        "format": "academiq-tauri-backup",
+        "formatVersion": 1,
+        "version": app.package_info().version.to_string(),
+        "source": data_dir.to_string_lossy(),
+        "createdAt": timestamp
+    });
+    let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    zip.start_file(MANIFEST_PATH, options)
+        .map_err(|e| e.to_string())?;
+    zip.write_all(&serde_json::to_vec_pretty(&manifest).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+
+    let mut file_count = 1_u64;
+    let mut total_bytes = 0_u64;
+    add_dir_to_zip(
+        &mut zip,
+        &data_dir,
+        &data_dir,
+        &backup_path,
+        &mut file_count,
+        &mut total_bytes,
+    )?;
+    zip.finish().map_err(|e| e.to_string())?;
+
+    // Rolling rotation: Keep only the latest 3 backups
+    let mut auto_backups = Vec::new();
+    if let Ok(entries) = fs::read_dir(&backups_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+                    if filename.starts_with("autobackup_") && filename.ends_with(".aqbackup") {
+                        if let Ok(metadata) = entry.metadata() {
+                            if let Ok(modified) = metadata.modified() {
+                                auto_backups.push((path, modified));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort by modified time: oldest first
+    auto_backups.sort_by(|a, b| a.1.cmp(&b.1));
+
+    // If more than 3, delete oldest ones
+    if auto_backups.len() > 3 {
+        let delete_count = auto_backups.len() - 3;
+        for i in 0..delete_count {
+            let _ = fs::remove_file(&auto_backups[i].0);
+        }
+    }
+
+    Ok(json!({
+        "ok": true,
+        "filePath": backup_path.to_string_lossy(),
         "fileCount": file_count,
         "totalBytes": total_bytes
     }))
@@ -124,6 +216,10 @@ fn add_dir_to_zip<W: Write + Seek>(
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
         if same_path(&path, target_backup_path) {
+            continue;
+        }
+        // Exclude the "backups" directory to prevent infinite recursion/nesting
+        if path.is_dir() && path.file_name().and_then(|n| n.to_str()) == Some("backups") {
             continue;
         }
         let rel = path

@@ -1,21 +1,34 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal } from '../ui/Modal';
 import type { AcademiqAppState, AcademiqReference } from '../../lib/app-state';
 import { formatDate, formatAge, asRecord, statusText } from '../../lib/modal-helpers';
 import { ReferenceEditModal } from './modals/ReferenceEditModal';
 import { BrowserCaptureModal } from './modals/BrowserCaptureModal';
 import { HistoryModal } from './modals/HistoryModal';
+import { CrossRefModal } from './modals/CrossRefModal';
+import { ReferenceImportModal } from './modals/ReferenceImportModal';
+import { PlainCitationLinkerModal } from './modals/PlainCitationLinkerModal';
 import { useSpellcheck } from '../../lib/useSpellcheck';
 import { L, fmt } from '../../lib/labels';
 import { confirmDialog } from '../../lib/dialog';
 
-type FeatureModal = 'settings' | 'recovery' | 'history' | 'browserCapture' | 'referenceEdit' | null;
+type FeatureModal =
+  | 'settings'
+  | 'recovery'
+  | 'history'
+  | 'browserCapture'
+  | 'referenceEdit'
+  | 'crossRef'
+  | 'referenceImport'
+  | 'plainCitationLinker'
+  | null;
 
 type FeatureModalsProps = {
   active: FeatureModal;
   state: AcademiqAppState;
   loadMeta?: Record<string, unknown> | null;
   selectedReference?: AcademiqReference | null;
+  plainCitationSingleMatch?: any | null;
   onClose: () => void;
   onStatus: (message: string) => void;
   onUpdateReference: (referenceId: string, patch: Record<string, unknown>) => void;
@@ -28,6 +41,7 @@ export function FeatureModals({
   state,
   loadMeta,
   selectedReference,
+  plainCitationSingleMatch,
   onClose,
   onStatus,
   onUpdateReference,
@@ -800,6 +814,26 @@ export function FeatureModals({
         onClose={onClose}
         onUpdate={onUpdateReference}
         onDelete={onDeleteReference}
+      />
+
+      <CrossRefModal
+        open={active === 'crossRef'}
+        onClose={onClose}
+        onStatus={onStatus}
+      />
+
+      <ReferenceImportModal
+        open={active === 'referenceImport'}
+        onClose={onClose}
+        onStatus={onStatus}
+      />
+
+      <PlainCitationLinkerModal
+        open={active === 'plainCitationLinker'}
+        state={state}
+        singleMatch={plainCitationSingleMatch}
+        onClose={onClose}
+        onStatus={onStatus}
       />
     </>
   );

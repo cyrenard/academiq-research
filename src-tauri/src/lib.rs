@@ -24,6 +24,10 @@ pub fn run() {
         .manage(capture::bridge::CaptureSidecarState::default())
         .setup(|app| {
             telemetry::install(&app.handle())?;
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let _ = commands::backup::backup_create_auto(handle).await;
+            });
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -41,6 +45,7 @@ pub fn run() {
             commands::app::app_open_external_url,
             commands::app::renderer_probe_error,
             commands::backup::backup_create,
+            commands::backup::backup_create_auto,
             commands::backup::backup_restore,
             commands::browser_capture::browser_capture_ack_payload,
             commands::browser_capture::browser_capture_create_workspace,

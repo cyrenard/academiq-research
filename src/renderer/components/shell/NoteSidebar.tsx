@@ -84,10 +84,17 @@ export function NoteSidebar({
   const menuNote = noteMenu ? notes.find((note) => note.id === noteMenu.noteId) || null : null;
   const tagPopupNote = tagPopup ? notes.find((note) => note.id === tagPopup.noteId) || null : null;
   const fallbackNotebookId = notebooks[0]?.id || '';
-  const notebookCounts = useMemo(() => new Map(notebooks.map((notebook) => [
-    notebook.id,
-    notes.filter((note) => String(note.nbId || '') === notebook.id).length
-  ])), [notebooks, notes]);
+  const notebookCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const note of notes) {
+      const nbId = String(note.nbId || '');
+      counts.set(nbId, (counts.get(nbId) || 0) + 1);
+    }
+    return new Map(notebooks.map((notebook) => [
+      notebook.id,
+      counts.get(notebook.id) || 0
+    ]));
+  }, [notebooks, notes]);
   const isInboxNote = (note: AcademiqNote) => {
     const hasSource = Boolean(note.src || note.rid || note.q || note.sourceExcerpt);
     return hasSource && !note.inserted;

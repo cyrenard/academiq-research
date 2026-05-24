@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react';
 import type { AcademiqReference } from '../../lib/app-state';
 import { referenceAuthors, referenceTags, referenceTitle } from '../../lib/app-state';
 import { legacyFeatures, runLegacyFeature } from '../../lib/legacy-feature-adapter';
@@ -132,10 +132,25 @@ export function RefSidebar({
       return haystack.includes(needle);
     });
   }, [needle, references]);
-  const groupedCollections = useMemo(() => collections.map((collection) => ({
-    collection,
-    references: searchableReferences.filter((ref) => refCollectionIds(ref).includes(String(collection.id)))
-  })), [collections, searchableReferences]);
+  const groupedCollections = useMemo(() => {
+    const map = new Map<string, AcademiqReference[]>();
+    for (const ref of searchableReferences) {
+      const ids = refCollectionIds(ref);
+      for (const id of ids) {
+        const idStr = String(id);
+        let list = map.get(idStr);
+        if (!list) {
+          list = [];
+          map.set(idStr, list);
+        }
+        list.push(ref);
+      }
+    }
+    return collections.map((collection) => ({
+      collection,
+      references: map.get(String(collection.id)) || []
+    }));
+  }, [collections, searchableReferences]);
   const unfiledReferences = useMemo(
     () => searchableReferences.filter((ref) => refCollectionIds(ref).length === 0),
     [searchableReferences]
@@ -465,7 +480,15 @@ export function RefSidebar({
         className="flex min-w-0 flex-1 items-center gap-2 text-left"
       >
         <span className="text-[10px] text-aq-muted">{collapsed ? '>' : 'v'}</span>
-        <span className="text-aq-navy">?</span>
+        {collapsed ? (
+          <svg className="h-3.5 w-3.5 text-aq-navy shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+          </svg>
+        ) : (
+          <svg className="h-3.5 w-3.5 text-aq-navy shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M2 6a2 2 0 012-2h4l2 2h4a2 2 0 012 2v2H2V6zm0 6h16v2a2 2 0 01-2 2H4a2 2 0 01-2-2v-2z" clipRule="evenodd" />
+          </svg>
+        )}
         <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-aq-ink">{name}</span>
         <span className="rounded-full border border-aq-line bg-white px-1.5 py-0.5 text-[10px] text-aq-muted">{count}</span>
       </button>
@@ -749,7 +772,7 @@ export function RefSidebar({
                     return (
                       <div key={label.name} className="flex items-center gap-1 rounded-md hover:bg-aq-panel">
                         <button type="button" className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left font-medium text-aq-ink" onClick={() => onToggleReferenceLabel(activeMenuReference.id, label)}>
-                          <span className={['flex h-4 w-4 items-center justify-center rounded border text-[10px]', selected ? 'border-aq-navy bg-aq-navy text-white' : 'border-aq-line text-transparent'].join(' ')}>?</span>
+                          <span className={['flex h-4 w-4 items-center justify-center rounded border text-[10px]', selected ? 'border-aq-navy bg-aq-navy text-white' : 'border-aq-line text-transparent'].join(' ')}>✓</span>
                           <span className="h-2.5 w-2.5 rounded-full" style={{ background: label.color || '#9aa' }} />
                           <span className="truncate">{label.name}</span>
                         </button>
@@ -783,7 +806,15 @@ export function RefSidebar({
                     const selected = refCollectionIds(activeMenuReference).includes(String(collection.id));
                     return (
                       <button key={collection.id} type="button" className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left font-medium text-aq-ink hover:bg-aq-panel" onClick={() => onToggleReferenceCollection(activeMenuReference.id, collection.id)}>
-                        <span className={['flex h-4 w-4 items-center justify-center rounded border text-[10px]', selected ? 'border-aq-navy bg-aq-navy text-white' : 'border-aq-line text-transparent'].join(' ')}>?</span>
+                        {selected ? (
+                          <svg className="h-4 w-4 text-aq-navy shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+                          </svg>
+                        ) : (
+                          <svg className="h-4 w-4 text-aq-muted/60 shrink-0" fill="none" viewBox="0 0 20 20" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+                          </svg>
+                        )}
                         <span className="truncate">{collection.name}</span>
                       </button>
                     );

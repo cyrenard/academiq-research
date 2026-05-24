@@ -1,4 +1,4 @@
-﻿import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EditorContext } from './components/editor/EditorContext';
 import { EditorHost } from './components/editor/EditorHost';
 import type { AcademiqEditorApi, AcademiqEditorState } from './lib/editor-adapter';
@@ -159,6 +159,7 @@ export default function App() {
   const [workspaceNameModal, setWorkspaceNameModal] = useState<{ mode: 'create' | 'rename'; workspaceId?: string } | null>(null);
   const [commandOpen, setCommandOpen] = useState(false);
   const [featureModal, setFeatureModal] = useState<FeatureModal>(null);
+  const [plainCitationSingleMatch, setPlainCitationSingleMatch] = useState<any | null>(null);
   const [spellPanelOpen, setSpellPanelOpen] = useState(false);
   const editorRef = useRef<AcademiqEditorApi | null>(null);
   const appStateRef = useRef(appState);
@@ -263,6 +264,57 @@ export default function App() {
   useEffect(() => {
     appStateRef.current = appState;
   }, [appState]);
+
+  useEffect(() => {
+    const intercept = () => {
+      const win = window as any;
+      if (win.AQFootnotes) {
+        win.AQFootnotes.showCrossRefDialog = () => {
+          setFeatureModal('crossRef');
+        };
+      }
+      if (win.AQPlainCitationLinking) {
+        win.AQPlainCitationLinking.openReviewModal = () => {
+          setPlainCitationSingleMatch(null);
+          setFeatureModal('plainCitationLinker');
+          return [];
+        };
+        win.AQPlainCitationLinking.openSingleLinkModal = (match: any, citation: any) => {
+          const occurrence = match?.occurrence || (citation ? {
+            from: citation.from,
+            to: citation.to,
+            text: citation.text,
+            mode: citation.citation?.mode || 'inline'
+          } : null);
+          if (occurrence) {
+            const fakeMatch = match || {
+              occurrence,
+              ambiguous: [],
+              refIds: [],
+              complete: false,
+              missing: []
+            };
+            setPlainCitationSingleMatch(fakeMatch);
+            setFeatureModal('plainCitationLinker');
+          }
+        };
+      }
+      if (win.openPlainCitationLinking) {
+        win.openPlainCitationLinking = () => {
+          setPlainCitationSingleMatch(null);
+          setFeatureModal('plainCitationLinker');
+          return true;
+        };
+      }
+      win.openExternalReferenceImportModal = () => {
+        setFeatureModal('referenceImport');
+        return true;
+      };
+    };
+    intercept();
+    const timer = setInterval(intercept, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     publishStateToLegacyWindow(appState);
@@ -1961,7 +2013,7 @@ export default function App() {
           />
         )}
         leftVisible={noteSidebarOpen}
-        toolbar={<TopToolbar selectedReferenceId={activeReferenceId} />}
+        toolbar={<TopToolbar selectedReferenceId={activeReferenceId} onOpenFeatureModal={setFeatureModal} />}
         editor={loading ? (
           <div className="flex h-full items-center justify-center text-sm text-aq-muted">Yükleniyor...</div>
         ) : (
@@ -2033,6 +2085,7 @@ export default function App() {
             state={appState}
             loadMeta={loadMeta}
             selectedReference={activeWorkspace.lib.find((ref) => ref.id === activeReferenceId) || null}
+            plainCitationSingleMatch={plainCitationSingleMatch}
             onClose={() => setFeatureModal(null)}
             onStatus={flashStatus}
             onUpdateReference={handleUpdateReference}
