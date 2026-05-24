@@ -303,6 +303,23 @@
   // Cross-reference dialog
   // ─────────────────────────────────────────────────────────────
   function showCrossRefDialog(){
+    // beta.8 race-condition fix: defer to the React shell's CrossRefModal
+    // when it has registered an opener on the window. App.tsx installs
+    // __aqOpenReactCrossRefModal at mount; if the React tree owns the
+    // modal, render that instead of the legacy HTML dialog (the legacy
+    // one ships with broken chip spacing and the format-preview buttons
+    // collapse onto each other when Tailwind purges its utility classes).
+    // We still keep the legacy renderer below as a fallback for the
+    // pure-Electron build that has no React shell at all.
+    var w = typeof window !== 'undefined' ? window : null;
+    if(w && typeof w.__aqOpenReactCrossRefModal === 'function'){
+      try{
+        w.__aqOpenReactCrossRefModal();
+        return;
+      }catch(_e){
+        // fall through to legacy renderer on failure
+      }
+    }
     var editor = getActiveEditor();
     if(!editor) return;
     var targets = collectCrossRefTargets();
@@ -322,24 +339,38 @@
         '<span class="aq-crd-badge aq-crd-'+escH(t.type)+'">'+typeLabel(t.type)+'</span>'+
         '<span class="aq-crd-copy"><span class="aq-crd-lbl">'+escH(t.label)+'</span>'+meta+'</span></div>';
     }).join('');
+    // Inline style backup so the legacy modal still looks reasonable
+    // when external CSS (e.g. Tailwind) has not loaded these classes —
+    // the screenshot in the beta.7 soak report showed every filter chip
+    // collapsed into "TümüBaşlıkTabloŞekilDipnotSonnot" because the
+    // legacy aq-crd-* class rules weren't reaching the page. These
+    // inline styles give the legacy renderer a deterministic look that
+    // survives any CSS-purge / shell-mismatch scenario.
+    var chipStyle = 'display:inline-block;margin:0 6px 6px 0;padding:5px 12px;font-size:12px;font-weight:500;border:1px solid #d4d4d8;background:#fff;border-radius:999px;cursor:pointer;line-height:1.2;';
+    var chipActiveStyle = chipStyle + 'background:#1e3a5f;color:#fff;border-color:#1e3a5f;font-weight:600;';
+    var modeStyle = 'flex:1;margin:0 4px;padding:8px 6px;font-size:12px;font-weight:600;border:1px solid #d4d4d8;background:#fff;border-radius:8px;cursor:pointer;text-align:center;';
+    var modeActiveStyle = modeStyle + 'background:#1e3a5f;color:#fff;border-color:#1e3a5f;';
+    var rowGroupStyle = 'display:flex;flex-wrap:wrap;margin-bottom:10px;';
+    var modeRowStyle = 'display:flex;margin-bottom:10px;';
+
     dlg.innerHTML = '<div class="aq-crd-head"><b>Çapraz Referans</b><button class="aq-crd-x">✕</button></div>'+
       '<div class="aq-crd-controls">'+
-        '<div class="aq-crd-search"><input type="text" placeholder="Ara..." id="aq-crd-q" autocomplete="off"/></div>'+
-        '<div class="aq-crd-filter" id="aq-crd-filter">'+
-          '<button type="button" class="aq-crd-chip active" data-filter="all">Tümü</button>'+
-          '<button type="button" class="aq-crd-chip" data-filter="heading">Başlık</button>'+
-          '<button type="button" class="aq-crd-chip" data-filter="table">Tablo</button>'+
-          '<button type="button" class="aq-crd-chip" data-filter="figure">Şekil</button>'+
-          '<button type="button" class="aq-crd-chip" data-filter="footnote">Dipnot</button>'+
-          '<button type="button" class="aq-crd-chip" data-filter="endnote">Sonnot</button>'+
+        '<div class="aq-crd-search" style="margin-bottom:10px;"><input type="text" placeholder="Ara..." id="aq-crd-q" autocomplete="off" style="width:100%;padding:8px 10px;border:1px solid #d4d4d8;border-radius:8px;font-size:13px;"/></div>'+
+        '<div class="aq-crd-filter" id="aq-crd-filter" style="'+rowGroupStyle+'">'+
+          '<button type="button" class="aq-crd-chip active" data-filter="all" style="'+chipActiveStyle+'">Tümü</button>'+
+          '<button type="button" class="aq-crd-chip" data-filter="heading" style="'+chipStyle+'">Başlık</button>'+
+          '<button type="button" class="aq-crd-chip" data-filter="table" style="'+chipStyle+'">Tablo</button>'+
+          '<button type="button" class="aq-crd-chip" data-filter="figure" style="'+chipStyle+'">Şekil</button>'+
+          '<button type="button" class="aq-crd-chip" data-filter="footnote" style="'+chipStyle+'">Dipnot</button>'+
+          '<button type="button" class="aq-crd-chip" data-filter="endnote" style="'+chipStyle+'">Sonnot</button>'+
         '</div>'+
-        '<div class="aq-crd-mode" id="aq-crd-mode">'+
-          '<button type="button" class="aq-crd-chip active" data-mode="context">bkz. Tablo 1</button>'+
-          '<button type="button" class="aq-crd-chip" data-mode="label">Tablo 1</button>'+
-          '<button type="button" class="aq-crd-chip" data-mode="number">1</button>'+
+        '<div class="aq-crd-mode" id="aq-crd-mode" style="'+modeRowStyle+'">'+
+          '<button type="button" class="aq-crd-chip active" data-mode="context" style="'+modeActiveStyle+'">bkz. Tablo 1</button>'+
+          '<button type="button" class="aq-crd-chip" data-mode="label" style="'+modeStyle+'">Tablo 1</button>'+
+          '<button type="button" class="aq-crd-chip" data-mode="number" style="'+modeStyle+'">1</button>'+
         '</div>'+
       '</div>'+
-      '<div class="aq-crd-body" id="aq-crd-body">'+rows+'</div>';
+      '<div class="aq-crd-body" id="aq-crd-body" style="max-height:340px;overflow:auto;border-top:1px solid #e4e4e7;padding-top:8px;">'+rows+'</div>';
     document.body.appendChild(dlg);
     // Position near selection
     var sel = root.getSelection && root.getSelection();
@@ -369,7 +400,12 @@
       btn.addEventListener('click', function(){
         activeFilter=String(btn.getAttribute('data-filter')||'all');
         dlg.querySelectorAll('#aq-crd-filter .aq-crd-chip').forEach(function(chip){
-          chip.classList.toggle('active', chip===btn);
+          var on = chip===btn;
+          chip.classList.toggle('active', on);
+          // Mirror state via inline style too so chip activation is
+          // visible even when the legacy aq-crd-chip.active CSS rule is
+          // missing from the page (Tailwind purge, shell mismatch).
+          chip.setAttribute('style', on ? chipActiveStyle : chipStyle);
         });
         renderRows();
       });
@@ -378,7 +414,9 @@
       btn.addEventListener('click', function(){
         activeMode=String(btn.getAttribute('data-mode')||'context');
         dlg.querySelectorAll('#aq-crd-mode .aq-crd-chip').forEach(function(chip){
-          chip.classList.toggle('active', chip===btn);
+          var on = chip===btn;
+          chip.classList.toggle('active', on);
+          chip.setAttribute('style', on ? modeActiveStyle : modeStyle);
         });
       });
     });

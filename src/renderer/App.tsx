@@ -266,6 +266,19 @@ export default function App() {
   }, [appState]);
 
   useEffect(() => {
+    // Always-reachable opener for the React CrossRefModal. The legacy
+    // tiptap-word-footnotes.js::showCrossRefDialog checks for this on
+    // every call and defers to us when present, which closes the race
+    // window between legacy script load and the intercept() below that
+    // overrides AQFootnotes.showCrossRefDialog itself. If a user clicks
+    // "Çapraz Referans" in the first 0–1000ms after mount, the legacy
+    // path will reach us through this hook instead of rendering the old
+    // HTML dialog.
+    (window as any).__aqOpenReactCrossRefModal = () => setFeatureModal('crossRef');
+    return () => { delete (window as any).__aqOpenReactCrossRefModal; };
+  }, []);
+
+  useEffect(() => {
     const intercept = () => {
       const win = window as any;
       if (win.AQFootnotes) {
