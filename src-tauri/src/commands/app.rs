@@ -24,5 +24,6 @@ pub async fn app_get_info(app: AppHandle) -> Result<Value, String> {
 #[tauri::command]
 pub async fn renderer_probe_error(payload: Value) -> Result<Value, String> {
     eprintln!("[renderer:probeError] {payload}");
+    crate::telemetry::record_event("renderer_error", payload);
     Ok(json!({ "ok": true }))
 }

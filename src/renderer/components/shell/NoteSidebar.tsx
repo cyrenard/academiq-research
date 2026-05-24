@@ -3,6 +3,7 @@ import type { MouseEvent } from 'react';
 import type { AcademiqNote, AcademiqReference } from '../../lib/app-state';
 import { referenceAuthors, referenceTitle } from '../../lib/app-state';
 import { legacyFeatures, runLegacyFeature } from '../../lib/legacy-feature-adapter';
+import { VirtualList } from '../ui/VirtualList';
 
 export type NoteSidebarTab = 'refs' | 'pdf' | 'notes' | 'matrix';
 
@@ -339,46 +340,53 @@ export function NoteSidebar({
             </div>
           ) : null}
 
-          <div className="mt-4 min-h-0 flex-1 overflow-auto">
-            {filteredNotes.length ? filteredNotes.map((note) => (
-              <article
-                key={note.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => openNoteEditor(note)}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  setNoteMenu({ noteId: note.id, x: event.clientX, y: event.clientY });
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    openNoteEditor(note);
-                  }
-                }}
-                className="mb-2 cursor-pointer rounded-lg border border-aq-line bg-white p-3 text-xs transition hover:border-aq-navy hover:shadow-sm"
-              >
-                <div className="mb-2 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.16em] text-aq-muted">
-                  <span>{String(note.noteType || (note.type === 'hl' ? 'quote' : 'summary'))}</span>
-                  <button type="button" onClick={(event) => { event.stopPropagation(); onDeleteNote(note.id); }} className="rounded px-1 text-aq-muted hover:bg-aq-panel hover:text-aq-ink">Sil</button>
-                </div>
-                {note.txt ? <p className="leading-5 text-aq-ink">{String(note.txt)}</p> : null}
-                {note.q ? <blockquote className="border-l-2 border-aq-navy pl-2 leading-5 text-aq-ink">{String(note.q)}</blockquote> : null}
-                {getNoteTags(note).length ? (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {getNoteTags(note).map((item) => (
-                      <span key={item} className="inline-flex rounded-full border border-aq-line bg-aq-panel px-2 py-0.5 text-[10px] font-medium text-aq-muted">{item}</span>
-                    ))}
-                  </div>
-                ) : null}
-                {note.rid ? (
-                  <div className="mt-2 flex gap-1">
-                    <button type="button" onClick={(event) => { event.stopPropagation(); onInsertCitation(String(note.rid)); }} className="rounded-md border border-aq-line px-2 py-1 font-semibold hover:bg-aq-panel">Atıf</button>
-                    <button type="button" onClick={(event) => { event.stopPropagation(); onOpenMatrix(); }} className="rounded-md border border-aq-line px-2 py-1 font-semibold hover:bg-aq-panel">Matris</button>
-                  </div>
-                ) : null}
-              </article>
-            )) : (
+          <div className="mt-4 min-h-0 flex-1 overflow-hidden flex flex-col">
+            {filteredNotes.length ? (
+              <VirtualList
+                items={filteredNotes}
+                itemHeight={120}
+                renderItem={(note) => (
+                  <article
+                    key={note.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openNoteEditor(note)}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      setNoteMenu({ noteId: note.id, x: event.clientX, y: event.clientY });
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        openNoteEditor(note);
+                      }
+                    }}
+                    className="mb-2 cursor-pointer rounded-lg border border-aq-line bg-white p-3 text-xs transition hover:border-aq-navy hover:shadow-sm"
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.16em] text-aq-muted">
+                      <span>{String(note.noteType || (note.type === 'hl' ? 'quote' : 'summary'))}</span>
+                      <button type="button" onClick={(event) => { event.stopPropagation(); onDeleteNote(note.id); }} className="rounded px-1 text-aq-muted hover:bg-aq-panel hover:text-aq-ink">Sil</button>
+                    </div>
+                    {note.txt ? <p className="leading-5 text-aq-ink">{String(note.txt)}</p> : null}
+                    {note.q ? <blockquote className="border-l-2 border-aq-navy pl-2 leading-5 text-aq-ink">{String(note.q)}</blockquote> : null}
+                    {getNoteTags(note).length ? (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {getNoteTags(note).map((item) => (
+                          <span key={item} className="inline-flex rounded-full border border-aq-line bg-aq-panel px-2 py-0.5 text-[10px] font-medium text-aq-muted">{item}</span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {note.rid ? (
+                      <div className="mt-2 flex gap-1">
+                        <button type="button" onClick={(event) => { event.stopPropagation(); onInsertCitation(String(note.rid)); }} className="rounded-md border border-aq-line px-2 py-1 font-semibold hover:bg-aq-panel">Atıf</button>
+                        <button type="button" onClick={(event) => { event.stopPropagation(); onOpenMatrix(); }} className="rounded-md border border-aq-line px-2 py-1 font-semibold hover:bg-aq-panel">Matris</button>
+                      </div>
+                    ) : null}
+                  </article>
+                )}
+                containerHeight="100%"
+              />
+            ) : (
               <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-aq-line text-center text-xs leading-5 text-aq-muted">
                 {notes.length ? 'Bu filtrelerde not yok.' : <>PDF'ten metin seç -&gt; Nota Kaydet<br />veya aşağıdan yaz.</>}
               </div>
@@ -493,30 +501,39 @@ export function NoteSidebar({
                 )}
               </aside>
 
-              <div className="min-h-0 overflow-auto rounded-xl border border-aq-line bg-white/70 p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="min-h-0 flex flex-col rounded-xl border border-aq-line bg-white/70 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2 shrink-0">
                   <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-aq-muted">Notlar</div>
                   <div className="text-[11px] text-aq-muted">{filteredNotes.length} / {notes.length}</div>
                 </div>
-                {filteredNotes.length ? filteredNotes.map((note) => (
-                  <button
-                    type="button"
-                    key={note.id}
-                    onClick={() => openNoteEditor(note)}
-                    onContextMenu={(event) => { event.preventDefault(); setNoteMenu({ noteId: note.id, x: event.clientX, y: event.clientY }); }}
-                    className={['mb-2 block w-full rounded-lg border p-3 text-left text-xs transition hover:border-aq-navy', note.id === editingNoteId ? 'border-aq-navy bg-white shadow-sm ring-1 ring-aq-navy/15' : 'border-aq-line bg-white'].join(' ')}
-                  >
-                    <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.14em] text-aq-muted">
-                      <span>{String(note.noteType || note.type || 'not')}</span>
-                      {note.dt ? <span>{String(note.dt)}</span> : null}
-                    </div>
-                    <div className="mt-2 line-clamp-3 font-semibold leading-5 text-aq-ink">{notePreview(note)}</div>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {getNoteTags(note).slice(0, 4).map((item) => <span key={item} className="inline-flex rounded-full border border-aq-line bg-aq-panel px-2 py-0.5 text-[10px] text-aq-muted">{item}</span>)}
-                      {isInboxNote(note) ? <span className="inline-flex rounded-full border border-aq-line bg-white px-2 py-0.5 text-[10px] text-aq-muted">gelen</span> : null}
-                    </div>
-                  </button>
-                )) : <div className="rounded-lg border border-dashed border-aq-line p-4 text-center text-xs text-aq-muted">Bu görünümde not yok.</div>}
+                <div className="min-h-0 flex-1">
+                  {filteredNotes.length ? (
+                    <VirtualList
+                      items={filteredNotes}
+                      itemHeight={130}
+                      renderItem={(note) => (
+                        <button
+                          type="button"
+                          key={note.id}
+                          onClick={() => openNoteEditor(note)}
+                          onContextMenu={(event) => { event.preventDefault(); setNoteMenu({ noteId: note.id, x: event.clientX, y: event.clientY }); }}
+                          className={['mb-2 block w-full rounded-lg border p-3 text-left text-xs transition hover:border-aq-navy', note.id === editingNoteId ? 'border-aq-navy bg-white shadow-sm ring-1 ring-aq-navy/15' : 'border-aq-line bg-white'].join(' ')}
+                        >
+                          <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.14em] text-aq-muted">
+                            <span>{String(note.noteType || note.type || 'not')}</span>
+                            {note.dt ? <span>{String(note.dt)}</span> : null}
+                          </div>
+                          <div className="mt-2 line-clamp-3 font-semibold leading-5 text-aq-ink">{notePreview(note)}</div>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {getNoteTags(note).slice(0, 4).map((item) => <span key={item} className="inline-flex rounded-full border border-aq-line bg-aq-panel px-2 py-0.5 text-[10px] text-aq-muted">{item}</span>)}
+                            {isInboxNote(note) ? <span className="inline-flex rounded-full border border-aq-line bg-white px-2 py-0.5 text-[10px] text-aq-muted">gelen</span> : null}
+                          </div>
+                        </button>
+                      )}
+                      containerHeight="100%"
+                    />
+                  ) : <div className="rounded-lg border border-dashed border-aq-line p-4 text-center text-xs text-aq-muted">Bu görünümde not yok.</div>}
+                </div>
               </div>
 
               <div className="flex min-h-0 flex-col rounded-xl border border-aq-line bg-white p-3">

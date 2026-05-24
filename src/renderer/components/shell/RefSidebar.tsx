@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type
 import type { AcademiqReference } from '../../lib/app-state';
 import { referenceAuthors, referenceTags, referenceTitle } from '../../lib/app-state';
 import { legacyFeatures, runLegacyFeature } from '../../lib/legacy-feature-adapter';
+import { VirtualList } from '../ui/VirtualList';
 
 type SidebarCollection = {
   id: string;
@@ -620,8 +621,15 @@ export function RefSidebar({
                 {!collapsed
                   ? renderCollectionDropZone(
                       collection.id,
-                      <div className="space-y-2 pl-4">
-                        {folderRefs.length ? folderRefs.map(renderReferenceCard) : (
+                      <div className="pl-4">
+                        {folderRefs.length ? (
+                          <VirtualList
+                            items={folderRefs}
+                            itemHeight={106}
+                            renderItem={(ref) => renderReferenceCard(ref)}
+                            containerHeight={Math.min(folderRefs.length * 106, 400)}
+                          />
+                        ) : (
                           <div className="rounded-lg border border-dashed border-aq-line p-4 text-center text-xs text-aq-muted">Kaynakları buraya sürükle.</div>
                         )}
                       </div>
@@ -634,7 +642,17 @@ export function RefSidebar({
           {orphanedReferences.length ? (
             <section className="space-y-2">
               {renderFolderHeader('unfiled', 'Eksik Klasör Bağlantısı', orphanedReferences.length, false, () => undefined, false)}
-              {renderCollectionDropZone('unfiled', <div className="space-y-2 pl-4">{orphanedReferences.map(renderReferenceCard)}</div>)}
+              {renderCollectionDropZone(
+                'unfiled',
+                <div className="pl-4">
+                  <VirtualList
+                    items={orphanedReferences}
+                    itemHeight={106}
+                    renderItem={(ref) => renderReferenceCard(ref)}
+                    containerHeight={Math.min(orphanedReferences.length * 106, 400)}
+                  />
+                </div>
+              )}
             </section>
           ) : null}
 
@@ -650,8 +668,15 @@ export function RefSidebar({
             {!unfiledCollapsed
               ? renderCollectionDropZone(
                   'unfiled',
-                  <div className="space-y-2 pl-4">
-                    {unfiledReferences.length ? unfiledReferences.map(renderReferenceCard) : (
+                  <div className="pl-4">
+                    {unfiledReferences.length ? (
+                      <VirtualList
+                        items={unfiledReferences}
+                        itemHeight={106}
+                        renderItem={(ref) => renderReferenceCard(ref)}
+                        containerHeight={Math.min(unfiledReferences.length * 106, 400)}
+                      />
+                    ) : (
                       <div className="rounded-lg border border-dashed border-aq-line p-4 text-center text-xs text-aq-muted">Klasörsüz kaynak yok.</div>
                     )}
                   </div>

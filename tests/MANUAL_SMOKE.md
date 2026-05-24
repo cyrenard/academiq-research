@@ -1260,3 +1260,18 @@ System Times New Roman gate:
   "worst": null
 }
 ```
+
+## Phase 5 Font Metrics - 2026-05-24T15:01:15.718Z
+
+System Times New Roman gate:
+
+```json
+{
+  "source": "system-times-new-roman",
+  "fontDir": "C:\\WINDOWS\\Fonts",
+  "max_diff": 0,
+  "avg_diff": 0,
+  "p99_diff": 0,
+  "worst": null
+}
+```
