@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.24.0-beta.9 - 2026-05-26
+
+Performance + reliability pass on top of beta.8.
+
+- **SQLite WAL mode**: main database connection now uses Write-Ahead
+  Logging so reads (renderer load, library search) no longer block
+  while autosave is writing, and vice versa. Editor responsiveness
+  under heavy autosave is markedly better, and recovery after an
+  ungraceful shutdown is more predictable.
+- **Open-access PDF download tightening**: extra guards in
+  `pdf::url_fallback` for redirect handling and content-length
+  verification, reducing the rare cases where a 200 OK reply still
+  produced a zero-byte or malformed PDF on disk.
+- **Virtualised sidebar lists**: `RefSidebar` and `NoteSidebar` now
+  render through a new `VirtualList` primitive at
+  `src/renderer/components/ui/VirtualList.tsx`. Workspaces with
+  thousands of references or notes scroll without paint stalls. The
+  buffer is set to 5 items above and below the viewport to prevent
+  white flickers when row heights vary.
+- **Error telemetry surface enabled**: `app.rs` now records uncaught
+  renderer errors with structured fields, complementing the existing
+  `events-day-*.jsonl` stream.
+
+beta.8 installer preserved as `.bak` for rollback.
+
 ## 1.24.0-beta.8 - 2026-05-24
 
 Soak-test hotfix for two beta.7 user-visible regressions.
