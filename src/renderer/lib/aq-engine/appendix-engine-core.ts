@@ -145,3 +145,90 @@ export function deleteAQEngineAppendix(
   deps.save();
   return true;
 }
+
+/** Legacy `findAQAppendixRange`. */
+export function findAQAppendixRange(blocks: any[]): { start: number; end: number } {
+  const list = Array.isArray(blocks) ? blocks : [];
+  let start = -1;
+  for (let i = 0; i < list.length; i++) {
+    if (list[i] && list[i].type === 'heading' && isAQAppendixHeading(list[i])) {
+      start = i;
+      break;
+    }
+  }
+  if (start < 0) return { start: -1, end: -1 };
+  return { start, end: list.length };
+}
+
+/** Legacy `normalizeAQEngineAppendixBlocks`. */
+export function normalizeAQEngineAppendixBlocks(appendixBlocks: any[]): any[] {
+  const list = Array.isArray(appendixBlocks) ? appendixBlocks : [];
+  let appendixIndex = 0;
+  let inAppendix = false;
+  list.forEach((block, idx) => {
+    if (!block) return;
+    const isHeading = (block.type === 'heading' && isAQAppendixHeading(block)) || (idx === 0 && !inAppendix);
+    if (isHeading) {
+      appendixIndex++;
+      inAppendix = true;
+      block.type = 'heading';
+      block.level = 1;
+      block.pageBreak = true;
+      block.align = 'center';
+      block._isAppendixHeading = true;
+      block._appendixId = 'appendix-' + appendixIndex;
+      block.runs = [{ text: getAppendixTitleText(appendixIndex), bold: true }];
+    } else {
+      block._isAppendixEntry = true;
+      block._appendixId = 'appendix-' + Math.max(1, appendixIndex || 1);
+      if (!block.type) block.type = 'paragraph';
+      if (block.type === 'paragraph') {
+        block.firstLineIndentPx = 0;
+        block.leftIndentPx = 0;
+      }
+    }
+  });
+  return list;
+}
+
+export interface AQEngineCompatDeps {
+  htmlToBlocks?: (html: string) => any[];
+}
+
+/** Legacy `updateAQEngineAppendices` — faithful 1:1. */
+export function updateAQEngineAppendices(
+  editorRef: any,
+  appendixHTML: unknown,
+  compat?: AQEngineCompatDeps
+): boolean {
+  if (!editorRef || !editorRef._aqEngine || !editorRef._docModel) return false;
+  const docModel = editorRef._docModel;
+  let blocks = (docModel.get().blocks || []).slice();
+  const range = findAQAppendixRange(blocks);
+  if (range.start >= 0) {
+    blocks = blocks.slice(0, range.start).concat(blocks.slice(range.end));
+  }
+  const html = String(appendixHTML ?? '').trim();
+  if (!html) {
+    docModel.replace(blocks);
+    if (typeof editorRef._reflow === 'function') editorRef._reflow();
+    if (typeof editorRef.emit === 'function') editorRef.emit('update');
+    return true;
+  }
+  let appendixBlocks: any[] = [];
+  if (compat && typeof compat.htmlToBlocks === 'function') {
+    appendixBlocks = compat.htmlToBlocks(html);
+  } else if ((globalThis as any).window?.AQEngineCompat && typeof (globalThis as any).window.AQEngineCompat.htmlToBlocks === 'function') {
+    appendixBlocks = (globalThis as any).window.AQEngineCompat.htmlToBlocks(html);
+  } else {
+    appendixBlocks = [
+      { type: 'heading', level: 1, runs: [{ text: 'Ek', bold: true }] },
+      { type: 'paragraph', runs: [{ text: 'Ek içeriği...' }] }
+    ];
+  }
+  appendixBlocks = normalizeAQEngineAppendixBlocks(appendixBlocks);
+  docModel.replace(blocks.concat(appendixBlocks));
+  if (typeof editorRef._reflow === 'function') editorRef._reflow();
+  if (typeof editorRef.emit === 'function') editorRef.emit('update');
+  return true;
+}

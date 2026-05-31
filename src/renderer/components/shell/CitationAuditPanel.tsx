@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { RotateCcw, Trash2, AlertTriangle, CheckCircle, RefreshCw, X, ArrowRight } from 'lucide-react';
 import type { AcademiqReference } from '../../lib/app-state';
+import { visibleCitationText } from '../../lib/citation-builder';
 
 interface CitationAuditPanelProps {
   open: boolean;
@@ -61,15 +62,9 @@ export function CitationAuditPanel({ open, onClose, references, onDeleteReferenc
       } else {
         const refs = ids.map((id) => references.find((r) => r.id === id)).filter(Boolean);
         let expectedText = '';
-        if (win.AQCitationStyles && typeof win.AQCitationStyles.visibleCitationText === 'function') {
-          try {
-            expectedText = win.AQCitationStyles.visibleCitationText(refs, { mode });
-          } catch (_) {}
-        } else if (typeof win.visibleCitationText === 'function') {
-          try {
-            expectedText = win.visibleCitationText(refs);
-          } catch (_) {}
-        }
+        try {
+          expectedText = visibleCitationText(win, refs, { mode });
+        } catch (_) {}
 
         const normalize = (t: string) => t.replace(/[()]/g, '').trim().toLowerCase();
         if (expectedText && normalize(text) !== normalize(expectedText)) {
@@ -144,13 +139,11 @@ export function CitationAuditPanel({ open, onClose, references, onDeleteReferenc
     if (!editor) return;
     try {
       const refs = refIds.map((id) => references.find((r) => r.id === id)).filter(Boolean);
-      let expectedText = '';
       const mode = el.getAttribute('data-mode') || 'inline';
-      if (win.AQCitationStyles && typeof win.AQCitationStyles.visibleCitationText === 'function') {
-        expectedText = win.AQCitationStyles.visibleCitationText(refs, { mode });
-      } else if (typeof win.visibleCitationText === 'function') {
-        expectedText = win.visibleCitationText(refs);
-      }
+      let expectedText = '';
+      try {
+        expectedText = visibleCitationText(win, refs, { mode });
+      } catch (_) {}
       if (!expectedText) return;
 
       const pos = editor.view.posAtDOM(el, 0);
@@ -203,11 +196,9 @@ export function CitationAuditPanel({ open, onClose, references, onDeleteReferenc
       const refs = refIds.map((id) => references.find((r) => r.id === id)).filter(Boolean);
       const mode = el.getAttribute('data-mode') || 'inline';
       let expectedText = '';
-      if (win.AQCitationStyles && typeof win.AQCitationStyles.visibleCitationText === 'function') {
-        expectedText = win.AQCitationStyles.visibleCitationText(refs, { mode });
-      } else if (typeof win.visibleCitationText === 'function') {
-        expectedText = win.visibleCitationText(refs);
-      }
+      try {
+        expectedText = visibleCitationText(win, refs, { mode });
+      } catch (_) {}
       if (expectedText) {
         const newHtml = `<span class="cit" data-ref="${refIds.join(',')}" data-mode="${mode}">${expectedText}</span>`;
         chain.insertContentAt({ from: pos, to: pos + el.textContent.length }, newHtml);

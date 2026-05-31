@@ -8,6 +8,7 @@
  * - `.aq-citation-mismatch`: if the visible text of the span does not match the generated citation text.
  */
 import { appStore, selectCurrentWorkspaceId } from './app-store';
+import { visibleCitationText } from './citation-builder';
 
 let debounceHandle: ReturnType<typeof setTimeout> | null = null;
 const DEBOUNCE_MS = 600;
@@ -72,15 +73,9 @@ export function runCitationAuditNow(): void {
       const mode = el.getAttribute('data-mode') || 'inline';
       let expectedText = '';
 
-      if (win.AQCitationStyles && typeof win.AQCitationStyles.visibleCitationText === 'function') {
-        try {
-          expectedText = win.AQCitationStyles.visibleCitationText(refs, { mode });
-        } catch (_) {}
-      } else if (typeof win.visibleCitationText === 'function') {
-        try {
-          expectedText = win.visibleCitationText(refs);
-        } catch (_) {}
-      }
+      try {
+        expectedText = visibleCitationText(win, refs, { mode });
+      } catch (_) {}
 
       if (expectedText) {
         const text = el.textContent || '';

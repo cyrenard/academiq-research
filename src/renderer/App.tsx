@@ -696,9 +696,12 @@ export default function App() {
       flashStatus('Browser capture durumu güncellendi');
     });
     return () => {
-      offIncoming?.();
-      offWorkspace?.();
-      offState?.();
+      // The Tauri preload bridge may return a non-function (the Electron
+      // contract is `() => () => void`); guard so cleanup never throws and
+      // crashes App on unmount/StrictMode remount.
+      if (typeof offIncoming === 'function') offIncoming();
+      if (typeof offWorkspace === 'function') offWorkspace();
+      if (typeof offState === 'function') offState();
     };
   }, [persistState, reloadStateFromDisk]);
 

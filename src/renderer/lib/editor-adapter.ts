@@ -1,4 +1,4 @@
-import { apa7Reference, sortReferencesApa, referenceKey as refFormatKey, dedupeReferences as refFormatDedupe, filterReferencesForQuery as refFormatFilter } from './reference-format';
+import { apa7Reference, sortReferencesApa, referenceKey as refFormatKey, dedupeReferences as refFormatDedupe, filterReferencesForQuery as refFormatFilter, normalizeRefRecord, mergeRefFields } from './reference-format';
 import { appStore, selectCurrentWorkspaceId, selectWorkspaceLibrary, selectReferenceById } from './app-store';
 import {
   getCitationStyle as buildGetCitationStyle,
@@ -116,10 +116,12 @@ type LegacyWindow = Window & {
   findRef?: (id: string, workspaceId?: string) => any;
   refKey?: (ref: any) => string;
   getInlineCitationText?: (ref: any) => string;
-  visibleCitationText?: (refs: any[]) => string;
+  visibleCitationText?: (refs: any[], options?: Record<string, unknown>) => string;
   buildCitationHTML?: (refs: any[]) => string;
   getNarrativeCitationText?: (ref: any) => string;
   __aqReactSyncFromLegacy?: (state: unknown) => void;
+  normalizeRefRecord?: (ref: any) => any;
+  mergeRefFields?: (target: any, source: any) => any;
 };
 
 let activeEditor: any = null;
@@ -453,8 +455,8 @@ function formatReference(win: LegacyWindow, ref: any, options?: Record<string, u
   return buildFormatReference(win, ref, options);
 }
 
-function visibleCitationText(win: LegacyWindow, refs: any[]) {
-  return buildVisibleCitationText(win, refs);
+function visibleCitationText(win: LegacyWindow, refs: any[], options?: Record<string, unknown>) {
+  return buildVisibleCitationText(win, refs, options);
 }
 
 function narrativeCitationText(ref: any) {
@@ -501,7 +503,9 @@ function installReferenceBridge(win: LegacyWindow) {
   win.dedupeRefs = (refs: any[]) => dedupeReferences(refs);
   win.sortLib = (refs: any[]) => sortReferences(win, refs);
   win.formatRef = (ref: any, options?: Record<string, unknown>) => formatReference(win, ref, options);
-  win.visibleCitationText = (refs: any[]) => visibleCitationText(win, refs);
+  win.visibleCitationText = (refs: any[], options?: Record<string, unknown>) => visibleCitationText(win, refs, options);
+  win.normalizeRefRecord = (ref: any) => normalizeRefRecord(ref);
+  win.mergeRefFields = (target: any, source: any) => mergeRefFields(target, source);
   win.getNarrativeCitationText = (ref: any) => narrativeCitationText(ref);
   win.buildCitationHTML = (refs: any[]) => buildCitationHTML(win, refs);
   win.filterRefsForQuery = (refs: any[], query: string) => filterReferences({ ...win, cLib: () => refs } as LegacyWindow, query);
@@ -546,7 +550,7 @@ function installReferenceBridge(win: LegacyWindow) {
       citationApi: (win as any).AQTipTapWordCitation || null,
       findReference,
       getInlineCitationText: (ref: any) => win.getInlineCitationText?.(ref) || '',
-      visibleCitationText: (refs: any[]) => visibleCitationText(win, refs),
+      visibleCitationText: (refs: any[], options?: Record<string, unknown>) => visibleCitationText(win, refs, options),
       formatReference: (ref: any, fmtOptions?: Record<string, unknown>) => formatReference(win, ref, fmtOptions),
       dedupeReferences: (refs: any[]) => dedupeReferences(refs),
       sortReferences: (refs: any[]) => sortReferences(win, refs),
@@ -583,7 +587,7 @@ function installReferenceBridge(win: LegacyWindow) {
     editor: activeEditor || win.editor,
     forceAuto: true,
     findReference: (id: string) => selectReferenceById(appStore.getState(), id, selectCurrentWorkspaceId(appStore.getState())),
-    visibleCitationText: (refs: any[]) => visibleCitationText(win, refs),
+    visibleCitationText: (refs: any[], options?: Record<string, unknown>) => visibleCitationText(win, refs, options),
     formatRef: (ref: any, fmtOptions?: Record<string, unknown>) => formatReference(win, ref, fmtOptions),
     dedupeReferences: (refs: any[]) => dedupeReferences(refs),
     sortReferences: (refs: any[]) => sortReferences(win, refs),

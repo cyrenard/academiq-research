@@ -5,7 +5,10 @@ import {
   isAQAppendixHeading,
   renumberAppendicesHTML,
   renumberAQEngineAppendicesInBlocks,
-  deleteAQEngineAppendix
+  deleteAQEngineAppendix,
+  findAQAppendixRange,
+  normalizeAQEngineAppendixBlocks,
+  updateAQEngineAppendices
 } from './appendix-engine-core';
 
 describe('normalizeAQAppendixTitle', () => {
@@ -180,5 +183,61 @@ describe('deleteAQEngineAppendix', () => {
     // surviving block renumbered to appendix-1 / EK-1
     expect(doc.appendicesHTML).toContain('data-appendix-id="appendix-1"');
     expect(doc.appendicesHTML).toContain('>EK-1<');
+  });
+});
+
+describe('findAQAppendixRange & normalizeAQEngineAppendixBlocks & updateAQEngineAppendices', () => {
+  it('findAQAppendixRange finds the index of first heading which is an appendix', () => {
+    const blocks = [
+      { type: 'paragraph' },
+      { type: 'heading', runs: [{ text: 'Giriş' }] },
+      { type: 'heading', _isAppendixHeading: true, runs: [{ text: 'EK-1' }] },
+      { type: 'paragraph', _appendixId: 'appendix-1' }
+    ];
+    const range = findAQAppendixRange(blocks);
+    expect(range.start).toBe(2);
+    expect(range.end).toBe(4);
+  });
+
+  it('normalizeAQEngineAppendixBlocks formats headers and body blocks', () => {
+    const blocks = [
+      { type: 'heading', runs: [{ text: 'Ek' }] },
+      { type: 'paragraph', runs: [{ text: 'Entry content' }] }
+    ];
+    const normalized = normalizeAQEngineAppendixBlocks(blocks);
+    expect(normalized[0]._isAppendixHeading).toBe(true);
+    expect(normalized[0]._appendixId).toBe('appendix-1');
+    expect(normalized[0].runs[0].text).toBe('EK-1');
+    expect(normalized[1]._isAppendixEntry).toBe(true);
+    expect(normalized[1]._appendixId).toBe('appendix-1');
+  });
+
+  it('updateAQEngineAppendices updates blocks in the editor doc model', () => {
+    const editor = {
+      _aqEngine: {},
+      _docModel: {
+        get: () => ({
+          blocks: [
+            { type: 'paragraph', runs: [{ text: 'intro' }] },
+            { type: 'heading', _isAppendixHeading: true, runs: [{ text: 'EK-1' }] }
+          ]
+        }),
+        replace: vi.fn()
+      },
+      _reflow: vi.fn(),
+      emit: vi.fn()
+    };
+
+    const compat = {
+      htmlToBlocks: (html: string) => [
+        { type: 'heading', runs: [{ text: 'New Ek' }] }
+      ]
+    };
+
+    const ok = updateAQEngineAppendices(editor, 'New Appendix HTML', compat);
+    expect(ok).toBe(true);
+    expect(editor._docModel.replace).toHaveBeenCalled();
+    expect(editor._reflow).toHaveBeenCalled();
+    expect(editor.emit).toHaveBeenCalledWith('update');
   });
 });

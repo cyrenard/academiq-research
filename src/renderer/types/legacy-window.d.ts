@@ -75,7 +75,7 @@ declare global {
 
     // --- Citation runtime ---------------------------------------------------
     getInlineCitationText?: (ref: LegacyAny) => string;
-    visibleCitationText?: (refs: LegacyAny[]) => string;
+    visibleCitationText?: (refs: LegacyAny[], options?: Record<string, unknown>) => string;
     buildCitationHTML?: (refs: LegacyAny[]) => string;
     getNarrativeCitationText?: (ref: LegacyAny) => string;
     insertCitation?: (refId?: string) => unknown;

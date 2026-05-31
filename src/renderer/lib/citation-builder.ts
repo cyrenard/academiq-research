@@ -49,10 +49,10 @@ export function getInlineCitationText(win: LegacyWindow, ref: ReferenceLike): st
   return apaInlineCitation(ref, 'inline');
 }
 
-export function visibleCitationText(win: LegacyWindow, refs: any[]): string {
+export function visibleCitationText(win: LegacyWindow, refs: any[], options?: Record<string, unknown>): string {
   const list = dedupeReferences(Array.isArray(refs) ? refs : []);
   if (win.AQCitationStyles && typeof win.AQCitationStyles.visibleCitationText === 'function') {
-    return win.AQCitationStyles.visibleCitationText(list, { style: getCitationStyle(win) });
+    return win.AQCitationStyles.visibleCitationText(list, { style: getCitationStyle(win), ...(options || {}) });
   }
   return list.map((ref) => String(getInlineCitationText(win, ref)).replace(/^\(|\)$/g, '')).filter(Boolean).join('; ');
 }
