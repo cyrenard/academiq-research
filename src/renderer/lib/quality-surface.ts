@@ -20,6 +20,7 @@ import {
   currentWorkspace,
   saveLegacyState
 } from './legacy-dom-helpers';
+import { mergeRefFields, normalizeRefRecord } from './reference-format';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Duplicate detection helpers
@@ -202,7 +203,11 @@ export function renderMetadataHealthFallback() {
               if (typeof w2.setDst === 'function') w2.setDst('DOI metadata alınamadı.', 'er');
               return;
             }
-            if (typeof w2.mergeRefFields === 'function') w2.mergeRefFields(ref, fetched);
+            try {
+              mergeRefFields(ref, fetched as any);
+            } catch (_error) {
+              if (typeof w2.mergeRefFields === 'function') w2.mergeRefFields(ref, fetched);
+            }
             saveLegacyState();
             renderMetadataHealthFallback();
             if (typeof w2.setDst === 'function') w2.setDst('Metadata güncellendi.', 'ok');
@@ -214,7 +219,11 @@ export function renderMetadataHealthFallback() {
             const result = w2.AQMetadataHealth.applyConservativeRepairs(ref);
             if (result?.ref) Object.keys(result.ref).forEach((key) => { ref[key] = result.ref[key]; });
           }
-          if (typeof w2.normalizeRefRecord === 'function') w2.normalizeRefRecord(ref);
+          try {
+            normalizeRefRecord(ref);
+          } catch (_error) {
+            if (typeof w2.normalizeRefRecord === 'function') w2.normalizeRefRecord(ref);
+          }
           saveLegacyState();
           renderMetadataHealthFallback();
           if (typeof w2.setDst === 'function') w2.setDst('Kayıt normalize edildi.', 'ok');
@@ -289,7 +298,9 @@ function mergeReferencesIntoPrimary(primary: any, secondary: any) {
     primary.authors = Array.from(authors);
     primary.labels = Array.from(labels);
   }
-  try { if (typeof w.normalizeRefRecord === 'function') w.normalizeRefRecord(primary); } catch (_error) {}
+  try { normalizeRefRecord(primary); } catch (_error) {
+    try { if (typeof w.normalizeRefRecord === 'function') w.normalizeRefRecord(primary); } catch (_fallbackError) {}
+  }
   return primary;
 }
 
@@ -408,7 +419,11 @@ export function runMetadataHealthAction(button: HTMLElement | null) {
         const result = w.AQMetadataHealth.applyConservativeRepairs(ref);
         if (result?.ref) {
           Object.keys(result.ref).forEach((key) => { ref[key] = result.ref[key]; });
-          if (typeof w.normalizeRefRecord === 'function') w.normalizeRefRecord(ref);
+          try {
+            normalizeRefRecord(ref);
+          } catch (_error) {
+            if (typeof w.normalizeRefRecord === 'function') w.normalizeRefRecord(ref);
+          }
           if (typeof w.save === 'function') w.save();
           if (typeof w.rLib === 'function') w.rLib();
           if (typeof w.rRefs === 'function') w.rRefs();
@@ -429,7 +444,11 @@ export function runMetadataHealthAction(button: HTMLElement | null) {
           if (typeof w.setDst === 'function') w.setDst('DOI metadata alınamadı.', 'er');
           return;
         }
-        if (typeof w.mergeRefFields === 'function') w.mergeRefFields(ref, fetched);
+        try {
+          mergeRefFields(ref, fetched as any);
+        } catch (_error) {
+          if (typeof w.mergeRefFields === 'function') w.mergeRefFields(ref, fetched);
+        }
         if (typeof w.save === 'function') w.save();
         if (typeof w.rLib === 'function') w.rLib();
         if (typeof w.rRefs === 'function') w.rRefs();

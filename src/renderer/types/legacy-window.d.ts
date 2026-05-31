@@ -69,6 +69,8 @@ declare global {
     cLib?: (workspaceId?: string) => LegacyAny[];
     findRef?: (id: string, workspaceId?: string) => LegacyAny | null;
     refKey?: (ref: LegacyAny) => string;
+    normalizeRefRecord?: (ref: LegacyAny) => LegacyAny;
+    mergeRefFields?: (target: LegacyAny, source: LegacyAny) => LegacyAny;
 
     // --- Citation runtime ---------------------------------------------------
     getInlineCitationText?: (ref: LegacyAny) => string;

@@ -35,6 +35,14 @@ export interface ReferenceLike {
   edition?: string;
   publishedDate?: string;
   accessedDate?: string;
+  pdfUrl?: string;
+  abstract?: string;
+  collectionIds?: string[];
+  labels?: string[];
+  pdfData?: unknown;
+  pdfVerification?: unknown;
+  citationCount?: unknown;
+  citationFetchDate?: string;
   [key: string]: unknown;
 }
 
@@ -74,6 +82,104 @@ export function normalizeIsbn(value: unknown): string {
   const raw = String(value ?? '').trim().replace(/[^\dXx]/g, '').toUpperCase();
   if (raw.length !== 10 && raw.length !== 13) return '';
   return raw;
+}
+
+function normalizeStoredPdfVerification(value: unknown): unknown {
+  const verifier = (globalThis as any).window?.AQPDFVerification;
+  if (verifier && typeof verifier.normalizeStoredVerification === 'function') {
+    try { return verifier.normalizeStoredVerification(value || null); } catch { /* keep legacy fallback */ }
+  }
+  return value && typeof value === 'object' ? value : null;
+}
+
+function sanitizeReferencePdfData(ref: ReferenceLike): boolean {
+  if (!ref || typeof ref !== 'object') return false;
+  if (!ref.pdfData) return false;
+  return true;
+}
+
+/** Legacy `normalizeRefRecord` â€” mutates and returns the input record. */
+export function normalizeRefRecord<T extends ReferenceLike | null | undefined>(ref: T): T {
+  if (!ref || typeof ref !== 'object') return ref;
+  const record = ref as ReferenceLike;
+  const type = String(record.referenceType || '').trim().toLowerCase();
+  record.referenceType = (type === 'book' || type === 'website' || type === 'article') ? type : 'article';
+  record.title = String(record.title || '').replace(/\s+/g, ' ').trim();
+  const y = String(record.year || '').trim();
+  const yMatch = y.match(/\b(19|20)\d{2}\b/);
+  record.year = yMatch ? yMatch[0] : y;
+  if (!record.year && record.publishedDate) {
+    const py = String(record.publishedDate || '').match(/\b(19|20)\d{2}\b/);
+    if (py && py[0]) record.year = py[0];
+  }
+  record.doi = normalizeDoi(record.doi || record.url || '');
+  record.isbn = normalizeIsbn(record.isbn || '');
+  record.journal = String(record.journal || '').replace(/\s+/g, ' ').trim();
+  record.publisher = String(record.publisher || '').replace(/\s+/g, ' ').trim();
+  record.edition = String(record.edition || '').replace(/\s+/g, ' ').trim();
+  record.websiteName = String(record.websiteName || '').replace(/\s+/g, ' ').trim();
+  record.publishedDate = String(record.publishedDate || '').replace(/\s+/g, ' ').trim();
+  record.accessedDate = String(record.accessedDate || '').replace(/\s+/g, ' ').trim();
+  record.volume = String(record.volume || '').replace(/\s+/g, ' ').trim();
+  record.issue = String(record.issue || '').replace(/\s+/g, ' ').trim();
+  record.fp = String(record.fp || '').replace(/\s+/g, ' ').trim();
+  record.lp = String(record.lp || '').replace(/\s+/g, ' ').trim();
+  record.url = String(record.url || '').replace(/\s+/g, ' ').trim();
+  record.pdfUrl = String(record.pdfUrl || '').replace(/\s+/g, ' ').trim();
+  record.abstract = String(record.abstract || '').trim();
+  if (Array.isArray(record.authors)) {
+    record.authors = record.authors.map((a) => String(a || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
+  } else {
+    record.authors = [];
+  }
+  if (!Array.isArray(record.collectionIds)) record.collectionIds = [];
+  record.collectionIds = record.collectionIds.map((id) => String(id || '').trim()).filter(Boolean);
+  if (record.pdfVerification && (globalThis as any).window?.AQPDFVerification?.normalizeStoredVerification) {
+    try { record.pdfVerification = (globalThis as any).window.AQPDFVerification.normalizeStoredVerification(record.pdfVerification); } catch { /* legacy swallows */ }
+  }
+  sanitizeReferencePdfData(record);
+  return ref;
+}
+
+/** Legacy `mergeRefFields` â€” mutates target after normalizing source. */
+export function mergeRefFields<T extends ReferenceLike | null | undefined>(target: T, source: ReferenceLike | null | undefined): T {
+  if (!target || !source || target === source) return target;
+  normalizeRefRecord(source);
+  function isPlaceholderTitle(value: unknown, ref: ReferenceLike | null | undefined): boolean {
+    const title = String(value || '').trim().toLowerCase();
+    if (!title) return true;
+    const titleDoi = normalizeDoi(title);
+    const keys = [ref && ref.doi, ref && ref.isbn, ref && ref.url].map((item) => String(item || '').trim().toLowerCase()).filter(Boolean);
+    return keys.some((key) => {
+      const keyDoi = normalizeDoi(key);
+      return title === key || title.slice(-key.length) === key || (titleDoi && titleDoi === key) || (titleDoi && keyDoi && titleDoi === keyDoi);
+    });
+  }
+  [
+    'referenceType', 'title', 'year', 'journal', 'volume', 'issue', 'fp', 'lp', 'doi', 'isbn', 'url', 'pdfUrl',
+    'publisher', 'edition', 'websiteName', 'publishedDate', 'accessedDate',
+    'booktitle', 'location', 'language', 'abstract', 'note'
+  ].forEach((k) => {
+    if (k === 'title' && source[k] && isPlaceholderTitle(target[k], target)) {
+      target[k] = source[k];
+      return;
+    }
+    if (source[k] && !target[k]) target[k] = source[k];
+  });
+  if (source.referenceType && source.referenceType !== 'article' && target.referenceType === 'article') {
+    target.referenceType = source.referenceType;
+  }
+  const sourceAuthors = source.authors || [];
+  if (sourceAuthors.length && !(target.authors || []).length) target.authors = sourceAuthors.slice();
+  if ((source.labels || []).length) {
+    target.labels = Array.from(new Set([].concat((target.labels || []) as never[], (source.labels || []) as never[]).filter(Boolean)));
+  }
+  if (source.pdfData && !target.pdfData) target.pdfData = source.pdfData;
+  if (source.pdfVerification && !target.pdfVerification) target.pdfVerification = normalizeStoredPdfVerification(source.pdfVerification);
+  if (source.citationCount != null && target.citationCount == null) target.citationCount = source.citationCount;
+  if (source.citationFetchDate && !target.citationFetchDate) target.citationFetchDate = source.citationFetchDate;
+  normalizeRefRecord(target);
+  return target;
 }
 
 /** Legacy `fa` — format a single author as "Surname, A. B.". */

@@ -3,6 +3,8 @@ import {
   normalizeReferenceType,
   normalizeDoi,
   normalizeIsbn,
+  normalizeRefRecord,
+  mergeRefFields,
   formatAuthor,
   formatAuthorList,
   formatTitle,
@@ -60,6 +62,89 @@ describe('normalizeIsbn', () => {
     expect(normalizeIsbn('978-3-16-148410-0')).toBe('9783161484100');
     expect(normalizeIsbn('0-306-40615-2')).toBe('0306406152');
     expect(normalizeIsbn('123')).toBe('');
+  });
+});
+
+describe('normalizeRefRecord', () => {
+  it('mutates records with the same trimming, defaulting and extraction as legacy', () => {
+    const ref: ReferenceLike = {
+      referenceType: ' Thesis ',
+      title: '  A   Study   ',
+      year: 'published in 2024 / online',
+      doi: '',
+      url: ' https://doi.org/10.1234/ABC.pdf ',
+      isbn: '978-3-16-148410-0',
+      journal: '  Journal   Name ',
+      publisher: '  Pub   House ',
+      authors: [' Doe,   Jane ', '', ' Smith   John '],
+      collectionIds: [' a ', '', ' b '],
+      abstract: '  keep\nline  ',
+      pdfUrl: '  file.pdf  ',
+    };
+
+    expect(normalizeRefRecord(ref)).toBe(ref);
+    expect(ref).toMatchObject({
+      referenceType: 'article',
+      title: 'A Study',
+      year: '2024',
+      doi: '10.1234/abc',
+      isbn: '9783161484100',
+      journal: 'Journal Name',
+      publisher: 'Pub House',
+      authors: ['Doe, Jane', 'Smith John'],
+      collectionIds: ['a', 'b'],
+      abstract: 'keep\nline',
+      pdfUrl: 'file.pdf',
+    });
+  });
+
+  it('uses publishedDate as a year fallback and normalizes invalid arrays', () => {
+    const ref = { publishedDate: 'May 2022', authors: 'Ada', collectionIds: 'x' } as unknown as ReferenceLike;
+    normalizeRefRecord(ref);
+    expect(ref.year).toBe('2022');
+    expect(ref.authors).toEqual([]);
+    expect(ref.collectionIds).toEqual([]);
+  });
+});
+
+describe('mergeRefFields', () => {
+  it('fills missing metadata, keeps existing fields and normalizes source and target', () => {
+    const target: ReferenceLike = {
+      referenceType: 'article',
+      title: 'https://doi.org/10.5555/old',
+      doi: '10.5555/old',
+      labels: ['read'],
+    };
+    const source: ReferenceLike = {
+      referenceType: ' Book ',
+      title: '  Better   Title ',
+      year: 'online 2020',
+      authors: [' Doe,   Jane '],
+      labels: ['read', 'important'],
+      publisher: '  Press ',
+      citationCount: 7,
+      citationFetchDate: '2026-05-31',
+    };
+
+    expect(mergeRefFields(target, source)).toBe(target);
+    expect(source.title).toBe('Better Title');
+    expect(target).toMatchObject({
+      referenceType: 'book',
+      title: 'Better Title',
+      year: '2020',
+      authors: ['Doe, Jane'],
+      labels: ['read', 'important'],
+      publisher: 'Press',
+      citationCount: 7,
+      citationFetchDate: '2026-05-31',
+    });
+  });
+
+  it('preserves legacy placeholder-title and DOI suffix quirks', () => {
+    const target: ReferenceLike = { title: '10.1000/example/a', doi: '10.1000/example/a' };
+    mergeRefFields(target, { title: 'Resolved', doi: '10.1000/example/a' });
+    expect(target.title).toBe('Resolved');
+    expect(target.doi).toBe('10.1000/example');
   });
 });
 

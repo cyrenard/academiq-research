@@ -57,6 +57,7 @@ import {
   enrichMetadataByDoi,
   searchMetadataByTitle
 } from '../../lib/metadata-lookup';
+import { mergeRefFields, normalizeRefRecord } from '../../lib/reference-format';
 
 type LegacyCompatibilityHostProps = {
   onStatus: (message: string) => void;
@@ -296,16 +297,19 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
           candidate.ref.doi = doi;
           if (!candidate.ref.url) candidate.ref.url = `https://doi.org/${doi}`;
         }
-      } else if (typeof win.mergeRefFields === 'function') {
-        win.mergeRefFields(candidate.ref, fetched);
       } else {
-        Object.entries(fetched).forEach(([key, value]) => {
-          if (key === 'id' || value == null || value === '') return;
-          if (!candidate.ref[key] || key === 'doi' || key === 'url' || key === 'pdfUrl') candidate.ref[key] = value;
-        });
+        try {
+          mergeRefFields(candidate.ref, fetched);
+        } catch (_error) {
+          if (typeof win.mergeRefFields === 'function') win.mergeRefFields(candidate.ref, fetched);
+        }
       }
       const changedFields = mode === 'doi-only' ? [] : applyFetchedMetadataToRef(candidate.ref, fetched);
-      if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(candidate.ref);
+      try {
+        normalizeRefRecord(candidate.ref);
+      } catch (_error) {
+        if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(candidate.ref);
+      }
       saveLegacyState();
       refreshMetadataHealth();
       setMetadataLookupCandidate(null);
@@ -351,12 +355,20 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
               onStatus('DOI metadata alınamadı');
               return;
             }
-            if (typeof win.mergeRefFields === 'function') win.mergeRefFields(ref, fetched);
-            else Object.entries(fetched).forEach(([key, value]) => {
-              if (key !== 'id' && value != null && value !== '' && (!ref[key] || key === 'doi' || key === 'url' || key === 'pdfUrl')) ref[key] = value;
-            });
+            try {
+              mergeRefFields(ref, fetched);
+            } catch (_error) {
+              if (typeof win.mergeRefFields === 'function') win.mergeRefFields(ref, fetched);
+              else Object.entries(fetched).forEach(([key, value]) => {
+                if (key !== 'id' && value != null && value !== '' && (!ref[key] || key === 'doi' || key === 'url' || key === 'pdfUrl')) ref[key] = value;
+              });
+            }
             const changedFields = applyFetchedMetadataToRef(ref, fetched);
-            if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(ref);
+            try {
+              normalizeRefRecord(ref);
+            } catch (_error) {
+              if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(ref);
+            }
             saveLegacyState();
             refreshMetadataHealth();
             const report = typeof win.AQMetadataHealth?.analyzeReference === 'function'
@@ -384,7 +396,11 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
           const result = win.AQMetadataHealth.applyConservativeRepairs(ref);
           if (result?.ref) Object.keys(result.ref).forEach((key) => { ref[key] = result.ref[key]; });
         }
-        if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(ref);
+        try {
+          normalizeRefRecord(ref);
+        } catch (_error) {
+          if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(ref);
+        }
         saveLegacyState();
         refreshMetadataHealth();
         onStatus('Kayıt normalize edildi');
