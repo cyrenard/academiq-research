@@ -1,3 +1,5 @@
+import { apa7Reference, sortReferencesApa, referenceKey as refFormatKey, dedupeReferences as refFormatDedupe } from './reference-format';
+
 export type AcademiqEditorState = {
   docId: string;
   html: string;
@@ -419,22 +421,11 @@ function getCitationStyle(win: LegacyWindow) {
 }
 
 function referenceKey(ref: any) {
-  if (!ref) return '';
-  const id = String(ref.id || '').trim();
-  if (id) return `id:${id}`;
-  const doi = String(ref.doi || '').trim().toLowerCase();
-  if (doi) return `doi:${doi}`;
-  return `ref:${String(ref.title || '').trim().toLowerCase()}|${String(ref.year || '').trim()}`;
+  return refFormatKey(ref);
 }
 
 function dedupeReferences(refs: any[]) {
-  const seen = new Set<string>();
-  return (Array.isArray(refs) ? refs : []).filter((ref) => {
-    const key = referenceKey(ref);
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return refFormatDedupe(refs);
 }
 
 function sortReferences(win: LegacyWindow, refs: any[]) {
@@ -442,7 +433,8 @@ function sortReferences(win: LegacyWindow, refs: any[]) {
   if (win.AQCitationStyles && typeof win.AQCitationStyles.sortReferences === 'function') {
     return win.AQCitationStyles.sortReferences(list, { style: getCitationStyle(win), locale: 'tr', preserveOrder: false });
   }
-  return list.sort((a, b) => String(a?.title || '').localeCompare(String(b?.title || ''), 'tr', { numeric: true, sensitivity: 'base' }));
+  // No style engine present: APA-7 surname/year ordering (faithful port).
+  return sortReferencesApa(list);
 }
 
 function filterReferences(win: LegacyWindow, query: string, workspaceId?: string) {
@@ -473,11 +465,8 @@ function formatReference(win: LegacyWindow, ref: any, options?: Record<string, u
       style: getCitationStyle(win)
     });
   }
-  const authors = Array.isArray(ref?.authors) ? ref.authors.join(', ') : String(ref?.authors || '');
-  const year = String(ref?.year || 't.y.');
-  const title = String(ref?.title || ref?.id || 'Kaynak');
-  const journal = String(ref?.journal || ref?.publisher || ref?.websiteName || '');
-  return [authors, `(${year}).`, title + '.', journal].filter(Boolean).join(' ');
+  // No style engine present: use the faithful APA-7 port (covered by reference-format.test.ts).
+  return apa7Reference(ref);
 }
 
 function visibleCitationText(win: LegacyWindow, refs: any[]) {
