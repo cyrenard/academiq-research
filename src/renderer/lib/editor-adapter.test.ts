@@ -38,6 +38,11 @@ describe('editor-adapter reference delegation', () => {
 
     const manager = (window as any).AQReferenceManager;
     expect(manager).toBeDefined();
+    expect(manager.getWorkspaceId()).toBe('ws-1');
+    expect(manager.getLibrary()).toEqual([
+      { id: 'ref-1', title: 'Test Reference', doi: '10.1000/xyz' }
+    ]);
+    expect(manager.findReference('ref-1')).toEqual({ id: 'ref-1', title: 'Test Reference', doi: '10.1000/xyz' });
 
     // Test referenceKey delegation (normalizing DOI prefix/casing via reference-format)
     expect(manager.referenceKey({ doi: 'https://doi.org/10.1000/XYZ' })).toBe('doi:10.1000/xyz');

@@ -1,5 +1,5 @@
 import { apa7Reference, sortReferencesApa, referenceKey as refFormatKey, dedupeReferences as refFormatDedupe, filterReferencesForQuery as refFormatFilter } from './reference-format';
-import { appStore, selectWorkspaceLibrary, selectReferenceById } from './app-store';
+import { appStore, selectCurrentWorkspaceId, selectWorkspaceLibrary, selectReferenceById } from './app-store';
 import {
   getCitationStyle as buildGetCitationStyle,
   getCurrentDocument as buildGetCurrentDocument,
@@ -413,7 +413,7 @@ function insertEditorHTML(win: LegacyWindow, html: string) {
 function exportEditorSnapshot(win: LegacyWindow) {
   const editor = activeEditor || win.editor;
   return {
-    docId: win.S && win.S.curDoc ? win.S.curDoc : '',
+    docId: appStore.getState().curDoc || '',
     html: getEditorHTML(win),
     mode: editor && editor._aqEngine ? 'aq-engine' : editor ? 'tiptap' : 'dom'
   };
@@ -445,7 +445,7 @@ function sortReferences(win: LegacyWindow, refs: any[]) {
 }
 
 function filterReferences(win: LegacyWindow, query: string, workspaceId?: string) {
-  const refs = win.cLib?.(workspaceId || win.S?.cur) || [];
+  const refs = selectWorkspaceLibrary(appStore.getState(), workspaceId || selectCurrentWorkspaceId(appStore.getState()));
   return refFormatFilter(refs, query);
 }
 
@@ -467,7 +467,8 @@ function buildCitationHTML(win: LegacyWindow, refs: any[]) {
 
 function collectUsedReferences(win: LegacyWindow) {
   const editor = activeEditor || win.editor;
-  const findReference = (id: string) => win.findRef?.(id, win.S?.cur) || null;
+  const workspaceId = selectCurrentWorkspaceId(appStore.getState());
+  const findReference = (id: string) => selectReferenceById(appStore.getState(), id, workspaceId);
   if (editor && editor._aqEngine && win.AQBibliographyState && typeof win.AQBibliographyState.collectAQEngineUsedReferences === 'function') {
     return win.AQBibliographyState.collectAQEngineUsedReferences(editor, {
       findReference,
@@ -490,7 +491,8 @@ function collectUsedReferences(win: LegacyWindow) {
 function getExtraBibliographyReferences(win: LegacyWindow) {
   const doc = getCurrentDoc(win) as any;
   const ids = Array.isArray(doc?.bibliographyExtraRefIds) ? doc.bibliographyExtraRefIds : [];
-  return ids.map((id: unknown) => win.findRef?.(String(id), win.S?.cur)).filter(Boolean);
+  const workspaceId = selectCurrentWorkspaceId(appStore.getState());
+  return ids.map((id: unknown) => selectReferenceById(appStore.getState(), String(id), workspaceId)).filter(Boolean);
 }
 
 function installReferenceBridge(win: LegacyWindow) {
@@ -506,9 +508,9 @@ function installReferenceBridge(win: LegacyWindow) {
   win.getUsedRefs = () => collectUsedReferences(win);
   win.rRefs = () => collectUsedReferences(win);
   win.AQReferenceManager = {
-    getWorkspaceId: () => win.S?.cur || '',
-    getLibrary: (workspaceId?: string) => win.cLib?.(workspaceId || win.S?.cur) || [],
-    findReference: (id: string, workspaceId?: string) => win.findRef?.(id, workspaceId || win.S?.cur) || null,
+    getWorkspaceId: () => selectCurrentWorkspaceId(appStore.getState()),
+    getLibrary: (workspaceId?: string) => selectWorkspaceLibrary(appStore.getState(), workspaceId || selectCurrentWorkspaceId(appStore.getState())),
+    findReference: (id: string, workspaceId?: string) => selectReferenceById(appStore.getState(), id, workspaceId || selectCurrentWorkspaceId(appStore.getState())),
     sortReferences: (refs: any[]) => sortReferences(win, refs),
     dedupeReferences: (refs: any[]) => dedupeReferences(refs),
     filterReferences: (query: string, workspaceId?: string) => filterReferences(win, query, workspaceId),
@@ -524,13 +526,14 @@ function installReferenceBridge(win: LegacyWindow) {
 
   win.updateRefSection = (forceAuto?: boolean) => {
     const editor = activeEditor || win.editor;
-    const state = win.S || {};
+    const state = appStore.getState();
+    const workspaceId = selectCurrentWorkspaceId(appStore.getState());
     const currentDoc = getCurrentDoc(win);
     const currentDocId = currentDoc?.id || state.curDoc || '';
     const listEl = document.getElementById('reflist');
     const pageEl = document.getElementById('bibpage');
     const bodyEl = document.getElementById('bibbody');
-    const findReference = (id: string) => win.findRef?.(id, state.cur) || null;
+    const findReference = (id: string) => selectReferenceById(appStore.getState(), id, workspaceId);
     const options = {
       state,
       currentDocId,
@@ -575,11 +578,11 @@ function installReferenceBridge(win: LegacyWindow) {
   };
 
   win.refreshBibliographyManual = () => win.AQBibliographyState?.refreshManualBibliographyForState?.({
-    state: win.S || {},
-    currentDocId: getCurrentDoc(win)?.id || win.S?.curDoc,
+    state: appStore.getState(),
+    currentDocId: getCurrentDoc(win)?.id || appStore.getState().curDoc,
     editor: activeEditor || win.editor,
     forceAuto: true,
-    findReference: (id: string) => win.findRef?.(id, win.S?.cur) || null,
+    findReference: (id: string) => selectReferenceById(appStore.getState(), id, selectCurrentWorkspaceId(appStore.getState())),
     visibleCitationText: (refs: any[]) => visibleCitationText(win, refs),
     formatRef: (ref: any, fmtOptions?: Record<string, unknown>) => formatReference(win, ref, fmtOptions),
     dedupeReferences: (refs: any[]) => dedupeReferences(refs),
@@ -589,13 +592,13 @@ function installReferenceBridge(win: LegacyWindow) {
   });
 
   win.resetBibliographyManual = () => {
-    win.AQBibliographyState?.resetManualBibliographyForState?.(win.S || {}, getCurrentDoc(win)?.id || win.S?.curDoc);
+    win.AQBibliographyState?.resetManualBibliographyForState?.(appStore.getState(), getCurrentDoc(win)?.id || appStore.getState().curDoc);
     return win.updateRefSection?.(true);
   };
 
   win.openBibliographySection = () => win.AQBibliographyState?.openBibliographySectionForState?.({
-    state: win.S || {},
-    currentDocId: getCurrentDoc(win)?.id || win.S?.curDoc,
+    state: appStore.getState(),
+    currentDocId: getCurrentDoc(win)?.id || appStore.getState().curDoc,
     editor: activeEditor || win.editor,
     pageEl: document.getElementById('bibpage'),
     refreshBibliography: () => win.updateRefSection?.(true)
