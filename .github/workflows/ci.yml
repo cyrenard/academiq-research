@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
         node-version: ['20.x']
     steps:
       - name: Checkout
@@ -74,3 +74,35 @@ jobs:
           path: dist/renderer/
           retention-days: 7
           if-no-files-found: error
+
+  build-tauri-macos:
+    name: Build macOS Tauri App
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Vite build
+        run: npm run build:renderer
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0.0"
+
+      - name: Build Tauri app
+        run: cargo tauri build
+        working-directory: src-tauri
+        env:
+          TAURI_SIGNING_PRIVATE_KEY_PATH: ""
+          ACADEMIQ_SKIP_SIGN: "1"

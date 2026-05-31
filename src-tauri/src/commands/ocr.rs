@@ -1,11 +1,17 @@
 use serde_json::{json, Value};
+#[cfg(target_os = "windows")]
 use windows::core::HSTRING;
+#[cfg(target_os = "windows")]
 use windows::Globalization::Language;
+#[cfg(target_os = "windows")]
 use windows::Graphics::Imaging::BitmapDecoder;
+#[cfg(target_os = "windows")]
 use windows::Media::Ocr::OcrEngine;
+#[cfg(target_os = "windows")]
 use windows::Storage::Streams::{DataWriter, InMemoryRandomAccessStream};
 use base64::prelude::*;
 
+#[cfg(target_os = "windows")]
 fn run_ocr(bytes: &[u8], lang_code: &str) -> Result<String, String> {
     let stream = InMemoryRandomAccessStream::new().map_err(|e| e.to_string())?;
     let output_stream = stream.GetOutputStreamAt(0).map_err(|e| e.to_string())?;
@@ -40,6 +46,11 @@ fn run_ocr(bytes: &[u8], lang_code: &str) -> Result<String, String> {
     let result = engine.RecognizeAsync(&bitmap).map_err(|e| e.to_string())?.get().map_err(|e| e.to_string())?;
     let text = result.Text().map_err(|e| e.to_string())?.to_string();
     Ok(text)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn run_ocr(_bytes: &[u8], _lang_code: &str) -> Result<String, String> {
+    Err("OCR is only supported on Windows".to_string())
 }
 
 #[tauri::command]
