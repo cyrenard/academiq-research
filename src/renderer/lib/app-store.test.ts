@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { appStore, selectWorkspaceLibrary, selectReferenceById } from './app-store';
+import {
+  appStore,
+  selectCurrentWorkspace,
+  selectCurrentWorkspaceId,
+  selectNotes,
+  selectReferenceById,
+  selectWorkspace,
+  selectWorkspaceLibrary
+} from './app-store';
 
 describe('appStore', () => {
   beforeEach(() => {
@@ -50,5 +58,22 @@ describe('appStore', () => {
     expect(selectWorkspaceLibrary(state, 'ws-1')).toEqual([{ id: 'ref-1', title: 'Test 1' }]);
     expect(selectReferenceById(state, 'ref-1', 'ws-1')).toEqual({ id: 'ref-1', title: 'Test 1' });
     expect(selectReferenceById(state, 'non-existent', 'ws-1')).toBeNull();
+  });
+
+  it('selects current workspace metadata and notes without reading window.S', () => {
+    appStore.setState({
+      cur: 'ws-2',
+      wss: [
+        { id: 'ws-1', name: 'Workspace 1', lib: [] },
+        { id: 'ws-2', name: 'Workspace 2', lib: [{ id: 'ref-2' }] }
+      ],
+      notes: [{ id: 'note-1', rid: 'ref-2' }]
+    });
+    const state = appStore.getState();
+    expect(selectCurrentWorkspaceId(state)).toBe('ws-2');
+    expect(selectCurrentWorkspace(state)?.name).toBe('Workspace 2');
+    expect(selectWorkspace(state, 'ws-1')?.name).toBe('Workspace 1');
+    expect(selectWorkspaceLibrary(state)).toEqual([{ id: 'ref-2' }]);
+    expect(selectNotes(state)).toEqual([{ id: 'note-1', rid: 'ref-2' }]);
   });
 });

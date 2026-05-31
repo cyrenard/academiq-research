@@ -45,7 +45,24 @@ export function selectWorkspaceLibrary(state: AcademiqAppState, workspaceId?: st
   return Array.isArray(workspace?.lib) ? workspace.lib : [];
 }
 
+export function selectCurrentWorkspaceId(state: AcademiqAppState): string {
+  return String(state.cur || '');
+}
+
+export function selectWorkspace(state: AcademiqAppState, workspaceId?: string): any | null {
+  const wsId = workspaceId || state.cur;
+  return (state.wss || []).find((ws) => ws && ws.id === wsId) || null;
+}
+
+export function selectCurrentWorkspace(state: AcademiqAppState): any | null {
+  return selectWorkspace(state, state.cur);
+}
+
 export function selectReferenceById(state: AcademiqAppState, id: string, workspaceId?: string): any | null {
   const refId = String(id || '');
   return selectWorkspaceLibrary(state, workspaceId).find((ref) => ref && String(ref.id) === refId) || null;
+}
+
+export function selectNotes(state: AcademiqAppState): any[] {
+  return Array.isArray(state.notes) ? state.notes : [];
 }

@@ -10,6 +10,7 @@ import {
   filterMetadataHealth,
   _internal
 } from './quality-surface';
+import { appStore } from './app-store';
 
 const {
   dismissedDuplicateMap,
@@ -39,10 +40,11 @@ function buildModalDom() {
 }
 
 function setWorkspace(refs: any[]) {
-  (window as any).S = {
+  appStore.setState({
     cur: 'ws-1',
-    wss: [{ id: 'ws-1', lib: refs }]
-  };
+    wss: [{ id: 'ws-1', name: 'Workspace 1', lib: refs }],
+    notes: []
+  });
 }
 
 beforeEach(() => {
@@ -86,14 +88,20 @@ describe('dismissedDuplicateMap', () => {
 
   it('isolates dismissed maps per workspace', () => {
     dismissedDuplicateMap()['sig1'] = true;
-    (window as any).S.cur = 'ws-2';
+    appStore.setState({
+      cur: 'ws-2',
+      wss: [
+        { id: 'ws-1', name: 'Workspace 1', lib: [] },
+        { id: 'ws-2', name: 'Workspace 2', lib: [] }
+      ]
+    });
     expect(dismissedDuplicateMap()).toEqual({});
-    (window as any).S.cur = 'ws-1';
+    appStore.setState({ cur: 'ws-1' });
     expect(dismissedDuplicateMap()).toEqual({ sig1: true });
   });
 
   it('uses "default" key when no workspace selected', () => {
-    delete (window as any).S;
+    appStore.setState({ cur: '', wss: [] });
     const map = dismissedDuplicateMap();
     map['x'] = true;
     expect((window as any).__aqDismissedDuplicateSignatures.default).toEqual({ x: true });

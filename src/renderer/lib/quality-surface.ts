@@ -16,11 +16,17 @@ import { legacyWin } from './legacy-window';
 import {
   showLegacyModal,
   escapeHtml,
-  currentWorkspaceRefs,
-  currentWorkspace,
   saveLegacyState
 } from './legacy-dom-helpers';
 import { mergeRefFields, normalizeRefRecord } from './reference-format';
+import {
+  appStore,
+  selectCurrentWorkspace,
+  selectCurrentWorkspaceId,
+  selectNotes,
+  selectReferenceById,
+  selectWorkspaceLibrary
+} from './app-store';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Duplicate detection helpers
@@ -28,20 +34,32 @@ import { mergeRefFields, normalizeRefRecord } from './reference-format';
 
 function dismissedDuplicateMap(): Record<string, boolean> {
   const win = legacyWin();
-  const key = String(win.S?.cur || 'default');
+  const key = selectCurrentWorkspaceId(appStore.getState()) || 'default';
   if (!win.__aqDismissedDuplicateSignatures) win.__aqDismissedDuplicateSignatures = {};
   if (!win.__aqDismissedDuplicateSignatures[key]) win.__aqDismissedDuplicateSignatures[key] = {};
   return win.__aqDismissedDuplicateSignatures[key] as Record<string, boolean>;
 }
 
+function activeWorkspaceId(): string {
+  return selectCurrentWorkspaceId(appStore.getState());
+}
+
+function activeWorkspace(): any | null {
+  return selectCurrentWorkspace(appStore.getState());
+}
+
+function activeWorkspaceRefs(): any[] {
+  return selectWorkspaceLibrary(appStore.getState());
+}
+
 function currentDuplicateGroups(): any[] {
   const win = legacyWin();
-  const refs = currentWorkspaceRefs();
+  const refs = activeWorkspaceRefs();
   const w = win as any;
   const legacyGroups = Array.isArray(w.duplicateReviewState?.groups) ? w.duplicateReviewState.groups : [];
   const detect = w.AQDuplicateDetection?.detectDuplicateGroups;
   const apiGroups = typeof detect === 'function'
-    ? detect(refs, { workspaceId: win.S?.cur, dismissedSignatures: dismissedDuplicateMap() }) || []
+    ? detect(refs, { workspaceId: activeWorkspaceId(), dismissedSignatures: dismissedDuplicateMap() }) || []
     : [];
   return legacyGroups.length ? legacyGroups : apiGroups;
 }
@@ -116,7 +134,7 @@ export function renderMetadataHealthFallback() {
   const listEl = document.getElementById('metaHealthList');
   const sumEl = document.getElementById('metaHealthSummary');
   if (!listEl || !sumEl) return;
-  const refs = currentWorkspaceRefs();
+  const refs = activeWorkspaceRefs();
   const healthApi = w.AQMetadataHealth || {};
   const rows = refs.map((ref: any, idx: number) => ({
     idx,
@@ -246,7 +264,7 @@ export function renderMetadataHealthFallback() {
 function runResolveRefFromButton(button: HTMLElement) {
   const refId = String(button.getAttribute('data-ref-id') || '');
   const refIndex = Number(button.getAttribute('data-ref-index') || '-1');
-  const refByIndex = Number.isFinite(refIndex) && refIndex >= 0 ? (currentWorkspaceRefs()[refIndex] || null) : null;
+  const refByIndex = Number.isFinite(refIndex) && refIndex >= 0 ? (activeWorkspaceRefs()[refIndex] || null) : null;
   return findLegacyReference(refId) || refByIndex;
 }
 
@@ -307,7 +325,7 @@ function mergeReferencesIntoPrimary(primary: any, secondary: any) {
 function mergeDuplicateGroupFallback(signature: string) {
   const win = legacyWin();
   const w = win as any;
-  const workspace = currentWorkspace();
+  const workspace = activeWorkspace();
   if (!workspace) return false;
   const groups = currentDuplicateGroups();
   const group = groups.find((item: any) => String(item?.signature || '') === signature);
@@ -326,11 +344,9 @@ function mergeDuplicateGroupFallback(signature: string) {
     removeIds[ref.id] = true;
   });
   workspace.lib = (workspace.lib || []).filter((ref: any) => !removeIds[ref.id]);
-  if (Array.isArray(win.S?.notes)) {
-    win.S.notes.forEach((note: any) => {
-      if (note && removeIds[note.rid]) note.rid = primary.id;
-    });
-  }
+  selectNotes(appStore.getState()).forEach((note: any) => {
+    if (note && removeIds[note.rid]) note.rid = primary.id;
+  });
   dismissedDuplicateMap()[signature] = true;
   saveLegacyState();
   return true;
@@ -365,7 +381,7 @@ export function runDuplicateAction(button: HTMLElement | null) {
     if (action === 'dismiss' || action === 'keep') {
       try {
         if (typeof w.__duplicateDismissedMap === 'function') {
-          const dismissed = w.__duplicateDismissedMap(w.S?.cur);
+          const dismissed = w.__duplicateDismissedMap(activeWorkspaceId());
           if (dismissed) dismissed[signature] = true;
         }
       } catch (_error) {}
@@ -390,9 +406,9 @@ export function handleDuplicateReviewClick(event: MouseEvent<HTMLElement>) {
 function findLegacyReference(refId: string) {
   const w = legacyWin() as any;
   if (typeof w.findRef === 'function') {
-    return w.findRef(refId, w.S?.cur) || w.findRef(refId);
+    return w.findRef(refId, activeWorkspaceId()) || w.findRef(refId);
   }
-  return currentWorkspaceRefs().find((ref: any) => ref && ref.id === refId) || null;
+  return selectReferenceById(appStore.getState(), refId, activeWorkspaceId()) || null;
 }
 
 export function runMetadataHealthAction(button: HTMLElement | null) {
@@ -401,7 +417,7 @@ export function runMetadataHealthAction(button: HTMLElement | null) {
   const action = String(button.getAttribute('data-mh-action') || '');
   const refId = String(button.getAttribute('data-ref-id') || '');
   const refIndex = Number(button.getAttribute('data-ref-index') || '-1');
-  const refByIndex = Number.isFinite(refIndex) && refIndex >= 0 ? (currentWorkspaceRefs()[refIndex] || null) : null;
+  const refByIndex = Number.isFinite(refIndex) && refIndex >= 0 ? (activeWorkspaceRefs()[refIndex] || null) : null;
   const ref = findLegacyReference(refId) || refByIndex;
   if (!ref) {
     if (typeof w.setDst === 'function') w.setDst('Kaynak bulunamadı.', 'er');
