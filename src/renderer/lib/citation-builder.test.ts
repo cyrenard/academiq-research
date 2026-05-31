@@ -24,17 +24,19 @@ describe('citation-builder', () => {
     expect(getCitationStyle({})).toBe('apa7');
   });
 
-  it('getInlineCitationText works with fallback', () => {
+  it('getInlineCitationText fallback uses the author surname (legacy inText)', () => {
     const ref = { id: 'r1', authors: ['Smith, John'], year: '2020' };
-    expect(getInlineCitationText(winMock, ref)).toBe('(John, 2020)');
+    expect(getInlineCitationText(winMock, ref)).toBe('(Smith, 2020)');
+    // Missing year and no authors fall back to legacy values.
+    expect(getInlineCitationText(winMock, { id: 'r2' })).toBe('(Bilinmeyen, t.y.)');
   });
 
-  it('visibleCitationText joins multiple references', () => {
+  it('visibleCitationText joins multiple references by surname', () => {
     const refs = [
       { id: 'r1', authors: ['Smith, John'], year: '2020' },
       { id: 'r2', authors: ['Doe, Jane'], year: '2021' }
     ];
-    expect(visibleCitationText(winMock, refs)).toBe('John, 2020; Jane, 2021');
+    expect(visibleCitationText(winMock, refs)).toBe('Smith, 2020; Doe, 2021');
   });
 
   it('narrativeCitationText matches legacy formatting', () => {
@@ -48,7 +50,7 @@ describe('citation-builder', () => {
   it('buildCitationHTML builds spans', () => {
     const refs = [{ id: 'r1', authors: ['Smith, John'], year: '2020' }];
     const sortFn = (w: any, items: any[]) => items;
-    expect(buildCitationHTML(winMock, refs, sortFn)).toBe('<span class="cit" data-ref="r1">John, 2020</span> ');
+    expect(buildCitationHTML(winMock, refs, sortFn)).toBe('<span class="cit" data-ref="r1">Smith, 2020</span> ');
   });
 
   it('formatReference format fallback to apa7Reference', () => {

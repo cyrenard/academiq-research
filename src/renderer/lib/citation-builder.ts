@@ -1,4 +1,4 @@
-import { ReferenceLike, apa7Reference, dedupeReferences } from './reference-format';
+import { ReferenceLike, apa7Reference, apaInlineCitation, dedupeReferences } from './reference-format';
 
 type LegacyWindow = any;
 
@@ -19,9 +19,9 @@ export function getInlineCitationText(win: LegacyWindow, ref: ReferenceLike): st
   if (win.AQCitationStyles && typeof win.AQCitationStyles.visibleCitationText === 'function') {
     return win.AQCitationStyles.visibleCitationText([ref], { style: getCitationStyle(win) });
   }
-  const authors = Array.isArray(ref.authors) ? ref.authors : [];
-  const first = authors[0] ? String(authors[0]).split(/\s+/).slice(-1)[0] : String(ref.title || ref.id || 'Kaynak');
-  return `(${first}${ref.year ? `, ${String(ref.year)}` : ''})`;
+  // Faithful APA-7 in-text fallback (legacy `inText`): uses author SURNAME
+  // (not the given name), with Bilinmeyen / & / vd. and t.y. handling.
+  return apaInlineCitation(ref, 'inline');
 }
 
 export function visibleCitationText(win: LegacyWindow, refs: any[]): string {
