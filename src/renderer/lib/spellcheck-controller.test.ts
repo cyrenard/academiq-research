@@ -9,6 +9,7 @@ import {
   shutdownSpellcheck
 } from './spellcheck-controller';
 import { _setSpellInstanceForTests } from './spellcheck';
+import { appStore } from './app-store';
 
 function fakeSpell(opts: { knownWords?: string[]; suggestionsFor?: Record<string, string[]> } = {}) {
   const known = new Set((opts.knownWords ?? []).map((w) => w.toLocaleLowerCase('tr-TR')));
@@ -42,7 +43,7 @@ beforeEach(() => {
   shutdownSpellcheck();
   _setSpellInstanceForTests(null);
   document.body.innerHTML = '';
-  delete (window as any).S;
+  appStore.setState({ cur: '', wss: [] });
 });
 
 afterEach(() => {
@@ -161,16 +162,17 @@ describe('runCheckNow / applyMarkers', () => {
   });
 
   it('does not flag author names from the active reference library', () => {
-    (window as any).S = {
+    appStore.setState({
       cur: 'ws-1',
       wss: [{
         id: 'ws-1',
+        name: 'Workspace 1',
         lib: [
           { id: 'r1', title: 'Social cognitive theory', authors: ['Albert Bandura'] },
           { id: 'r2', title: 'Cultural historical theory', authors: ['Lev Vygotsky'] }
         ]
       }]
-    };
+    });
     _setSpellInstanceForTests(fakeSpell({ knownWords: ['ve'] }));
     setSpellcheckScope({ workspaceId: 'ws-1', docId: 'doc-1' });
     paintDocument('Bandura ve Vygotsky xyzz');

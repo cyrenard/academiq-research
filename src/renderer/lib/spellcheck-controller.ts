@@ -28,6 +28,7 @@ import {
   type SpellMatch
 } from './spellcheck';
 import { checkLanguageRules } from './language-rules';
+import { appStore, selectWorkspaceLibrary } from './app-store';
 
 export type SpellcheckListener = (state: SpellcheckState) => void;
 
@@ -223,12 +224,10 @@ export function setSpellcheckScope(scope: { workspaceId: string | null; docId: s
 // ─── Deduplication and Exclusions ───────────────────────────────────────────
 
 function getActiveWorkspaceLibrary(): any[] {
-  const win = window as any;
-  if (!win || !win.S || !Array.isArray(win.S.wss)) return [];
-  const activeWsId = currentWorkspaceId || win.S.cur;
+  const state = appStore.getState();
+  const activeWsId = currentWorkspaceId || state.cur;
   if (!activeWsId) return [];
-  const ws = win.S.wss.find((w: any) => w && w.id === activeWsId);
-  return ws && Array.isArray(ws.lib) ? ws.lib : [];
+  return selectWorkspaceLibrary(state, activeWsId);
 }
 
 function getAuthorTokens(): Set<string> {
