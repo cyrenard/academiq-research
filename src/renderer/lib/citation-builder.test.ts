@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   getCitationStyle,
   getCurrentDocument,
@@ -10,16 +10,21 @@ import {
   formatReference,
   buildBibliographyHTML
 } from './citation-builder';
+import { appStore } from './app-store';
 
 describe('citation-builder', () => {
   const winMock: any = {
-    S: {
+  };
+
+  beforeEach(() => {
+    appStore.setState({
       curDoc: 'doc-1',
       docs: [
-        { id: 'doc-1', citationStyle: 'apa7' }
-      ]
-    }
-  };
+        { id: 'doc-1', content: '', citationStyle: 'apa7' } as any
+      ],
+      cm: 'apa7'
+    });
+  });
 
   it('getCitationStyle falls back to apa7', () => {
     expect(getCitationStyle(winMock)).toBe('apa7');
@@ -28,31 +33,28 @@ describe('citation-builder', () => {
 
   it('getCurrentDocument matches the legacy current-doc fallback order', () => {
     expect(getCurrentDocument(winMock)?.id).toBe('doc-1');
-    expect(getCurrentDocument({ S: { docs: [{ id: 'first' }, { id: 'second' }] } })?.id).toBe('first');
+    appStore.setState({ curDoc: '', docs: [{ id: 'first', content: '' }, { id: 'second', content: '' }] });
+    expect(getCurrentDocument({})?.id).toBe('first');
     const stateApi = {
       getCurrentDocumentFromState: vi.fn(() => ({ id: 'from-state' }))
     };
-    expect(getCurrentDocument({ S: { curDoc: 'doc-x', docs: [] }, AQBibliographyState: stateApi })?.id).toBe('from-state');
-    expect(stateApi.getCurrentDocumentFromState).toHaveBeenCalledWith({ curDoc: 'doc-x', docs: [] }, 'doc-x');
+    appStore.setState({ curDoc: 'doc-x', docs: [] });
+    expect(getCurrentDocument({ AQBibliographyState: stateApi })?.id).toBe('from-state');
+    expect(stateApi.getCurrentDocumentFromState).toHaveBeenCalledWith(expect.objectContaining({ curDoc: 'doc-x', docs: [] }), 'doc-x');
   });
 
   it('setCitationStyle mutates only the current document and normalizes like legacy', () => {
-    const win = {
-      S: {
-        curDoc: 'doc-1',
-        citationStyle: 'apa7',
-        docs: [{ id: 'doc-1', citationStyle: 'apa7' }]
-      }
-    };
+    const win = {};
     expect(setCitationStyle(win, ' Chicago ')).toBe('chicago');
-    expect(win.S.docs[0].citationStyle).toBe('chicago');
-    expect(win.S.citationStyle).toBe('apa7');
+    expect((appStore.getState().docs[0] as any).citationStyle).toBe('chicago');
+    expect((appStore.getState() as any).citationStyle).toBeUndefined();
+    appStore.setState({ curDoc: '', docs: [] });
     expect(setCitationStyle({}, 'apa7')).toBeNull();
   });
 
   it('setCitationStyle delegates style normalization when the style engine exists', () => {
+    appStore.setState({ curDoc: 'doc-1', docs: [{ id: 'doc-1', content: '' }] });
     const win = {
-      S: { docs: [{ id: 'doc-1' }], curDoc: 'doc-1' },
       AQCitationStyles: { normalizeStyleId: vi.fn(() => 'vancouver') }
     };
     expect(setCitationStyle(win, 'VAN')).toBe('vancouver');

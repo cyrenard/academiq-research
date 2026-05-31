@@ -1,9 +1,10 @@
 import { ReferenceLike, apa7Reference, apaInlineCitation, dedupeReferences } from './reference-format';
+import { appStore } from './app-store';
 
 type LegacyWindow = any;
 
 export function getCurrentDocument(win: LegacyWindow): any | null {
-  const state = win.S || {};
+  const state = appStore.getState();
   const docs = Array.isArray(state.docs) ? state.docs : [];
   const docId = state.curDoc || state.doc || '';
   if (win.AQBibliographyState && typeof win.AQBibliographyState.getCurrentDocumentFromState === 'function') {
@@ -16,8 +17,9 @@ export function getCurrentDocument(win: LegacyWindow): any | null {
 }
 
 export function getCitationStyle(win: LegacyWindow): string {
+  const state = appStore.getState();
   const doc = getCurrentDocument(win);
-  const raw = doc?.citationStyle || (win.S as any)?.citationStyle || win.S?.cm || 'apa7';
+  const raw = doc?.citationStyle || (state as any).citationStyle || state.cm || 'apa7';
   if (win.AQCitationStyles && typeof win.AQCitationStyles.normalizeStyleId === 'function') {
     return win.AQCitationStyles.normalizeStyleId(String(raw || 'apa7'));
   }
@@ -25,6 +27,7 @@ export function getCitationStyle(win: LegacyWindow): string {
 }
 
 export function setCitationStyle(win: LegacyWindow, styleId: unknown): string | null {
+  const state = appStore.getState();
   const doc = getCurrentDocument(win);
   if (!doc) return null;
   if (win.AQCitationStyles && typeof win.AQCitationStyles.normalizeStyleId === 'function') {
@@ -32,6 +35,7 @@ export function setCitationStyle(win: LegacyWindow, styleId: unknown): string | 
   } else {
     doc.citationStyle = String(styleId || 'apa7').trim().toLowerCase() || 'apa7';
   }
+  appStore.setState({ docs: state.docs });
   return doc.citationStyle;
 }
 
