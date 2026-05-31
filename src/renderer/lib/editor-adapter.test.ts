@@ -51,6 +51,11 @@ describe('editor-adapter reference delegation', () => {
     expect(deduped).toHaveLength(1);
     expect(deduped[0].id).toBe('1');
 
+    // Test filterReferences delegation
+    const searchResults = manager.filterReferences('test');
+    expect(searchResults).toHaveLength(1);
+    expect(searchResults[0].id).toBe('ref-1');
+
     editor.destroy();
   });
 });

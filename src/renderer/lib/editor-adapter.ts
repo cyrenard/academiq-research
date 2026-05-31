@@ -1,4 +1,4 @@
-import { apa7Reference, sortReferencesApa, referenceKey as refFormatKey, dedupeReferences as refFormatDedupe } from './reference-format';
+import { apa7Reference, sortReferencesApa, referenceKey as refFormatKey, dedupeReferences as refFormatDedupe, filterReferencesForQuery as refFormatFilter } from './reference-format';
 
 export type AcademiqEditorState = {
   docId: string;
@@ -438,24 +438,8 @@ function sortReferences(win: LegacyWindow, refs: any[]) {
 }
 
 function filterReferences(win: LegacyWindow, query: string, workspaceId?: string) {
-  const q = String(query || '').trim().toLocaleLowerCase('tr');
   const refs = win.cLib?.(workspaceId || win.S?.cur) || [];
-  if (!q) return refs.slice();
-  return refs.filter((ref: any) => {
-    const authors = Array.isArray(ref?.authors) ? ref.authors.join(' ') : String(ref?.authors || '');
-    const haystack = [
-      ref?.title,
-      authors,
-      ref?.year,
-      ref?.journal,
-      ref?.publisher,
-      ref?.doi,
-      ref?.isbn,
-      ref?.url,
-      Array.isArray(ref?.labels) ? ref.labels.join(' ') : ''
-    ].map((part) => String(part || '').toLocaleLowerCase('tr')).join(' ');
-    return haystack.includes(q);
-  });
+  return refFormatFilter(refs, query);
 }
 
 function formatReference(win: LegacyWindow, ref: any, options?: Record<string, unknown>) {
