@@ -17,8 +17,13 @@
 import type { ChangeEvent } from 'react';
 import { legacyWin } from './legacy-window';
 import { syncReactFromLegacy } from './legacy-dom-helpers';
+import { appStore, selectCurrentWorkspaceId } from './app-store';
 
 type StatusFn = (message: string) => void;
+
+function activeWorkspaceId(): string {
+  return selectCurrentWorkspaceId(appStore.getState());
+}
 
 // ───────────────────────────────────────────────────────────────────────────
 // FileReader Promise wrappers
@@ -349,7 +354,7 @@ export async function importBibliographyFile(event: ChangeEvent<HTMLInputElement
       }
       throw new Error('Parser hazır değil');
     }
-    const entries = parser(text, { createId: w.uid, workspaceId: win.S?.cur });
+    const entries = parser(text, { createId: w.uid, workspaceId: activeWorkspaceId() });
     if (!Array.isArray(entries) || !entries.length) {
       onStatus('Kaynak bulunamadı');
       return;

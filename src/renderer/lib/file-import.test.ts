@@ -6,9 +6,10 @@ import {
   importWordFileDirect,
   importBibliographyFile
 } from './file-import';
+import { appStore } from './app-store';
 
 beforeEach(() => {
-  (window as any).S = { cur: 'workspace-1' };
+  appStore.setState({ cur: 'workspace-1', wss: [{ id: 'workspace-1', name: 'Workspace 1', lib: [] }] });
   (window as any).uid = () => 'fake-uid';
 });
 
