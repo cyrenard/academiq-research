@@ -9,6 +9,11 @@ import {
   scheduleReactSyncFromLegacy,
   saveLegacyState
 } from './legacy-dom-helpers';
+import { appStore } from './app-store';
+
+beforeEach(() => {
+  appStore.setState({ cur: '', wss: [], notes: [] });
+});
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -65,40 +70,40 @@ describe('showLegacyModal / hideLegacyModal', () => {
 // ─── Workspace selectors ────────────────────────────────────────────────
 
 describe('currentWorkspaceRefs', () => {
-  it('returns [] when window.S is missing', () => {
+  it('returns [] when app store has no active workspace', () => {
     expect(currentWorkspaceRefs()).toEqual([]);
   });
 
   it('returns active workspace lib', () => {
-    (window as any).S = {
+    appStore.setState({
       cur: 'ws-1',
       wss: [
-        { id: 'ws-1', lib: [{ id: 'r1' }, { id: 'r2' }] },
-        { id: 'ws-2', lib: [{ id: 'r3' }] }
+        { id: 'ws-1', name: 'Workspace 1', lib: [{ id: 'r1' }, { id: 'r2' }] },
+        { id: 'ws-2', name: 'Workspace 2', lib: [{ id: 'r3' }] }
       ]
-    };
+    });
     expect(currentWorkspaceRefs()).toEqual([{ id: 'r1' }, { id: 'r2' }]);
   });
 
   it('returns [] when active workspace not found', () => {
-    (window as any).S = { cur: 'missing', wss: [{ id: 'ws-1', lib: [] }] };
+    appStore.setState({ cur: 'missing', wss: [{ id: 'ws-1', name: 'Workspace 1', lib: [] }] });
     expect(currentWorkspaceRefs()).toEqual([]);
   });
 });
 
 describe('currentWorkspace', () => {
-  it('returns null when window.S is missing', () => {
+  it('returns null when app store has no active workspace', () => {
     expect(currentWorkspace()).toBe(null);
   });
 
   it('returns active workspace object', () => {
-    const ws = { id: 'ws-1', name: 'WS One' };
-    (window as any).S = { cur: 'ws-1', wss: [ws] };
+    const ws = { id: 'ws-1', name: 'WS One', lib: [] };
+    appStore.setState({ cur: 'ws-1', wss: [ws] });
     expect(currentWorkspace()).toEqual(ws);
   });
 
   it('returns null when active workspace id not in wss', () => {
-    (window as any).S = { cur: 'missing', wss: [{ id: 'other' }] };
+    appStore.setState({ cur: 'missing', wss: [{ id: 'other', name: 'Other', lib: [] }] });
     expect(currentWorkspace()).toBe(null);
   });
 });
@@ -117,6 +122,7 @@ describe('syncReactFromLegacy', () => {
   it('passes empty object when window.S missing', () => {
     const sync = vi.fn();
     (window as any).__aqReactSyncFromLegacy = sync;
+    delete (window as any).S;
     syncReactFromLegacy();
     expect(sync).toHaveBeenCalledWith({});
   });

@@ -8,6 +8,7 @@
  */
 
 import { legacyWin } from './legacy-window';
+import { appStore, selectCurrentWorkspace, selectWorkspaceLibrary } from './app-store';
 
 /** Toggle a legacy modal element's `.show` class off. No-op if missing. */
 export function hideLegacyModal(id: string) {
@@ -31,19 +32,12 @@ export function escapeHtml(value: unknown) {
 
 /** Return references for the active legacy workspace, or [] if missing. */
 export function currentWorkspaceRefs(): any[] {
-  const state = legacyWin().S || ({} as any);
-  const workspace = Array.isArray(state.wss)
-    ? state.wss.find((item: any) => item && item.id === state.cur)
-    : null;
-  return Array.isArray(workspace?.lib) ? (workspace as any).lib : [];
+  return selectWorkspaceLibrary(appStore.getState());
 }
 
 /** Return the active legacy workspace object, or null. */
 export function currentWorkspace(): any | null {
-  const state = legacyWin().S || ({} as any);
-  return Array.isArray(state.wss)
-    ? state.wss.find((item: any) => item && item.id === state.cur) || null
-    : null;
+  return selectCurrentWorkspace(appStore.getState());
 }
 
 /**
