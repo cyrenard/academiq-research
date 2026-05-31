@@ -54,6 +54,7 @@ import {
   installAppendixDeleteButtons as installAppendixDeleteButtonsLib,
   resolveAppendixIdFromButton
 } from '../../lib/appendix-engine';
+import { deleteAQEngineAppendix as deleteAQEngineAppendixCore } from '../../lib/aq-engine/appendix-engine-core';
 
 type TopToolbarProps = {
   selectedReferenceId?: string;
@@ -425,7 +426,19 @@ export function TopToolbar({ selectedReferenceId, onOpenAudit, onOpenFeatureModa
       ? win.getActiveEditorInstance()
       : (win.editor || null);
     let removed = false;
-    if (typeof win.deleteAQEngineAppendix === 'function') {
+    // Phase 4 (strangler): faithful TS port of legacy deleteAQEngineAppendix,
+    // with side-effectful deps injected from legacy-doc-helpers. Falls back to
+    // the legacy global only if the port is somehow unavailable.
+    try {
+      removed = deleteAQEngineAppendixCore(activeEditor, appendixId, blockIndex, {
+        getDocRecord: getActiveDocRecord,
+        sanitize: sanitizeAuxiliaryHTML,
+        save: saveAuxiliaryChange
+      });
+    } catch (_e) {
+      removed = false;
+    }
+    if (!removed && typeof win.deleteAQEngineAppendix === 'function') {
       removed = !!win.deleteAQEngineAppendix(activeEditor, appendixId, blockIndex);
     }
     if (!removed) {
