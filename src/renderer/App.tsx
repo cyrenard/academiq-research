@@ -66,6 +66,7 @@ import {
   collectReferenceIdsFromHTML
 } from './lib/note-insert';
 import { publishStateToLegacyWindow } from './lib/legacy-state-bridge';
+import { appStore, useAppStore } from './lib/app-store';
 
 const CommandPalette = lazy(() => import('./components/shell/CommandPalette').then((module) => ({ default: module.CommandPalette })));
 const FeatureModals = lazy(() => import('./components/shell/FeatureModals').then((module) => ({ default: module.FeatureModals })));
@@ -143,7 +144,10 @@ function preserveReferenceLibraries(next: AcademiqAppState, current: AcademiqApp
 
 
 export default function App() {
-  const [appState, setAppState] = useState<AcademiqAppState>(() => createBlankState());
+  const appState = useAppStore((state) => state);
+  const setAppState = (next: AcademiqAppState | ((prev: AcademiqAppState) => AcademiqAppState)) => {
+    appStore.setState(next);
+  };
   const [loading, setLoading] = useState(true);
   const [activeView, setActiveView] = useState<'library' | 'notes' | 'pdf' | 'matrix' | 'focus' | 'settings'>('notes');
   const [activeReferenceId, setActiveReferenceId] = useState('');
