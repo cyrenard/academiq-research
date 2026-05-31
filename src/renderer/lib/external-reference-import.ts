@@ -20,6 +20,7 @@
 import type { ChangeEvent } from 'react';
 import { legacyWin } from './legacy-window';
 import { syncReactFromLegacy } from './legacy-dom-helpers';
+import { appStore, selectCurrentWorkspaceId } from './app-store';
 
 type StatusFn = (message: string) => void;
 
@@ -46,6 +47,10 @@ function normalizeExternalDoi(value: string) {
   }
   const match = String(value || '').match(/\b10\.\d{4,9}\/[^\s"'<>]+/i);
   return match ? match[0].replace(/[),.;]+$/, '') : '';
+}
+
+function activeWorkspaceId(): string {
+  return selectCurrentWorkspaceId(appStore.getState());
 }
 
 /** APA-7 fallback parser — splits on blank lines + "Author, X." boundaries. */
@@ -81,7 +86,7 @@ function parseApaFallbackEntries(text: string) {
       year: yearMatch ? yearMatch[1] : '',
       doi,
       url: doi ? `https://doi.org/${doi}` : '',
-      wsId: win.S?.cur
+      wsId: activeWorkspaceId()
     };
   }).filter(Boolean);
 }
@@ -91,7 +96,7 @@ export function parseExternalReferenceText(text: string, kind: 'auto' | 'bibtex'
   const win = legacyWin();
   const raw = String(text || '').trim();
   if (!raw) return [];
-  const options = { createId: (win as any).uid, workspaceId: win.S?.cur };
+  const options = { createId: (win as any).uid, workspaceId: activeWorkspaceId() };
   const looksBib = /@\w+\s*\{/i.test(raw);
   const looksRis = /(^|\n)TY\s*-\s*/i.test(raw);
   const refParse = win.AQReferenceParse;

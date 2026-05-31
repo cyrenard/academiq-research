@@ -7,6 +7,7 @@ import {
   runExternalReferenceFileImport,
   runExternalReferenceDoiImport
 } from './external-reference-import';
+import { appStore } from './app-store';
 
 // Snapshot of original window globals before each test
 const SAVED: Record<string, any> = {};
@@ -20,7 +21,7 @@ function restoreWin() {
 
 beforeEach(() => {
   // Set up minimal state surface
-  (window as any).S = { cur: 'workspace-1' };
+  appStore.setState({ cur: 'workspace-1', wss: [{ id: 'workspace-1', name: 'Workspace 1', lib: [] }] });
   (window as any).uid = () => 'fake-uid-' + Math.floor(Math.random() * 1e6);
 });
 
@@ -51,6 +52,7 @@ describe('parseExternalReferenceText', () => {
     (window as any).parseBibTeX = fake;
     const result = parseExternalReferenceText('@article{foo, title={X}}', 'auto');
     expect(fake).toHaveBeenCalledTimes(1);
+    expect((fake.mock.calls[0] as any[])[1]).toMatchObject({ workspaceId: 'workspace-1' });
     expect(result).toEqual([{ id: 'a', title: 'Parsed BibTeX entry' }]);
   });
 
