@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { appStore } from './app-store';
+import { appStore, selectWorkspaceLibrary, selectReferenceById } from './app-store';
 
 describe('appStore', () => {
   beforeEach(() => {
@@ -33,5 +33,22 @@ describe('appStore', () => {
     expect(callback).toHaveBeenCalledWith(appStore.getState());
 
     unsubscribe();
+  });
+
+  it('selects workspace library and reference by ID', () => {
+    appStore.setState({
+      wss: [
+        {
+          id: 'ws-1',
+          name: 'Workspace 1',
+          lib: [{ id: 'ref-1', title: 'Test 1' }]
+        }
+      ],
+      cur: 'ws-1'
+    });
+    const state = appStore.getState();
+    expect(selectWorkspaceLibrary(state, 'ws-1')).toEqual([{ id: 'ref-1', title: 'Test 1' }]);
+    expect(selectReferenceById(state, 'ref-1', 'ws-1')).toEqual({ id: 'ref-1', title: 'Test 1' });
+    expect(selectReferenceById(state, 'non-existent', 'ws-1')).toBeNull();
   });
 });

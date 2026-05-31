@@ -1,5 +1,14 @@
 import { apa7Reference, sortReferencesApa, referenceKey as refFormatKey, dedupeReferences as refFormatDedupe, filterReferencesForQuery as refFormatFilter } from './reference-format';
 import { appStore, selectWorkspaceLibrary, selectReferenceById } from './app-store';
+import {
+  getCitationStyle as buildGetCitationStyle,
+  getInlineCitationText as buildGetInlineCitationText,
+  visibleCitationText as buildVisibleCitationText,
+  narrativeCitationText as buildNarrativeCitationText,
+  buildCitationHTML as buildBuildCitationHTML,
+  formatReference as buildFormatReference,
+  buildBibliographyHTML as buildBuildBibliographyHTML
+} from './citation-builder';
 
 export type AcademiqEditorState = {
   docId: string;
@@ -413,12 +422,7 @@ function getCurrentDoc(win: LegacyWindow) {
 }
 
 function getCitationStyle(win: LegacyWindow) {
-  const doc = getCurrentDoc(win) as any;
-  const raw = doc?.citationStyle || (win.S as any)?.citationStyle || win.S?.cm || 'apa7';
-  if (win.AQCitationStyles && typeof win.AQCitationStyles.normalizeStyleId === 'function') {
-    return win.AQCitationStyles.normalizeStyleId(String(raw || 'apa7'));
-  }
-  return String(raw || 'apa7').trim().toLowerCase() || 'apa7';
+  return buildGetCitationStyle(win);
 }
 
 function referenceKey(ref: any) {
@@ -444,57 +448,19 @@ function filterReferences(win: LegacyWindow, query: string, workspaceId?: string
 }
 
 function formatReference(win: LegacyWindow, ref: any, options?: Record<string, unknown>) {
-  if (win.AQCitationStyles && typeof win.AQCitationStyles.formatReference === 'function') {
-    return win.AQCitationStyles.formatReference(ref, {
-      ...(options || {}),
-      style: getCitationStyle(win)
-    });
-  }
-  // No style engine present: use the faithful APA-7 port (covered by reference-format.test.ts).
-  return apa7Reference(ref);
+  return buildFormatReference(win, ref, options);
 }
 
 function visibleCitationText(win: LegacyWindow, refs: any[]) {
-  const list = dedupeReferences(Array.isArray(refs) ? refs : []);
-  if (win.AQCitationStyles && typeof win.AQCitationStyles.visibleCitationText === 'function') {
-    return win.AQCitationStyles.visibleCitationText(list, { style: getCitationStyle(win) });
-  }
-  return list.map((ref) => String(win.getInlineCitationText?.(ref) || '').replace(/^\(|\)$/g, '')).filter(Boolean).join('; ');
-}
-
-function authorSurname(author: unknown) {
-  const text = String(author || '').trim();
-  if (!text) return '';
-  if (text.includes(',')) return text.split(',')[0].trim();
-  return text.split(/\s+/).filter(Boolean).pop() || '';
+  return buildVisibleCitationText(win, refs);
 }
 
 function narrativeCitationText(ref: any) {
-  const authors = Array.isArray(ref?.authors) ? ref.authors : (ref?.authors ? [ref.authors] : []);
-  const surnames = authors.map(authorSurname).filter(Boolean);
-  const label = surnames.length === 0
-    ? String(ref?.title || ref?.id || 'Kaynak')
-    : surnames.length === 1
-      ? surnames[0]
-      : surnames.length === 2
-        ? `${surnames[0]} & ${surnames[1]}`
-        : `${surnames[0]} vd.`;
-  return `${label}${ref?.year ? ` (${String(ref.year)})` : ''}`;
+  return buildNarrativeCitationText(ref);
 }
 
 function buildCitationHTML(win: LegacyWindow, refs: any[]) {
-  const normalized = sortReferences(win, dedupeReferences(Array.isArray(refs) ? refs : []));
-  if (!normalized.length) return '';
-  if ((win as any).AQCitationState && typeof (win as any).AQCitationState.buildCitationHTML === 'function') {
-    return (win as any).AQCitationState.buildCitationHTML(normalized, {
-      citationStyles: win.AQCitationStyles || null,
-      styleId: getCitationStyle(win),
-      dedupeReferences: (items: any[]) => dedupeReferences(items),
-      sortReferences: (items: any[]) => sortReferences(win, items)
-    });
-  }
-  const ids = normalized.map((ref) => ref.id).join(',');
-  return `<span class="cit" data-ref="${ids}">${visibleCitationText(win, normalized)}</span> `;
+  return buildBuildCitationHTML(win, refs, sortReferences);
 }
 
 function collectUsedReferences(win: LegacyWindow) {
@@ -548,9 +514,7 @@ function installReferenceBridge(win: LegacyWindow) {
     formatReference: (ref: any) => formatReference(win, ref),
     getUsedReferences: () => collectUsedReferences(win),
     buildBibliographyHTML: (refs: any[]) => {
-      const sorted = sortReferences(win, dedupeReferences(refs || []));
-      if (!sorted.length) return '';
-      return '<h1>KAYNAKÇA</h1>' + sorted.map((ref, idx) => `<p class="refe">${formatReference(win, ref, { index: idx + 1 })}</p>`).join('');
+      return buildBuildBibliographyHTML(win, refs, sortReferences);
     },
     syncReferenceSection: () => win.updateRefSection?.(true)
   } as any;
@@ -687,13 +651,7 @@ function hydrateInitialDocument(win: LegacyWindow, docId: string, initialState: 
   };
   win.refKey = (ref: any) => ref && ref.id ? `id:${String(ref.id)}` : '';
   win.getInlineCitationText = (ref: any) => {
-    if (!ref) return '';
-    if (win.AQCitationStyles && typeof win.AQCitationStyles.visibleCitationText === 'function') {
-      return win.AQCitationStyles.visibleCitationText([ref], { style: getCitationStyle(win) });
-    }
-    const authors = Array.isArray(ref.authors) ? ref.authors : [];
-    const first = authors[0] ? String(authors[0]).split(/\s+/).slice(-1)[0] : String(ref.title || ref.id || 'Kaynak');
-    return `(${first}${ref.year ? `, ${String(ref.year)}` : ''})`;
+    return buildGetInlineCitationText(win, ref);
   };
   installReferenceBridge(win);
   setEditorHTML(win, html);

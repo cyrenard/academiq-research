@@ -38,3 +38,14 @@ export function useAppStore<T>(selector: (state: AcademiqAppState) => T): T {
     () => selector(appStore.getState())
   );
 }
+
+export function selectWorkspaceLibrary(state: AcademiqAppState, workspaceId?: string): any[] {
+  const wsId = workspaceId || state.cur;
+  const workspace = (state.wss || []).find((ws) => ws && ws.id === wsId) || state.wss[0];
+  return Array.isArray(workspace?.lib) ? workspace.lib : [];
+}
+
+export function selectReferenceById(state: AcademiqAppState, id: string, workspaceId?: string): any | null {
+  const refId = String(id || '');
+  return selectWorkspaceLibrary(state, workspaceId).find((ref) => ref && String(ref.id) === refId) || null;
+}
