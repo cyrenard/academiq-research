@@ -13,6 +13,7 @@
  * tried, so any UI plumbing already wired for that JSON works here too.
  */
 import nspell from 'nspell';
+import { appStore, selectCurrentWorkspaceId } from './app-store';
 
 /** Single misspelling found in the submitted text. */
 export interface SpellMatch {
@@ -676,7 +677,7 @@ function nativeSpellApi(): any | null {
 
 function currentWorkspaceId(): string {
   try {
-    return String((window as any)?.S?.cur || '');
+    return selectCurrentWorkspaceId(appStore.getState());
   } catch (_error) {
     return '';
   }

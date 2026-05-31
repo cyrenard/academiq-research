@@ -9,6 +9,7 @@ import {
   _setSpellInstanceForTests,
   type SpellMatch
 } from './spellcheck';
+import { appStore } from './app-store';
 
 /**
  * The real dictionary is 9 MB and we don't want to read it from disk in
@@ -27,6 +28,7 @@ function fakeSpell(opts: { knownWords?: string[]; suggestionsFor?: Record<string
 
 beforeEach(() => {
   _setSpellInstanceForTests(null);
+  appStore.setState({ cur: 'ws-1', wss: [{ id: 'ws-1', name: 'Workspace 1', lib: [] }] });
 });
 
 afterEach(() => {
@@ -253,5 +255,21 @@ describe('checkText', () => {
 
     expect(check).toHaveBeenCalledWith('yanlis', 'tr', 'ws-2');
     expect(suggest).toHaveBeenCalledWith('yanlis', 'tr', 'ws-2');
+  });
+
+  it('uses active app-store workspace id for native spellcheck when no option is passed', async () => {
+    const original = (window as any).electronAPI;
+    const check = vi.fn(async () => []);
+    const suggest = vi.fn(async () => []);
+    (window as any).electronAPI = { spell: { check, suggest } };
+    try {
+      await checkText('metin', { preferNative: true });
+      await suggestWord('metin', { preferNative: true });
+    } finally {
+      (window as any).electronAPI = original;
+    }
+
+    expect(check).toHaveBeenCalledWith('metin', 'tr', 'ws-1');
+    expect(suggest).toHaveBeenCalledWith('metin', 'tr', 'ws-1');
   });
 });
