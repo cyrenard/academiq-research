@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   getActiveDocRecord,
   commitEditorHTMLToLegacyState,
@@ -7,6 +7,11 @@ import {
   setStatusText,
   setAuxiliaryPageHTML
 } from './legacy-doc-helpers';
+import { appStore } from './app-store';
+
+beforeEach(() => {
+  appStore.setState({ curDoc: '', doc: '', docs: [] });
+});
 
 afterEach(() => {
   delete (window as any).S;
@@ -20,36 +25,36 @@ afterEach(() => {
 // ─── getActiveDocRecord ──────────────────────────────────────────────────
 
 describe('getActiveDocRecord', () => {
-  it('returns null when window.S is missing', () => {
+  it('returns null when docs are missing', () => {
     expect(getActiveDocRecord()).toBe(null);
   });
 
-  it('returns null when window.S is not an object', () => {
-    (window as any).S = 'not an object';
+  it('returns null when docs is not an array', () => {
+    appStore.setState({ docs: undefined as any });
     expect(getActiveDocRecord()).toBe(null);
   });
 
   it('returns doc matching curDoc', () => {
-    (window as any).S = {
+    appStore.setState({
       curDoc: 'doc-2',
       docs: [
-        { id: 'doc-1', name: 'First' },
-        { id: 'doc-2', name: 'Second' }
+        { id: 'doc-1', name: 'First', content: '' },
+        { id: 'doc-2', name: 'Second', content: '' }
       ]
-    };
-    expect(getActiveDocRecord()).toEqual({ id: 'doc-2', name: 'Second' });
+    });
+    expect(getActiveDocRecord()).toEqual({ id: 'doc-2', name: 'Second', content: '' });
   });
 
   it('falls back to first doc when curDoc not found', () => {
-    (window as any).S = {
+    appStore.setState({
       curDoc: 'missing',
-      docs: [{ id: 'doc-1', name: 'First' }]
-    };
-    expect(getActiveDocRecord()).toEqual({ id: 'doc-1', name: 'First' });
+      docs: [{ id: 'doc-1', name: 'First', content: '' }]
+    });
+    expect(getActiveDocRecord()).toEqual({ id: 'doc-1', name: 'First', content: '' });
   });
 
   it('returns null when docs is empty', () => {
-    (window as any).S = { curDoc: 'x', docs: [] };
+    appStore.setState({ curDoc: 'x', docs: [] });
     expect(getActiveDocRecord()).toBe(null);
   });
 });
@@ -63,7 +68,7 @@ describe('commitEditorHTMLToLegacyState', () => {
 
   it('writes html to state.doc and active doc.content', () => {
     const docs = [{ id: 'd1', content: 'old' }];
-    (window as any).S = { curDoc: 'd1', docs };
+    appStore.setState({ curDoc: 'd1', docs });
     commitEditorHTMLToLegacyState('<p>New</p>');
     expect((window as any).S.doc).toBe('<p>New</p>');
     expect(docs[0]!.content).toBe('<p>New</p>');
@@ -71,7 +76,7 @@ describe('commitEditorHTMLToLegacyState', () => {
 
   it('writes to first doc when curDoc missing', () => {
     const docs = [{ id: 'd1', content: 'old' }];
-    (window as any).S = { curDoc: 'missing', docs };
+    appStore.setState({ curDoc: 'missing', docs });
     commitEditorHTMLToLegacyState('<p>fallback</p>');
     expect(docs[0]!.content).toBe('<p>fallback</p>');
   });

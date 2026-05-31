@@ -12,33 +12,32 @@
  * legacy-dom-helpers to persist + sync back to React.
  */
 import { legacyWin } from './legacy-window';
+import { appStore } from './app-store';
 
 /**
- * Return the active document record from `window.S.docs`, or the first
- * doc when `curDoc` doesn't match. Returns null when `window.S` is
- * missing.
+ * Return the active document record from app state, or the first doc when
+ * `curDoc` doesn't match. Returns null when docs are missing.
  */
 export function getActiveDocRecord(): any | null {
-  const state = legacyWin().S;
-  if (!state || typeof state !== 'object') return null;
+  const state = appStore.getState();
   const docs = Array.isArray(state.docs) ? state.docs : [];
   return docs.find((item: any) => item && item.id === state.curDoc) || docs[0] || null;
 }
 
 /**
- * Push the current editor HTML into legacy state mirror (`state.doc`
+ * Push the current editor HTML into app state + legacy mirror (`state.doc`
  * + `docs[active].content`). Returns the HTML that was written so the
- * caller can use it for further work. No-op (returns the html) when
- * `window.S` is missing.
+ * caller can use it for further work.
  */
 export function commitEditorHTMLToLegacyState(html: string): string {
-  const state = legacyWin().S;
+  const state = appStore.getState();
   if (!state || typeof state !== 'object') return html;
   state.doc = html;
   const docs = Array.isArray(state.docs) ? state.docs : [];
   const docId = state.curDoc;
   const doc = docs.find((item: any) => item && item.id === docId) || docs[0];
   if (doc) doc.content = html;
+  appStore.setState({ doc: html, docs });
   return html;
 }
 
