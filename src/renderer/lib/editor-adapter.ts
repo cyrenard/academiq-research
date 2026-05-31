@@ -1,4 +1,5 @@
 import { apa7Reference, sortReferencesApa, referenceKey as refFormatKey, dedupeReferences as refFormatDedupe, filterReferencesForQuery as refFormatFilter } from './reference-format';
+import { appStore, selectWorkspaceLibrary, selectReferenceById } from './app-store';
 
 export type AcademiqEditorState = {
   docId: string;
@@ -675,14 +676,14 @@ function hydrateInitialDocument(win: LegacyWindow, docId: string, initialState: 
     doc: html,
     docs
   });
+  if (win.S) {
+    appStore.setState(win.S as any);
+  }
   win.cLib = (workspaceId?: string) => {
-    const state = win.S || {};
-    const workspace = (state.wss || []).find((ws: any) => ws && ws.id === (workspaceId || state.cur)) || (state.wss || [])[0];
-    return Array.isArray(workspace && workspace.lib) ? workspace.lib : [];
+    return selectWorkspaceLibrary(appStore.getState(), workspaceId);
   };
   win.findRef = (id: string, workspaceId?: string) => {
-    const refId = String(id || '');
-    return (win.cLib?.(workspaceId) || []).find((ref: any) => ref && String(ref.id) === refId) || null;
+    return selectReferenceById(appStore.getState(), id, workspaceId);
   };
   win.refKey = (ref: any) => ref && ref.id ? `id:${String(ref.id)}` : '';
   win.getInlineCitationText = (ref: any) => {
