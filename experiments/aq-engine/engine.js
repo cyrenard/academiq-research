@@ -54,6 +54,30 @@
 })(typeof window !== 'undefined' ? window : globalThis, function(){
 
   var PT_TO_PX = 96 / 72;            // 1pt = 1.333... px @ 96dpi
+
+  // APA 7: every body paragraph's first line is indented (0.5"). We use the
+  // engine's existing first-line-indent unit (36px — same value the manual
+  // indent toggle and L4/L5 run-in headings use) so all indents stay visually
+  // consistent. NOTE (A2b follow-up): 36px ≈ 0.375"; true APA 0.5" = 48px
+  // (= 36pt * PT_TO_PX). Tightening every first-line indent to exactly 0.5" is
+  // a separate, deliberate slice.
+  var APA_BODY_FIRST_LINE_INDENT_PX = 36;
+
+  // Effective first-line indent for a block's first line. An explicit
+  // block.firstLineIndentPx ALWAYS wins (incl. a user-set 0 / headings). Only
+  // a *plain* body paragraph — not a list item, not indented (block quote),
+  // not a bibliography/appendix entry — receives the APA default.
+  function apaBodyFirstLineIndentPx(block, leftIndentPx){
+    if(!block) return 0;
+    if(block.firstLineIndentPx != null) return block.firstLineIndentPx;
+    if((block.type || 'paragraph') !== 'paragraph') return 0;
+    if(block.list) return 0;
+    if(leftIndentPx) return 0;
+    if(block._isBibEntry || block._isAppendixEntry || block._isAppendixHeading) return 0;
+    if(block.blockquote || block.quote || block.isBlockquote) return 0;
+    return APA_BODY_FIRST_LINE_INDENT_PX;
+  }
+
   var DEFAULT_OPTS = {
     pageSize: { widthPt: 595.276, heightPt: 841.89 }, // A4 @ 72dpi
     margins:  { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, // APA 1 inch
@@ -606,7 +630,7 @@
         var lineOffsetEnd   = line.items.length ? line.items[line.items.length-1].offsetEnd : lineOffsetStart;
         page.lines.push({
           y: y,
-          x: ml + leftIndentPx + (isFirstLineOfBlock ? (block.firstLineIndentPx || 0) : 0),
+          x: ml + leftIndentPx + (isFirstLineOfBlock ? apaBodyFirstLineIndentPx(block, leftIndentPx) : 0),
           width: blockContentWidth,
           height: lineHeightPx,
           align: block.align || 'left',
@@ -1128,6 +1152,8 @@
     renderToDOM: renderToDOM,
     PT_TO_PX: PT_TO_PX,
     measureText: measureText,
-    _measureCtx: getMeasureCtx
+    _measureCtx: getMeasureCtx,
+    apaBodyFirstLineIndentPx: apaBodyFirstLineIndentPx,
+    APA_BODY_FIRST_LINE_INDENT_PX: APA_BODY_FIRST_LINE_INDENT_PX
   };
 });
