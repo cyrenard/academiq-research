@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   getCitationStyle,
+  getCurrentDocument,
+  setCitationStyle,
   getInlineCitationText,
   visibleCitationText,
   narrativeCitationText,
@@ -22,6 +24,39 @@ describe('citation-builder', () => {
   it('getCitationStyle falls back to apa7', () => {
     expect(getCitationStyle(winMock)).toBe('apa7');
     expect(getCitationStyle({})).toBe('apa7');
+  });
+
+  it('getCurrentDocument matches the legacy current-doc fallback order', () => {
+    expect(getCurrentDocument(winMock)?.id).toBe('doc-1');
+    expect(getCurrentDocument({ S: { docs: [{ id: 'first' }, { id: 'second' }] } })?.id).toBe('first');
+    const stateApi = {
+      getCurrentDocumentFromState: vi.fn(() => ({ id: 'from-state' }))
+    };
+    expect(getCurrentDocument({ S: { curDoc: 'doc-x', docs: [] }, AQBibliographyState: stateApi })?.id).toBe('from-state');
+    expect(stateApi.getCurrentDocumentFromState).toHaveBeenCalledWith({ curDoc: 'doc-x', docs: [] }, 'doc-x');
+  });
+
+  it('setCitationStyle mutates only the current document and normalizes like legacy', () => {
+    const win = {
+      S: {
+        curDoc: 'doc-1',
+        citationStyle: 'apa7',
+        docs: [{ id: 'doc-1', citationStyle: 'apa7' }]
+      }
+    };
+    expect(setCitationStyle(win, ' Chicago ')).toBe('chicago');
+    expect(win.S.docs[0].citationStyle).toBe('chicago');
+    expect(win.S.citationStyle).toBe('apa7');
+    expect(setCitationStyle({}, 'apa7')).toBeNull();
+  });
+
+  it('setCitationStyle delegates style normalization when the style engine exists', () => {
+    const win = {
+      S: { docs: [{ id: 'doc-1' }], curDoc: 'doc-1' },
+      AQCitationStyles: { normalizeStyleId: vi.fn(() => 'vancouver') }
+    };
+    expect(setCitationStyle(win, 'VAN')).toBe('vancouver');
+    expect(win.AQCitationStyles.normalizeStyleId).toHaveBeenCalledWith('VAN');
   });
 
   it('getInlineCitationText fallback uses the author surname (legacy inText)', () => {

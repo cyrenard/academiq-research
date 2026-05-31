@@ -66,6 +66,7 @@ declare global {
     sortLib?: (refs: LegacyAny[]) => LegacyAny[];
     formatRef?: (ref: LegacyAny, options?: Record<string, unknown>) => string;
     getCurrentCitationStyle?: () => string;
+    getCurrentDocument?: () => LegacyAny | null;
     cLib?: (workspaceId?: string) => LegacyAny[];
     findRef?: (id: string, workspaceId?: string) => LegacyAny | null;
     refKey?: (ref: LegacyAny) => string;

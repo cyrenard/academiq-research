@@ -2,6 +2,8 @@ import { apa7Reference, sortReferencesApa, referenceKey as refFormatKey, dedupeR
 import { appStore, selectWorkspaceLibrary, selectReferenceById } from './app-store';
 import {
   getCitationStyle as buildGetCitationStyle,
+  getCurrentDocument as buildGetCurrentDocument,
+  setCitationStyle as buildSetCitationStyle,
   getInlineCitationText as buildGetInlineCitationText,
   visibleCitationText as buildVisibleCitationText,
   narrativeCitationText as buildNarrativeCitationText,
@@ -52,6 +54,8 @@ type LegacyWindow = Window & {
   AQBibliographyState?: {
     ensureBibliographySection?: (editor: any, options?: Record<string, unknown>) => boolean;
     collectAQEngineUsedReferences?: (editor: any, options?: Record<string, unknown>) => any[];
+    getCurrentDocumentFromState?: (state: unknown, docId?: string) => any;
+    getCurrentDocument?: (docs: any[], docId?: string) => any;
     syncReferenceViewsForState?: (options?: Record<string, unknown>) => any[] | boolean;
     refreshManualBibliographyForState?: (options?: Record<string, unknown>) => boolean;
     openBibliographySectionForState?: (options?: Record<string, unknown>) => boolean;
@@ -99,6 +103,7 @@ type LegacyWindow = Window & {
   sortLib?: (refs: any[]) => any[];
   formatRef?: (ref: any, options?: Record<string, unknown>) => string;
   getCurrentCitationStyle?: () => string;
+  getCurrentDocument?: () => any;
   save?: () => void;
   uSt?: () => void;
   updatePageHeight?: () => void;
@@ -415,10 +420,7 @@ function exportEditorSnapshot(win: LegacyWindow) {
 }
 
 function getCurrentDoc(win: LegacyWindow) {
-  const state = win.S || {};
-  const docs = Array.isArray(state.docs) ? state.docs : [];
-  const docId = state.curDoc || state.doc || '';
-  return docs.find((doc: any) => doc && doc.id === docId) || docs[0] || null;
+  return buildGetCurrentDocument(win);
 }
 
 function getCitationStyle(win: LegacyWindow) {
@@ -493,6 +495,7 @@ function getExtraBibliographyReferences(win: LegacyWindow) {
 
 function installReferenceBridge(win: LegacyWindow) {
   win.getCurrentCitationStyle = () => getCitationStyle(win);
+  win.getCurrentDocument = () => getCurrentDoc(win);
   win.dedupeRefs = (refs: any[]) => dedupeReferences(refs);
   win.sortLib = (refs: any[]) => sortReferences(win, refs);
   win.formatRef = (ref: any, options?: Record<string, unknown>) => formatReference(win, ref, options);
@@ -599,9 +602,7 @@ function installReferenceBridge(win: LegacyWindow) {
   }) || win.insRefs?.();
 
   win.setCitationStyle = (style: string) => {
-    const next = win.AQCitationStyles?.normalizeStyleId?.(style) || String(style || 'apa7').trim().toLowerCase() || 'apa7';
-    const doc = getCurrentDoc(win) as any;
-    if (doc) doc.citationStyle = next;
+    const next = buildSetCitationStyle(win, style) || (win.AQCitationStyles?.normalizeStyleId?.(style) || String(style || 'apa7').trim().toLowerCase() || 'apa7');
     if (win.S) {
       (win.S as any).citationStyle = next;
       win.S.cm = next;
