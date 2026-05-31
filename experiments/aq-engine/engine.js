@@ -55,13 +55,11 @@
 
   var PT_TO_PX = 96 / 72;            // 1pt = 1.333... px @ 96dpi
 
-  // APA 7: every body paragraph's first line is indented (0.5"). We use the
-  // engine's existing first-line-indent unit (36px — same value the manual
-  // indent toggle and L4/L5 run-in headings use) so all indents stay visually
-  // consistent. NOTE (A2b follow-up): 36px ≈ 0.375"; true APA 0.5" = 48px
-  // (= 36pt * PT_TO_PX). Tightening every first-line indent to exactly 0.5" is
-  // a separate, deliberate slice.
-  var APA_BODY_FIRST_LINE_INDENT_PX = 36;
+  // APA 7: every body paragraph's first line is indented exactly 0.5".
+  // At this engine's scale 1in = 72pt*PT_TO_PX = 96px, so 0.5" = 48px
+  // (= 36pt * PT_TO_PX). This matches the manual indent toggle and L4/L5
+  // run-in headings, which are pinned to the same 0.5" value.
+  var APA_BODY_FIRST_LINE_INDENT_PX = 48;
 
   // Effective first-line indent for a block's first line. An explicit
   // block.firstLineIndentPx ALWAYS wins (incl. a user-set 0 / headings). Only

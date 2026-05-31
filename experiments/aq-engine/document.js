@@ -662,7 +662,7 @@
     // (If a user wants UPPERCASE section titles, they apply it themselves.)
     block.font = { sizePt: 12, weight: '700', style: (level === 3 || level === 5) ? 'italic' : 'normal' };
     block.align = level === 1 ? 'center' : 'left';
-    block.firstLineIndentPx = (level === 4 || level === 5) ? 36 : 0;
+    block.firstLineIndentPx = (level === 4 || level === 5) ? 48 : 0; // APA 0.5" = 48px
     block.spaceAfterPx = 0;
     block.runInHeading = level === 4 || level === 5;
     return block;
@@ -749,7 +749,7 @@
       if(next > 0) b.leftIndentPx = next;
       else delete b.leftIndentPx;
       if(!b.list && (!b.type || b.type === 'paragraph')){
-        b.firstLineIndentPx = next > 0 ? 0 : 36;
+        b.firstLineIndentPx = next > 0 ? 0 : 48; // APA 0.5" = 48px
       }
     }
     return d;

@@ -22,7 +22,7 @@ const DEF = AQEngine.APA_BODY_FIRST_LINE_INDENT_PX;
 
 describe('aq-engine APA body first-line indent', () => {
   it('plain body paragraph gets the default 0.5" indent', () => {
-    expect(DEF).toBe(36);
+    expect(DEF).toBe(48); // APA 0.5" = 48px (1in = 96px)
     expect(fl({ type: 'paragraph', runs: [{ text: 'Lorem' }] })).toBe(DEF);
     expect(fl({ runs: [{ text: 'no explicit type' }] })).toBe(DEF); // type defaults to paragraph
   });
@@ -34,7 +34,7 @@ describe('aq-engine APA body first-line indent', () => {
 
   it('headings keep their explicit indent (0 for L1-3, 36 for L4/5)', () => {
     expect(fl({ type: 'heading', level: 1, firstLineIndentPx: 0 })).toBe(0);
-    expect(fl({ type: 'heading', level: 4, firstLineIndentPx: 36 })).toBe(36);
+    expect(fl({ type: 'heading', level: 4, firstLineIndentPx: 48 })).toBe(48);
   });
 
   it('list items do NOT get the body indent', () => {

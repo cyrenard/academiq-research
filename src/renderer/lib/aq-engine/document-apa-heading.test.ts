@@ -65,7 +65,7 @@ describe('aq-engine APA 7 heading styling', () => {
     const b = headingBlock('Ölçüm araçları', 4);
     expect(b.font.weight).toBe('700');
     expect(b.font.style).toBe('normal');
-    expect(b.firstLineIndentPx).toBe(36);
+    expect(b.firstLineIndentPx).toBe(48); // APA 0.5" = 48px
     expect(b.runInHeading).toBe(true);
   });
 
@@ -73,7 +73,7 @@ describe('aq-engine APA 7 heading styling', () => {
     const b = headingBlock('Güvenirlik', 5);
     expect(b.font.weight).toBe('700');
     expect(b.font.style).toBe('italic');
-    expect(b.firstLineIndentPx).toBe(36);
+    expect(b.firstLineIndentPx).toBe(48); // APA 0.5" = 48px
     expect(b.runInHeading).toBe(true);
   });
 

@@ -34,10 +34,10 @@
   function applyAPA7HeadingStyle(block, level){
     level = normalizeHeadingLevel(level);
     block.level = level;
-    if(level === 1) uppercaseAPAHeadingRuns(block.runs);
+    // APA 7: headings are Title Case (author's casing), not force-uppercased.
     block.font = { sizePt: 12, weight: '700', style: (level === 3 || level === 5) ? 'italic' : 'normal' };
     block.align = level === 1 ? 'center' : 'left';
-    block.firstLineIndentPx = (level === 4 || level === 5) ? 36 : 0;
+    block.firstLineIndentPx = (level === 4 || level === 5) ? 48 : 0; // APA 0.5" = 48px
     block.spaceAfterPx = 0;
     block.runInHeading = level === 4 || level === 5;
     return block;
