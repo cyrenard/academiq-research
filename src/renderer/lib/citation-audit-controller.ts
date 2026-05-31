@@ -7,6 +7,7 @@
  * - `.aq-citation-error`: if one or more reference IDs do not exist in the database.
  * - `.aq-citation-mismatch`: if the visible text of the span does not match the generated citation text.
  */
+import { appStore, selectCurrentWorkspaceId } from './app-store';
 
 let debounceHandle: ReturnType<typeof setTimeout> | null = null;
 const DEBOUNCE_MS = 600;
@@ -40,7 +41,7 @@ export function runCitationAuditNow(): void {
       return win.AQReferenceManager.findReference(id);
     }
     if (typeof win.findRef === 'function') {
-      return win.findRef(id, win.S?.cur);
+      return win.findRef(id, selectCurrentWorkspaceId(appStore.getState()));
     }
     return null;
   };

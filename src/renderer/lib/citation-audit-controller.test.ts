@@ -3,6 +3,7 @@ import {
   scheduleCitationAudit,
   runCitationAuditNow
 } from './citation-audit-controller';
+import { appStore } from './app-store';
 
 function paintDocumentWithCitations(citations: Array<{ ref: string; text: string; mode?: string }>) {
   document.body.innerHTML = '';
@@ -24,9 +25,11 @@ function paintDocumentWithCitations(citations: Array<{ ref: string; text: string
 
 beforeEach(() => {
   document.body.innerHTML = '';
+  appStore.setState({ cur: 'ws-1', wss: [{ id: 'ws-1', name: 'Workspace 1', lib: [] }] });
   delete (window as any).AQReferenceManager;
   delete (window as any).AQCitationStyles;
   delete (window as any).visibleCitationText;
+  delete (window as any).findRef;
 });
 
 describe('Citation Audit Controller', () => {
@@ -75,6 +78,22 @@ describe('Citation Audit Controller', () => {
     runCitationAuditNow();
     expect(el.classList.contains('aq-citation-error')).toBe(false);
     expect(el.classList.contains('aq-citation-mismatch')).toBe(false);
+  });
+
+  it('falls back to legacy findRef with active app-store workspace id', () => {
+    paintDocumentWithCitations([{ ref: 'ref-1', text: '(Doe, 2020)' }]);
+    (window as any).AQReferenceManager = {
+      getLibrary: () => []
+    };
+    (window as any).findRef = vi.fn(() => ({ id: 'ref-1', title: 'Test Title' }));
+    (window as any).AQCitationStyles = {
+      visibleCitationText: () => '(Doe, 2020)'
+    };
+
+    runCitationAuditNow();
+
+    expect((window as any).findRef).toHaveBeenCalledWith('ref-1', 'ws-1');
+    expect(document.body.querySelectorAll('.aq-citation-error').length).toBe(0);
   });
 });
 
