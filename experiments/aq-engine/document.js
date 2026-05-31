@@ -653,20 +653,13 @@
     return Math.max(1, Math.min(5, n));
   }
 
-  function uppercaseAPAHeadingRuns(runs){
-    if(!Array.isArray(runs)) return;
-    runs.forEach(function(run){
-      if(!run || typeof run.text !== 'string') return;
-      try{ run.text = run.text.toLocaleUpperCase('tr-TR'); }
-      catch(_e){ run.text = run.text.toUpperCase(); }
-    });
-  }
-
   function applyAPA7HeadingStyle(block, level){
     level = normalizeHeadingLevel(level);
     block.type = 'heading';
     block.level = level;
-    if(level === 1) uppercaseAPAHeadingRuns(block.runs);
+    // APA 7: all heading levels are Title Case (not ALL CAPS). The author types
+    // the casing they want; the engine no longer force-uppercases Level 1.
+    // (If a user wants UPPERCASE section titles, they apply it themselves.)
     block.font = { sizePt: 12, weight: '700', style: (level === 3 || level === 5) ? 'italic' : 'normal' };
     block.align = level === 1 ? 'center' : 'left';
     block.firstLineIndentPx = (level === 4 || level === 5) ? 36 : 0;
