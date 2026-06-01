@@ -76,6 +76,18 @@
     return APA_BODY_FIRST_LINE_INDENT_PX;
   }
 
+  // Keep a heading with the start of its content (Word/APA "keep with next"):
+  // if a heading would be the last thing that fits on the current page —
+  // leaving no room for at least one following body line — move it to the next
+  // page instead of orphaning it at the bottom. Returns true → break first.
+  function shouldBreakBeforeHeading(block, yPx, headingHeightPx, lineHeightPx, contentHeightPx, hasFollowingContent){
+    if(!block || block.type !== 'heading') return false;
+    if(!hasFollowingContent) return false;     // nothing to keep it with
+    if(block.pageBreak) return false;          // explicit page breaks handle themselves
+    if(yPx <= 0) return false;                 // already at the top of a fresh page
+    return (yPx + headingHeightPx + lineHeightPx) > contentHeightPx;
+  }
+
   var DEFAULT_OPTS = {
     pageSize: { widthPt: 595.276, heightPt: 841.89 }, // A4 @ 72dpi
     margins:  { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, // APA 1 inch
@@ -606,6 +618,11 @@
         }
         lineCache.set(cacheKey, cloneLines(rawLines));
         lines = cloneLinesAndShiftOffsets(rawLines, docOffset);
+      }
+
+      // Keep-with-next: don't orphan a heading at the bottom of a page.
+      if(shouldBreakBeforeHeading(block, y, lines.length * lineHeightPx, lineHeightPx, contentHeightPx, b < blocks.length - 1)){
+        pages.push(page); page = newPage(); y = 0;
       }
 
       // Widow/orphan: if only 1 line of a multi-line paragraph fits on the
@@ -1152,6 +1169,7 @@
     measureText: measureText,
     _measureCtx: getMeasureCtx,
     apaBodyFirstLineIndentPx: apaBodyFirstLineIndentPx,
-    APA_BODY_FIRST_LINE_INDENT_PX: APA_BODY_FIRST_LINE_INDENT_PX
+    APA_BODY_FIRST_LINE_INDENT_PX: APA_BODY_FIRST_LINE_INDENT_PX,
+    shouldBreakBeforeHeading: shouldBreakBeforeHeading
   };
 });
