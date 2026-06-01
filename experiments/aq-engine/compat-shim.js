@@ -158,13 +158,11 @@
   }
 
   function applyAPA7BibliographyEntryStyle(block){
-    block.type = block.type || 'paragraph';
-    block._isBibEntry = true;
-    block.leftIndentPx = 48;
-    block.firstLineIndentPx = -48;
-    block.spaceAfterPx = 0;
-    block.lineHeightFactor = 2.0;
-    block.font = { sizePt: 12, weight: '400', style: 'normal' };
+    // Canonical APA 7 bibliography entry styling lives in document.js
+    // (window.AQEngineDocument, loaded first). Single source of truth.
+    if(typeof window !== 'undefined' && window.AQEngineDocument && typeof window.AQEngineDocument.applyAPA7BibliographyEntryStyle === 'function'){
+      return window.AQEngineDocument.applyAPA7BibliographyEntryStyle(block);
+    }
     return block;
   }
 

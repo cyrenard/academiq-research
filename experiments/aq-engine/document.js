@@ -668,6 +668,20 @@
     return block;
   }
 
+  // Canonical APA 7 bibliography (reference list) entry styling: 0.5" hanging
+  // indent (left 48px, first line -48px), double spacing, 12pt regular. Shared
+  // by compat-shim.js + tiptap-adapter.js (which delegate here).
+  function applyAPA7BibliographyEntryStyle(block){
+    block.type = block.type || 'paragraph';
+    block._isBibEntry = true;
+    block.leftIndentPx = 48;
+    block.firstLineIndentPx = -48;
+    block.spaceAfterPx = 0;
+    block.lineHeightFactor = 2.0;
+    block.font = { sizePt: 12, weight: '400', style: 'normal' };
+    return block;
+  }
+
   function setBlockType(doc, blockIdx, type, attrs){
     if(blockIdx < 0 || blockIdx >= doc.blocks.length) return doc;
     var d = cloneDoc(doc);
@@ -894,6 +908,7 @@
     // Canonical APA 7 heading styling — single source of truth shared by the
     // compat-shim and tiptap-adapter (which delegate here). Loaded first.
     applyAPA7HeadingStyle: applyAPA7HeadingStyle,
+    applyAPA7BibliographyEntryStyle: applyAPA7BibliographyEntryStyle,
     normalizeHeadingLevel: normalizeHeadingLevel,
     _ops: { insertText: insertText, deleteRange: deleteRange, splitBlock: splitBlock, mergeWithPrevious: mergeWithPrevious, locate: locate, flatLength: flatLength }
   };

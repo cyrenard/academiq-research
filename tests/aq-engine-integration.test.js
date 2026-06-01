@@ -536,12 +536,17 @@ test('AQ Engine bibliography entries keep APA 7 hanging indent and double spacin
   const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
   const adapter = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'tiptap-adapter.js'), 'utf8');
   const compat = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'compat-shim.js'), 'utf8');
-  [bibliography, adapter, compat].forEach((source) => {
+  // applyAPA7BibliographyEntryStyle is deduped to one canonical source in
+  // document.js; compat-shim/tiptap-adapter delegate to it.
+  const document = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'document.js'), 'utf8');
+  [bibliography, document].forEach((source) => {
     assert.match(source, /leftIndentPx = 48|leftIndentPx: 48/);
     assert.match(source, /firstLineIndentPx = -48|firstLineIndentPx: -48/);
     assert.match(source, /lineHeightFactor = 2\.0|lineHeightFactor: 2\.0/);
     assert.match(source, /spaceAfterPx = 0|spaceAfterPx: 0/);
   });
+  assert.match(adapter, /window\.AQEngineDocument\.applyAPA7BibliographyEntryStyle/);
+  assert.match(compat, /window\.AQEngineDocument\.applyAPA7BibliographyEntryStyle/);
   assert.match(compat, /applyAPA7BibliographyEntryStyle\(b\)/);
   assert.match(adapter, /applyAPA7BibliographyEntryStyle\(block\)/);
   assert.ok(html.includes('<script src="./src/bibliography-state.js">'), 'bibliography-state module must be loaded as src/ script');
