@@ -16,6 +16,7 @@ const require = createRequire(import.meta.url);
 const D = require('../../../../experiments/aq-engine/document.js') as {
   create: (blocks?: any[]) => any;
   resolveTrackChangesInBlocks: (blocks: any[], mode: 'accept' | 'reject') => any[];
+  resolveTrackChangeAtOffset: (blocks: any[], off: number, mode: 'accept' | 'reject') => boolean;
   blocksHaveTrackChanges: (blocks: any[]) => boolean;
 };
 
@@ -90,5 +91,39 @@ describe('doc-model acceptAll / rejectAll', () => {
     const doc = D.create([{ type: 'paragraph', runs: [{ text: 'plain' }] }]);
     expect(doc.acceptAllTrackChanges()).toBe(false);
     expect(doc.rejectAllTrackChanges()).toBe(false);
+  });
+});
+
+describe('single (current) track change at an offset', () => {
+  // offsets: "keep " = 0..5, "added" = 5..10, "gone" = 10..14, " tail" = 14..19
+  it('accepts only the change under the offset, leaving the others', () => {
+    const doc = D.create(sample());
+    expect(doc.acceptTrackChangeAt(7)).toBe(true); // inside "added" (insertion)
+    expect(doc.getPlainText()).toBe('keep addedgone tail'); // insertion kept, deletion still pending
+    expect(doc.hasTrackChanges()).toBe(true);
+  });
+
+  it('rejects only the deletion under the offset', () => {
+    const doc = D.create(sample());
+    expect(doc.rejectTrackChangeAt(12)).toBe(true); // inside "gone" (deletion) → restore
+    expect(doc.getPlainText()).toBe('keep addedgone tail');
+    // the insertion is still pending (not yet accepted)
+    expect(doc.hasTrackChanges()).toBe(true);
+  });
+
+  it('returns false when the offset is not on a tracked change', () => {
+    const doc = D.create(sample());
+    expect(doc.acceptTrackChangeAt(2)).toBe(false); // inside "keep "
+  });
+
+  it('resolveTrackChangeAtOffset expands across a contiguous same-flag span', () => {
+    const blocks = [{ type: 'paragraph', runs: [
+      { text: 'a' },
+      { text: 'X', trackInsert: true },
+      { text: 'Y', trackInsert: true },
+      { text: 'b' }
+    ] }];
+    expect(D.resolveTrackChangeAtOffset(blocks, 2, 'reject')).toBe(true); // inside the X/Y insertion span
+    expect(blocks[0].runs.map((r: any) => r.text).join('')).toBe('ab'); // both X,Y dropped
   });
 });

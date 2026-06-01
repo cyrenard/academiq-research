@@ -770,6 +770,27 @@
     });
     return blocks;
   }
+  // Resolve the SINGLE tracked change at flat offset `off` — the contiguous
+  // span of runs (within one block) sharing the same trackInsert/trackDelete
+  // flag as the run under the offset. Mutates `blocks`; returns true if a change
+  // was resolved, false if the offset isn't on a tracked change.
+  function resolveTrackChangeAtOffset(blocks, off, mode){
+    var loc = locate({ blocks: blocks }, off);
+    var block = blocks[loc.blockIdx];
+    if(!block || !Array.isArray(block.runs) || !block.runs.length) return false;
+    var rl = locateRun(block, loc.intra);
+    var runs = block.runs;
+    var run = runs[rl.runIdx];
+    if(!run || !(run.trackInsert || run.trackDelete)) return false;
+    var flag = run.trackInsert ? 'trackInsert' : 'trackDelete';
+    var start = rl.runIdx, end = rl.runIdx;
+    while(start > 0 && runs[start - 1] && runs[start - 1][flag]) start--;
+    while(end < runs.length - 1 && runs[end + 1] && runs[end + 1][flag]) end++;
+    var resolved = resolveTrackRuns(runs.slice(start, end + 1), mode);
+    block.runs = runs.slice(0, start).concat(resolved).concat(runs.slice(end + 1));
+    if(!block.runs.length) block.runs = [{ text: '' }];
+    return true;
+  }
   function blocksHaveTrackChanges(blocks){
     return (blocks || []).some(function(block){
       if(!block) return false;
@@ -1013,6 +1034,16 @@
         commit({ blocks: resolveTrackChangesInBlocks(cloneDoc(doc).blocks, 'reject') });
         return true;
       },
+      acceptTrackChangeAt: function(off){
+        var d = cloneDoc(doc);
+        if(!resolveTrackChangeAtOffset(d.blocks, off, 'accept')) return false;
+        commit(d); return true;
+      },
+      rejectTrackChangeAt: function(off){
+        var d = cloneDoc(doc);
+        if(!resolveTrackChangeAtOffset(d.blocks, off, 'reject')) return false;
+        commit(d); return true;
+      },
       // Remove the table block containing offset `off`. Returns true if a table
       // was removed (no-op + false when the block at `off` is not a table).
       removeTableAt: function(off){
@@ -1058,6 +1089,7 @@
     clearAPA7BlockquoteStyle: clearAPA7BlockquoteStyle,
     makeEmptyTable: makeEmptyTable,
     resolveTrackChangesInBlocks: resolveTrackChangesInBlocks,
+    resolveTrackChangeAtOffset: resolveTrackChangeAtOffset,
     blocksHaveTrackChanges: blocksHaveTrackChanges,
     normalizeHeadingLevel: normalizeHeadingLevel,
     _ops: { insertText: insertText, deleteRange: deleteRange, splitBlock: splitBlock, mergeWithPrevious: mergeWithPrevious, locate: locate, flatLength: flatLength }

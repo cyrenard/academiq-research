@@ -615,6 +615,10 @@ export function TopToolbar({ selectedReferenceId, onOpenAudit, onOpenFeatureModa
         handled = editor.acceptAllTrackChanges() !== false;
       } else if (/^reject(Tracked|Track)Changes$/.test(fn) && typeof editor.rejectAllTrackChanges === 'function') {
         handled = editor.rejectAllTrackChanges() !== false;
+      } else if (/^acceptCurrentTrack(ed)?Change$/.test(fn) && typeof editor.acceptCurrentTrackChange === 'function') {
+        handled = editor.acceptCurrentTrackChange() !== false;
+      } else if (/^rejectCurrentTrack(ed)?Change$/.test(fn) && typeof editor.rejectCurrentTrackChange === 'function') {
+        handled = editor.rejectCurrentTrackChange() !== false;
       }
     }
     if (!handled) {

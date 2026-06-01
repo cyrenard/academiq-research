@@ -1969,6 +1969,18 @@
         if(typeof docModel.rejectAllTrackChanges !== 'function' || !docModel.rejectAllTrackChanges()) return false;
         reflow(); onUpdate({ editor: editorObj });
         return true;
+      },
+      acceptCurrentTrackChange: function(){
+        if(!selection || typeof docModel.acceptTrackChangeAt !== 'function') return false;
+        if(!docModel.acceptTrackChangeAt(selection.getRange().from)) return false;
+        reflow(); onUpdate({ editor: editorObj });
+        return true;
+      },
+      rejectCurrentTrackChange: function(){
+        if(!selection || typeof docModel.rejectTrackChangeAt !== 'function') return false;
+        if(!docModel.rejectTrackChangeAt(selection.getRange().from)) return false;
+        reflow(); onUpdate({ editor: editorObj });
+        return true;
       }
     };
 
