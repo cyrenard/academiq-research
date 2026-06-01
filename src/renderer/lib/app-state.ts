@@ -449,8 +449,18 @@ export function deleteNote(state: AcademiqAppState, noteId: string): AcademiqApp
   return { ...state, notes: state.notes.filter((note) => note.id !== noteId) };
 }
 
+/**
+ * Strip leading/trailing separator junk (commas/semicolons/periods/whitespace)
+ * that import parsers sometimes leave on a title (e.g. ", Qualitative
+ * metasynthesis…" when the author segment was split off). Display-only.
+ */
+export function cleanReferenceTitle(raw: unknown): string {
+  return String(raw ?? '').replace(/^[\s,;.]+/, '').replace(/\s+$/, '').trim();
+}
+
 export function referenceTitle(ref: AcademiqReference) {
-  return String(ref.title || ref.doi || ref.url || 'Başlıksız kaynak');
+  const cleaned = cleanReferenceTitle(ref.title);
+  return cleaned || String(ref.doi || ref.url || 'Başlıksız kaynak');
 }
 
 export function referenceAuthors(ref: AcademiqReference) {

@@ -33,6 +33,8 @@ import {
   switchWorkspace,
   updateActiveDocumentHTML,
   updateReferenceInActiveWorkspace,
+  cleanReferenceTitle,
+  referenceTitle,
   type AcademiqAppState
 } from './app-state';
 
@@ -230,5 +232,20 @@ describe('active selectors', () => {
   it('getActiveDocument returns the document whose id matches state.curDoc', () => {
     const s: AcademiqAppState = createBlankState();
     expect(getActiveDocument(s).id).toBe(s.curDoc);
+  });
+});
+
+describe('referenceTitle / cleanReferenceTitle', () => {
+  it('strips leading separator junk left by import parsers', () => {
+    expect(cleanReferenceTitle(', Qualitative metasynthesis: Issues')).toBe('Qualitative metasynthesis: Issues');
+    expect(cleanReferenceTitle('  ;. Title ')).toBe('Title');
+    expect(cleanReferenceTitle('Normal Title')).toBe('Normal Title');
+    expect(cleanReferenceTitle(null)).toBe('');
+  });
+
+  it('referenceTitle returns the cleaned title, falling back to doi/url', () => {
+    expect(referenceTitle({ id: 'r1', title: ', Foo Bar' } as any)).toBe('Foo Bar');
+    expect(referenceTitle({ id: 'r2', title: '   ', doi: '10.1/x' } as any)).toBe('10.1/x');
+    expect(referenceTitle({ id: 'r3' } as any)).toBe('Başlıksız kaynak');
   });
 });

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type
 import type { AcademiqReference } from '../../lib/app-state';
 import { referenceAuthors, referenceTags, referenceTitle } from '../../lib/app-state';
 import { legacyFeatures, runLegacyFeature } from '../../lib/legacy-feature-adapter';
-import { VirtualList } from '../ui/VirtualList';
 
 type SidebarCollection = {
   id: string;
@@ -623,12 +622,7 @@ export function RefSidebar({
                       collection.id,
                       <div className="pl-4">
                         {folderRefs.length ? (
-                          <VirtualList
-                            items={folderRefs}
-                            itemHeight={106}
-                            renderItem={(ref) => renderReferenceCard(ref)}
-                            containerHeight={Math.min(folderRefs.length * 106, 400)}
-                          />
+                          <div className="space-y-2">{folderRefs.map((ref) => renderReferenceCard(ref))}</div>
                         ) : (
                           <div className="rounded-lg border border-dashed border-aq-line p-4 text-center text-xs text-aq-muted">Kaynakları buraya sürükle.</div>
                         )}
@@ -645,12 +639,7 @@ export function RefSidebar({
               {renderCollectionDropZone(
                 'unfiled',
                 <div className="pl-4">
-                  <VirtualList
-                    items={orphanedReferences}
-                    itemHeight={106}
-                    renderItem={(ref) => renderReferenceCard(ref)}
-                    containerHeight={Math.min(orphanedReferences.length * 106, 400)}
-                  />
+                  <div className="space-y-2">{orphanedReferences.map((ref) => renderReferenceCard(ref))}</div>
                 </div>
               )}
             </section>
@@ -670,12 +659,7 @@ export function RefSidebar({
                   'unfiled',
                   <div className="pl-4">
                     {unfiledReferences.length ? (
-                      <VirtualList
-                        items={unfiledReferences}
-                        itemHeight={106}
-                        renderItem={(ref) => renderReferenceCard(ref)}
-                        containerHeight={Math.min(unfiledReferences.length * 106, 400)}
-                      />
+                      <div className="space-y-2">{unfiledReferences.map((ref) => renderReferenceCard(ref))}</div>
                     ) : (
                       <div className="rounded-lg border border-dashed border-aq-line p-4 text-center text-xs text-aq-muted">Klasörsüz kaynak yok.</div>
                     )}
