@@ -1940,8 +1940,23 @@
         }
         reflow(); onUpdate({ editor: editorObj });
       },
-      deleteTable:  function(){},
-      insertTable:  function(){},
+      insertTable: function(rows, cols){
+        if(!selection) return;
+        var range = selection.getRange();
+        var at = range.from;
+        if(range.from !== range.to) docModel.deleteRange(range.from, range.to);
+        if(typeof docModel.insertTable === 'function') docModel.insertTable(at, rows, cols);
+        reflow();
+        if(selection) selection.setRange(at, at);
+        onUpdate({ editor: editorObj });
+      },
+      deleteTable: function(){
+        if(!selection) return;
+        var range = selection.getRange();
+        if(typeof docModel.removeTableAt !== 'function' || !docModel.removeTableAt(range.from)) return;
+        reflow();
+        onUpdate({ editor: editorObj });
+      },
       undo: function(){ if(docModel.undo()){ reflow(); onUpdate({ editor: editorObj }); } },
       redo: function(){ if(docModel.redo()){ reflow(); onUpdate({ editor: editorObj }); } }
     };

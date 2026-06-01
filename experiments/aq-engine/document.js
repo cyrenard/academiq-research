@@ -704,6 +704,20 @@
     return block;
   }
 
+  // Build an empty `rows × cols` table block (cells carry a single empty run).
+  // Shape matches what the engine reflow renders: { type:'table', rows:[{cells:[{runs}]}] }.
+  function makeEmptyTable(rows, cols){
+    var r = Math.max(1, parseInt(rows, 10) || 3);
+    var c = Math.max(1, parseInt(cols, 10) || 3);
+    var tableRows = [];
+    for(var i = 0; i < r; i++){
+      var cells = [];
+      for(var j = 0; j < c; j++) cells.push({ runs: [{ text: '' }] });
+      tableRows.push({ cells: cells });
+    }
+    return { type: 'table', rows: tableRows };
+  }
+
   function setBlockType(doc, blockIdx, type, attrs){
     if(blockIdx < 0 || blockIdx >= doc.blocks.length) return doc;
     var d = cloneDoc(doc);
@@ -918,6 +932,21 @@
         }
         commit(d);
       },
+      // Insert an empty rows×cols table block at offset `off`.
+      insertTable: function(off, rows, cols){
+        commit(insertBlocks(doc, off, [makeEmptyTable(rows, cols)]));
+      },
+      // Remove the table block containing offset `off`. Returns true if a table
+      // was removed (no-op + false when the block at `off` is not a table).
+      removeTableAt: function(off){
+        var idx = blockIndexAt(doc, off);
+        if(idx < 0 || idx >= doc.blocks.length || doc.blocks[idx].type !== 'table') return false;
+        var d = cloneDoc(doc);
+        d.blocks.splice(idx, 1);
+        if(!d.blocks.length) d.blocks.push({ type: 'paragraph', runs: [{ text: '' }] });
+        commit(d);
+        return true;
+      },
       changeListLevel:     function(blockIdx, delta){ commit(changeListLevel(doc, blockIdx, delta)); },
       setLeftIndentForRange: function(from, to, deltaPx){ commit(setLeftIndentForRange(doc, from, to, deltaPx)); },
       blockTextLength:     function(blockIdx){ return blockTextLength(doc.blocks[blockIdx] || { runs: [] }); },
@@ -950,6 +979,7 @@
     applyAPA7BibliographyEntryStyle: applyAPA7BibliographyEntryStyle,
     applyAPA7BlockquoteStyle: applyAPA7BlockquoteStyle,
     clearAPA7BlockquoteStyle: clearAPA7BlockquoteStyle,
+    makeEmptyTable: makeEmptyTable,
     normalizeHeadingLevel: normalizeHeadingLevel,
     _ops: { insertText: insertText, deleteRange: deleteRange, splitBlock: splitBlock, mergeWithPrevious: mergeWithPrevious, locate: locate, flatLength: flatLength }
   };
