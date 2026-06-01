@@ -43,7 +43,13 @@ export function applyAppendicesToEngine(
   if (activeEditor?._aqEngine && activeEditor?._docModel?.get && activeEditor?._docModel?.replace) {
     const docModel = activeEditor._docModel;
     const blocks = Array.isArray(docModel.get()?.blocks) ? docModel.get().blocks.slice() : [];
-    const nextIndex = Math.max(1, getCount(appendicesHTML));
+    // Number the new appendix from how many appendix headings the engine
+    // ALREADY has, not just from getCount(appendicesHTML). The HTML-derived
+    // count could stick at 1 (when doc.appendicesHTML failed to accumulate),
+    // so every "add" reused appendix-1 and the renumber collapsed them into a
+    // single appendix. Taking the max guarantees a fresh, increasing index.
+    const existingInEngine = blocks.filter((block: any) => block?._isAppendixHeading).length;
+    const nextIndex = Math.max(existingInEngine + 1, Number(getCount(appendicesHTML)) || 0, 1);
     docModel.replace(blocks.concat([
       {
         type: 'heading',

@@ -76,6 +76,24 @@ describe('applyAppendicesToEngine', () => {
     expect(appended[0]._appendixId).toBe('appendix-1');
   });
 
+  it('numbers the next appendix from the engine count even when getCount is stuck (regression: only one appendix could be added)', () => {
+    // The engine already has appendix-1; the HTML-derived getCount is stuck at 1
+    // (doc.appendicesHTML failed to accumulate). The new appendix must still be
+    // appendix-2, not a second appendix-1 (which collapsed to one on renumber).
+    const editor = makeEngine([
+      { type: 'paragraph', runs: [{ text: 'body' }] },
+      { type: 'heading', _isAppendixHeading: true, _appendixId: 'appendix-1', runs: [{ text: 'EK-1' }] },
+      { type: 'paragraph', _isAppendixEntry: true, _appendixId: 'appendix-1' }
+    ]);
+    (window as any).editor = editor;
+    expect(applyAppendicesToEngine('html', () => 1)).toBe(true);
+    const appended = (editor._replace.mock.calls[0] as any[])[0];
+    const headings = appended.filter((b: any) => b._isAppendixHeading);
+    expect(headings).toHaveLength(2);
+    expect(headings[1]._appendixId).toBe('appendix-2');
+    expect(headings[1].runs[0].text).toBe('EK-2');
+  });
+
   it('uses getActiveEditorInstance when registered', () => {
     const editor = makeEngine();
     const getActive = vi.fn(() => editor);
