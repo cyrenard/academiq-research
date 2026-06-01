@@ -14,12 +14,14 @@ export function legacyWin(): LegacyWindow {
   return window as LegacyWindow;
 }
 
+import { appStore } from './app-store';
+
 /**
  * Returns the legacy state object if present, or null. Safer than
  * `legacyWin().S` for read-only paths because callers must opt into the
  * null check.
  */
 export function legacyState(): LegacyState | null {
-  const s = legacyWin().S;
-  return s && typeof s === 'object' ? s : null;
+  const s = appStore.getState();
+  return s && typeof s === 'object' ? (s as any) : null;
 }

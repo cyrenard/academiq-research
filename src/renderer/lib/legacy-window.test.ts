@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { legacyWin, legacyState } from './legacy-window';
+import { appStore } from './app-store';
 
 afterEach(() => {
   delete (window as any).S;
@@ -25,25 +26,8 @@ describe('legacyWin', () => {
 });
 
 describe('legacyState', () => {
-  it('returns null when window.S is missing', () => {
-    expect(legacyState()).toBe(null);
-  });
-
-  it('returns null when window.S is not an object', () => {
-    (window as any).S = 'not an object';
-    expect(legacyState()).toBe(null);
-
-    (window as any).S = 123;
-    expect(legacyState()).toBe(null);
-  });
-
-  it('returns null when window.S is null', () => {
-    (window as any).S = null;
-    expect(legacyState()).toBe(null);
-  });
-
-  it('returns the state object when present', () => {
-    (window as any).S = { cur: 'ws-1', wss: [] };
-    expect(legacyState()).toEqual({ cur: 'ws-1', wss: [] });
+  it('returns the state object from appStore when present', () => {
+    appStore.setState({ cur: 'ws-1', wss: [] } as any);
+    expect(legacyState()).toEqual(expect.objectContaining({ cur: 'ws-1', wss: [] }));
   });
 });
