@@ -250,6 +250,7 @@
           crossRef: run.crossRef || null,
           trackInsert: !!run.trackInsert,
           trackDelete: !!run.trackDelete,
+          commentId: run.commentId || null,
           offsetStart: localCursor + m.index,
           offsetEnd:   localCursor + m.index + seg.length
         });
@@ -301,6 +302,7 @@
         crossRef: tok.crossRef,
         trackInsert: !!tok.trackInsert,
         trackDelete: !!tok.trackDelete,
+        commentId: tok.commentId || null,
         offsetStart: tok.offsetStart,
         offsetEnd: tok.offsetEnd
       });
@@ -958,6 +960,13 @@
             span.style.color = '#a33a35';
             span.style.textDecoration = 'line-through';
             span.style.backgroundColor = span.style.backgroundColor || 'rgba(201,72,66,.10)';
+          }
+          if(it.commentId){
+            span.className = (span.className ? span.className + ' ' : '') + 'aq-comment-mark';
+            span.dataset.commentId = String(it.commentId);
+            span.style.backgroundColor = span.style.backgroundColor || 'rgba(255,196,0,.18)';
+            span.style.borderBottom = '1.5px solid rgba(214,150,0,.85)';
+            span.style.cursor = 'pointer';
           }
           if(it.href){
             span.style.color = span.style.color || '#1a0dab';

@@ -1981,7 +1981,22 @@
         if(!docModel.rejectTrackChangeAt(selection.getRange().from)) return false;
         reflow(); onUpdate({ editor: editorObj });
         return true;
-      }
+      },
+      // Comments: anchor/clear a `commentId` mark on the current selection.
+      applyComment: function(commentId){
+        if(!selection || !commentId) return false;
+        var range = selection.getRange();
+        if(range.from === range.to) return false;
+        docModel.applyMark(range.from, range.to, 'commentId', String(commentId));
+        reflow(); onUpdate({ editor: editorObj });
+        return true;
+      },
+      removeComment: function(commentId){
+        if(typeof docModel.clearCommentMark !== 'function' || !docModel.clearCommentMark(commentId)) return false;
+        reflow(); onUpdate({ editor: editorObj });
+        return true;
+      },
+      listCommentIds: function(){ return typeof docModel.listCommentIds === 'function' ? docModel.listCommentIds() : []; }
     };
 
     function _toggleMark(mark){

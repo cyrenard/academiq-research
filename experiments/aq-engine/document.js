@@ -570,6 +570,9 @@
   function runsHaveSameFormat(a, b){
     var keys = ['bold','italic','underline','strike','color','highlight','baselineShift','fontScale','href','trackInsert','trackDelete'];
     for(var i = 0; i < keys.length; i++) if(!!a[keys[i]] !== !!b[keys[i]] && a[keys[i]] !== b[keys[i]]) return false;
+    // Comment anchors: runs with different commentId (incl. one with / one
+    // without) must NOT merge, or comment ranges would bleed into neighbours.
+    if(String(a.commentId || '') !== String(b.commentId || '')) return false;
     return JSON.stringify(a.font || null) === JSON.stringify(b.font || null) &&
            JSON.stringify(a.citation || null) === JSON.stringify(b.citation || null) &&
            JSON.stringify(a.footnote || null) === JSON.stringify(b.footnote || null) &&
@@ -790,6 +793,32 @@
     block.runs = runs.slice(0, start).concat(resolved).concat(runs.slice(end + 1));
     if(!block.runs.length) block.runs = [{ text: '' }];
     return true;
+  }
+  // ── Comments: anchor a comment to a text range via a `commentId` run mark ──
+  function eachRunList(blocks, fn){
+    (blocks || []).forEach(function(block){
+      if(!block) return;
+      if(Array.isArray(block.runs)) fn(block.runs);
+      if(Array.isArray(block.rows)){
+        block.rows.forEach(function(row){
+          (row && row.cells ? row.cells : []).forEach(function(cell){ if(cell) fn(cell.runs); });
+        });
+      }
+    });
+  }
+  function clearCommentInBlocks(blocks, commentId){
+    var id = String(commentId);
+    eachRunList(blocks, function(runs){
+      (runs || []).forEach(function(run){ if(run && String(run.commentId) === id) delete run.commentId; });
+    });
+    return blocks;
+  }
+  function collectCommentIds(blocks){
+    var ids = {};
+    eachRunList(blocks, function(runs){
+      (runs || []).forEach(function(run){ if(run && run.commentId) ids[String(run.commentId)] = true; });
+    });
+    return Object.keys(ids);
   }
   function blocksHaveTrackChanges(blocks){
     return (blocks || []).some(function(block){
@@ -1034,6 +1063,11 @@
         commit({ blocks: resolveTrackChangesInBlocks(cloneDoc(doc).blocks, 'reject') });
         return true;
       },
+      listCommentIds: function(){ return collectCommentIds(doc.blocks); },
+      clearCommentMark: function(commentId){
+        commit({ blocks: clearCommentInBlocks(cloneDoc(doc).blocks, commentId) });
+        return true;
+      },
       acceptTrackChangeAt: function(off){
         var d = cloneDoc(doc);
         if(!resolveTrackChangeAtOffset(d.blocks, off, 'accept')) return false;
@@ -1090,6 +1124,8 @@
     makeEmptyTable: makeEmptyTable,
     resolveTrackChangesInBlocks: resolveTrackChangesInBlocks,
     resolveTrackChangeAtOffset: resolveTrackChangeAtOffset,
+    clearCommentInBlocks: clearCommentInBlocks,
+    collectCommentIds: collectCommentIds,
     blocksHaveTrackChanges: blocksHaveTrackChanges,
     normalizeHeadingLevel: normalizeHeadingLevel,
     _ops: { insertText: insertText, deleteRange: deleteRange, splitBlock: splitBlock, mergeWithPrevious: mergeWithPrevious, locate: locate, flatLength: flatLength }
