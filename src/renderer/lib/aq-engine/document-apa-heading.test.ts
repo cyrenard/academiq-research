@@ -23,6 +23,8 @@ const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const AQEngineDocument = require('../../../../experiments/aq-engine/document.js') as {
   create: (blocks?: any[]) => any;
+  applyAPA7HeadingStyle: (block: any, level: number) => any;
+  normalizeHeadingLevel: (level: unknown) => number;
 };
 
 function headingBlock(text: string, level: number) {
@@ -86,5 +88,19 @@ describe('aq-engine APA 7 heading styling', () => {
     for (let lvl = 1; lvl <= 5; lvl++) {
       expect(headingBlock('x', lvl).font.sizePt).toBe(12);
     }
+  });
+
+  // The canonical applyAPA7HeadingStyle is exported so compat-shim.js and
+  // tiptap-adapter.js delegate to it (single source of truth, no triplication).
+  it('exports the canonical applyAPA7HeadingStyle used by the other engine modules', () => {
+    expect(typeof AQEngineDocument.applyAPA7HeadingStyle).toBe('function');
+    const b: any = { runs: [{ text: 'Giriş ve Amaç' }] };
+    AQEngineDocument.applyAPA7HeadingStyle(b, 1);
+    expect(b.type).toBe('heading');
+    expect(b.level).toBe(1);
+    expect(b.align).toBe('center');
+    expect(b.font.weight).toBe('700');
+    expect(b.runs[0].text).toBe('Giriş ve Amaç'); // Title Case preserved, no ALL CAPS
+    expect(AQEngineDocument.normalizeHeadingLevel(9)).toBe(5);
   });
 });

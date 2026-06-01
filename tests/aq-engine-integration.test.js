@@ -53,11 +53,11 @@ test('AQ Engine applies APA 7 five-level heading styles', () => {
   doc.setBlockType(5, 'heading', { level:6 });
   const blocks = doc.get().blocks;
 
-  assert.equal(blocks[0].runs[0].text, 'LEVEL 1');
+  assert.equal(blocks[0].runs[0].text, 'Level 1'); // APA 7: Title Case, not ALL CAPS
   assert.equal(blocks[0].align, 'center');
   assert.equal(blocks[1].align, 'left');
   assert.equal(blocks[2].font.style, 'italic');
-  assert.equal(blocks[3].firstLineIndentPx, 36);
+  assert.equal(blocks[3].firstLineIndentPx, 48); // APA 0.5" = 48px
   assert.equal(blocks[4].font.style, 'italic');
   assert.equal(blocks[4].runInHeading, true);
   assert.equal(blocks[5].level, 5);
@@ -80,11 +80,12 @@ test('AQ Engine heading adapters clamp exported headings to APA 7 levels', () =>
   assert.match(legacy, /\^h\[1-5\]\$/);
 });
 
-test('AQ Engine APA level 1 headings use Turkish uppercase text', () => {
+test('AQ Engine APA level 1 headings keep the author casing (Title Case, not ALL CAPS)', () => {
   const AQEngineDocument = require(path.join(__dirname, '..', 'experiments', 'aq-engine', 'document.js'));
-  const doc = AQEngineDocument.create([{ runs:[{ text:'Giriş ve yöntem' }] }]);
+  const doc = AQEngineDocument.create([{ runs:[{ text:'Giriş ve Yöntem' }] }]);
   doc.setBlockType(0, 'heading', { level:1 });
-  assert.equal(doc.get().blocks[0].runs[0].text, 'GİRİŞ VE YÖNTEM');
+  // APA 7 headings are Title Case; the engine no longer force-uppercases L1.
+  assert.equal(doc.get().blocks[0].runs[0].text, 'Giriş ve Yöntem');
 });
 
 test('AQ Engine typed input always clears citation marks from new text', () => {

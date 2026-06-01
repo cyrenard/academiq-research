@@ -889,5 +889,12 @@
     };
   }
 
-  return { create: createDocument, _ops: { insertText: insertText, deleteRange: deleteRange, splitBlock: splitBlock, mergeWithPrevious: mergeWithPrevious, locate: locate, flatLength: flatLength } };
+  return {
+    create: createDocument,
+    // Canonical APA 7 heading styling — single source of truth shared by the
+    // compat-shim and tiptap-adapter (which delegate here). Loaded first.
+    applyAPA7HeadingStyle: applyAPA7HeadingStyle,
+    normalizeHeadingLevel: normalizeHeadingLevel,
+    _ops: { insertText: insertText, deleteRange: deleteRange, splitBlock: splitBlock, mergeWithPrevious: mergeWithPrevious, locate: locate, flatLength: flatLength }
+  };
 });

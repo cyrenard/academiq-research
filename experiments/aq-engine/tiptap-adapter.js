@@ -33,13 +33,12 @@
 
   function applyAPA7HeadingStyle(block, level){
     level = normalizeHeadingLevel(level);
-    block.level = level;
-    // APA 7: headings are Title Case (author's casing), not force-uppercased.
-    block.font = { sizePt: 12, weight: '700', style: (level === 3 || level === 5) ? 'italic' : 'normal' };
-    block.align = level === 1 ? 'center' : 'left';
-    block.firstLineIndentPx = (level === 4 || level === 5) ? 48 : 0; // APA 0.5" = 48px
-    block.spaceAfterPx = 0;
-    block.runInHeading = level === 4 || level === 5;
+    // Canonical APA 7 heading styling lives in document.js
+    // (window.AQEngineDocument, loaded first by index.html). Single source of
+    // truth — delegate so the rules exist in exactly one place.
+    if(typeof window !== 'undefined' && window.AQEngineDocument && typeof window.AQEngineDocument.applyAPA7HeadingStyle === 'function'){
+      return window.AQEngineDocument.applyAPA7HeadingStyle(block, level);
+    }
     return block;
   }
 
