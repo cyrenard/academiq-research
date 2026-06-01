@@ -1927,7 +1927,17 @@
       toggleBlockquote: function(){
         if(!selection) return;
         var range = selection.getRange();
-        docModel.setBlockTypeForRange(range.from, range.to, 'paragraph');
+        // APA 7 block quotation: toggle a 0.5" left-indented, double-spaced,
+        // no-first-line-indent block on the selected paragraph(s). Delegates to
+        // the canonical doc-model styling (document.js).
+        if(typeof docModel.setBlockquoteForRange === 'function'){
+          var on = typeof docModel.isBlockquoteForRange === 'function'
+            ? !docModel.isBlockquoteForRange(range.from, range.to)
+            : true;
+          docModel.setBlockquoteForRange(range.from, range.to, on);
+        } else {
+          docModel.setBlockTypeForRange(range.from, range.to, 'paragraph');
+        }
         reflow(); onUpdate({ editor: editorObj });
       },
       deleteTable:  function(){},

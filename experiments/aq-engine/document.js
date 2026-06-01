@@ -682,6 +682,28 @@
     return block;
   }
 
+  // Canonical APA 7 block quotation styling (quotes of 40+ words): the whole
+  // block is indented 0.5" from the left margin, double-spaced, with NO
+  // first-line indent and no quotation marks. Toggle off restores a plain body
+  // paragraph (the APA first-line indent default then applies again).
+  function applyAPA7BlockquoteStyle(block){
+    if(!block) return block;
+    block.type = 'paragraph';
+    block.blockquote = true;
+    block.leftIndentPx = 48;       // 0.5" block indent
+    block.firstLineIndentPx = 0;   // explicit 0 → no body first-line indent
+    block.lineHeightFactor = 2.0;  // double spacing
+    return block;
+  }
+  function clearAPA7BlockquoteStyle(block){
+    if(!block) return block;
+    delete block.blockquote;
+    delete block.leftIndentPx;
+    delete block.firstLineIndentPx; // undefined → APA body first-line indent resumes
+    delete block.lineHeightFactor;  // undefined → falls back to the doc default (2.0)
+    return block;
+  }
+
   function setBlockType(doc, blockIdx, type, attrs){
     if(blockIdx < 0 || blockIdx >= doc.blocks.length) return doc;
     var d = cloneDoc(doc);
@@ -879,6 +901,23 @@
         for(var i = range.from; i <= range.to; i++) d.blocks[i].align = align;
         commit(d);
       },
+      // True when every block in [from,to] is already an APA block quote.
+      isBlockquoteForRange: function(from, to){
+        var range = blocksInRange(doc, from, to);
+        for(var i = range.from; i <= range.to; i++){
+          if(!(doc.blocks[i] && doc.blocks[i].blockquote)) return false;
+        }
+        return range.to >= range.from;
+      },
+      setBlockquoteForRange: function(from, to, on){
+        var range = blocksInRange(doc, from, to);
+        var d = cloneDoc(doc);
+        for(var i = range.from; i <= range.to; i++){
+          if(on) applyAPA7BlockquoteStyle(d.blocks[i]);
+          else clearAPA7BlockquoteStyle(d.blocks[i]);
+        }
+        commit(d);
+      },
       changeListLevel:     function(blockIdx, delta){ commit(changeListLevel(doc, blockIdx, delta)); },
       setLeftIndentForRange: function(from, to, deltaPx){ commit(setLeftIndentForRange(doc, from, to, deltaPx)); },
       blockTextLength:     function(blockIdx){ return blockTextLength(doc.blocks[blockIdx] || { runs: [] }); },
@@ -909,6 +948,8 @@
     // compat-shim and tiptap-adapter (which delegate here). Loaded first.
     applyAPA7HeadingStyle: applyAPA7HeadingStyle,
     applyAPA7BibliographyEntryStyle: applyAPA7BibliographyEntryStyle,
+    applyAPA7BlockquoteStyle: applyAPA7BlockquoteStyle,
+    clearAPA7BlockquoteStyle: clearAPA7BlockquoteStyle,
     normalizeHeadingLevel: normalizeHeadingLevel,
     _ops: { insertText: insertText, deleteRange: deleteRange, splitBlock: splitBlock, mergeWithPrevious: mergeWithPrevious, locate: locate, flatLength: flatLength }
   };
