@@ -88,6 +88,14 @@
     return (yPx + headingHeightPx + lineHeightPx) > contentHeightPx;
   }
 
+  // APA 7: in a block quotation that spans multiple paragraphs, the first line
+  // of the SECOND and subsequent paragraphs is indented an additional 0.5".
+  // Returns the extra first-line indent for `block` given the preceding block.
+  function apaBlockquoteContinuationIndentPx(block, prevBlock){
+    var isQuote = function(b){ return !!(b && (b.blockquote || b.quote || b.isBlockquote)); };
+    return (isQuote(block) && isQuote(prevBlock)) ? APA_BODY_FIRST_LINE_INDENT_PX : 0;
+  }
+
   var DEFAULT_OPTS = {
     pageSize: { widthPt: 595.276, heightPt: 841.89 }, // A4 @ 72dpi
     margins:  { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, // APA 1 inch
@@ -645,7 +653,7 @@
         var lineOffsetEnd   = line.items.length ? line.items[line.items.length-1].offsetEnd : lineOffsetStart;
         page.lines.push({
           y: y,
-          x: ml + leftIndentPx + (isFirstLineOfBlock ? apaBodyFirstLineIndentPx(block, leftIndentPx) : 0),
+          x: ml + leftIndentPx + (isFirstLineOfBlock ? (apaBodyFirstLineIndentPx(block, leftIndentPx) + apaBlockquoteContinuationIndentPx(block, blocks[b - 1])) : 0),
           width: blockContentWidth,
           height: lineHeightPx,
           align: block.align || 'left',
@@ -1170,6 +1178,7 @@
     _measureCtx: getMeasureCtx,
     apaBodyFirstLineIndentPx: apaBodyFirstLineIndentPx,
     APA_BODY_FIRST_LINE_INDENT_PX: APA_BODY_FIRST_LINE_INDENT_PX,
-    shouldBreakBeforeHeading: shouldBreakBeforeHeading
+    shouldBreakBeforeHeading: shouldBreakBeforeHeading,
+    apaBlockquoteContinuationIndentPx: apaBlockquoteContinuationIndentPx
   };
 });
