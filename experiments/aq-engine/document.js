@@ -111,6 +111,20 @@
       runs: sourceRuns.map(function(run){ return cloneRun(run, repairText); }),
       font: b.font ? Object.assign({}, b.font) : null
     });
+    // Deep-clone table rows/cells so a committed/undone snapshot never shares
+    // cell arrays with the live doc (otherwise a later cell edit would mutate
+    // history in place).
+    if(Array.isArray(b.rows)){
+      out.rows = b.rows.map(function(row){
+        return Object.assign({}, row, {
+          cells: (row && row.cells ? row.cells : []).map(function(cell){
+            return Object.assign({}, cell, {
+              runs: (cell && cell.runs ? cell.runs : []).map(function(r){ return cloneRun(r, repairText); })
+            });
+          })
+        });
+      });
+    }
     // Drop the legacy `text` property to prevent drift between text + runs.
     if('text' in out) delete out.text;
     return out;

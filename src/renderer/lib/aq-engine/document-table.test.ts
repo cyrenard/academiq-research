@@ -68,6 +68,17 @@ describe('aq-engine doc-model insertTable / removeTableAt', () => {
     expect(doc.get().blocks).toHaveLength(1);
   });
 
+  it('deep-clones table rows/cells so snapshots do not share cell arrays', () => {
+    const inputRows = [{ cells: [{ runs: [{ text: 'orig' }] }] }];
+    const doc = AQEngineDocument.create([{ type: 'table', rows: inputRows }]);
+    // mutating the original input must NOT leak into the document snapshot
+    inputRows[0].cells[0].runs[0].text = 'mutated';
+    const table = doc.get().blocks.find((b: any) => b.type === 'table');
+    expect(table.rows[0].cells[0].runs[0].text).toBe('orig');
+    expect(table.rows).not.toBe(inputRows);
+    expect(table.rows[0].cells).not.toBe(inputRows[0].cells);
+  });
+
   it('insert then remove is undoable (commit-based)', () => {
     const doc = AQEngineDocument.create([{ type: 'paragraph', runs: [{ text: 'X' }] }]);
     doc.insertTable(0, 2, 2);
