@@ -732,6 +732,58 @@
     return { type: 'table', rows: tableRows };
   }
 
+  // ── Track changes: accept / reject ─────────────────────────────────────────
+  // Runs carry boolean flags `trackInsert` (typed while tracking) and
+  // `trackDelete` (deleted while tracking — kept + struck through, not removed).
+  // accept → keep insertions (clear flag), drop deletions.
+  // reject → drop insertions, keep deletions (clear flag).
+  function resolveTrackRuns(runs, mode){
+    var out = [];
+    (runs || []).forEach(function(run){
+      if(!run) return;
+      if(run.trackInsert){
+        if(mode === 'reject') return;          // undo the insertion
+        var ri = Object.assign({}, run); delete ri.trackInsert; out.push(ri);
+        return;
+      }
+      if(run.trackDelete){
+        if(mode === 'accept') return;          // apply the deletion
+        var rd = Object.assign({}, run); delete rd.trackDelete; out.push(rd);
+        return;
+      }
+      out.push(run);
+    });
+    if(!out.length) out.push({ text: '' });    // never leave a block with no runs
+    return out;
+  }
+  function resolveTrackChangesInBlocks(blocks, mode){
+    (blocks || []).forEach(function(block){
+      if(!block) return;
+      if(Array.isArray(block.runs)) block.runs = resolveTrackRuns(block.runs, mode);
+      if(Array.isArray(block.rows)){
+        block.rows.forEach(function(row){
+          (row && row.cells ? row.cells : []).forEach(function(cell){
+            if(cell) cell.runs = resolveTrackRuns(cell.runs, mode);
+          });
+        });
+      }
+    });
+    return blocks;
+  }
+  function blocksHaveTrackChanges(blocks){
+    return (blocks || []).some(function(block){
+      if(!block) return false;
+      var inRuns = function(runs){ return (runs || []).some(function(r){ return r && (r.trackInsert || r.trackDelete); }); };
+      if(Array.isArray(block.runs) && inRuns(block.runs)) return true;
+      if(Array.isArray(block.rows)){
+        return block.rows.some(function(row){
+          return (row && row.cells ? row.cells : []).some(function(cell){ return cell && inRuns(cell.runs); });
+        });
+      }
+      return false;
+    });
+  }
+
   function setBlockType(doc, blockIdx, type, attrs){
     if(blockIdx < 0 || blockIdx >= doc.blocks.length) return doc;
     var d = cloneDoc(doc);
@@ -950,6 +1002,17 @@
       insertTable: function(off, rows, cols){
         commit(insertBlocks(doc, off, [makeEmptyTable(rows, cols)]));
       },
+      hasTrackChanges: function(){ return blocksHaveTrackChanges(doc.blocks); },
+      acceptAllTrackChanges: function(){
+        if(!blocksHaveTrackChanges(doc.blocks)) return false;
+        commit({ blocks: resolveTrackChangesInBlocks(cloneDoc(doc).blocks, 'accept') });
+        return true;
+      },
+      rejectAllTrackChanges: function(){
+        if(!blocksHaveTrackChanges(doc.blocks)) return false;
+        commit({ blocks: resolveTrackChangesInBlocks(cloneDoc(doc).blocks, 'reject') });
+        return true;
+      },
       // Remove the table block containing offset `off`. Returns true if a table
       // was removed (no-op + false when the block at `off` is not a table).
       removeTableAt: function(off){
@@ -994,6 +1057,8 @@
     applyAPA7BlockquoteStyle: applyAPA7BlockquoteStyle,
     clearAPA7BlockquoteStyle: clearAPA7BlockquoteStyle,
     makeEmptyTable: makeEmptyTable,
+    resolveTrackChangesInBlocks: resolveTrackChangesInBlocks,
+    blocksHaveTrackChanges: blocksHaveTrackChanges,
     normalizeHeadingLevel: normalizeHeadingLevel,
     _ops: { insertText: insertText, deleteRange: deleteRange, splitBlock: splitBlock, mergeWithPrevious: mergeWithPrevious, locate: locate, flatLength: flatLength }
   };

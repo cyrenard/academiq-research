@@ -1958,7 +1958,18 @@
         onUpdate({ editor: editorObj });
       },
       undo: function(){ if(docModel.undo()){ reflow(); onUpdate({ editor: editorObj }); } },
-      redo: function(){ if(docModel.redo()){ reflow(); onUpdate({ editor: editorObj }); } }
+      redo: function(){ if(docModel.redo()){ reflow(); onUpdate({ editor: editorObj }); } },
+      hasTrackChanges: function(){ return typeof docModel.hasTrackChanges === 'function' ? docModel.hasTrackChanges() : false; },
+      acceptAllTrackChanges: function(){
+        if(typeof docModel.acceptAllTrackChanges !== 'function' || !docModel.acceptAllTrackChanges()) return false;
+        reflow(); onUpdate({ editor: editorObj });
+        return true;
+      },
+      rejectAllTrackChanges: function(){
+        if(typeof docModel.rejectAllTrackChanges !== 'function' || !docModel.rejectAllTrackChanges()) return false;
+        reflow(); onUpdate({ editor: editorObj });
+        return true;
+      }
     };
 
     function _toggleMark(mark){

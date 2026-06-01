@@ -603,8 +603,24 @@ export function TopToolbar({ selectedReferenceId, onOpenAudit, onOpenFeatureModa
 
   const runTrackChangeAction = (fn: string) => {
     preserveEditorSelection();
-    const ok = callLegacy(fn);
-    if (!ok) runEditorCommand(fn.replace(/TrackedChange$/, 'TrackChange').replace(/TrackedChanges$/, 'TrackChanges'));
+    const win = window as any;
+    const editor = typeof win.getActiveEditorInstance === 'function'
+      ? win.getActiveEditorInstance()
+      : (win.editor || null);
+    let handled = false;
+    // Prefer the aq-engine's native bulk accept/reject (correct + commit-based,
+    // so undo works) over the legacy commands, which may not cover the engine.
+    if (editor?._aqEngine) {
+      if (/^accept(Tracked|Track)Changes$/.test(fn) && typeof editor.acceptAllTrackChanges === 'function') {
+        handled = editor.acceptAllTrackChanges() !== false;
+      } else if (/^reject(Tracked|Track)Changes$/.test(fn) && typeof editor.rejectAllTrackChanges === 'function') {
+        handled = editor.rejectAllTrackChanges() !== false;
+      }
+    }
+    if (!handled) {
+      const ok = callLegacy(fn);
+      if (!ok) runEditorCommand(fn.replace(/TrackedChange$/, 'TrackChange').replace(/TrackedChanges$/, 'TrackChanges'));
+    }
     activeNotifySave();
     window.setTimeout(refreshTrackChangesState, 0);
     window.setTimeout(refreshTrackChangesState, 120);
