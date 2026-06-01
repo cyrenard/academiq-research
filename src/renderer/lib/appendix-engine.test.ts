@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   applyAppendicesToEngine,
+  parseAppendicesHTMLToEngineBlocks,
+  syncAppendicesToEngine,
   removeAppendixFromEngine,
   scrollToLatestAppendix,
   installAppendixDeleteButtons,
@@ -31,74 +33,93 @@ function makeEngine(blocks: any[] = []) {
 
 // ─── applyAppendicesToEngine ────────────────────────────────────────────
 
+const APP2 =
+  '<div class="appendix-block"><h1 class="appendix-title">EK-1</h1><p>Birinci</p></div>' +
+  '<div class="appendix-block"><h1 class="appendix-title">EK-2</h1><p>İkinci</p></div>';
+
+function lastReplace(editor: any) {
+  const calls = editor._replace.mock.calls;
+  return calls[calls.length - 1][0] as any[];
+}
+
+describe('parseAppendicesHTMLToEngineBlocks', () => {
+  it('produces one heading + content paragraph per appendix-block (text preserved)', () => {
+    const blocks = parseAppendicesHTMLToEngineBlocks(APP2);
+    const headings = blocks.filter((b: any) => b._isAppendixHeading);
+    expect(headings).toHaveLength(2);
+    expect(headings[0].runs[0].text).toBe('EK-1');
+    expect(headings[1].runs[0].text).toBe('EK-2');
+    const entries = blocks.filter((b: any) => b._isAppendixEntry);
+    expect(entries[0].runs[0].text).toBe('Birinci');
+    expect(entries[1].runs[0].text).toBe('İkinci');
+  });
+
+  it('falls back to a placeholder entry when an appendix has no content', () => {
+    const blocks = parseAppendicesHTMLToEngineBlocks('<div class="appendix-block"><h1 class="appendix-title">EK-1</h1></div>');
+    expect(blocks).toHaveLength(2);
+    expect(blocks[1].runs[0].text).toBe('Ek içeriği...');
+  });
+
+  it('returns [] for empty / non-appendix HTML', () => {
+    expect(parseAppendicesHTMLToEngineBlocks('')).toEqual([]);
+    expect(parseAppendicesHTMLToEngineBlocks('<p>nope</p>')).toEqual([]);
+  });
+});
+
 describe('applyAppendicesToEngine', () => {
   it('returns false when no editor available', () => {
-    expect(applyAppendicesToEngine('<x/>', () => 0)).toBe(false);
+    expect(applyAppendicesToEngine(APP2)).toBe(false);
   });
 
   it('returns false when editor is not AQ Engine', () => {
     (window as any).editor = { _aqEngine: false };
-    expect(applyAppendicesToEngine('<x/>', () => 0)).toBe(false);
+    expect(applyAppendicesToEngine(APP2)).toBe(false);
   });
 
-  it('delegates to legacy updateAQEngineAppendices when present', () => {
-    const fake = vi.fn(() => true);
-    (window as any).editor = { _aqEngine: true };
-    (window as any).updateAQEngineAppendices = fake;
-    const result = applyAppendicesToEngine('<x/>', () => 0);
-    expect(result).toBe(true);
-    expect(fake).toHaveBeenCalledWith((window as any).editor, '<x/>');
-  });
-
-  it('appends a new appendix heading + paragraph via docModel.replace', () => {
-    const editor = makeEngine([{ type: 'paragraph', runs: [{ text: 'pre' }] }]);
+  it('syncs ALL appendices from the HTML (regression: only one appendix could be added)', () => {
+    const editor = makeEngine([{ type: 'paragraph', runs: [{ text: 'body' }] }]);
     (window as any).editor = editor;
-    const getCount = vi.fn(() => 2);
-    expect(applyAppendicesToEngine('html', getCount)).toBe(true);
-    expect(editor._replace).toHaveBeenCalled();
-    const appended = (editor._replace.mock.calls[0] as any[])[0];
-    expect(appended.length).toBe(3);
-    expect(appended[1].type).toBe('heading');
-    expect(appended[1]._isAppendixHeading).toBe(true);
-    expect(appended[1]._appendixId).toBe('appendix-2');
-    expect(appended[1].runs[0].text).toBe('EK-2');
-    expect(appended[2].type).toBe('paragraph');
-    expect(appended[2]._isAppendixEntry).toBe(true);
+    expect(applyAppendicesToEngine(APP2)).toBe(true);
+    const next = lastReplace(editor);
+    const headings = next.filter((b: any) => b._isAppendixHeading);
+    expect(headings).toHaveLength(2);
+    expect(headings[0]._appendixId).toBe('appendix-1');
+    expect(headings[0].runs[0].text).toBe('EK-1');
+    expect(headings[1]._appendixId).toBe('appendix-2');
+    expect(headings[1].runs[0].text).toBe('EK-2');
+    expect(next[0].runs[0].text).toBe('body'); // base content preserved
     expect(editor._reflow).toHaveBeenCalled();
     expect(editor.emit).toHaveBeenCalledWith('update');
   });
 
-  it('uses appendix index from getCount but never less than 1', () => {
-    const editor = makeEngine();
-    (window as any).editor = editor;
-    applyAppendicesToEngine('html', () => 0); // count 0 should still produce appendix-1
-    const appended = (editor._replace.mock.calls[0] as any[])[0];
-    expect(appended[0]._appendixId).toBe('appendix-1');
-  });
-
-  it('numbers the next appendix from the engine count even when getCount is stuck (regression: only one appendix could be added)', () => {
-    // The engine already has appendix-1; the HTML-derived getCount is stuck at 1
-    // (doc.appendicesHTML failed to accumulate). The new appendix must still be
-    // appendix-2, not a second appendix-1 (which collapsed to one on renumber).
+  it('replaces the existing appendix section instead of duplicating it', () => {
     const editor = makeEngine([
       { type: 'paragraph', runs: [{ text: 'body' }] },
       { type: 'heading', _isAppendixHeading: true, _appendixId: 'appendix-1', runs: [{ text: 'EK-1' }] },
       { type: 'paragraph', _isAppendixEntry: true, _appendixId: 'appendix-1' }
     ]);
     (window as any).editor = editor;
-    expect(applyAppendicesToEngine('html', () => 1)).toBe(true);
-    const appended = (editor._replace.mock.calls[0] as any[])[0];
-    const headings = appended.filter((b: any) => b._isAppendixHeading);
-    expect(headings).toHaveLength(2);
-    expect(headings[1]._appendixId).toBe('appendix-2');
-    expect(headings[1].runs[0].text).toBe('EK-2');
+    applyAppendicesToEngine(APP2);
+    const next = lastReplace(editor);
+    expect(next.filter((b: any) => b._isAppendixHeading)).toHaveLength(2);
+    expect(next[0].runs[0].text).toBe('body'); // base kept once, not duplicated
+  });
+
+  it('overrides window.updateAQEngineAppendices with the corrected parser', () => {
+    const editor = makeEngine([{ type: 'paragraph', runs: [{ text: 'x' }] }]);
+    (window as any).editor = editor;
+    applyAppendicesToEngine(APP2);
+    expect(typeof (window as any).updateAQEngineAppendices).toBe('function');
+    const e2 = makeEngine([{ type: 'paragraph', runs: [{ text: 'y' }] }]);
+    expect((window as any).updateAQEngineAppendices(e2, APP2)).toBe(true);
+    expect(lastReplace(e2).filter((b: any) => b._isAppendixHeading)).toHaveLength(2);
   });
 
   it('uses getActiveEditorInstance when registered', () => {
-    const editor = makeEngine();
+    const editor = makeEngine([{ type: 'paragraph', runs: [{ text: 'x' }] }]);
     const getActive = vi.fn(() => editor);
     (window as any).getActiveEditorInstance = getActive;
-    applyAppendicesToEngine('html', () => 0);
+    applyAppendicesToEngine(APP2);
     expect(getActive).toHaveBeenCalled();
   });
 });

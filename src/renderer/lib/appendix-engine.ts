@@ -26,52 +26,83 @@ function getActiveEditor() {
 }
 
 /**
- * Apply the appendices HTML to the active AQ Engine editor. Tries
- * the legacy `updateAQEngineAppendices` helper first; falls back to
- * a direct docModel.replace() that appends a new appendix heading +
- * placeholder paragraph. Returns true on success.
+ * Parse an appendices-HTML string (`<div class="appendix-block">` wrappers,
+ * each containing an `<h1 class="appendix-title">` + content) DIRECTLY into AQ
+ * Engine blocks — one centered, page-broken heading per appendix plus one
+ * entry paragraph per content element (text preserved).
+ *
+ * This deliberately bypasses `AQEngineCompat.htmlToBlocks`, which flattens the
+ * whole appendices HTML into a SINGLE block (heading levels lost, every
+ * appendix's text merged) — that collapse is why only one appendix ever
+ * appeared no matter how many were added.
+ */
+export function parseAppendicesHTMLToEngineBlocks(appendicesHTML: string): any[] {
+  if (typeof document === 'undefined' || !document.createElement) return [];
+  const div = document.createElement('div');
+  div.innerHTML = String(appendicesHTML || '');
+  const appendixDivs = Array.prototype.slice.call(div.querySelectorAll('.appendix-block')) as Element[];
+  const out: any[] = [];
+  appendixDivs.forEach((blockEl, idx) => {
+    const n = idx + 1;
+    out.push({
+      type: 'heading', level: 1, pageBreak: true, align: 'center',
+      _isAppendixHeading: true, _appendixId: `appendix-${n}`,
+      runs: [{ text: `EK-${n}`, bold: true }]
+    });
+    const contentEls = (Array.prototype.slice.call(blockEl.children) as Element[])
+      .filter((el) => !(el.tagName === 'H1' || (el.classList && el.classList.contains('appendix-title'))));
+    if (contentEls.length) {
+      contentEls.forEach((el) => {
+        out.push({
+          type: 'paragraph', _isAppendixEntry: true, _appendixId: `appendix-${n}`,
+          runs: [{ text: String(el.textContent || '').trim() }]
+        });
+      });
+    } else {
+      out.push({
+        type: 'paragraph', _isAppendixEntry: true, _appendixId: `appendix-${n}`,
+        runs: [{ text: 'Ek içeriği...' }]
+      });
+    }
+  });
+  return out;
+}
+
+/**
+ * Replace the active engine's appendix section (first appendix heading → end of
+ * document) with the appendices parsed from `appendicesHTML`. Returns true on
+ * success. This is the corrected drop-in for the legacy
+ * `updateAQEngineAppendices` (which used the collapsing htmlToBlocks path).
+ */
+export function syncAppendicesToEngine(editor: any, appendicesHTML: string): boolean {
+  if (!editor?._aqEngine || !editor?._docModel?.get || !editor?._docModel?.replace) return false;
+  const docModel = editor._docModel;
+  const blocks = Array.isArray(docModel.get()?.blocks) ? docModel.get().blocks.slice() : [];
+  const start = blocks.findIndex((block: any) => block?._isAppendixHeading);
+  const base = start >= 0 ? blocks.slice(0, start) : blocks;
+  const appendixBlocks = parseAppendicesHTMLToEngineBlocks(appendicesHTML);
+  docModel.replace(base.concat(appendixBlocks));
+  editor._reflow?.();
+  editor.emit?.('update');
+  return true;
+}
+
+/**
+ * Apply the appendices HTML to the active AQ Engine editor by re-syncing the
+ * whole appendix section from `appendicesHTML` (so adding the Nth appendix
+ * keeps the previous N-1). Also overrides the global `updateAQEngineAppendices`
+ * with the corrected parser so the editor-adapter's re-sync on every edit
+ * stops collapsing the appendices back down to one.
  */
 export function applyAppendicesToEngine(
   appendicesHTML: string,
-  getCount: (html: string) => number
+  _getCount?: (html: string) => number
 ): boolean {
-  const win = legacyWin() as any;
   const activeEditor = getActiveEditor();
-  if (activeEditor?._aqEngine && typeof win.updateAQEngineAppendices === 'function') {
-    return !!win.updateAQEngineAppendices(activeEditor, appendicesHTML);
-  }
-  if (activeEditor?._aqEngine && activeEditor?._docModel?.get && activeEditor?._docModel?.replace) {
-    const docModel = activeEditor._docModel;
-    const blocks = Array.isArray(docModel.get()?.blocks) ? docModel.get().blocks.slice() : [];
-    // Number the new appendix from how many appendix headings the engine
-    // ALREADY has, not just from getCount(appendicesHTML). The HTML-derived
-    // count could stick at 1 (when doc.appendicesHTML failed to accumulate),
-    // so every "add" reused appendix-1 and the renumber collapsed them into a
-    // single appendix. Taking the max guarantees a fresh, increasing index.
-    const existingInEngine = blocks.filter((block: any) => block?._isAppendixHeading).length;
-    const nextIndex = Math.max(existingInEngine + 1, Number(getCount(appendicesHTML)) || 0, 1);
-    docModel.replace(blocks.concat([
-      {
-        type: 'heading',
-        level: 1,
-        pageBreak: true,
-        align: 'center',
-        _isAppendixHeading: true,
-        _appendixId: `appendix-${nextIndex}`,
-        runs: [{ text: `EK-${nextIndex}`, bold: true }]
-      },
-      {
-        type: 'paragraph',
-        _isAppendixEntry: true,
-        _appendixId: `appendix-${nextIndex}`,
-        runs: [{ text: 'Ek içeriği...' }]
-      }
-    ]));
-    activeEditor._reflow?.();
-    activeEditor.emit?.('update');
-    return true;
-  }
-  return false;
+  if (!activeEditor?._aqEngine) return false;
+  const win = legacyWin() as any;
+  win.updateAQEngineAppendices = (editor: any, html: string) => syncAppendicesToEngine(editor, html);
+  return syncAppendicesToEngine(activeEditor, appendicesHTML);
 }
 
 /**
