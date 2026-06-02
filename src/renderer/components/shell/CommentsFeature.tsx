@@ -34,20 +34,47 @@ export function CommentIcon({ size = 15 }: { size?: number }) {
 const EDITOR_SURFACE_SELECTOR =
   '#apaed, #escroll, .aq-engine-stage, .aq-engine-page, .aq-engine-line, .aq-engine-table-cell, .aq-input-capture';
 
-function currentSelectionText(): string {
-  try {
-    const editor = getEditor();
-    if (editor && typeof editor.getSelectedText === 'function') {
-      const t = String(editor.getSelectedText() || '');
-      if (t) return t;
-    }
-  } catch (_e) { /* fall through to DOM selection */ }
-  return String(window.getSelection?.()?.toString() || '');
-}
-
 function getEditor(): any {
   const win = window as any;
   return typeof win.getActiveEditorInstance === 'function' ? win.getActiveEditorInstance() : win.editor || null;
+}
+
+/** The aq-engine document model on the active editor (has applyMark / listCommentIds / clearCommentMark). */
+function getDocModel(): any {
+  const ed = getEditor();
+  return ed && ed._docModel ? ed._docModel : null;
+}
+
+// Map a DOM point (text node + offset) inside an .aq-engine-line to the engine's
+// flat document offset (line's data-line-offset-start + chars before the point).
+function domPointToEngineOffset(node: Node | null, offset: number): number | null {
+  if (!node) return null;
+  const el = node.nodeType === 3 ? node.parentElement : (node as HTMLElement);
+  const line = el?.closest('.aq-engine-line') as HTMLElement | null;
+  if (!line || line.dataset.lineOffsetStart == null) return null;
+  const lineStart = Number(line.dataset.lineOffsetStart);
+  let chars = 0;
+  const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+  let t: Node | null = walker.nextNode();
+  while (t) {
+    if (t === node) return lineStart + chars + offset;
+    chars += (t.textContent || '').length;
+    t = walker.nextNode();
+  }
+  return lineStart + chars;
+}
+
+// The current native DOM selection mapped to engine offsets + its text, or null.
+function captureEngineSelection(): { from: number; to: number; text: string } | null {
+  const sel = window.getSelection?.();
+  const text = String(sel?.toString() || '');
+  if (!sel || sel.rangeCount === 0 || !text.trim()) return null;
+  const a = domPointToEngineOffset(sel.anchorNode, sel.anchorOffset);
+  const b = domPointToEngineOffset(sel.focusNode, sel.focusOffset);
+  if (a == null || b == null) return null;
+  const from = Math.min(a, b);
+  const to = Math.max(a, b);
+  return from === to ? null : { from, to, text };
 }
 
 /**
@@ -65,18 +92,15 @@ export function CommentsFeature() {
 
   // Capture the selection on mouseup/keyup, BEFORE a right-click collapses it.
   useEffect(() => {
-    const capture = (event: Event) => {
-      const target = event.target as HTMLElement | null;
-      if (!target || target.closest('#pdfscroll')) return;
-      if (!target.closest(EDITOR_SURFACE_SELECTOR)) return;
-      const editor = getEditor();
-      if (!editor) return;
-      const range = typeof editor.getSelectionRange === 'function' ? editor.getSelectionRange() : null;
-      const text = typeof editor.getSelectedText === 'function' ? String(editor.getSelectedText() || '') : '';
-      if (range && text) lastSelRef.current = { from: range.from, to: range.to, text };
+    const capture = () => {
+      // captureEngineSelection only returns non-null for a selection inside an
+      // .aq-engine-line, so this is safe to run on any selection change.
+      const snap = captureEngineSelection();
+      if (snap) lastSelRef.current = snap;
     };
     document.addEventListener('mouseup', capture, true);
     document.addEventListener('keyup', capture, true);
+    document.addEventListener('selectionchange', capture, true);
     return () => {
       document.removeEventListener('mouseup', capture, true);
       document.removeEventListener('keyup', capture, true);
@@ -86,8 +110,8 @@ export function CommentsFeature() {
   const reload = useCallback(() => {
     const doc = getActiveDocRecord();
     const stored: Comment[] = Array.isArray(doc?.comments) ? doc.comments : [];
-    const editor = getEditor();
-    const anchored = editor && typeof editor.listCommentIds === 'function' ? editor.listCommentIds() : null;
+    const docModel = getDocModel();
+    const anchored = docModel && typeof docModel.listCommentIds === 'function' ? docModel.listCommentIds() : null;
     const next = anchored ? pruneOrphanComments(stored, anchored) : stored;
     if (doc && anchored && next.length !== stored.length) {
       doc.comments = next;
@@ -122,10 +146,11 @@ export function CommentsFeature() {
       const target = event.target as HTMLElement | null;
       if (!target || target.closest('#pdfscroll')) return; // leave the PDF menu alone
       if (!target.closest(EDITOR_SURFACE_SELECTOR)) return;
-      // Use the snapshot captured on mouseup (the live selection may already be
-      // collapsed by the right-click), falling back to a live read.
-      const sel = (lastSelRef.current && lastSelRef.current.text) ? lastSelRef.current.text : currentSelectionText();
-      if (!sel.trim()) return; // only when text is selected
+      // Capture a live selection if still present; else use the mouseup snapshot
+      // (the right-click usually collapses the selection before this fires).
+      const live = captureEngineSelection();
+      if (live) lastSelRef.current = live;
+      if (!lastSelRef.current || !lastSelRef.current.text.trim()) return;
       // Replace the native WebView menu with our "Yorum ekle" menu.
       event.preventDefault();
       event.stopPropagation();
@@ -160,15 +185,17 @@ export function CommentsFeature() {
   const addAtSelection = useCallback(() => {
     setMenu(null);
     const editor = getEditor();
+    const docModel = editor && editor._docModel;
     const snap = lastSelRef.current;
-    const quote = (snap && snap.text) || currentSelectionText();
-    if (!editor || typeof editor.applyComment !== 'function') {
-      (window as any).setStatusText?.('Yorum için editörü yenileyin', 'er');
+    if (!editor || !docModel || typeof docModel.applyMark !== 'function' || !snap) {
+      (window as any).setStatusText?.('Önce yorumlanacak metni seçin', 'er');
       return;
     }
     const id = createCommentId();
-    const range = snap ? { from: snap.from, to: snap.to } : undefined;
-    if (!editor.applyComment(id, range)) return; // no selection
+    const quote = snap.text;
+    docModel.applyMark(snap.from, snap.to, 'commentId', id);
+    if (typeof editor._reflow === 'function') editor._reflow();
+    if (typeof editor.emit === 'function') editor.emit('update');
     lastSelRef.current = null;
     const doc = getActiveDocRecord();
     if (doc) {
@@ -193,7 +220,12 @@ export function CommentsFeature() {
 
   const onDelete = (id: string) => {
     const editor = getEditor();
-    if (editor && typeof editor.removeComment === 'function') editor.removeComment(id);
+    const docModel = editor && editor._docModel;
+    if (docModel && typeof docModel.clearCommentMark === 'function') {
+      docModel.clearCommentMark(id);
+      if (typeof editor._reflow === 'function') editor._reflow();
+      if (typeof editor.emit === 'function') editor.emit('update');
+    }
     persist(removeComment(comments, id));
   };
 
