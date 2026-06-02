@@ -39,6 +39,7 @@ import { scrollToBibliographyBlock } from '../../lib/bibliography-navigation';
 import { openDocumentOutline } from '../../lib/outline-modals';
 import { computeActiveMarks, activeMarksEqual, type ActiveMarks } from '../../lib/editor-active-marks';
 import { SectionTabs } from './SectionTabs';
+import { CommentIcon, CommentsFeature } from './CommentsFeature';
 import {
   getActiveDocRecord,
   commitEditorHTMLToLegacyState as commitEditorHTMLToLegacyStateLib,
@@ -834,6 +835,7 @@ export function TopToolbar({ selectedReferenceId, onOpenAudit, onOpenFeatureModa
       className="aq-editor-toolbars space-y-1.5 bg-transparent px-2 py-1.5"
     >
       <SectionTabs />
+      <CommentsFeature />
       <div className="flex h-8 w-full items-center overflow-hidden rounded-md border border-aq-line bg-white shadow-sm">
         <TopBarButton id="outlineOpenBtn" onClick={openDocumentOutline} title="Belge anahatı">
           <BookOpen size={15} strokeWidth={1.8} />
@@ -1065,6 +1067,7 @@ export function TopToolbar({ selectedReferenceId, onOpenAudit, onOpenFeatureModa
           <ToolbarButton onClick={insertCitation}><Quote size={15} /> Atıf</ToolbarButton>
           <ToolbarButton label="Tablo ekle" onClick={openTableWizard}><Table2 size={14} /> Tablo</ToolbarButton>
           <ToolbarButton label="Görsel ekle" onClick={insertImage}><ImageIcon size={15} /> Görsel</ToolbarButton>
+          <ToolbarButton label="Yorumlar" onClick={() => window.dispatchEvent(new CustomEvent('aq:comments-toggle'))}><CommentIcon size={15} /></ToolbarButton>
           <select
             defaultValue=""
             onChange={(event) => selectAction(event, (value) => {

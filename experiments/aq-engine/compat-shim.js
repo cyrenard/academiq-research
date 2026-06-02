@@ -1996,7 +1996,14 @@
         reflow(); onUpdate({ editor: editorObj });
         return true;
       },
-      listCommentIds: function(){ return typeof docModel.listCommentIds === 'function' ? docModel.listCommentIds() : []; }
+      listCommentIds: function(){ return typeof docModel.listCommentIds === 'function' ? docModel.listCommentIds() : []; },
+      getSelectedText: function(){
+        if(!selection) return '';
+        var r = selection.getRange();
+        if(!r || r.from === r.to) return '';
+        var full = typeof docModel.getPlainText === 'function' ? String(docModel.getPlainText()) : '';
+        return full.slice(Math.min(r.from, r.to), Math.max(r.from, r.to));
+      }
     };
 
     function _toggleMark(mark){
