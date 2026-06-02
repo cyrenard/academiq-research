@@ -31,7 +31,19 @@ export function CommentIcon({ size = 15 }: { size?: number }) {
   );
 }
 
-const EDITOR_SURFACE_SELECTOR = '#apaed, .aq-engine-stage, .aq-engine-line, #escroll';
+const EDITOR_SURFACE_SELECTOR =
+  '#apaed, #escroll, .aq-engine-stage, .aq-engine-page, .aq-engine-line, .aq-engine-table-cell';
+
+function currentSelectionText(): string {
+  try {
+    const editor = getEditor();
+    if (editor && typeof editor.getSelectedText === 'function') {
+      const t = String(editor.getSelectedText() || '');
+      if (t) return t;
+    }
+  } catch (_e) { /* fall through to DOM selection */ }
+  return String(window.getSelection?.()?.toString() || '');
+}
 
 function getEditor(): any {
   const win = window as any;
@@ -88,9 +100,8 @@ export function CommentsFeature() {
       const target = event.target as HTMLElement | null;
       if (!target || target.closest('#pdfscroll')) return; // leave the PDF menu alone
       if (!target.closest(EDITOR_SURFACE_SELECTOR)) return;
-      const editor = getEditor();
-      if (!editor || !editor._aqEngine || typeof editor.getSelectedText !== 'function') return;
-      if (!editor.getSelectedText()) return; // only when text is selected
+      if (!currentSelectionText().trim()) return; // only when text is selected
+      // Replace the native WebView menu with our "Yorum ekle" menu.
       event.preventDefault();
       event.stopPropagation();
       setMenu({ x: Math.min(event.clientX, window.innerWidth - 170), y: Math.min(event.clientY, window.innerHeight - 70) });
@@ -124,8 +135,11 @@ export function CommentsFeature() {
   const addAtSelection = useCallback(() => {
     setMenu(null);
     const editor = getEditor();
-    if (!editor || typeof editor.applyComment !== 'function') return;
-    const quote = typeof editor.getSelectedText === 'function' ? String(editor.getSelectedText() || '') : '';
+    const quote = currentSelectionText();
+    if (!editor || typeof editor.applyComment !== 'function') {
+      (window as any).setStatusText?.('Yorum için editörü yenileyin', 'er');
+      return;
+    }
     const id = createCommentId();
     if (!editor.applyComment(id)) return; // no selection
     const doc = getActiveDocRecord();
