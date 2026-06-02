@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getActiveDocRecord, saveAuxiliaryChange } from '../../lib/legacy-doc-helpers';
 import {
   addComment,
@@ -32,7 +32,7 @@ export function CommentIcon({ size = 15 }: { size?: number }) {
 }
 
 const EDITOR_SURFACE_SELECTOR =
-  '#apaed, #escroll, .aq-engine-stage, .aq-engine-page, .aq-engine-line, .aq-engine-table-cell';
+  '#apaed, #escroll, .aq-engine-stage, .aq-engine-page, .aq-engine-line, .aq-engine-table-cell, .aq-input-capture';
 
 function currentSelectionText(): string {
   try {
@@ -60,6 +60,28 @@ export function CommentsFeature() {
   const [open, setOpen] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  // Snapshot the last non-empty selection (engine collapses it on right-click).
+  const lastSelRef = useRef<{ from: number; to: number; text: string } | null>(null);
+
+  // Capture the selection on mouseup/keyup, BEFORE a right-click collapses it.
+  useEffect(() => {
+    const capture = (event: Event) => {
+      const target = event.target as HTMLElement | null;
+      if (!target || target.closest('#pdfscroll')) return;
+      if (!target.closest(EDITOR_SURFACE_SELECTOR)) return;
+      const editor = getEditor();
+      if (!editor) return;
+      const range = typeof editor.getSelectionRange === 'function' ? editor.getSelectionRange() : null;
+      const text = typeof editor.getSelectedText === 'function' ? String(editor.getSelectedText() || '') : '';
+      if (range && text) lastSelRef.current = { from: range.from, to: range.to, text };
+    };
+    document.addEventListener('mouseup', capture, true);
+    document.addEventListener('keyup', capture, true);
+    return () => {
+      document.removeEventListener('mouseup', capture, true);
+      document.removeEventListener('keyup', capture, true);
+    };
+  }, []);
 
   const reload = useCallback(() => {
     const doc = getActiveDocRecord();
@@ -100,7 +122,10 @@ export function CommentsFeature() {
       const target = event.target as HTMLElement | null;
       if (!target || target.closest('#pdfscroll')) return; // leave the PDF menu alone
       if (!target.closest(EDITOR_SURFACE_SELECTOR)) return;
-      if (!currentSelectionText().trim()) return; // only when text is selected
+      // Use the snapshot captured on mouseup (the live selection may already be
+      // collapsed by the right-click), falling back to a live read.
+      const sel = (lastSelRef.current && lastSelRef.current.text) ? lastSelRef.current.text : currentSelectionText();
+      if (!sel.trim()) return; // only when text is selected
       // Replace the native WebView menu with our "Yorum ekle" menu.
       event.preventDefault();
       event.stopPropagation();
@@ -135,13 +160,16 @@ export function CommentsFeature() {
   const addAtSelection = useCallback(() => {
     setMenu(null);
     const editor = getEditor();
-    const quote = currentSelectionText();
+    const snap = lastSelRef.current;
+    const quote = (snap && snap.text) || currentSelectionText();
     if (!editor || typeof editor.applyComment !== 'function') {
       (window as any).setStatusText?.('Yorum için editörü yenileyin', 'er');
       return;
     }
     const id = createCommentId();
-    if (!editor.applyComment(id)) return; // no selection
+    const range = snap ? { from: snap.from, to: snap.to } : undefined;
+    if (!editor.applyComment(id, range)) return; // no selection
+    lastSelRef.current = null;
     const doc = getActiveDocRecord();
     if (doc) {
       const { comments: next } = addComment(Array.isArray(doc.comments) ? doc.comments : [], { id, text: '', quote });

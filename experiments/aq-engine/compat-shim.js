@@ -1982,12 +1982,21 @@
         reflow(); onUpdate({ editor: editorObj });
         return true;
       },
-      // Comments: anchor/clear a `commentId` mark on the current selection.
-      applyComment: function(commentId){
-        if(!selection || !commentId) return false;
-        var range = selection.getRange();
-        if(range.from === range.to) return false;
-        docModel.applyMark(range.from, range.to, 'commentId', String(commentId));
+      // Current non-empty selection range, or null.
+      getSelectionRange: function(){
+        if(!selection) return null;
+        var r = selection.getRange();
+        if(!r || r.from === r.to) return null;
+        return { from: Math.min(r.from, r.to), to: Math.max(r.from, r.to) };
+      },
+      // Comments: anchor a `commentId` mark on `range` (or the live selection).
+      applyComment: function(commentId, range){
+        if(!commentId) return false;
+        var r = (range && typeof range.from === 'number' && typeof range.to === 'number')
+          ? { from: Math.min(range.from, range.to), to: Math.max(range.from, range.to) }
+          : (selection ? selection.getRange() : null);
+        if(!r || r.from === r.to) return false;
+        docModel.applyMark(r.from, r.to, 'commentId', String(commentId));
         reflow(); onUpdate({ editor: editorObj });
         return true;
       },
