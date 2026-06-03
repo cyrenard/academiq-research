@@ -58,6 +58,7 @@ import {
   searchMetadataByTitle
 } from '../../lib/metadata-lookup';
 import { mergeRefFields, normalizeRefRecord } from '../../lib/reference-format';
+import { appStore, ensureNotebooks, addNote } from '../../lib/app-store';
 
 type LegacyCompatibilityHostProps = {
   onStatus: (message: string) => void;
@@ -1405,19 +1406,15 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
 
     const pushHighlightToNotes = (selection: FallbackSelection, color: string) => {
       const win = window as any;
-      if (!win.S || typeof win.S !== 'object') win.S = {};
-      if (!Array.isArray(win.S.notes)) win.S.notes = [];
-      if (!Array.isArray(win.S.notebooks) || !win.S.notebooks.length) {
-        win.S.notebooks = [{ id: 'nb1', name: 'Genel Notlar' }];
-      }
-      if (!win.S.curNb) win.S.curNb = win.S.notebooks[0]?.id || 'nb1';
+      appStore.setState(ensureNotebooks(appStore.getState()));
+      const storeState = appStore.getState();
       const ref = win.__aqCurrentPdfReference || null;
       const quote = String(selection.text || '').trim();
       if (!quote) return null;
       const note = {
         id: `note_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
-        wsId: win.S.cur || '',
-        nbId: win.S.curNb || 'nb1',
+        wsId: storeState.cur || '',
+        nbId: storeState.curNb || 'nb1',
         type: 'hl',
         txt: '',
         q: quote,
@@ -1445,7 +1442,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         }
       } catch (_error) {}
       try { if (typeof win.normalizeResearchNote === 'function') win.normalizeResearchNote(note); } catch (_error) {}
-      win.S.notes.unshift(note);
+      appStore.setState((s) => addNote(s, note));
       try { if (typeof win.rNotes === 'function') win.rNotes(); } catch (_error) {}
       try { if (typeof win.swR === 'function') win.swR('notes', document.querySelectorAll('.rtab')[0]); } catch (_error) {}
       saveLegacyState();
