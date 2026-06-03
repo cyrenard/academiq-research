@@ -2023,6 +2023,61 @@
       docModel.applyMark(range.from, range.to, mark, !has);
     }
 
+    // Comments bridge for the React layer: everything runs in the engine
+    // context where `selection` (authoritative doc-offset range), `docModel`
+    // and `reflow` are in scope — the raw window.editor doesn't expose these.
+    try {
+      window.__aqEngineComments = {
+        getSelectionRange: function(){
+          var r = selection && typeof selection.getRange === 'function' ? selection.getRange() : null;
+          if(!r || r.from === r.to) return null;
+          return { from: Math.min(r.from, r.to), to: Math.max(r.from, r.to) };
+        },
+        getSelectedText: function(){
+          var r = this.getSelectionRange();
+          if(!r) return '';
+          var t = typeof docModel.getPlainText === 'function' ? String(docModel.getPlainText()) : '';
+          return t.slice(r.from, r.to);
+        },
+        getCaret: function(){
+          var r = selection && typeof selection.getRange === 'function' ? selection.getRange() : null;
+          return r ? Math.min(r.from, r.to) : 0;
+        },
+        applyComment: function(commentId, from, to){
+          if(commentId == null || from == null || to == null || from === to) return false;
+          docModel.applyMark(Math.min(from, to), Math.max(from, to), 'commentId', String(commentId));
+          reflow(); onUpdate({ editor: editorObj });
+          return true;
+        },
+        clearComment: function(commentId){
+          if(typeof docModel.clearCommentMark === 'function') docModel.clearCommentMark(commentId);
+          reflow(); onUpdate({ editor: editorObj });
+          return true;
+        },
+        listCommentIds: function(){
+          return typeof docModel.listCommentIds === 'function' ? docModel.listCommentIds() : [];
+        },
+        // Clipboard ops driven from the React context menu (selection is the
+        // snapshot captured before the right-click collapsed it).
+        cut: function(from, to){
+          if(from == null || to == null || from === to) return false;
+          docModel.deleteRange(Math.min(from, to), Math.max(from, to));
+          if(selection && selection.setRange) selection.setRange(Math.min(from, to), Math.min(from, to));
+          reflow(); onUpdate({ editor: editorObj });
+          return true;
+        },
+        paste: function(from, to, text){
+          var lo = Math.min(from, to), hi = Math.max(from, to);
+          if(lo !== hi) docModel.deleteRange(lo, hi);
+          docModel.insertText(lo, String(text || ''));
+          var caret = lo + String(text || '').length;
+          if(selection && selection.setRange) selection.setRange(caret, caret);
+          reflow(); onUpdate({ editor: editorObj });
+          return true;
+        }
+      };
+    } catch(_e){}
+
     reflow();
     return editorObj;
   }

@@ -39,42 +39,19 @@ function getEditor(): any {
   return typeof win.getActiveEditorInstance === 'function' ? win.getActiveEditorInstance() : win.editor || null;
 }
 
-/** The aq-engine document model on the active editor (has applyMark / listCommentIds / clearCommentMark). */
-function getDocModel(): any {
-  const ed = getEditor();
-  return ed && ed._docModel ? ed._docModel : null;
+/** Engine-context comments bridge (set up by compat-shim createEditor). */
+function commentsBridge(): any {
+  return (window as any).__aqEngineComments || null;
 }
 
-// Map a DOM point (text node + offset) inside an .aq-engine-line to the engine's
-// flat document offset (line's data-line-offset-start + chars before the point).
-function domPointToEngineOffset(node: Node | null, offset: number): number | null {
-  if (!node) return null;
-  const el = node.nodeType === 3 ? node.parentElement : (node as HTMLElement);
-  const line = el?.closest('.aq-engine-line') as HTMLElement | null;
-  if (!line || line.dataset.lineOffsetStart == null) return null;
-  const lineStart = Number(line.dataset.lineOffsetStart);
-  let chars = 0;
-  const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
-  let t: Node | null = walker.nextNode();
-  while (t) {
-    if (t === node) return lineStart + chars + offset;
-    chars += (t.textContent || '').length;
-    t = walker.nextNode();
-  }
-  return lineStart + chars;
-}
-
-// The current native DOM selection mapped to engine offsets + its text, or null.
+// The current engine selection (authoritative doc offsets) + its text, or null.
 function captureEngineSelection(): { from: number; to: number; text: string } | null {
-  const sel = window.getSelection?.();
-  const text = String(sel?.toString() || '');
-  if (!sel || sel.rangeCount === 0 || !text.trim()) return null;
-  const a = domPointToEngineOffset(sel.anchorNode, sel.anchorOffset);
-  const b = domPointToEngineOffset(sel.focusNode, sel.focusOffset);
-  if (a == null || b == null) return null;
-  const from = Math.min(a, b);
-  const to = Math.max(a, b);
-  return from === to ? null : { from, to, text };
+  const b = commentsBridge();
+  if (!b || typeof b.getSelectionRange !== 'function') return null;
+  const range = b.getSelectionRange();
+  if (!range) return null;
+  const text = typeof b.getSelectedText === 'function' ? String(b.getSelectedText() || '') : String(window.getSelection?.()?.toString() || '');
+  return { from: range.from, to: range.to, text };
 }
 
 /**
@@ -86,15 +63,13 @@ function captureEngineSelection(): { from: number; to: number; text: string } | 
 export function CommentsFeature() {
   const [open, setOpen] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; hasSel: boolean } | null>(null);
   // Snapshot the last non-empty selection (engine collapses it on right-click).
   const lastSelRef = useRef<{ from: number; to: number; text: string } | null>(null);
 
   // Capture the selection on mouseup/keyup, BEFORE a right-click collapses it.
   useEffect(() => {
     const capture = () => {
-      // captureEngineSelection only returns non-null for a selection inside an
-      // .aq-engine-line, so this is safe to run on any selection change.
       const snap = captureEngineSelection();
       if (snap) lastSelRef.current = snap;
     };
@@ -110,8 +85,8 @@ export function CommentsFeature() {
   const reload = useCallback(() => {
     const doc = getActiveDocRecord();
     const stored: Comment[] = Array.isArray(doc?.comments) ? doc.comments : [];
-    const docModel = getDocModel();
-    const anchored = docModel && typeof docModel.listCommentIds === 'function' ? docModel.listCommentIds() : null;
+    const bridge = commentsBridge();
+    const anchored = bridge && typeof bridge.listCommentIds === 'function' ? bridge.listCommentIds() : null;
     const next = anchored ? pruneOrphanComments(stored, anchored) : stored;
     if (doc && anchored && next.length !== stored.length) {
       doc.comments = next;
@@ -146,15 +121,13 @@ export function CommentsFeature() {
       const target = event.target as HTMLElement | null;
       if (!target || target.closest('#pdfscroll')) return; // leave the PDF menu alone
       if (!target.closest(EDITOR_SURFACE_SELECTOR)) return;
-      // Capture a live selection if still present; else use the mouseup snapshot
-      // (the right-click usually collapses the selection before this fires).
       const live = captureEngineSelection();
       if (live) lastSelRef.current = live;
-      if (!lastSelRef.current || !lastSelRef.current.text.trim()) return;
-      // Replace the native WebView menu with our "Yorum ekle" menu.
+      const hasSel = !!(lastSelRef.current && lastSelRef.current.text.trim());
+      // Replace the native WebView menu with our editor menu.
       event.preventDefault();
       event.stopPropagation();
-      setMenu({ x: Math.min(event.clientX, window.innerWidth - 170), y: Math.min(event.clientY, window.innerHeight - 70) });
+      setMenu({ x: Math.min(event.clientX, window.innerWidth - 190), y: Math.min(event.clientY, window.innerHeight - 190), hasSel });
     };
     document.addEventListener('contextmenu', onCtx, true);
     return () => document.removeEventListener('contextmenu', onCtx, true);
@@ -184,18 +157,15 @@ export function CommentsFeature() {
 
   const addAtSelection = useCallback(() => {
     setMenu(null);
-    const editor = getEditor();
-    const docModel = editor && editor._docModel;
+    const bridge = commentsBridge();
     const snap = lastSelRef.current;
-    if (!editor || !docModel || typeof docModel.applyMark !== 'function' || !snap) {
+    if (!bridge || typeof bridge.applyComment !== 'function' || !snap) {
       (window as any).setStatusText?.('Önce yorumlanacak metni seçin', 'er');
       return;
     }
     const id = createCommentId();
     const quote = snap.text;
-    docModel.applyMark(snap.from, snap.to, 'commentId', id);
-    if (typeof editor._reflow === 'function') editor._reflow();
-    if (typeof editor.emit === 'function') editor.emit('update');
+    if (!bridge.applyComment(id, snap.from, snap.to)) return;
     lastSelRef.current = null;
     const doc = getActiveDocRecord();
     if (doc) {
@@ -210,6 +180,35 @@ export function CommentsFeature() {
     }, 50);
   }, [reload]);
 
+  const doCopy = useCallback(() => {
+    setMenu(null);
+    const text = lastSelRef.current?.text || '';
+    if (text) navigator.clipboard?.writeText(text).catch(() => undefined);
+  }, []);
+
+  const doCut = useCallback(() => {
+    setMenu(null);
+    const bridge = commentsBridge();
+    const snap = lastSelRef.current;
+    if (!bridge || typeof bridge.cut !== 'function' || !snap) return;
+    if (snap.text) navigator.clipboard?.writeText(snap.text).catch(() => undefined);
+    bridge.cut(snap.from, snap.to);
+    lastSelRef.current = null;
+  }, []);
+
+  const doPaste = useCallback(() => {
+    setMenu(null);
+    const bridge = commentsBridge();
+    if (!bridge || typeof bridge.paste !== 'function') return;
+    const snap = lastSelRef.current;
+    const from = snap ? snap.from : (typeof bridge.getCaret === 'function' ? bridge.getCaret() : 0);
+    const to = snap ? snap.to : from;
+    navigator.clipboard?.readText().then((text) => {
+      bridge.paste(from, to, String(text || ''));
+      lastSelRef.current = null;
+    }).catch(() => undefined);
+  }, []);
+
   const navigate = (id: string) => {
     const el = document.querySelector(`[data-comment-id="${id}"]`) as HTMLElement | null;
     if (!el) return;
@@ -219,13 +218,8 @@ export function CommentsFeature() {
   };
 
   const onDelete = (id: string) => {
-    const editor = getEditor();
-    const docModel = editor && editor._docModel;
-    if (docModel && typeof docModel.clearCommentMark === 'function') {
-      docModel.clearCommentMark(id);
-      if (typeof editor._reflow === 'function') editor._reflow();
-      if (typeof editor.emit === 'function') editor.emit('update');
-    }
+    const bridge = commentsBridge();
+    if (bridge && typeof bridge.clearComment === 'function') bridge.clearComment(id);
     persist(removeComment(comments, id));
   };
 
@@ -233,14 +227,39 @@ export function CommentsFeature() {
     <>
       {menu ? (
         <div
-          className="fixed z-[2300] overflow-hidden rounded-lg border border-aq-line bg-white py-1 text-[12px] text-aq-ink shadow-[0_18px_44px_rgba(22,27,34,0.22)]"
+          className="fixed z-[2300] min-w-[170px] overflow-hidden rounded-lg border border-aq-line bg-white py-1 text-[12px] text-aq-ink shadow-[0_18px_44px_rgba(22,27,34,0.22)]"
           style={{ left: menu.x, top: menu.y }}
           onClick={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.preventDefault()}
         >
           <button
             type="button"
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-aq-panel"
-            onMouseDown={(event) => event.preventDefault()}
+            disabled={!menu.hasSel}
+            className="flex w-full items-center justify-between px-3 py-1.5 text-left hover:bg-aq-panel disabled:opacity-40 disabled:hover:bg-transparent"
+            onClick={doCut}
+          >
+            <span>Kes</span><span className="text-aq-muted">Ctrl+X</span>
+          </button>
+          <button
+            type="button"
+            disabled={!menu.hasSel}
+            className="flex w-full items-center justify-between px-3 py-1.5 text-left hover:bg-aq-panel disabled:opacity-40 disabled:hover:bg-transparent"
+            onClick={doCopy}
+          >
+            <span>Kopyala</span><span className="text-aq-muted">Ctrl+C</span>
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center justify-between px-3 py-1.5 text-left hover:bg-aq-panel"
+            onClick={doPaste}
+          >
+            <span>Yapıştır</span><span className="text-aq-muted">Ctrl+V</span>
+          </button>
+          <div className="my-1 h-px bg-aq-line" />
+          <button
+            type="button"
+            disabled={!menu.hasSel}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-aq-panel disabled:opacity-40 disabled:hover:bg-transparent"
             onClick={addAtSelection}
           >
             <CommentIcon size={13} /> Yorum ekle
