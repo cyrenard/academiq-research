@@ -1,4 +1,4 @@
-﻿export {};
+export {};
 
 type IpcResult<T = unknown> = Promise<T>;
 type BrowserCaptureListener = (payload: unknown) => void;
@@ -69,6 +69,19 @@ declare global {
         suggest: (word: string, lang?: string, wsId?: string) => IpcResult<string[]>;
         addUserWord: (word: string, lang?: string, wsId?: string) => IpcResult<void>;
         getUserDictionary: (lang?: string, wsId?: string) => IpcResult<string[]>;
+      };
+      fs?: {
+        readFileText?: (path: string) => IpcResult<string>;
+        readFileBase64?: (path: string) => IpcResult<string>;
+      };
+      pdf?: {
+        extractMetadata?: (refId: string, ws?: unknown) => IpcResult<unknown>;
+        applyAnnotations?: (refId: string, ws?: unknown, annotations?: unknown[]) => IpcResult<unknown>;
+        readAnnotations?: (refId: string, ws?: unknown) => IpcResult<unknown>;
+        renderPage?: (refId: string, ws?: unknown, page?: number, dpi?: number) => IpcResult<unknown>;
+        extractText?: (refId: string, ws?: unknown, page?: number) => IpcResult<unknown>;
+        getOutline?: (refId: string, ws?: unknown) => IpcResult<unknown>;
+        ingest?: (filePath: string) => IpcResult<unknown>;
       };
     };
     ocrAPI: {

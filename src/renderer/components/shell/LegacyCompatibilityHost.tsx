@@ -13,7 +13,7 @@ import {
   importWordFileDirect,
   importBibliographyFile
 } from '../../lib/file-import';
-import { handleDroppedFiles } from '../../lib/drop-router';
+import { handleDroppedFiles, handleTauriDroppedPaths } from '../../lib/drop-router';
 import {
   runExternalReferenceTextImport,
   runExternalReferenceBibliographyTextImport,
@@ -58,6 +58,7 @@ import {
   searchMetadataByTitle
 } from '../../lib/metadata-lookup';
 import { mergeRefFields, normalizeRefRecord } from '../../lib/reference-format';
+import { useKeyboardShortcut, keyboardRouter } from '../../lib/keyboard-router';
 
 type LegacyCompatibilityHostProps = {
   onStatus: (message: string) => void;
@@ -157,6 +158,11 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
   const [metadataFilter, setMetadataFilter] = useState('all');
   const [metadataLookupCandidate, setMetadataLookupCandidate] = useState<MetadataLookupCandidate | null>(null);
   const [metadataLookupBusyId, setMetadataLookupBusyId] = useState('');
+  const [pdfTitle, setPdfTitle] = useState('-- kaynak seç --');
+  const [pdfPageText, setPdfPageText] = useState('--');
+  const [pdfZoomText, setPdfZoomText] = useState('--');
+  const [pdfToolMode, setPdfToolMode] = useState('');
+  const [pdfIsFullscreen, setPdfIsFullscreen] = useState(false);
 
   // Note: the legacy → React sync debounce timer is owned by
   // legacy-dom-helpers; no per-component cleanup needed here.
@@ -170,18 +176,13 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       if (!panel) return;
       pdfFullscreenLockRef.current = true;
       const nextFullscreen = !panel.classList.contains('fullscreen');
-      panel.classList.toggle('fullscreen', nextFullscreen);
+      setPdfIsFullscreen(nextFullscreen);
       document.body.classList.toggle('aq-pdf-reader-fullscreen', nextFullscreen);
-      const fullBtn = document.getElementById('pdffullbtn');
-      if (fullBtn) {
-        fullBtn.innerHTML = nextFullscreen ? '&#x2716;' : '&#x26F6;';
-        fullBtn.setAttribute('title', nextFullscreen ? 'Küçült' : 'Tam ekran');
-        fullBtn.setAttribute('aria-label', nextFullscreen ? 'PDF okuyucuyu küçült' : 'Tam ekran aç/kapat');
-      }
       document.getElementById('pdfresize')?.classList.toggle('aq-hidden', nextFullscreen);
       window.setTimeout(() => {
         pdfFullscreenLockRef.current = false;
       }, 180);
+      return true;
     };
     return () => {
       win.togglePdfFullscreen = previousToggle;
@@ -189,6 +190,27 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
   }, []);
 
   useEffect(() => {
+    let unlistenDragDrop: (() => void) | null = null;
+    let cancelled = false;
+    const isTauri = typeof window !== 'undefined' && (window as any).__TAURI__;
+    if (isTauri) {
+      const listen = (window as any).__TAURI__.event.listen;
+      if (typeof listen === 'function') {
+        listen('tauri://drag-drop', (event: any) => {
+          const paths = event?.payload?.paths;
+          if (Array.isArray(paths)) {
+            void handleTauriDroppedPaths(paths, onStatus);
+          }
+        }).then((unsub: any) => {
+          if (cancelled) {
+            unsub();
+          } else {
+            unlistenDragDrop = unsub;
+          }
+        });
+      }
+    }
+
     const hasFiles = (event: DragEvent) => {
       const types = Array.from(event.dataTransfer?.types || []);
       return types.includes('Files');
@@ -223,6 +245,8 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     window.addEventListener('dragleave', onDragLeave, true);
     window.addEventListener('drop', onDrop, true);
     return () => {
+      cancelled = true;
+      if (unlistenDragDrop) unlistenDragDrop();
       window.removeEventListener('dragenter', onDragEnter, true);
       window.removeEventListener('dragover', onDragOver, true);
       window.removeEventListener('dragleave', onDragLeave, true);
@@ -544,14 +568,8 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         if (!panel || pdfFullscreenLockRef.current) return true;
         pdfFullscreenLockRef.current = true;
         const nextFullscreen = !panel.classList.contains('fullscreen');
-        panel.classList.toggle('fullscreen', nextFullscreen);
+        setPdfIsFullscreen(nextFullscreen);
         document.body.classList.toggle('aq-pdf-reader-fullscreen', nextFullscreen);
-        const fullBtn = document.getElementById('pdffullbtn');
-        if (fullBtn) {
-          fullBtn.innerHTML = nextFullscreen ? '&#x2716;' : '&#x26F6;';
-          fullBtn.setAttribute('title', nextFullscreen ? 'Küçült' : 'Tam ekran');
-          fullBtn.setAttribute('aria-label', nextFullscreen ? 'PDF okuyucuyu küçült' : 'Tam ekran aç/kapat');
-        }
         document.getElementById('pdfresize')?.classList.toggle('aq-hidden', nextFullscreen);
         window.setTimeout(() => {
           pdfFullscreenLockRef.current = false;
@@ -566,8 +584,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         const target = scroll.querySelector<HTMLElement>(`.pdf-page-wrap[data-page="${nextPage}"]`);
         if (target) scroll.scrollTo({ top: target.offsetTop, behavior: 'smooth' });
         if (state) state.page = nextPage;
-        const pageNode = document.getElementById('pdfpg');
-        if (pageNode) pageNode.textContent = total ? `${nextPage}/${total}` : '--';
+        setPdfPageText(total ? `${nextPage}/${total}` : '--');
         document.querySelectorAll<HTMLElement>('#pdfthumbs [data-thumbpage]').forEach((item) => {
           const active = Number(item.dataset.thumbpage || 0) === nextPage;
           item.classList.toggle('active', active);
@@ -960,55 +977,74 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     };
   }, []);
 
-  useEffect(() => {
-    const isEditableTarget = (target: EventTarget | null) => {
-      const node = target as HTMLElement | null;
-      if (!node) return false;
-      if (/^(INPUT|TEXTAREA|SELECT)$/i.test(node.tagName)) return true;
-      if (node.isContentEditable) return true;
-      return Boolean(node.closest?.('[contenteditable="true"], .ProseMirror, #apaed, #tgs'));
-    };
-    const isPdfActive = (target: EventTarget | null) => {
+  const isEditableTarget = (target: EventTarget | null) => {
+    const node = target as HTMLElement | null;
+    if (!node) return false;
+    if (/^(INPUT|TEXTAREA|SELECT)$/i.test(node.tagName)) return true;
+    if (node.isContentEditable) return true;
+    return Boolean(node.closest?.('[contenteditable="true"], .ProseMirror, #apaed, #tgs'));
+  };
+  const isPdfActive = (target: EventTarget | null) => {
+    const panel = document.getElementById('pdfpanel');
+    if (!panel?.classList.contains('open')) return false;
+    const node = target as HTMLElement | null;
+    return Boolean(node?.closest?.('#pdfpanel') || document.activeElement?.closest?.('#pdfpanel') || panel.matches(':hover'));
+  };
+  const clickPdfButton = (id: string) => {
+    const button = document.getElementById(id) as HTMLElement | null;
+    if (!button) return false;
+    button.click();
+    return true;
+  };
+  const focusSearch = () => {
+    const bar = document.getElementById('pdfsearchbar');
+    if (!bar?.classList.contains('open')) clickPdfButton('pdfSearchToggleBtn');
+    window.setTimeout(() => {
+      const input = document.getElementById('pdfsearchinp') as HTMLInputElement | null;
+      input?.focus();
+      input?.select();
+    }, 20);
+  };
+  const scrollToEdgePage = (last: boolean) => {
+    const scroll = document.getElementById('pdfscroll');
+    const pages = scroll ? Array.from(scroll.querySelectorAll<HTMLElement>('.pdf-page-wrap[data-page]')) : [];
+    const target = pages[last ? pages.length - 1 : 0];
+    if (!scroll || !target) return false;
+    scroll.scrollTo({ top: target.offsetTop, behavior: 'smooth' });
+    const page = Number(target.dataset.page || (last ? pages.length : 1));
+    setPdfPageText(`${page}/${pages.length}`);
+    return true;
+  };
+
+  useKeyboardShortcut(
+    'pdf-panel-navigation',
+    [
+      { key: 'Escape' },
+      { key: 'ArrowLeft' },
+      { key: 'PageUp' },
+      { key: 'ArrowRight' },
+      { key: 'PageDown' },
+      { key: 'Home' },
+      { key: 'End' },
+      { key: '+' },
+      { key: '=' },
+      { key: '-' },
+      { key: '_' },
+      { key: '0', ctrlKey: true },
+      { key: 'f', ctrlKey: true }
+    ],
+    (event) => {
       const panel = document.getElementById('pdfpanel');
       if (!panel?.classList.contains('open')) return false;
-      const node = target as HTMLElement | null;
-      return Boolean(node?.closest?.('#pdfpanel') || document.activeElement?.closest?.('#pdfpanel') || panel.matches(':hover'));
-    };
-    const clickPdfButton = (id: string) => {
-      const button = document.getElementById(id) as HTMLElement | null;
-      if (!button) return false;
-      button.click();
-      return true;
-    };
-    const focusSearch = () => {
-      const bar = document.getElementById('pdfsearchbar');
-      if (!bar?.classList.contains('open')) clickPdfButton('pdfSearchToggleBtn');
-      window.setTimeout(() => {
-        const input = document.getElementById('pdfsearchinp') as HTMLInputElement | null;
-        input?.focus();
-        input?.select();
-      }, 20);
-    };
-    const scrollToEdgePage = (last: boolean) => {
-      const scroll = document.getElementById('pdfscroll');
-      const pages = scroll ? Array.from(scroll.querySelectorAll<HTMLElement>('.pdf-page-wrap[data-page]')) : [];
-      const target = pages[last ? pages.length - 1 : 0];
-      if (!scroll || !target) return false;
-      scroll.scrollTo({ top: target.offsetTop, behavior: 'smooth' });
-      const pageNode = document.getElementById('pdfpg');
-      const page = Number(target.dataset.page || (last ? pages.length : 1));
-      if (pageNode) pageNode.textContent = `${page}/${pages.length}`;
-      return true;
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      const panel = document.getElementById('pdfpanel');
-      if (!panel?.classList.contains('open')) return;
+
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
         event.preventDefault();
         focusSearch();
-        return;
+        return true;
       }
-      if (!isPdfActive(event.target) || isEditableTarget(event.target)) return;
+
+      if (!isPdfActive(event.target) || isEditableTarget(event.target)) return false;
+
       const key = event.key;
       if (key === 'Escape') {
         const search = document.getElementById('pdfsearchbar');
@@ -1017,68 +1053,73 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         if (tip?.classList.contains('show')) {
           tip.classList.remove('show');
           event.preventDefault();
-          return;
+          return true;
         }
         if (menu?.classList.contains('show')) {
           menu.classList.remove('show');
           event.preventDefault();
-          return;
+          return true;
         }
         if (search?.classList.contains('open')) {
           clickPdfButton('pdfSearchCloseBtn');
           event.preventDefault();
-          return;
+          return true;
         }
         if (panel.classList.contains('fullscreen')) {
           clickPdfButton('pdffullbtn');
           event.preventDefault();
         }
-        return;
+        return true;
       }
       if (key === 'ArrowLeft' || key === 'PageUp') {
         event.preventDefault();
         clickPdfButton('pdfPrevBtn');
-        return;
+        return true;
       }
       if (key === 'ArrowRight' || key === 'PageDown') {
         event.preventDefault();
         clickPdfButton('pdfNextBtn');
-        return;
+        return true;
       }
       if (key === 'Home') {
         event.preventDefault();
         scrollToEdgePage(false);
-        return;
+        return true;
       }
       if (key === 'End') {
         event.preventDefault();
         scrollToEdgePage(true);
-        return;
+        return true;
       }
       if (key === '+' || key === '=') {
         event.preventDefault();
         clickPdfButton('pdfZoomInBtn');
-        return;
+        return true;
       }
       if (key === '-' || key === '_') {
         event.preventDefault();
         clickPdfButton('pdfZoomOutBtn');
-        return;
+        return true;
       }
       if ((event.ctrlKey || event.metaKey) && key === '0') {
         event.preventDefault();
         clickPdfButton('pdfzoom');
+        return true;
       }
-    };
+      return false;
+    },
+    [],
+    { priority: 10 }
+  );
+
+  useEffect(() => {
     const onWheel = (event: WheelEvent) => {
       if (!event.ctrlKey || !isPdfActive(event.target) || isEditableTarget(event.target)) return;
       event.preventDefault();
       clickPdfButton(event.deltaY < 0 ? 'pdfZoomInBtn' : 'pdfZoomOutBtn');
     };
-    document.addEventListener('keydown', onKeyDown, true);
     document.addEventListener('wheel', onWheel, { capture: true, passive: false });
     return () => {
-      document.removeEventListener('keydown', onKeyDown, true);
       document.removeEventListener('wheel', onWheel, true);
     };
   }, []);
@@ -1107,14 +1148,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       const win = window as any;
       const nextMode = ['annot', 'draw', 'region'].includes(mode) ? mode : '';
       win.__aqPdfToolMode = nextMode;
-      const panel = document.getElementById('pdfpanel');
-      if (panel) {
-        if (nextMode) panel.dataset.toolMode = nextMode;
-        else delete panel.dataset.toolMode;
-      }
-      document.getElementById('annotbtn')?.classList.toggle('on', nextMode === 'annot');
-      document.getElementById('drawbtn')?.classList.toggle('on', nextMode === 'draw');
-      document.getElementById('pdfRegionBtn')?.classList.toggle('on', nextMode === 'region');
+      setPdfToolMode(nextMode);
       document.querySelectorAll<HTMLElement>('.pdf-page-wrap').forEach((page) => {
         page.style.cursor = nextMode ? 'crosshair' : '';
       });
@@ -1130,6 +1164,10 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     };
 
     (window as any).__aqSetPdfToolMode = setFallbackToolMode;
+    (window as any).__aqSetPdfTitle = setPdfTitle;
+    (window as any).__aqSetPdfPage = setPdfPageText;
+    (window as any).__aqSetPdfZoom = setPdfZoomText;
+    (window as any).__aqSetPdfFullscreen = setPdfIsFullscreen;
 
     const getFallbackSelection = (): FallbackSelection | null => {
       const selection = window.getSelection();
@@ -2058,61 +2096,78 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       }
     };
 
-    const onKeyDown = (event: Event) => {
-      const keyboard = event as KeyboardEvent;
-      const key = keyboard.key.toLowerCase();
-      const panelOpen = document.getElementById('pdfpanel')?.classList.contains('open');
-      if (keyboard.key === 'Escape') {
-        hideFallbackTip();
-        if ((window as any).__aqPdfToolMode) {
-          setFallbackToolMode('');
-          keyboard.preventDefault();
-        }
-      }
-      if (panelOpen && !isEditablePdfTarget(keyboard.target) && !keyboard.ctrlKey && !keyboard.metaKey && !keyboard.altKey) {
-        if (key === 'a') {
-          setFallbackToolMode((window as any).__aqPdfToolMode === 'annot' ? '' : 'annot');
-          keyboard.preventDefault();
-          return;
-        }
-        if (key === 'd') {
-          setFallbackToolMode((window as any).__aqPdfToolMode === 'draw' ? '' : 'draw');
-          keyboard.preventDefault();
-          return;
-        }
-        if (key === 'r') {
-          setFallbackToolMode((window as any).__aqPdfToolMode === 'region' ? '' : 'region');
-          keyboard.preventDefault();
-          return;
-        }
-        if (key === 'h') {
-          const selection = (window as any).__aqPdfFallbackSelection || getFallbackSelection();
-          if (selection) {
-            paintFallbackHighlight(selection, false);
+    const cleanupShortcuts = keyboardRouter.register({
+      id: 'pdf-panel-actions',
+      combo: [
+        { key: 'Escape' },
+        { key: 'a' },
+        { key: 'd' },
+        { key: 'r' },
+        { key: 'h' },
+        { key: 'n' },
+        { key: 'Delete' },
+        { key: 'Backspace' }
+      ],
+      handler: (event) => {
+        const keyboard = event;
+        const key = keyboard.key.toLowerCase();
+        const panelOpen = document.getElementById('pdfpanel')?.classList.contains('open');
+        if (keyboard.key === 'Escape') {
+          hideFallbackTip();
+          if ((window as any).__aqPdfToolMode) {
+            setFallbackToolMode('');
             keyboard.preventDefault();
-            return;
+            return true;
           }
         }
-        if (key === 'n') {
-          const selection = (window as any).__aqPdfFallbackSelection || getFallbackSelection();
-          if (selection) {
-            paintFallbackHighlight(selection, true);
+        if (panelOpen && !isEditablePdfTarget(keyboard.target) && !keyboard.ctrlKey && !keyboard.metaKey && !keyboard.altKey) {
+          if (key === 'a') {
+            setFallbackToolMode((window as any).__aqPdfToolMode === 'annot' ? '' : 'annot');
             keyboard.preventDefault();
-            return;
+            return true;
+          }
+          if (key === 'd') {
+            setFallbackToolMode((window as any).__aqPdfToolMode === 'draw' ? '' : 'draw');
+            keyboard.preventDefault();
+            return true;
+          }
+          if (key === 'r') {
+            setFallbackToolMode((window as any).__aqPdfToolMode === 'region' ? '' : 'region');
+            keyboard.preventDefault();
+            return true;
+          }
+          if (key === 'h') {
+            const selection = (window as any).__aqPdfFallbackSelection || getFallbackSelection();
+            if (selection) {
+              paintFallbackHighlight(selection, false);
+              keyboard.preventDefault();
+              return true;
+            }
+          }
+          if (key === 'n') {
+            const selection = (window as any).__aqPdfFallbackSelection || getFallbackSelection();
+            if (selection) {
+              paintFallbackHighlight(selection, true);
+              keyboard.preventDefault();
+              return true;
+            }
           }
         }
-      }
-      if ((keyboard.key === 'Delete' || keyboard.key === 'Backspace') && (window as any).__aqSelectedPdfFallbackHighlightId) {
-        const active = document.activeElement as HTMLElement | null;
-        if (active?.closest?.('.pdf-annot-body, input, textarea, [contenteditable="true"]')) return;
-        persistFallbackHighlights(getFallbackHighlights().filter((item) => String(item.id) !== String((window as any).__aqSelectedPdfFallbackHighlightId)));
-        repaintFallbackHighlights();
-        renderFallbackAnnotationPanel();
-        updateFallbackStats();
-        hideFallbackTip();
-        keyboard.preventDefault();
-      }
-    };
+        if ((keyboard.key === 'Delete' || keyboard.key === 'Backspace') && (window as any).__aqSelectedPdfFallbackHighlightId) {
+          const active = document.activeElement as HTMLElement | null;
+          if (active?.closest?.('.pdf-annot-body, input, textarea, [contenteditable="true"]')) return false;
+          persistFallbackHighlights(getFallbackHighlights().filter((item) => String(item.id) !== String((window as any).__aqSelectedPdfFallbackHighlightId)));
+          repaintFallbackHighlights();
+          renderFallbackAnnotationPanel();
+          updateFallbackStats();
+          hideFallbackTip();
+          keyboard.preventDefault();
+          return true;
+        }
+        return false;
+      },
+      priority: 10
+    });
 
     const onPdfScroll = () => {
       const tip = document.getElementById('hltip');
@@ -2141,7 +2196,6 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     document.addEventListener('pointerdown', onPdfPointerDown, true);
     document.addEventListener('pointermove', onPdfPointerMove, true);
     document.addEventListener('pointerup', onPdfPointerUp, true);
-    document.addEventListener('keydown', onKeyDown, true);
     document.getElementById('pdfscroll')?.addEventListener('scroll', onPdfScroll, { passive: true });
     return () => {
       document.removeEventListener('contextmenu', showContextMenu, true);
@@ -2153,10 +2207,14 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       document.removeEventListener('pointerdown', onPdfPointerDown, true);
       document.removeEventListener('pointermove', onPdfPointerMove, true);
       document.removeEventListener('pointerup', onPdfPointerUp, true);
-      document.removeEventListener('keydown', onKeyDown, true);
+      cleanupShortcuts();
       document.getElementById('pdfscroll')?.removeEventListener('scroll', onPdfScroll);
       delete (window as any).__aqApplyPdfFallbackHighlight;
       delete (window as any).__aqSetPdfToolMode;
+      delete (window as any).__aqSetPdfTitle;
+      delete (window as any).__aqSetPdfPage;
+      delete (window as any).__aqSetPdfZoom;
+      delete (window as any).__aqSetPdfFullscreen;
     };
   }, []);
 
@@ -2210,26 +2268,35 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         </div>
       ) : null}
 
-      <section id="pdfpanel" className="aq-legacy-pdf-panel" aria-label="PDF viewer">
+      <section id="pdfpanel" className={`aq-legacy-pdf-panel${pdfIsFullscreen ? ' fullscreen' : ''}`} data-tool-mode={pdfToolMode || undefined} aria-label="PDF viewer">
         <div id="pdfresize" className="aq-legacy-pdf-resize" title="Genislik ayarla" />
         <div id="pdftb" className="aq-legacy-pdf-toolbar">
           <div className="pdf-brand">
             <span className="pdf-kicker">PDF Reader</span>
-            <span id="pdftitle" className="aq-legacy-pdf-title">-- kaynak seç --</span>
+            <span id="pdftitle" className="aq-legacy-pdf-title">{pdfTitle}</span>
           </div>
           <div className="pdf-toolbar-group compact" aria-label="Sayfa gezinme">
             <button className="ppb" id="pdfPrevBtn" type="button" title="Önceki sayfa" aria-label="Önceki sayfa" onClick={() => (window as any).pPrev?.()}>◀</button>
-            <span id="pdfpg" role="button" tabIndex={0} title="Sayfaya git" aria-label="Sayfa numarasına git" onClick={() => (window as any).goToPage?.()}>--</span>
+            <span id="pdfpg" role="button" tabIndex={0} title="Sayfaya git" aria-label="Sayfa numarasına git" onClick={() => (window as any).goToPage?.()}>{pdfPageText}</span>
             <button className="ppb" id="pdfNextBtn" type="button" title="Sonraki sayfa" aria-label="Sonraki sayfa" onClick={() => (window as any).pNext?.()}>▶</button>
           </div>
           <div className="pdf-toolbar-group compact" aria-label="Yakınlaştırma">
             <button className="ppb" id="pdfZoomOutBtn" type="button" title="Uzaklaştır" aria-label="Uzaklaştır" onClick={() => (window as any).pZO?.()}>-</button>
-            <span id="pdfzoom" role="button" tabIndex={0} title="Genişliğe sığdır" aria-label="Genişliğe sığdır" onClick={() => (window as any).pZFit?.()}>--</span>
+            <span id="pdfzoom" role="button" tabIndex={0} title="Genişliğe sığdır" aria-label="Genişliğe sığdır" onClick={() => (window as any).pZFit?.()}>{pdfZoomText}</span>
             <button className="ppb" id="pdfZoomInBtn" type="button" title="Yakınlaştır" aria-label="Yakınlaştır" onClick={() => (window as any).pZI?.()}>+</button>
           </div>
           <div className="pdf-toolbar-spacer" />
           <div className="pdf-toolbar-window" aria-label="Pencere">
-            <button className="ppb" id="pdffullbtn" type="button" title="Tam ekran" aria-label="Tam ekran aç/kapat" onClick={() => (window as any).togglePdfFullscreen?.()}>⛶</button>
+            <button
+              className="ppb"
+              id="pdffullbtn"
+              type="button"
+              title={pdfIsFullscreen ? "Küçült" : "Tam ekran"}
+              aria-label={pdfIsFullscreen ? "PDF okuyucuyu küçült" : "Tam ekran aç/kapat"}
+              onClick={() => (window as any).togglePdfFullscreen?.()}
+            >
+              {pdfIsFullscreen ? '✖' : '⛶'}
+            </button>
             <button className="ppb pdf-close-btn" id="pdfclosebtn" type="button" title="Kapat" aria-label="PDF okuyucuyu kapat" onClick={() => (window as any).togglePDF?.()}>×</button>
           </div>
         </div>
@@ -2268,10 +2335,10 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
           </div>
           <div className="pdf-tools-divider" />
           <div className="pdf-tools-group" aria-label="Not ve kalem">
-            <button className="ppb" id="annotbtn" type="button" title="Metin notu ekle" onClick={() => (window as any).toggleAnnotMode?.()}>✎</button>
-            <button className="ppb" id="drawbtn" type="button" title="Serbest çizim" onClick={() => (window as any).toggleDrawMode?.()}>✏</button>
+            <button className={`ppb${pdfToolMode === 'annot' ? ' on' : ''}`} id="annotbtn" type="button" title="Metin notu ekle" onClick={() => (window as any).toggleAnnotMode?.()}>✎</button>
+            <button className={`ppb${pdfToolMode === 'draw' ? ' on' : ''}`} id="drawbtn" type="button" title="Serbest çizim" onClick={() => (window as any).toggleDrawMode?.()}>✏</button>
             <input id="pdfDrawColor" className="pdf-draw-color" type="color" defaultValue="#c9453e" title="Çizim rengi" onChange={(event) => (window as any).setPdfDrawColor?.(event.target.value)} />
-            <button className="ppb" id="pdfRegionBtn" type="button" title="PDF bölgesi seç" onClick={() => (window as any).togglePdfRegionCaptureMode?.()}>▢</button>
+            <button className={`ppb${pdfToolMode === 'region' ? ' on' : ''}`} id="pdfRegionBtn" type="button" title="PDF bölgesi seç" onClick={() => (window as any).togglePdfRegionCaptureMode?.()}>▢</button>
             <select id="pdfDrawWidth" className="pdf-draw-width" title="Çizim kalınlığı" defaultValue="2.5" onChange={(event) => (window as any).setPdfDrawWidth?.(event.target.value)}>
               <option value="1.5">İnce</option>
               <option value="2.5">Orta</option>

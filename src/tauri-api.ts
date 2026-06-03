@@ -452,6 +452,11 @@ electronAPI.export = {
   })
 };
 
+electronAPI.fs = {
+  readFileText: (path) => invokeCommand('read_file_text', { path: asString(path, 4096) }),
+  readFileBase64: (path) => invokeCommand('read_file_base64', { path: asString(path, 4096) })
+};
+
 if (typeof window !== 'undefined') {
   installWindowAPI('electronAPI', electronAPI);
   installWindowAPI('ocrAPI', ocrAPI);

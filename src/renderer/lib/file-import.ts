@@ -413,3 +413,101 @@ export function importZoteroFileObject(file: File, onStatus: StatusFn) {
     return false;
   }
 }
+
+export async function importWordFileByPath(filePath: string, onStatus: StatusFn): Promise<void> {
+  try {
+    let html = '';
+    if (typeof window.electronAPI?.wordToHtml === 'function') {
+      const result = await window.electronAPI.wordToHtml(filePath) as { ok?: boolean; html?: string } | undefined;
+      if (result?.ok && result.html) {
+        html = String(result.html || '');
+      }
+    }
+    if (!html.trim()) {
+      onStatus('Word dosyası okunamadı veya boş');
+      return;
+    }
+    if (!applyImportedWordHTML(html, onStatus)) {
+      onStatus('Word dosyası içe aktarılamadı');
+    }
+  } catch (error) {
+    console.error('[word-import-path]', error);
+    onStatus('Word dosyası içe aktarılamadı');
+  }
+}
+
+export async function importBibliographyFileByPath(filePath: string, onStatus: StatusFn): Promise<void> {
+  const win = legacyWin();
+  const w = win as any;
+  try {
+    if (typeof window.electronAPI?.fs?.readFileText !== 'function') {
+      onStatus('Dosya okuma servisi hazır değil');
+      return;
+    }
+    const text = await window.electronAPI.fs.readFileText(filePath);
+    if (!text) {
+      onStatus('Kaynak dosyası okunamadı veya boş');
+      return;
+    }
+    const lowerName = filePath.toLowerCase();
+    const refParse = win.AQReferenceParse;
+    const parser = lowerName.endsWith('.bib')
+      ? (w.parseBibTeX || refParse?.parseBibTeX)
+      : (w.parseRIS || refParse?.parseRIS);
+    if (typeof parser !== 'function') {
+      throw new Error('Parser hazır değil');
+    }
+    const entries = parser(text, { createId: w.uid, workspaceId: activeWorkspaceId() });
+    if (!Array.isArray(entries) || !entries.length) {
+      onStatus('Kaynak bulunamadı');
+      return;
+    }
+    window.dispatchEvent(new CustomEvent('aq:import-references', {
+      detail: { entries, sourceLabel: lowerName.endsWith('.bib') ? 'BibTeX' : 'RIS' }
+    }));
+  } catch (error) {
+    console.error('[bibliography-import-path]', error);
+    onStatus('BibTeX/RIS aktarılamadı');
+  }
+}
+
+export async function insertImageFileByPath(filePath: string, onStatus: StatusFn): Promise<void> {
+  const win = legacyWin();
+  try {
+    if (typeof window.electronAPI?.fs?.readFileBase64 !== 'function') {
+      onStatus('Görsel okuma servisi hazır değil');
+      return;
+    }
+    const base64 = await window.electronAPI.fs.readFileBase64(filePath);
+    if (!base64) {
+      onStatus('Görsel okunamadı');
+      return;
+    }
+    const lowerName = filePath.toLowerCase();
+    const ext = lowerName.split('.').pop() || 'png';
+    const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`;
+    const src = `data:${mime};base64,${base64}`;
+
+    const editor = win.editor;
+    const buildImageHTML = (win as any).AQTipTapWordDocument?.buildImageHTML;
+    const fileName = filePath.split(/[/\\]/).pop() || 'image';
+    const html = typeof buildImageHTML === 'function'
+      ? buildImageHTML(src, fileName)
+      : `<img src="${src}" data-width="70%" data-align="left" style="display:block;float:left;width:70%;max-width:100%;height:auto;text-indent:0;margin-left:0;margin-right:14px;margin-top:2px;margin-bottom:10px;" alt="${fileName}"/><p><br></p>`;
+    if (typeof win.restoreEditorListStyleSelection === 'function') {
+      try { win.restoreEditorListStyleSelection(); } catch (_error) {}
+    }
+    if (editor?.chain) {
+      editor.chain().focus().insertContent(html, { parseOptions: { preserveWhitespace: false } }).run();
+      if (typeof win.runEditorMutationEffects === 'function') {
+        win.runEditorMutationEffects({ layout: true, syncChrome: true, syncTOC: false, syncRefs: false, refreshTrigger: false });
+      }
+      onStatus('Görsel eklendi');
+      return;
+    }
+    onStatus('Editor hazır değil');
+  } catch (error) {
+    console.error('[image-insert-path]', error);
+    onStatus('Görsel eklenemedi');
+  }
+}

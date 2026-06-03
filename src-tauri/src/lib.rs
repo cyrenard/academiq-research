@@ -107,7 +107,9 @@ pub fn run() {
             commands::window::window_close,
             commands::window::window_minimize,
             commands::window::window_toggle_maximize,
-            commands::word::word_to_html
+            commands::word::word_to_html,
+            commands::word::read_file_text,
+            commands::word::read_file_base64
         ])
         .run(tauri::generate_context!())
         .expect("error while running AcademiQ Research Tauri shell");

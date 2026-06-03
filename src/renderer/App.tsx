@@ -37,6 +37,7 @@ import {
 import { WorkspaceTabs } from './components/shell/WorkspaceTabs';
 import { DocumentTabs } from './components/shell/DocumentTabs';
 import type { CommandItem } from './components/shell/CommandPalette';
+import { useKeyboardShortcut } from './lib/keyboard-router';
 import type { FeatureModal } from './components/shell/FeatureModals';
 import { callLegacy } from './lib/legacy-feature-adapter';
 import {
@@ -705,25 +706,34 @@ export default function App() {
     };
   }, [persistState, reloadStateFromDisk]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const key = event.key.toLowerCase();
-      if ((event.ctrlKey || event.metaKey) && (key === 'k' || (event.shiftKey && key === 'p'))) {
+  useKeyboardShortcut(
+    'global-command-palette',
+    [
+      { key: 'k', ctrlKey: true },
+      { key: 'p', ctrlKey: true, shiftKey: true }
+    ],
+    (event) => {
+      event.preventDefault();
+      setCommandOpen(true);
+    },
+    []
+  );
+
+  useKeyboardShortcut(
+    'global-shortcut-help',
+    [
+      { key: 'F1' },
+      { key: '/', ctrlKey: true }
+    ],
+    (event) => {
+      const shell = (window as any).AQLeanUIShell;
+      if (shell && typeof shell.openShortcutHelp === 'function') {
         event.preventDefault();
-        setCommandOpen(true);
-        return;
+        shell.openShortcutHelp();
       }
-      if (event.key === 'F1' || ((event.ctrlKey || event.metaKey) && key === '/')) {
-        const shell = (window as any).AQLeanUIShell;
-        if (shell && typeof shell.openShortcutHelp === 'function') {
-          event.preventDefault();
-          shell.openShortcutHelp();
-        }
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+    },
+    []
+  );
 
   useEffect(() => {
     const onEditReference = (event: Event) => {
@@ -1110,8 +1120,12 @@ export default function App() {
       const loadingTask = pdfjs.getDocument({ data: source });
       const pdf = await loadingTask.promise;
       panel.classList.add('open');
-      const titleNode = document.getElementById('pdftitle');
-      if (titleNode) titleNode.textContent = title;
+      if (typeof win.__aqSetPdfTitle === 'function') {
+        win.__aqSetPdfTitle(title);
+      } else {
+        const titleNode = document.getElementById('pdftitle');
+        if (titleNode) titleNode.textContent = title;
+      }
       scroll.innerHTML = '';
       const total = Number(pdf.numPages || 0);
       const pdfUtil = pdfjs.Util || {};
@@ -1256,10 +1270,18 @@ export default function App() {
           }
         }
       }
-      const pageNode = document.getElementById('pdfpg');
-      if (pageNode) pageNode.textContent = total ? `1/${total}` : '--';
-      const zoomNode = document.getElementById('pdfzoom');
-      if (zoomNode) zoomNode.textContent = `${Math.round(scale * 100)}%`;
+      if (typeof win.__aqSetPdfPage === 'function') {
+        win.__aqSetPdfPage(total ? `1/${total}` : '--');
+      } else {
+        const pageNode = document.getElementById('pdfpg');
+        if (pageNode) pageNode.textContent = total ? `1/${total}` : '--';
+      }
+      if (typeof win.__aqSetPdfZoom === 'function') {
+        win.__aqSetPdfZoom(`${Math.round(scale * 100)}%`);
+      } else {
+        const zoomNode = document.getElementById('pdfzoom');
+        if (zoomNode) zoomNode.textContent = `${Math.round(scale * 100)}%`;
+      }
       const metaNode = document.getElementById('pdfreadmeta');
       if (metaNode) metaNode.textContent = title;
       win.__aqPdfFallbackHighlights = savedHighlights.slice();

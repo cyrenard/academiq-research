@@ -3,7 +3,10 @@ import {
   importWordFileObject,
   importZoteroFileObject,
   insertImageFileObject,
-  readFileAsText
+  readFileAsText,
+  importWordFileByPath,
+  importBibliographyFileByPath,
+  insertImageFileByPath
 } from './file-import';
 import { syncReactFromLegacy } from './legacy-dom-helpers';
 import { legacyWin } from './legacy-window';
@@ -78,5 +81,43 @@ export async function handleDroppedFiles(files: File[], onStatus: StatusFn) {
   } else {
     onStatus(`${list.length} dosya işlendi`);
   }
+  return true;
+}
+
+export async function handleTauriDroppedPaths(paths: string[], onStatus: StatusFn): Promise<boolean> {
+  const list = paths.filter(Boolean);
+  if (!list.length) return false;
+
+  let pdfCount = 0;
+  for (const filePath of list) {
+    const name = filePath.toLowerCase();
+    if (name.endsWith('.pdf')) {
+      const win = legacyWin() as any;
+      if (typeof window.electronAPI?.pdf?.ingest === 'function') {
+        try {
+          await window.electronAPI.pdf.ingest(filePath);
+          pdfCount++;
+        } catch (error) {
+          console.error('[tauri-drop:pdf]', error);
+        }
+      } else if (typeof win.hPDFs === 'function') {
+        onStatus('PDF ingest servisi hazır değil');
+      }
+    } else if (/\.(docx?|html?|rtf|txt)$/i.test(name)) {
+      await importWordFileByPath(filePath, onStatus);
+    } else if (/\.(bib|ris|enw|apa)$/i.test(name)) {
+      await importBibliographyFileByPath(filePath, onStatus);
+    } else if (/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name)) {
+      await insertImageFileByPath(filePath, onStatus);
+    } else {
+      onStatus(`Dosya türü desteklenmiyor: ${filePath.split(/[/\\]/).pop()}`);
+    }
+  }
+
+  if (pdfCount > 0) {
+    [500, 1500, 3500].forEach((delay) => window.setTimeout(syncReactFromLegacy, delay));
+    onStatus(`${pdfCount} PDF kütüphaneye eklendi`);
+  }
+
   return true;
 }

@@ -565,7 +565,8 @@ test('React AQ Engine adapter binds slash citations to bibliography sync', () =>
   assert.match(adapter, /filterReferences: \(query: string/);
   assert.match(adapter, /win\.filterRefsForQuery =/);
   assert.match(adapter, /win\.buildCitationHTML =/);
-  assert.match(adapter, /AQCitationState\.buildCitationHTML/);
+  const citationBuilder = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'lib', 'citation-builder.ts'), 'utf8');
+  assert.match(citationBuilder, /AQCitationState\.buildCitationHTML/);
   assert.match(host, /id="trig"/);
   assert.match(host, /id="tgs"/);
   assert.match(host, /id="tgl"/);
