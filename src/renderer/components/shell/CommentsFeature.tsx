@@ -34,11 +34,6 @@ export function CommentIcon({ size = 15 }: { size?: number }) {
 const EDITOR_SURFACE_SELECTOR =
   '#apaed, #escroll, .aq-engine-stage, .aq-engine-page, .aq-engine-line, .aq-engine-table-cell, .aq-input-capture';
 
-function getEditor(): any {
-  const win = window as any;
-  return typeof win.getActiveEditorInstance === 'function' ? win.getActiveEditorInstance() : win.editor || null;
-}
-
 /** Engine-context comments bridge (set up by compat-shim createEditor). */
 function commentsBridge(): any {
   return (window as any).__aqEngineComments || null;
