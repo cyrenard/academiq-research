@@ -7,6 +7,18 @@ function newRefId(): string {
   return 'ref_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
 }
 
+/** Visual topicality cue from termCoverage (0..1): how much of the claim the paper covers. */
+function relevanceBadge(coverage: number | undefined): { label: string; cls: string } | null {
+  if (coverage == null || !isFinite(coverage)) return null;
+  const pct = Math.round(Math.max(0, Math.min(1, coverage)) * 100);
+  const cls = pct >= 50
+    ? 'bg-emerald-100 text-emerald-700'
+    : pct >= 25
+      ? 'bg-amber-100 text-amber-700'
+      : 'bg-aq-panel text-aq-muted';
+  return { label: `İlgi %${pct}`, cls };
+}
+
 function candidateToReference(c: FoundCandidate, id: string): any {
   return {
     id,
@@ -83,7 +95,7 @@ export function CitationFinderModal({ sentence, caretOffset, onClose }: Props) {
 
         <div className="min-h-0 flex-1 space-y-2 overflow-auto p-3">
           {loading ? (
-            <div className="px-2 py-10 text-center text-[12px] text-aq-muted">Aranıyor… (Crossref · Semantic Scholar)</div>
+            <div className="px-2 py-10 text-center text-[12px] text-aq-muted">Aranıyor… (Crossref · Semantic Scholar · OpenAlex)</div>
           ) : error ? (
             <div className="px-2 py-10 text-center text-[12px] text-aq-muted">{error}</div>
           ) : (
@@ -94,6 +106,7 @@ export function CitationFinderModal({ sentence, caretOffset, onClose }: Props) {
                   <div className="flex items-start justify-between gap-2">
                     <div className="font-semibold leading-snug text-aq-ink">{c.title || 'Başlıksız'}</div>
                     <div className="flex shrink-0 items-center gap-1">
+                      {(() => { const b = relevanceBadge(c.termCoverage); return b ? <span className={`rounded px-1.5 text-[10px] font-semibold ${b.cls}`} title="Cümlenizin anahtar terimlerinin bu makalede ne kadar geçtiği">{b.label}</span> : null; })()}
                       {c.isOpenAccess ? <span className="rounded bg-emerald-100 px-1.5 text-[10px] font-semibold text-emerald-700">OA</span> : null}
                       {c.quartile ? <span className="rounded bg-aq-navy/10 px-1.5 text-[10px] font-semibold text-aq-navy">{c.quartile}</span> : null}
                     </div>
