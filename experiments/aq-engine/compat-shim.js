@@ -2043,6 +2043,13 @@
           var r = selection && typeof selection.getRange === 'function' ? selection.getRange() : null;
           return r ? Math.min(r.from, r.to) : 0;
         },
+        setCaret: function(off){
+          if(selection && typeof selection.setRange === 'function'){
+            selection.setRange(off, off);
+            if(stageEl && typeof stageEl.focus === 'function') try { stageEl.focus(); } catch(_e){}
+          }
+          return true;
+        },
         applyComment: function(commentId, from, to){
           if(commentId == null || from == null || to == null || from === to) return false;
           docModel.applyMark(Math.min(from, to), Math.max(from, to), 'commentId', String(commentId));

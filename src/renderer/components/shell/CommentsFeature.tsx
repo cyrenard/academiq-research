@@ -9,6 +9,7 @@ import {
   createCommentId,
   type Comment
 } from '../../lib/comments-store';
+import { CitationFinderModal } from './CitationFinderModal';
 
 /** Self-drawn, royalty-free speech-bubble comment icon (SVG only). */
 export function CommentIcon({ size = 15 }: { size?: number }) {
@@ -59,6 +60,7 @@ export function CommentsFeature() {
   const [open, setOpen] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
   const [menu, setMenu] = useState<{ x: number; y: number; hasSel: boolean } | null>(null);
+  const [finder, setFinder] = useState<{ sentence: string; caret: number | null } | null>(null);
   // Snapshot the last non-empty selection (engine collapses it on right-click).
   const lastSelRef = useRef<{ from: number; to: number; text: string } | null>(null);
 
@@ -175,6 +177,13 @@ export function CommentsFeature() {
     }, 50);
   }, [reload]);
 
+  const openFinder = useCallback(() => {
+    setMenu(null);
+    const snap = lastSelRef.current;
+    if (!snap || !snap.text.trim()) return;
+    setFinder({ sentence: snap.text.trim(), caret: snap.to });
+  }, []);
+
   const doCopy = useCallback(() => {
     setMenu(null);
     const text = lastSelRef.current?.text || '';
@@ -259,6 +268,14 @@ export function CommentsFeature() {
           >
             <CommentIcon size={13} /> Yorum ekle
           </button>
+          <button
+            type="button"
+            disabled={!menu.hasSel}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-aq-panel disabled:opacity-40 disabled:hover:bg-transparent"
+            onClick={openFinder}
+          >
+            <span aria-hidden className="text-[13px]">🔎</span> Atıf bul
+          </button>
         </div>
       ) : null}
 
@@ -332,6 +349,10 @@ export function CommentsFeature() {
             )}
           </div>
         </aside>
+      ) : null}
+
+      {finder ? (
+        <CitationFinderModal sentence={finder.sentence} caretOffset={finder.caret} onClose={() => setFinder(null)} />
       ) : null}
     </>
   );
