@@ -57,9 +57,14 @@ Konum: `src/renderer/lib/citation-finder/{query,ranking,sentence-match,search}.t
 - Mekanik `win.S` okuma taşıması BİTTİ. Kalan `win.S` kullanımları indirgenemez dikiş
   (legacy nesnesini kalıcılık için mutasyon, legacy-owned doc/matrix okuma).
 - Gemini porte etti: notes/notebooks, research-matrix (mutasyon sonrası sync).
-- KALAN: **doc-engine** (docs/curDoc/track-changes) hâlâ `src/legacy-runtime.js`
-  (~14.6k satır) içinde. Port HARİTASI çıkarıldı (`DOC_ENGINE_PORT_MAP.md`), uygulama
-  insan onayı bekliyor — tek hamlede değil, dilim dilim.
+- doc-engine HARİTASI: `DOC_ENGINE_PORT_MAP.md` (read=(a), seam=(b), persistence=(c)).
+- doc-engine **okuma-tarafı YAPILDI** (commit 5449062): `selectCurrentDocument` +
+  TopToolbar track-changes okumaları win.S yerine appStore'dan; toggle write-through
+  korundu. citation-builder zaten appStore okuyordu.
+- KALAN (b/c seam, KASITLI bırakıldı): `editor-adapter.ts` window binding'i +
+  `aq-engine/**` içi `trackChangesEnabled` okuması (aq-engine dokunma yasağı) +
+  `legacy-runtime.js` (~14.6k satır) doc-engine'in kendisi. Bunlar write-through ile
+  beslenmeye devam eder; tam emeklilik = legacy-runtime.js'i parçalama (büyük, ayrı iş).
 - Gemini prompt'u: `GEMINI_DOMAIN_PORT_PROMPT.md`.
 
 ## 5) Çalışma disiplini (kullanıcı kuralları)
