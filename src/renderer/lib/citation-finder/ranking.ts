@@ -22,7 +22,9 @@ export interface PaperCandidate {
   quartile?: 'Q1' | 'Q2' | 'Q3' | 'Q4' | null;
   /** 0-based position in the source API's own relevance order (lower = better). */
   apiRank?: number;
-  source?: 'crossref' | 'semanticscholar' | 'dergipark' | string;
+  /** 0..1 — share of the claim's key terms present in title+abstract (topicality). */
+  termCoverage?: number;
+  source?: 'crossref' | 'semanticscholar' | 'openalex' | 'dergipark' | string;
 }
 
 export interface RankOptions {
@@ -45,8 +47,11 @@ export function scoreCandidate(c: PaperCandidate, opts: RankOptions = {}): numbe
   const year = Number(c.year) || 0;
   const recency = year ? Math.max(0, Math.min(1, (year - (currentYear - 25)) / 25)) : 0.3;
   const oaBonus = preferOA && c.isOpenAccess ? 0.3 : 0;
+  // Topicality: does the paper's title/abstract actually contain the claim's
+  // key terms? Strong signal that it's on-topic (not just a keyword match).
+  const coverage = c.termCoverage != null ? Math.max(0, Math.min(1, c.termCoverage)) : 0.5;
 
-  return 0.4 * rel + 0.25 * citeScore + inflBonus + 0.15 * qual + 0.1 * recency + oaBonus;
+  return 0.3 * rel + 0.3 * coverage + 0.2 * citeScore + inflBonus + 0.1 * qual + 0.07 * recency + oaBonus;
 }
 
 export function rankCandidates(candidates: PaperCandidate[], opts: RankOptions = {}): PaperCandidate[] {

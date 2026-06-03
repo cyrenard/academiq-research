@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { extractKeyTerms, buildEnglishQuery, TERM_GLOSSARY } from './query';
 import { scoreCandidate, rankCandidates, mergeCandidates, type PaperCandidate } from './ranking';
-import { splitSentences, termOverlapScore, bestSupportingSentence } from './sentence-match';
+import { splitSentences, termOverlapScore, weightedOverlapScore, termWeight, bestSupportingSentence } from './sentence-match';
 
 const CLAIM = 'Bilişsel yük kişinin psikolojik iyi oluşunu etkiler.';
 
@@ -85,5 +85,33 @@ describe('sentence-match', () => {
 
   it('returns null when nothing meets the threshold', () => {
     expect(bestSupportingSentence(['quantum', 'entanglement'], 'A study about gardening and soil.')).toBeNull();
+  });
+
+  it('termWeight: phrases > long words > short words', () => {
+    expect(termWeight('cognitive load')).toBe(4); // multi-word phrase
+    expect(termWeight('cognitive')).toBe(2);      // long word
+    expect(termWeight('learn')).toBe(1.5);
+    expect(termWeight('age')).toBe(1);
+  });
+
+  it('weightedOverlapScore: matches hyphenated phrases after normalization', () => {
+    // "well-being" (term, hyphen) vs "well being" (sentence, normalized) must match.
+    const s = weightedOverlapScore(['psychological well-being'], 'It improves psychological well being.');
+    expect(s).toBeCloseTo(1, 5);
+  });
+
+  it('weightedOverlapScore: a rare on-topic phrase outweighs shared filler', () => {
+    const terms = ['cognitive load', 'student', 'study'];
+    const onTopic = weightedOverlapScore(terms, 'Cognitive load was measured in the study.'); // phrase(3)+study(1.5)
+    const fillerOnly = weightedOverlapScore(terms, 'The study and the student met.');          // study+student only
+    expect(onTopic).toBeGreaterThan(fillerOnly);
+  });
+
+  it('bestSupportingSentence prefers the sentence carrying the rare phrase', () => {
+    const abstract =
+      'The study involved many students. ' +
+      'Cognitive load was the strongest predictor of outcomes.';
+    const best = bestSupportingSentence(['cognitive load', 'student', 'study'], abstract);
+    expect(best!.sentence).toContain('Cognitive load');
   });
 });

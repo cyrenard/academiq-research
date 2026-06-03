@@ -43,6 +43,39 @@ export function termOverlapScore(claimTerms: string[], sentence: string): number
   return hits / terms.length;
 }
 
+/**
+ * Specificity weight for a term: multi-word phrases ("cognitive load") and
+ * longer words carry more signal than common short words. Used so a sentence
+ * matching the rare, on-topic terms outranks one that only shares filler.
+ */
+export function termWeight(term: string): number {
+  const t = String(term || '').trim();
+  if (!t) return 0;
+  if (t.includes(' ')) return 4; // multi-word phrase — strongest topical signal
+  if (t.length >= 8) return 2;
+  if (t.length >= 5) return 1.5;
+  return 1;
+}
+
+function normalizeForMatch(s: string): string {
+  return String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+/** Weighted, phrase-aware overlap (0..1): share of total term weight matched. */
+export function weightedOverlapScore(claimTerms: string[], sentence: string): number {
+  const terms = Array.from(new Set((claimTerms || []).map(normalizeForMatch).filter((t) => t.length > 2)));
+  if (!terms.length) return 0;
+  const hay = ' ' + normalizeForMatch(sentence) + ' ';
+  let matched = 0;
+  let total = 0;
+  for (const t of terms) {
+    const w = termWeight(t);
+    total += w;
+    if (hay.includes(' ' + t + ' ') || hay.includes(t)) matched += w;
+  }
+  return total ? matched / total : 0;
+}
+
 export interface SupportingSentence {
   sentence: string;
   score: number;
@@ -59,7 +92,7 @@ export function bestSupportingSentence(
   let best: SupportingSentence | null = null;
   for (let index = 0; index < sentences.length; index++) {
     const sentence = sentences[index];
-    const score = termOverlapScore(claimTerms, sentence);
+    const score = weightedOverlapScore(claimTerms, sentence);
     if (score > 0 && (best === null || score > best.score)) {
       best = { sentence, score, index };
     }

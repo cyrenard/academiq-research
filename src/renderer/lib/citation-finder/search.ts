@@ -13,7 +13,7 @@
  */
 import { buildEnglishQuery, extractKeyTerms } from './query';
 import { mergeCandidates, rankCandidates, type PaperCandidate, type RankOptions } from './ranking';
-import { bestSupportingSentence, type SupportingSentence } from './sentence-match';
+import { bestSupportingSentence, weightedOverlapScore, type SupportingSentence } from './sentence-match';
 
 export interface FetchResult { ok: boolean; data?: any; error?: string }
 export type FetchJSON = (url: string, options?: unknown) => Promise<FetchResult>;
@@ -63,14 +63,53 @@ function mapCrossref(w: any, rank: number): PaperCandidate {
   };
 }
 
-export async function searchCrossref(query: string, fetchJSON: FetchJSON = defaultFetchJSON, rows = 8): Promise<PaperCandidate[]> {
+export async function searchCrossref(query: string, fetchJSON: FetchJSON = defaultFetchJSON, rows = 12): Promise<PaperCandidate[]> {
   if (!String(query || '').trim()) return [];
-  const url = `https://api.crossref.org/works?query.bibliographic=${encodeURIComponent(query)}&rows=${rows}` +
+  // `query=` is Crossref's topical/relevance search (dismax across fields);
+  // `query.bibliographic` is for matching a known citation string, which gave
+  // poor topical results.
+  const url = `https://api.crossref.org/works?query=${encodeURIComponent(query)}&rows=${rows}` +
     `&select=DOI,title,author,issued,container-title,is-referenced-by-count,abstract&mailto=${MAILTO}`;
   const res = await fetchJSON(url);
   if (!res.ok) return [];
   const items = res.data?.message?.items || [];
   return items.map((w: any, i: number) => mapCrossref(w, i));
+}
+
+// ── OpenAlex ────────────────────────────────────────────────────────────────
+function reconstructOpenAlexAbstract(inv: any): string {
+  if (!inv || typeof inv !== 'object') return '';
+  const positions: string[] = [];
+  for (const word of Object.keys(inv)) {
+    for (const pos of inv[word] || []) positions[pos] = word;
+  }
+  return positions.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+function mapOpenAlex(w: any, rank: number): PaperCandidate {
+  return {
+    id: `oa:${w?.doi || w?.id || rank}`,
+    title: String(w?.display_name || '').trim(),
+    authors: (w?.authorships || []).map((a: any) => String(a?.author?.display_name || '').trim()).filter(Boolean),
+    year: w?.publication_year ? Number(w.publication_year) : null,
+    venue: w?.primary_location?.source?.display_name || w?.host_venue?.display_name || '',
+    citationCount: Number(w?.cited_by_count) || 0,
+    abstract: reconstructOpenAlexAbstract(w?.abstract_inverted_index),
+    doi: w?.doi ? String(w.doi).replace(/^https?:\/\/doi\.org\//i, '').toLowerCase() : null,
+    isOpenAccess: !!w?.open_access?.is_oa,
+    oaPdfUrl: w?.open_access?.oa_url || null,
+    apiRank: rank,
+    source: 'openalex'
+  };
+}
+
+export async function searchOpenAlex(query: string, fetchJSON: FetchJSON = defaultFetchJSON, perPage = 12): Promise<PaperCandidate[]> {
+  if (!String(query || '').trim()) return [];
+  const url = `https://api.openalex.org/works?search=${encodeURIComponent(query)}&per_page=${perPage}&mailto=${MAILTO}`;
+  const res = await fetchJSON(url);
+  if (!res.ok) return [];
+  const items = res.data?.results || [];
+  return items.map((w: any, i: number) => mapOpenAlex(w, i));
 }
 
 // ── Semantic Scholar ────────────────────────────────────────────────────────
@@ -130,13 +169,23 @@ export async function findCitations(
     const translated = await translateToEnglish(trQuery, fetchJSON);
     if (translated) enQuery = translated;
   }
-  const englishTerms = extractKeyTerms(enQuery).concat(glossary.mappedTerms.join(' ').split(/\s+/));
+  // Match terms: the glossary phrases (high signal) + the English content words.
+  const englishTerms = Array.from(new Set([
+    ...glossary.mappedTerms,
+    ...extractKeyTerms(enQuery)
+  ]));
 
-  const [cr, s2] = await Promise.all([
+  const [cr, s2, oa] = await Promise.all([
     searchCrossref(enQuery, fetchJSON).catch(() => []),
-    searchSemanticScholar(enQuery, fetchJSON).catch(() => [])
+    searchSemanticScholar(enQuery, fetchJSON).catch(() => []),
+    searchOpenAlex(enQuery, fetchJSON).catch(() => [])
   ]);
-  let merged = mergeCandidates(cr, s2);
+  let merged = mergeCandidates(cr, s2, oa);
+
+  // Topicality score: how much of the claim actually appears in title+abstract.
+  for (const c of merged) {
+    c.termCoverage = weightedOverlapScore(englishTerms, `${c.title || ''} ${c.abstract || ''}`);
+  }
 
   // Enrich OA for the most relevant candidates that don't already know.
   const topForOA = rankCandidates(merged, opts)

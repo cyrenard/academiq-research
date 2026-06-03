@@ -3,6 +3,7 @@ import {
   translateToEnglish,
   searchCrossref,
   searchSemanticScholar,
+  searchOpenAlex,
   checkOpenAccess,
   findCitations,
   type FetchJSON
@@ -40,6 +41,24 @@ const mockFetch: FetchJSON = async (url) => {
       ] }
     };
   }
+  if (url.includes('api.openalex.org')) {
+    return {
+      ok: true,
+      data: { results: [
+        {
+          id: 'https://openalex.org/W1', display_name: 'Load and Well-being in Learning',
+          publication_year: 2020,
+          // inverted index: word -> positions; reconstructs to readable text
+          abstract_inverted_index: { Cognitive: [0], load: [1], affects: [2], 'well-being.': [3] },
+          authorships: [{ author: { display_name: 'C Kaya' } }],
+          primary_location: { source: { display_name: 'Learning Journal' } },
+          cited_by_count: 80,
+          doi: 'https://doi.org/10.1/OA',
+          open_access: { is_oa: true, oa_url: 'http://oa/oa.pdf' }
+        }
+      ] }
+    };
+  }
   if (url.includes('unpaywall.org')) {
     return { ok: true, data: { is_oa: true, best_oa_location: { url_for_pdf: 'http://oa/x.pdf' } } };
   }
@@ -70,6 +89,17 @@ describe('citation-finder adapters', () => {
     expect(out[0].oaPdfUrl).toBe('http://oa/pdf');
   });
 
+  it('searchOpenAlex maps results + reconstructs the inverted-index abstract', async () => {
+    const out = await searchOpenAlex('cognitive load', mockFetch);
+    expect(out).toHaveLength(1);
+    expect(out[0].title).toBe('Load and Well-being in Learning');
+    expect(out[0].citationCount).toBe(80);
+    expect(out[0].doi).toBe('10.1/oa'); // https + lowercased
+    expect(out[0].isOpenAccess).toBe(true);
+    expect(out[0].abstract).toBe('Cognitive load affects well-being.');
+    expect(out[0].source).toBe('openalex');
+  });
+
   it('checkOpenAccess reads Unpaywall', async () => {
     expect(await checkOpenAccess('10.1/x', mockFetch)).toEqual({ isOpenAccess: true, oaPdfUrl: 'http://oa/x.pdf' });
   });
@@ -86,7 +116,7 @@ describe('citation-finder adapters', () => {
       { currentYear: 2025 },
       mockFetch
     );
-    expect(candidates.length).toBeGreaterThanOrEqual(2); // crossref + s2 (different DOIs)
+    expect(candidates.length).toBeGreaterThanOrEqual(3); // crossref + s2 + openalex (different DOIs)
     // the OA, highly-cited, recent S2 paper should rank at/near the top
     expect(candidates[0].source).toBe('semanticscholar');
     expect(candidates[0].isOpenAccess).toBe(true);
