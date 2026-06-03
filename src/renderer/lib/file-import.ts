@@ -174,12 +174,12 @@ async function persistImportedWordDocument(onStatus?: StatusFn) {
   try { if (typeof w.flushCurrentDocFromEditor === 'function') w.flushCurrentDocFromEditor(); } catch (_error) {}
   try { if (typeof w.__aqCommitActiveDoc === 'function') w.__aqCommitActiveDoc(); } catch (_error) {}
   try { if (typeof win.save === 'function') win.save(); } catch (_error) {}
-  try { if (typeof win.__aqReactSyncFromLegacy === 'function') win.__aqReactSyncFromLegacy(win.S || {}); } catch (_error) {}
+  try { if (typeof win.__aqReactSyncFromLegacy === 'function') win.__aqReactSyncFromLegacy(appStore.getState()); } catch (_error) {}
 
   try {
     const json = typeof w.__aqBuildPersistedStateJSON === 'function'
       ? w.__aqBuildPersistedStateJSON()
-      : JSON.stringify(win.S || {});
+      : JSON.stringify(appStore.getState());
     if (typeof window.electronAPI?.saveEditorDraft === 'function') await window.electronAPI.saveEditorDraft(json);
     if (typeof window.electronAPI?.saveData === 'function') {
       const result = await window.electronAPI.saveData(json) as { ok?: boolean; error?: string } | undefined;
@@ -212,17 +212,19 @@ function currentImportedEditorHTML(win: Window & Record<string, any>) {
 }
 
 function patchLegacyActiveDocumentHTML(win: Window & Record<string, any>, html: string) {
-  const state = win.S;
+  const state = appStore.getState();
   if (!state || typeof state !== 'object' || !html) return;
   const docId = String(state.curDoc || '');
-  state.doc = html;
-  if (Array.isArray(state.docs)) {
-    state.docs = state.docs.map((doc: any) => (
-      doc && String(doc.id || '') === docId
-        ? { ...doc, content: html }
-        : doc
-    ));
-  }
+  const docs = Array.isArray(state.docs) ? state.docs : [];
+  const nextDocs = docs.map((doc: any) => (
+    doc && String(doc.id || '') === docId
+      ? { ...doc, content: html }
+      : doc
+  ));
+  appStore.setState({
+    doc: html,
+    docs: nextDocs
+  });
 }
 
 function scheduleImportedWordPersist(onStatus: StatusFn) {

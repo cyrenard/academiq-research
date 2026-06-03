@@ -11,6 +11,7 @@ import { PlainCitationLinkerModal } from './modals/PlainCitationLinkerModal';
 import { useSpellcheck } from '../../lib/useSpellcheck';
 import { L, fmt } from '../../lib/labels';
 import { confirmDialog } from '../../lib/dialog';
+import { appStore } from '../../lib/app-store';
 
 type FeatureModal =
   | 'settings'
@@ -143,10 +144,9 @@ export function FeatureModals({
     const next = Object.assign({}, current, patch, {
       updatedAt: Date.now()
     });
-    (state as any).localMatrixAssistant = next;
+    appStore.setState({ localMatrixAssistant: next });
     const win = window as any;
-    if (win.S && typeof win.S === 'object') win.S.localMatrixAssistant = next;
-    window.electronAPI.saveData(JSON.stringify(state))
+    window.electronAPI.saveData(JSON.stringify(appStore.getState()))
       .then(() => {
         onStatus(next.enabled ? 'Yerel Matrix yardımcısı açıldı' : 'Yerel Matrix yardımcısı kapatıldı');
         if (next.enabled && win.AQLiteratureMatrix && typeof win.AQLiteratureMatrix.rerunLocalAssistantAutoFill === 'function') {
