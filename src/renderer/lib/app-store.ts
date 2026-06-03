@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { AcademiqAppState, createBlankState } from './app-state';
+import { AcademiqAppState, AcademiqNote, createBlankState } from './app-state';
 import { publishStateToLegacyWindow } from './legacy-state-bridge';
 
 let currentState: AcademiqAppState = createBlankState();
@@ -66,3 +66,49 @@ export function selectReferenceById(state: AcademiqAppState, id: string, workspa
 export function selectNotes(state: AcademiqAppState): any[] {
   return Array.isArray(state.notes) ? state.notes : [];
 }
+
+export function selectNotebooks(state: AcademiqAppState): Array<{ id: string; name: string; wsId?: string }> {
+  return Array.isArray(state.notebooks) ? state.notebooks : [];
+}
+
+export function selectCurrentNotebookId(state: AcademiqAppState): string {
+  return String(state.curNb || '');
+}
+
+export function ensureNotebooks(state: AcademiqAppState): Partial<AcademiqAppState> {
+  const curWs = state.cur || 'ws1';
+  const notebooks = Array.isArray(state.notebooks) ? state.notebooks : [];
+  const hasNotebookForCur = notebooks.some(nb => nb.wsId === curWs);
+  const hasCurNb = !!state.curNb;
+
+  if (hasNotebookForCur && hasCurNb) {
+    return {};
+  }
+
+  const nextNotebooks = [...notebooks];
+  let newNbId = '';
+  if (!hasNotebookForCur) {
+    newNbId = `${curWs}:nb1`;
+    nextNotebooks.push({
+      id: newNbId,
+      wsId: curWs,
+      name: 'Genel Notlar'
+    });
+  }
+
+  const defaultCurNb = newNbId || notebooks.find(nb => nb.wsId === curWs)?.id || `${curWs}:nb1`;
+  const nextCurNb = state.curNb || defaultCurNb;
+
+  return {
+    notebooks: nextNotebooks,
+    curNb: nextCurNb
+  };
+}
+
+export function addNote(state: AcademiqAppState, note: AcademiqNote): Partial<AcademiqAppState> {
+  const notes = Array.isArray(state.notes) ? state.notes : [];
+  return {
+    notes: [note, ...notes]
+  };
+}
+
