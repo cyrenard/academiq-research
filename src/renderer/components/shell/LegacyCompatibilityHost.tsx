@@ -1511,6 +1511,9 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       }
       try { win.AQLiteratureMatrix?.render?.(); } catch (_error) {}
       try { win.openLiteratureMatrix?.(); } catch (_error) {}
+      if (typeof win.__aqReactSyncFromLegacy === 'function') {
+        try { win.__aqReactSyncFromLegacy(win.S || {}); } catch (_error) {}
+      }
       saveLegacyState();
       onStatus(`Seçili metin ${label} hücresine gönderildi`);
       return true;

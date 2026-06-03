@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { hydrateAppState } from './app-state';
 import {
   appStore,
   selectCurrentWorkspace,
@@ -142,6 +143,26 @@ describe('appStore', () => {
         { id: 'note-2', txt: 'Second' },
         { id: 'note-1', txt: 'First' }
       ]);
+    });
+
+    it('syncs literatureMatrix through hydrateAppState and appStore', () => {
+      const legacyState = {
+        cur: 'ws-1',
+        wss: [{ id: 'ws-1', name: 'Workspace 1', lib: [] }],
+        docs: [],
+        curDoc: '',
+        literatureMatrix: {
+          'ws-1': {
+            rows: [{ id: 'row-1', referenceId: 'ref-1', cells: {} }]
+          }
+        }
+      };
+
+      const hydrated = hydrateAppState(legacyState);
+      appStore.setState(hydrated);
+
+      expect(appStore.getState().literatureMatrix).toBeDefined();
+      expect((appStore.getState().literatureMatrix as any)['ws-1'].rows[0].id).toBe('row-1');
     });
   });
 });
