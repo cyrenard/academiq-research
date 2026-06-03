@@ -38,6 +38,7 @@ import {
 import { scrollToBibliographyBlock } from '../../lib/bibliography-navigation';
 import { openDocumentOutline } from '../../lib/outline-modals';
 import { computeActiveMarks, activeMarksEqual, type ActiveMarks } from '../../lib/editor-active-marks';
+import { appStore, selectCurrentDocument } from '../../lib/app-store';
 import { SectionTabs } from './SectionTabs';
 import { CommentIcon, CommentsFeature } from './CommentsFeature';
 import {
@@ -148,7 +149,7 @@ export function TopToolbar({ selectedReferenceId, onOpenAudit, onOpenFeatureModa
     const win = window as any;
     const doc = typeof win.getCurrentDocument === 'function'
       ? win.getCurrentDocument()
-      : win.S?.docs?.find?.((item: any) => item?.id === win.S?.curDoc);
+      : selectCurrentDocument(appStore.getState());
     setTrackChangesActive(Boolean(doc?.trackChangesEnabled));
   };
 
@@ -545,7 +546,7 @@ export function TopToolbar({ selectedReferenceId, onOpenAudit, onOpenFeatureModa
     const win = window as any;
     return typeof win.getCurrentDocument === 'function'
       ? win.getCurrentDocument()
-      : win.S?.docs?.find?.((item: any) => item?.id === win.S?.curDoc);
+      : selectCurrentDocument(appStore.getState());
   };
 
   const syncTrackChangesUI = (enabled?: boolean) => {
@@ -587,7 +588,15 @@ export function TopToolbar({ selectedReferenceId, onOpenAudit, onOpenFeatureModa
     if (nextEnabled == null) {
       const doc = getCurrentTrackChangesDocument();
       nextEnabled = !Boolean(doc?.trackChangesEnabled);
-      if (doc) doc.trackChangesEnabled = nextEnabled;
+      if (doc) {
+        doc.trackChangesEnabled = nextEnabled;
+        // Persist through appStore so the write-through reaches legacy window.S
+        // (the in-place mutation above only covers a live legacy doc object).
+        const flag = nextEnabled;
+        appStore.setState((s) => ({
+          docs: (s.docs || []).map((d) => (d && d.id === doc.id ? { ...d, trackChangesEnabled: flag } : d))
+        }));
+      }
       if (win.AQTipTapWordCommands && typeof win.AQTipTapWordCommands.setTrackChangesEnabled === 'function') {
         try {
           nextEnabled = Boolean(win.AQTipTapWordCommands.setTrackChangesEnabled(nextEnabled, { source: 'react-toolbar' }));

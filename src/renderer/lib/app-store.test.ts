@@ -10,6 +10,7 @@ import {
   selectWorkspaceLibrary,
   selectNotebooks,
   selectCurrentNotebookId,
+  selectCurrentDocument,
   ensureNotebooks,
   addNote
 } from './app-store';
@@ -80,6 +81,18 @@ describe('appStore', () => {
     expect(selectWorkspace(state, 'ws-1')?.name).toBe('Workspace 1');
     expect(selectWorkspaceLibrary(state)).toEqual([{ id: 'ref-2' }]);
     expect(selectNotes(state)).toEqual([{ id: 'note-1', rid: 'ref-2' }]);
+  });
+
+  it('selects the current document without reading window.S', () => {
+    appStore.setState({
+      docs: [{ id: 'doc1', name: 'A', content: '' }, { id: 'doc2', name: 'B', content: '' }],
+      curDoc: 'doc2'
+    });
+    const state = appStore.getState();
+    expect(selectCurrentDocument(state)?.id).toBe('doc2');
+    // falls back to the first doc when curDoc points nowhere
+    appStore.setState({ curDoc: 'missing' });
+    expect(selectCurrentDocument(appStore.getState())?.id).toBe('doc1');
   });
 
   describe('notebooks and notes helpers', () => {

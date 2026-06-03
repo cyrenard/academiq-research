@@ -58,6 +58,13 @@ export function selectCurrentWorkspace(state: AcademiqAppState): any | null {
   return selectWorkspace(state, state.cur);
 }
 
+/** Active document record, or null. Mirrors the legacy `S.docs.find(id===S.curDoc)`. */
+export function selectCurrentDocument(state: AcademiqAppState): any | null {
+  const docs = Array.isArray(state.docs) ? state.docs : [];
+  const docId = state.curDoc || (state as any).doc || '';
+  return docs.find((doc) => doc && doc.id === docId) || docs[0] || null;
+}
+
 export function selectReferenceById(state: AcademiqAppState, id: string, workspaceId?: string): any | null {
   const refId = String(id || '');
   return selectWorkspaceLibrary(state, workspaceId).find((ref) => ref && String(ref.id) === refId) || null;
