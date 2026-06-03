@@ -12,7 +12,7 @@
  *   Unpaywall         — Open-Access status + best OA pdf by DOI
  */
 import { buildEnglishQuery, extractKeyTerms } from './query';
-import { mergeCandidates, rankCandidates, type PaperCandidate, type RankOptions } from './ranking';
+import { mergeCandidates, rankCandidates, filterByCoverage, type PaperCandidate, type RankOptions } from './ranking';
 import { bestSupportingSentence, weightedOverlapScore, type SupportingSentence } from './sentence-match';
 
 export interface FetchResult { ok: boolean; data?: any; error?: string }
@@ -169,6 +169,7 @@ export async function checkOpenAccess(doi: string, fetchJSON: FetchJSON = defaul
 export interface FindOptions extends RankOptions {
   enrichOpenAccessTop?: number; // how many top candidates to check via Unpaywall (default 6)
   enrichAbstractTop?: number;   // how many abstract-less candidates to backfill via OpenAlex (default 6)
+  coverageFloor?: number;       // drop candidates below this topicality (default 0.15, safety net keeps top 5)
 }
 
 export async function findCitations(
@@ -226,7 +227,7 @@ export async function findCitations(
     })
   );
 
-  const ranked = rankCandidates(merged, opts) as FoundCandidate[];
+  const ranked = filterByCoverage(rankCandidates(merged, opts), { floor: opts.coverageFloor }) as FoundCandidate[];
   // Attach the best supporting sentence from each abstract (verification aid).
   for (const c of ranked) {
     c.supporting = c.abstract ? bestSupportingSentence(englishTerms, c.abstract) : null;

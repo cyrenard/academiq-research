@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { extractKeyTerms, buildEnglishQuery, TERM_GLOSSARY } from './query';
-import { scoreCandidate, rankCandidates, mergeCandidates, type PaperCandidate } from './ranking';
+import { scoreCandidate, rankCandidates, mergeCandidates, filterByCoverage, type PaperCandidate } from './ranking';
 import { splitSentences, termOverlapScore, weightedOverlapScore, termWeight, bestSupportingSentence } from './sentence-match';
 
 const CLAIM = 'Bilişsel yük kişinin psikolojik iyi oluşunu etkiler.';
@@ -51,6 +51,17 @@ describe('ranking: scoreCandidate / rankCandidates', () => {
       { id: 'strong', title: 's', authors: [], apiRank: 1, citationCount: 1500, influentialCitationCount: 150, isOpenAccess: true, quartile: 'Q1', year: 2022 }
     ];
     expect(rankCandidates(cands, { currentYear: 2025 })[0].id).toBe('strong');
+  });
+
+  it('filterByCoverage drops off-topic candidates but honours the safety net', () => {
+    const c = (id: string, cov: number): PaperCandidate => ({ id, title: id, authors: [], termCoverage: cov });
+    // 6 candidates, 2 off-topic → with keepMin default 5 there are 4 on-topic (<5) → keep ALL
+    const six = [c('a', 0.9), c('b', 0.5), c('c', 0.02), c('d', 0.4), c('e', 0.01), c('f', 0.3)];
+    expect(filterByCoverage(six)).toHaveLength(6); // safety net: fewer than 5 on-topic
+    // with a low keepMin the off-topic ones are dropped
+    expect(filterByCoverage(six, { keepMin: 2 }).map((x) => x.id)).toEqual(['a', 'b', 'd', 'f']);
+    // unknown coverage is never dropped
+    expect(filterByCoverage([c('x', 0.0), { id: 'y', title: 'y', authors: [] }], { keepMin: 1 }).map((x) => x.id)).toEqual(['y']);
   });
 
   it('mergeCandidates de-dupes by DOI and keeps the richer record', () => {

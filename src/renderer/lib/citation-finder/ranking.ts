@@ -58,6 +58,25 @@ export function rankCandidates(candidates: PaperCandidate[], opts: RankOptions =
   return [...(candidates || [])].sort((a, b) => scoreCandidate(b, opts) - scoreCandidate(a, opts));
 }
 
+export interface CoverageFilterOptions {
+  floor?: number;   // minimum termCoverage to be considered on-topic (default 0.15)
+  keepMin?: number; // never return fewer than this many (safety net) (default 5)
+}
+
+/**
+ * Drop off-topic candidates whose claim-term coverage is below `floor`, but only
+ * while at least `keepMin` on-topic candidates remain — so a poor translation or
+ * a niche claim can't empty the list. Candidates with unknown coverage are kept
+ * (we don't penalise what we couldn't measure). Order is preserved.
+ */
+export function filterByCoverage(candidates: PaperCandidate[], opts: CoverageFilterOptions = {}): PaperCandidate[] {
+  const list = candidates || [];
+  const floor = opts.floor ?? 0.15;
+  const keepMin = opts.keepMin ?? 5;
+  const onTopic = list.filter((c) => c.termCoverage == null || c.termCoverage >= floor);
+  return onTopic.length >= Math.min(keepMin, list.length) ? onTopic : list;
+}
+
 /** Merge candidates from multiple sources, de-duped by DOI (or normalized title). */
 export function mergeCandidates(...lists: PaperCandidate[][]): PaperCandidate[] {
   const byKey = new Map<string, PaperCandidate>();
