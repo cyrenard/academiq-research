@@ -112,6 +112,20 @@ export async function searchOpenAlex(query: string, fetchJSON: FetchJSON = defau
   return items.map((w: any, i: number) => mapOpenAlex(w, i));
 }
 
+/**
+ * Fetch a single work's abstract by DOI from OpenAlex. Many Crossref hits ship
+ * no abstract, which both sinks their topicality score and leaves no sentence
+ * to verify — so we backfill the abstract for the most promising of them.
+ */
+export async function fetchOpenAlexAbstractByDoi(doi: string, fetchJSON: FetchJSON = defaultFetchJSON): Promise<string> {
+  const clean = String(doi || '').replace(/^https?:\/\/doi\.org\//i, '').trim();
+  if (!clean) return '';
+  const url = `https://api.openalex.org/works/doi:${encodeURIComponent(clean)}?select=abstract_inverted_index&mailto=${MAILTO}`;
+  const res = await fetchJSON(url);
+  if (!res.ok) return '';
+  return reconstructOpenAlexAbstract(res.data?.abstract_inverted_index);
+}
+
 // ── Semantic Scholar ────────────────────────────────────────────────────────
 function mapS2(p: any, rank: number): PaperCandidate {
   return {
@@ -154,6 +168,7 @@ export async function checkOpenAccess(doi: string, fetchJSON: FetchJSON = defaul
 // ── Orchestrator ────────────────────────────────────────────────────────────
 export interface FindOptions extends RankOptions {
   enrichOpenAccessTop?: number; // how many top candidates to check via Unpaywall (default 6)
+  enrichAbstractTop?: number;   // how many abstract-less candidates to backfill via OpenAlex (default 6)
 }
 
 export async function findCitations(
@@ -181,6 +196,19 @@ export async function findCitations(
     searchOpenAlex(enQuery, fetchJSON).catch(() => [])
   ]);
   let merged = mergeCandidates(cr, s2, oa);
+
+  // Backfill missing abstracts (common for Crossref hits) for the most promising
+  // candidates — before scoring, since topicality + the supporting sentence both
+  // depend on having abstract text. Picked by a preliminary rank (citations/recency).
+  const needAbstract = rankCandidates(merged, opts)
+    .filter((c) => c.doi && !String(c.abstract || '').trim())
+    .slice(0, opts.enrichAbstractTop ?? 6);
+  await Promise.all(
+    needAbstract.map(async (c) => {
+      const ab = await fetchOpenAlexAbstractByDoi(c.doi as string, fetchJSON).catch(() => '');
+      if (ab) c.abstract = ab;
+    })
+  );
 
   // Topicality score: how much of the claim actually appears in title+abstract.
   for (const c of merged) {

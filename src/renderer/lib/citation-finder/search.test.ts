@@ -4,6 +4,7 @@ import {
   searchCrossref,
   searchSemanticScholar,
   searchOpenAlex,
+  fetchOpenAlexAbstractByDoi,
   checkOpenAccess,
   findCitations,
   type FetchJSON
@@ -40,6 +41,10 @@ const mockFetch: FetchJSON = async (url) => {
         }
       ] }
     };
+  }
+  if (url.includes('api.openalex.org/works/doi:')) {
+    // abstract backfill by DOI
+    return { ok: true, data: { abstract_inverted_index: { Backfilled: [0], abstract: [1], 'text.': [2] } } };
   }
   if (url.includes('api.openalex.org')) {
     return {
@@ -98,6 +103,32 @@ describe('citation-finder adapters', () => {
     expect(out[0].isOpenAccess).toBe(true);
     expect(out[0].abstract).toBe('Cognitive load affects well-being.');
     expect(out[0].source).toBe('openalex');
+  });
+
+  it('fetchOpenAlexAbstractByDoi reconstructs the abstract from the inverted index', async () => {
+    expect(await fetchOpenAlexAbstractByDoi('https://doi.org/10.1/X', mockFetch)).toBe('Backfilled abstract text.');
+    expect(await fetchOpenAlexAbstractByDoi('', mockFetch)).toBe('');
+  });
+
+  it('findCitations backfills a missing abstract so it gets a supporting sentence', async () => {
+    // Crossref hit with a DOI but no abstract; only OpenAlex-by-DOI can fill it.
+    const backfillMock: FetchJSON = async (url) => {
+      if (url.includes('mymemory')) return { ok: true, data: { responseData: { translatedText: 'cognitive load' } } };
+      if (url.includes('api.openalex.org/works/doi:')) {
+        return { ok: true, data: { abstract_inverted_index: { Cognitive: [0], load: [1], 'matters.': [2] } } };
+      }
+      if (url.includes('api.crossref.org')) {
+        return { ok: true, data: { message: { items: [
+          { DOI: '10.1/noabs', title: ['Cognitive Load Paper'], author: [{ given: 'A', family: 'X' }],
+            issued: { 'date-parts': [[2021]] }, 'is-referenced-by-count': 40 } // <- no abstract
+        ] } } };
+      }
+      return { ok: false, error: 'none' }; // s2 + openalex-search empty
+    };
+    const { candidates } = await findCitations('Bilişsel yük', { currentYear: 2025 }, backfillMock);
+    const filled = candidates.find((c) => c.doi === '10.1/noabs');
+    expect(filled?.abstract).toBe('Cognitive load matters.');
+    expect(filled?.supporting?.sentence.toLowerCase()).toContain('cognitive load');
   });
 
   it('checkOpenAccess reads Unpaywall', async () => {
