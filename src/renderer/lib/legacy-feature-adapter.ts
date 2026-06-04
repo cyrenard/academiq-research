@@ -196,7 +196,6 @@ export const legacyFeatures: LegacyFeature[] = [
   { id: 'reference-duplicates', group: 'Kaynak', label: 'Duplicate review aç', fn: 'openDuplicateReview' },
   { id: 'reference-metadata-health', group: 'Kaynak', label: 'Metadata health center aç', fn: 'openMetadataHealthCenter' },
   { id: 'reference-collections', group: 'Kaynak', label: 'Koleksiyon yonetimi', fn: 'openCollectionManager' },
-  { id: 'reference-labels', group: 'Kaynak', label: 'Label filtre paneli', fn: 'toggleLabelFilterPanel' },
   { id: 'reference-related', group: 'Kaynak', label: 'Related papers paneli', fn: 'toggleRelatedPanel' },
   { id: 'reference-batch-oa', group: 'Kaynak', label: 'Batch open access PDF indir', fn: 'batchDownloadOA' },
   { id: 'reference-batch-cites', group: 'Kaynak', label: 'Batch citation metadata cek', fn: 'batchFetchCitations' },

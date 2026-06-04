@@ -126,9 +126,7 @@ var defaultLabels=[
   {name:'Sonra Oku',color:'#ff9800'},
   {name:'Tezde Kullan',color:'#e91e63'}
 ];
-var activeLabelFilter=null;
 var activeCollectionFilter='all';
-var labelFilterPanelOpen=false;
 var noteViewFilters={type:'all',usage:'all',tag:'',refId:'all'};
 
 var pdfDoc=null,pdfPg=1,pdfTotal=0,pdfScale=0,curRef=null; // 0=auto
@@ -2210,28 +2208,7 @@ function addToLib(ref){
 }
 
 // ¦¦ LIBRARY ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
-function deleteCustomLabel(name){
-  var labelName=String(name||'').trim();
-  if(!labelName)return;
-  if(!(S.customLabels||[]).some(function(l){
-    return (typeof l==='string'?l:(l&&l.name)||'')===labelName;
-  }))return;
-  if(!confirm('"'+labelName+'" etiketi silinsin?'))return;
-  S.customLabels=(S.customLabels||[]).filter(function(l){
-    return (typeof l==='string'?l:(l&&l.name)||'')!==labelName;
-  });
-  S.wss.forEach(function(ws){
-    (ws.lib||[]).forEach(function(ref){
-      ref.labels=(ref.labels||[]).filter(function(l){
-        return (typeof l==='string'?l:(l&&l.name)||'')!==labelName;
-      });
-    });
-  });
-  if(activeLabelFilter===labelName)activeLabelFilter=null;
-  save();
-  rLabelFilter();
-  
-}
+
 function downloadPDF(id,overrideUrl){
   var r=findRef(id);
   var eq=r?findEquivalentRef(r):null;
@@ -2423,207 +2400,12 @@ function showMoveMenuItems(menu,ref,fromWsId){
   });
 }
 
-function closeCtxLabelPanel(){
-  var panel=document.getElementById('ctxlabelpanel');
-  if(!panel)return;
-  panel.classList.remove('show');
-  panel.innerHTML='';
-}
-function openLabelPickerPanel(anchorBtn,ref){
-  if(!anchorBtn||!ref)return;
-  var panel=document.getElementById('ctxlabelpanel');
-  if(!panel){
-    panel=document.createElement('div');
-    panel.id='ctxlabelpanel';
-    document.body.appendChild(panel);
-  }
-  panel.innerHTML='';
-  var title=document.createElement('div');
-  title.className='ctx-label-title';
-  title.textContent='Etiket Seç';
-  panel.appendChild(title);
-  var allLabels=defaultLabels.concat(S.customLabels||[]);
-  if(!Array.isArray(ref.labels))ref.labels=[];
-  allLabels.forEach(function(l){
-    var hasLabel=ref.labels.some(function(rl){return rl&&rl.name===l.name;});
-    var btn=document.createElement('button');
-    btn.className='ctxi';
-    var check=document.createElement('span');
-    check.className='ctx-label-check'+(hasLabel?'':' off');
-    check.textContent='✓';
-    btn.appendChild(check);
-    var dot=document.createElement('span');
-    dot.className='ctx-label-dot';
-    dot.style.background=String(l.color||'#9aa');
-    btn.appendChild(dot);
-    var txt=document.createElement('span');
-    txt.textContent=String(l.name||'');
-    btn.appendChild(txt);
-    btn.onclick=function(){
-      if(hasLabel)ref.labels=ref.labels.filter(function(rl){return rl&&rl.name!==l.name;});
-      else ref.labels.push({name:l.name,color:l.color});
-      save();
-      
-      hideCtx();
-    };
-    panel.appendChild(btn);
-  });
-  var customLabels=(S.customLabels||[]).filter(function(label){return label&&label.name;});
-  if(customLabels.length){
-    var delSep=document.createElement('div');
-    delSep.className='ctx-sep';
-    panel.appendChild(delSep);
-    var delTitle=document.createElement('div');
-    delTitle.className='ctx-label-title';
-    delTitle.textContent='Etiket Sil';
-    panel.appendChild(delTitle);
-    customLabels.forEach(function(label){
-      var delBtn=document.createElement('button');
-      delBtn.className='ctxi ctxi-delete-label';
-      var delDot=document.createElement('span');
-      delDot.className='ctx-label-dot';
-      delDot.style.background=String(label.color||'#9aa');
-      delBtn.appendChild(delDot);
-      var delTxt=document.createElement('span');
-      delTxt.textContent=String(label.name||'');
-      delBtn.appendChild(delTxt);
-      var delX=document.createElement('span');
-      delX.className='ctx-label-delete-x';
-      delX.textContent='x';
-      delBtn.appendChild(delX);
-      delBtn.onclick=function(){
-        if(!confirm('Bu ozel etiketi silmek istiyor musun?'))return;
-        deleteCustomLabel(label.name);
-        if(Array.isArray(ref.labels)){
-          ref.labels=ref.labels.filter(function(rl){return rl&&rl.name!==label.name;});
-        }
-        save();
-        
-        openLabelPickerPanel(anchorBtn,ref);
-      };
-      panel.appendChild(delBtn);
-    });
-  }
-  var sep=document.createElement('div');
-  sep.className='ctx-sep';
-  panel.appendChild(sep);
-  var newBtn=document.createElement('button');
-  newBtn.className='ctxi ctxi-new-label';
-  newBtn.textContent='+ Yeni Etiket';
-  newBtn.onclick=function(){
-    customPrompt('Etiket adı:','').then(function(name){
-      if(!name||!name.trim())return;
-      var colors=['#4caf50','#f44336','#2196f3','#9c27b0','#ff9800','#e91e63','#00bcd4','#795548'];
-      var color=colors[Math.floor(Math.random()*colors.length)];
-      var newLabel={name:name.trim(),color:color};
-      if(!S.customLabels)S.customLabels=[];
-      if(!S.customLabels.some(function(label){return label&&label.name===newLabel.name;}))S.customLabels.push(newLabel);
-      if(!Array.isArray(ref.labels))ref.labels=[];
-      if(!ref.labels.some(function(label){return label&&label.name===newLabel.name;}))ref.labels.push(newLabel);
-      save();
-      
-      hideCtx();
-    });
-  };
-  panel.appendChild(newBtn);
-  var rect=anchorBtn.getBoundingClientRect();
-  panel.style.top=Math.min(rect.top,window.innerHeight-320)+'px';
-  panel.style.left=Math.min(rect.right+6,window.innerWidth-250)+'px';
-  panel.classList.add('show');
-}
-function showLabelMenu(x,y,ref){
-  var menu=document.getElementById('ctxmenu');
-  if(!menu||!ref)return;
-  try{
-  menu.innerHTML='';
-  closeCtxLabelPanel();
-  var editBtn=document.createElement('button');
-  editBtn.className='ctxi';
-  editBtn.textContent='Künyeyi Düzenle';
-  editBtn.onclick=function(){hideCtx();editRefMetadata(ref);};
-  menu.appendChild(editBtn);
-  var labelBtn=document.createElement('button');
-  labelBtn.className='ctxi has-arrow';
-  labelBtn.innerHTML='<span>Etiket Ekle</span><span class="ctx-arrow">▸</span>';
-  labelBtn.onclick=function(event){
-    if(event){event.preventDefault();event.stopPropagation();}
-    openLabelPickerPanel(labelBtn,ref);
-  };
-  menu.appendChild(labelBtn);
-  var csep=document.createElement('div');
-  csep.className='ctx-sep';
-  menu.appendChild(csep);
-  var ctitle=document.createElement('div');
-  ctitle.className='ctx-label-title';
-  ctitle.textContent='Koleksiyonlar';
-  menu.appendChild(ctitle);
-  var ws=currentWorkspaceForCollections();
-  var collections=ensureWorkspaceCollections(ws);
-  if(!Array.isArray(ref.collectionIds))ref.collectionIds=[];
-  if(!collections.length){
-    var empty=document.createElement('div');
-    empty.className='ctxi';
-    empty.style.opacity='.72';
-    empty.textContent='Koleksiyon yok';
-    menu.appendChild(empty);
-  }else{
-    collections.forEach(function(col){
-      var has=(ref.collectionIds||[]).some(function(id){return String(id)===String(col.id);});
-      var btn=document.createElement('button');
-      btn.className='ctxi';
-      var check=document.createElement('span');
-      check.className='ctx-label-check'+(has?'':' off');
-      check.textContent='✓';
-      btn.appendChild(check);
-      var txt=document.createElement('span');
-      txt.textContent=String(col.name||'');
-      btn.appendChild(txt);
-      btn.onclick=function(){
-        toggleReferenceCollection(ref,col.id);
-        hideCtx();
-      };
-      menu.appendChild(btn);
-    });
-  }
-  var manage=document.createElement('button');
-  manage.className='ctxi ctxi-new-label';
-  manage.textContent='Koleksiyonları Yönet';
-  manage.onclick=function(){hideCtx();openCollectionManager();};
-  menu.appendChild(manage);
-  if(S.wss.length>1){
-    var sep=document.createElement('div');
-    sep.className='ctx-sep';
-    menu.appendChild(sep);
-    showMoveMenuItems(menu,ref,S.cur);
-  }
-  menu.style.top=Math.min(y,window.innerHeight-300)+'px';
-  menu.style.left=Math.min(x,window.innerWidth-220)+'px';
-  menu.classList.add('show');
-  }catch(_err){
-    menu.innerHTML='';
-    closeCtxLabelPanel();
-    var fallbackEdit=document.createElement('button');
-    fallbackEdit.className='ctxi';
-    fallbackEdit.textContent='KÃ¼nyeyi DÃ¼zenle';
-    fallbackEdit.onclick=function(){hideCtx();editRefMetadata(ref);};
-    menu.appendChild(fallbackEdit);
-    var fallbackLabel=document.createElement('button');
-    fallbackLabel.className='ctxi';
-    fallbackLabel.textContent='Etiket Ekle';
-    fallbackLabel.onclick=function(event){
-      if(event){event.preventDefault();event.stopPropagation();}
-      openLabelPickerPanel(fallbackLabel,ref);
-    };
-    menu.appendChild(fallbackLabel);
-    menu.style.top=Math.min(y,window.innerHeight-220)+'px';
-    menu.style.left=Math.min(x,window.innerWidth-220)+'px';
-    menu.classList.add('show');
-  }
-}
+
+
+
 function hideCtx(){
   var menu=document.getElementById('ctxmenu');
   if(menu)menu.classList.remove('show');
-  closeCtxLabelPanel();
 }
 document.addEventListener('click',function(e){
   if(Date.now()-Number(window.__aqSidebarCtxAt||0)<380)return;
@@ -10613,11 +10395,6 @@ function rRefs(){
     pdfBtn.addEventListener('click',function(){openRef(r.id);});
     actions.appendChild(copyBtn);
     actions.appendChild(pdfBtn);
-    item.addEventListener('contextmenu',function(e){
-      e.preventDefault();
-      e.stopPropagation();
-      showLabelMenu(e.clientX,e.clientY,r);
-    });
     item.appendChild(cite);
     item.appendChild(full);
     item.appendChild(actions);
@@ -10852,24 +10629,8 @@ document.addEventListener('mousedown',function(e){
   e.preventDefault();
   scrollToHeading(entry.dataset.tocIdx);
 });
-function setLabelFilterPanelOpen(next){
-  labelFilterPanelOpen=!!next;
-  var wrap=document.getElementById('labelToggleWrap');
-  var btn=document.getElementById('labelToggleBtn');
-  if(wrap)wrap.classList.toggle('open',labelFilterPanelOpen);
-  if(btn)btn.setAttribute('aria-expanded',labelFilterPanelOpen?'true':'false');
-}
-function toggleLabelFilterPanel(force){
-  if(typeof force==='boolean')setLabelFilterPanelOpen(force);
-  else setLabelFilterPanelOpen(!labelFilterPanelOpen);
-}
-document.addEventListener('click',function(e){
-  if(!labelFilterPanelOpen)return;
-  var wrap=document.getElementById('labelToggleWrap');
-  if(!wrap)return;
-  if(wrap.contains(e.target))return;
-  setLabelFilterPanelOpen(false);
-});
+
+
 document.addEventListener('click',function(e){
   var btn=e&&e.target&&e.target.closest?e.target.closest('#relatedToggleBtn'):null;
   if(!btn)return;
@@ -11014,44 +10775,7 @@ function openCollectionManager(){
   renderCollectionManager();
   showM('collectionModal');
 }
-function rLabelFilter(){
-  var el=document.getElementById('labelfilt');if(!el)return;
-  var customLabels=(S.customLabels||[]).map(function(l){
-    if(typeof l==='string')return {name:l,color:'#b6873f'};
-    return l;
-  }).filter(function(l){return l&&l.name;});
-  var allLabels=defaultLabels.concat(customLabels);
-  var btnTxt=document.getElementById('labelToggleBtnText');
-  if(btnTxt)btnTxt.textContent=activeLabelFilter?('Etiket: '+activeLabelFilter):('Etiketler ('+allLabels.length+')');
-  var toggleBtn=document.getElementById('labelToggleBtn');
-  if(toggleBtn)toggleBtn.classList.toggle('is-filtered',!!activeLabelFilter);
-  el.innerHTML='';
-  allLabels.forEach(function(l){
-    var isCustom=customLabels.some(function(x){return x.name===l.name;});
-    var btn=document.createElement('button');
-    btn.className='label-chip'+(activeLabelFilter===l.name?' is-active':'');
-    btn.style.setProperty('--chip-color',String(l.color||'#9aa'));
-    btn.onclick=function(){activeLabelFilter=activeLabelFilter===l.name?null:l.name;rLabelFilter();};
-    var label=document.createElement('span');
-    label.className='label-chip-text';
-    label.textContent=l.name;
-    btn.appendChild(label);
-    if(isCustom){
-      var del=document.createElement('span');
-      del.className='label-chip-del';
-      del.textContent='×';
-      del.title='Etiketi sil';
-      del.onclick=function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        if(activeLabelFilter===l.name)activeLabelFilter=null;
-        deleteCustomLabel(l.name);
-      };
-      btn.appendChild(del);
-    }
-    el.appendChild(btn);
-  });
-}
+
 document.addEventListener('focusin',function(e){
   var body=e.target&&e.target.closest?e.target.closest('.pdf-annot-body'):null;
   if(body){
@@ -12109,7 +11833,6 @@ function showSidebarRefMenu(x,y,ref){
   var menu=document.getElementById('ctxmenu');
   if(!menu||!ref)return;
   menu.innerHTML='';
-  closeCtxLabelPanel();
   var editBtn=document.createElement('button');
   editBtn.className='ctxi';
   editBtn.textContent='Künyeyi Düzenle';
@@ -12119,14 +11842,6 @@ function showSidebarRefMenu(x,y,ref){
     editRefMetadata(ref);
   };
   menu.appendChild(editBtn);
-  var labelBtn=document.createElement('button');
-  labelBtn.className='ctxi has-arrow';
-  labelBtn.innerHTML='<span>Etiket Ekle</span><span class="ctx-arrow">▸</span>';
-  labelBtn.onclick=function(event){
-    if(event){event.preventDefault();event.stopPropagation();}
-    openLabelPickerPanel(labelBtn,ref);
-  };
-  menu.appendChild(labelBtn);
   var relatedBtn=document.createElement('button');
   relatedBtn.className='ctxi';
   relatedBtn.innerHTML='<span>\uD83D\uDD17 Benzer Makaleler</span>';
@@ -13888,25 +13603,9 @@ async function syncSave(){
     }
   }
 }
-deleteCustomLabel=function(name){
-  var labelName=String(name||'').trim();
-  if(!labelName)return;
-  var customLabels=(S.customLabels||[]).map(function(l){return typeof l==='string'?{name:l,color:'#b6873f'}:l;});
-  if(!customLabels.some(function(l){return l&&l.name===labelName;}))return;
-  if(!confirm('"'+labelName+'" etiketi silinsin?'))return;
-  S.customLabels=customLabels.filter(function(l){return l&&l.name!==labelName;});
-  S.wss.forEach(function(ws){
-    (ws.lib||[]).forEach(function(ref){
-      ref.labels=(ref.labels||[]).filter(function(l){
-        return (typeof l==='string'?l:((l&&l.name)||''))!==labelName;
-      });
-    });
-  });
-  if(activeLabelFilter===labelName)activeLabelFilter=null;
-  rLabelFilter();
-  
-  save();
-};
+// NOTE (slice 5b): deleteCustomLabel (+ no-op label render chain) retired.
+// Label create/delete/toggle live in React (App.tsx handleCreate/DeleteLabel →
+// appStore/persistState). See LEGACY_RUNTIME_SPLIT_PLAN.md.
 updatePageHeight=function(){
   clearTimeout(_pgTimer);
   _pgTimer=setTimeout(function(){
