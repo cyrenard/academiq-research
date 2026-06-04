@@ -1179,60 +1179,11 @@ function rDocTabs(){
   add.onclick=function(){promptAddWs();};
   bar.appendChild(add);
 }
-function nextDocName(){
-  var n=1;
-  var existNames=S.docs.map(function(d){return d.name;});
-  while(existNames.indexOf('Belge '+n)!==-1)n++;
-  return 'Belge '+n;
-}
-function createDoc(){
-  customPrompt('Belge adı:',nextDocName()).then(function(name){
-    name=(name||'').trim();
-    if(!name)return;
-    __aqCommitActiveDoc();
-    var nd=window.AQDocTabsState&&typeof window.AQDocTabsState.createDocState==='function'
-      ? window.AQDocTabsState.createDocState(S,name,{uid:uid,sanitize:sanitizeDocHTML})
-      : {id:uid(),name:name,content:__aqBlankDocHTML(),bibliographyHTML:'',bibliographyManual:false,coverHTML:'',tocHTML:''};
-    if(!nd)return;
-    ensureDocAuxFields(nd);
-    if(!(window.AQDocTabsState&&typeof window.AQDocTabsState.createDocState==='function')){
-      S.docs=(S.docs||[]).concat([nd]);
-      S.curDoc=nd.id;
-      S.doc=nd.content;
-    }
-    __aqSetEditorDoc(nd.content,true);
-    applyCurrentDocTrackChangesMode({source:'create-doc'});
-    save();
-  });
-}
-function switchDoc(docId){
-  if(S.curDoc===docId&&S.docs&&S.docs.length)return;
-  __aqCommitActiveDoc();
-  var next=window.AQDocTabsState&&typeof window.AQDocTabsState.switchDocState==='function'
-    ? window.AQDocTabsState.switchDocState(S,docId,{sanitize:sanitizeDocHTML})
-    : (S.docs||[]).find(function(d){return d.id===docId;});
-  if(!next)return;
-  if(!(window.AQDocTabsState&&typeof window.AQDocTabsState.switchDocState==='function')){
-    S.curDoc=docId;
-    next.content=sanitizeDocHTML(next.content||__aqBlankDocHTML());
-    S.doc=next.content;
-  }
-  __aqSetEditorDoc(next.content,true);
-  applyCurrentDocTrackChangesMode({source:'switch-doc'});
-  save();
-}
-function renameDoc(docId){
-  var ws=S.wss.find(function(entry){return entry&&entry.docId===docId;});
-  if(ws)renameWs(ws.id);
-}
-function deleteDoc(docId){
-  var ws=S.wss.find(function(entry){return entry&&entry.docId===docId;});
-  if(ws)delWs(ws.id);
-}
-function showDocMenu(x,y,docId){
-  var ws=S.wss.find(function(entry){return entry&&entry.docId===docId;});
-  if(ws)return showWsMenu(x,y,ws.id);
-}
+// NOTE (state-retirement, dilim 1): createDoc / switchDoc / renameDoc / deleteDoc /
+// showDocMenu / nextDocName kaldırıldı. Belge sekmeleri React tarafına taşındı
+// (components/shell/DocumentTabs.tsx + App.tsx handler'ları → app-state.ts saf
+// fonksiyonları → appStore/persistState). Bu legacy fonksiyonların hiçbir çağıranı
+// kalmamıştı (HTML onclick / window expose / diğer src yok). Bkz. LEGACY_RUNTIME_SPLIT_PLAN.md
 function renameWs(wsId){
   var ws=S.wss.find(function(entry){return entry&&entry.id===wsId;});
   if(!ws)return;
