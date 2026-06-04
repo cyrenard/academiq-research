@@ -646,7 +646,7 @@ function switchWs(wsId){
 
   // 4. Save and update UI
   save();
-  rWS();rLib();switchWsPdfTabs();rDocTabs();uSt();
+  rLib();switchWsPdfTabs();uSt();
   setTimeout(function(){save();},260);
   }catch(e){
     logStability('switchWs',e,{wsId:wsId});
@@ -1085,37 +1085,7 @@ function curNotes(options){
 
 
 // ¦¦ DOCUMENT TABS ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
-function rDocTabs(){
-  ensureWorkspaceDocs();
-  var bar=document.getElementById('doctabs');if(!bar)return;
-  bar.innerHTML='';
-  S.wss.forEach(function(ws){
-    var doc=(S.docs||[]).find(function(entry){return entry&&entry.id===ws.docId;});
-    if(!doc)return;
-    var btn=document.createElement('button');
-    btn.className='doctab'+(doc.id===S.curDoc?' on':'');
-    var lbl=document.createElement('span');
-    lbl.textContent=doc.name;
-    btn.appendChild(lbl);
-    if(S.wss.length>1){
-      var cl=document.createElement('span');
-      cl.className='dtclose';
-      cl.textContent='×';
-      cl.onclick=function(e){e.stopPropagation();delWs(ws.id);};
-      btn.appendChild(cl);
-    }
-    btn.onclick=function(){switchWs(ws.id);};
-    btn.oncontextmenu=function(e){e.preventDefault();showWsMenu(e.clientX,e.clientY,ws.id);};
-    btn.ondblclick=function(){renameWs(ws.id);};
-    bar.appendChild(btn);
-  });
-  var add=document.createElement('button');
-  add.id='doctab-add';
-  add.textContent='+';
-  add.title='Yeni çalışma alanı';
-  add.onclick=function(){promptAddWs();};
-  bar.appendChild(add);
-}
+
 // NOTE (state-retirement, dilim 1): createDoc / switchDoc / renameDoc / deleteDoc /
 // showDocMenu / nextDocName kaldırıldı. Belge sekmeleri React tarafına taşındı
 // (components/shell/DocumentTabs.tsx + App.tsx handler'ları → app-state.ts saf
@@ -1131,8 +1101,8 @@ function renameWs(wsId){
     var doc=(S.docs||[]).find(function(entry){return entry&&entry.id===ws.docId;});
     if(doc)doc.name=n;
     save();
-    rWS();
-    rDocTabs();
+    
+    
   });
 }
 function showWsMenu(x,y,wsId){
@@ -1309,12 +1279,7 @@ function formatRef(ref,options){
 }
 
 // ¦¦ WORKSPACES ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
-function rWS(){
-  var bar=document.getElementById('wsbar');
-  if(bar)bar.classList.add('aq-hidden');
-  var row=document.getElementById('wsrow');
-  if(row)row.innerHTML='';
-}
+
 function delWs(id){
   if(workspaceMutationBusy)return;
   workspaceMutationBusy=true;
@@ -1334,7 +1299,7 @@ function delWs(id){
     ensureWorkspaceDocs();
   }
   save();
-  rWS();rLib();rRefs();rDocTabs();switchWsPdfTabs();uSt();
+  rLib();rRefs();switchWsPdfTabs();uSt();
   var active=(S.docs||[]).find(function(doc){return doc.id===S.curDoc;});
   if(active)__aqSetEditorDoc(active.content||__aqBlankDocHTML(),false);
   }catch(e){
@@ -1385,7 +1350,7 @@ function doAddWs(){
   __aqSetEditorDoc(__aqBlankDocHTML(),false);
   hideM('wsm');
   save();
-  rWS();rLib();rDocTabs();switchWsPdfTabs();uSt();
+  rLib();switchWsPdfTabs();uSt();
   setTimeout(function(){save();},260);
   }catch(e){
     logStability('doAddWs',e);
@@ -8683,7 +8648,7 @@ async function restoreDocumentHistoryVersion(snapshotId){
     setSL('Belge surumu geri yukleniyor...','ld');
     await window.electronAPI.restoreDocumentHistorySnapshot(docId,versionId);
     await syncLoad();
-    rWS();rNB();rLib();renderRelatedPapers();rNotes();rRefs();applyCurrentDocTrackChangesMode({source:'history-restore'});uSt();rDocTabs();
+    rNB();rLib();renderRelatedPapers();rNotes();rRefs();applyCurrentDocTrackChangesMode({source:'history-restore'});uSt();
     setSL('Belge surumu geri yuklendi','ok');
     setTimeout(function(){if(!autosaveState.dirty&&!autosaveState.saving)setSL('Kaydedildi','ok');},2200);
     refreshDocumentHistory().catch(function(){});
@@ -11805,7 +11770,7 @@ function initTipTapEditor(){
 function __refreshUIAfterBrowserCapture(detail){
   var info=detail&&typeof detail==='object'?detail:{};
   return syncLoad().then(function(){
-    rWS();rNB();rLib();renderRelatedPapers();rNotes();rRefs();applyCurrentDocTrackChangesMode({source:'capture-refresh'});uSt();rDocTabs();
+    rNB();rLib();renderRelatedPapers();rNotes();rRefs();applyCurrentDocTrackChangesMode({source:'capture-refresh'});uSt();
     if(info.focusWorkspace&&info.workspaceId){
       try{switchWs(String(info.workspaceId));}catch(_e){}
     }
@@ -11822,7 +11787,7 @@ syncLoad().then(function(){
   window.__aqLegacyRuntimePhase='post-syncLoad';
   resetTransientChrome();
   __bindLibraryContextMenuGlobal();
-  rWS();rNB();rLib();renderRelatedPapers();rNotes();rRefs();applyCurrentDocTrackChangesMode({source:'init-load'});uSt();rDocTabs();
+  rNB();rLib();renderRelatedPapers();rNotes();rRefs();applyCurrentDocTrackChangesMode({source:'init-load'});uSt();
   setTimeout(function(){
     try{rNotes();}catch(_e){}
   },120);
@@ -14064,7 +14029,7 @@ function __aqSetEditorDoc(html,focusAtEnd){
       },
       syncChrome:uSt,
       updatePageHeight:updatePageHeight,
-      afterLayout:function(){ rDocTabs(); syncAuxiliaryPages(); }
+      afterLayout:function(){  syncAuxiliaryPages(); }
     });
   }
   if(window.AQTipTapWordDocument&&typeof window.AQTipTapWordDocument.loadEditorDocumentWithState==='function'){
@@ -14098,7 +14063,7 @@ function __aqSetEditorDoc(html,focusAtEnd){
         if(window.AQEditorRuntime&&typeof window.AQEditorRuntime.syncPageLayout==='function')window.AQEditorRuntime.syncPageLayout();
         else updatePageHeight();
       },
-      afterLayout:function(){ rDocTabs(); syncAuxiliaryPages(); }
+      afterLayout:function(){  syncAuxiliaryPages(); }
     });
   }
   if(window.AQTipTapWordDocument&&typeof window.AQTipTapWordDocument.prepareLoadedHTML==='function'){
@@ -14119,7 +14084,7 @@ function __aqSetEditorDoc(html,focusAtEnd){
         focusToEndFn:function(){ if(editor)editor.commands.focus('end'); },
         focusSurface:!!focusAtEnd&&!editor,
         focusSurfaceFn:function(){ focusEditorSurface(true); },
-        afterLayout:function(){ rDocTabs(); syncAuxiliaryPages(); }
+        afterLayout:function(){  syncAuxiliaryPages(); }
       });
       return;
     }
@@ -14134,7 +14099,7 @@ function __aqSetEditorDoc(html,focusAtEnd){
     uSt();
     if(window.AQEditorRuntime&&typeof window.AQEditorRuntime.syncPageLayout==='function')window.AQEditorRuntime.syncPageLayout();
     else updatePageHeight();
-    rDocTabs();
+    
   }
   html=sanitizeDocHTML(html||__aqBlankDocHTML());
   if(editor){
