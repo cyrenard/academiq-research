@@ -48,8 +48,9 @@ Her domain için adımlar:
 | # | Dilim | Satır (yakl.) | Durum | Not |
 |---|-------|---------------|-------|-----|
 | 1 | DOCUMENT TABS — ölü fonksiyonlar | 1182-1235 | ✅ tamam | createDoc/switchDoc/renameDoc/deleteDoc/showDocMenu/nextDocName kaldırıldı (~54 satır). React (DocumentTabs+appStore) tam karşılıyor. `rDocTabs` (12 iç çağrı + browser-capture guard) KALDI. tsc+vitest(720) yeşil; canlı doğrulandı (belge sekmesi ekle/değiştir). |
-| 2 | CUSTOM LABELS | ~12380+ | ⬜ | Basit veri dizisi; appStore'a. |
-| 3 | WORKSPACES (rWS/rDocTabs ölü-kod taraması) | 1151-1181, 1423-1513 | ⬜ | React WorkspaceTabs tam karşılıyor; `rDocTabs` ve `rWS` çağrı yerleri no-op mu? |
+| 2 | ÖLÜ KOD SÜPÜRME (13 fonksiyon) | dağınık | ✅ tamam | Tüm dosya tarandı (559 fn). occurrence=1 olan 56 adaydan dış çağıranı olanlar elendi → 13 gerçek ölü: rThemes, showLabelMenuLegacy, addManualReference, showMoveMenu, setPdfAnnotationQuery, getFindCountEl, toggleTrigSel, toggleToolbarMenu, applyEditorListStyle, initPdfAnnotBody, buildNarrativeCitationHTML, replaceTOCInEditorHTML, __handleMetadataHealthAction. ~495 satır (14835→14340). brace-aware script + `node --check`; tsc+vitest(720) yeşil; canlı doğrulandı. |
+| 3 | CUSTOM LABELS (DOM→React) | dağınık | ⬜ | Label sistemi HÂLÂ legacy DOM: openLabelPickerPanel/rLabelFilter/deleteCustomLabel/showLabelMenu canlı; toggleLabelFilterPanel'i legacy-feature-adapter çağırıyor. customLabels/activeLabelFilter state'i + picker/filter UI'ı React'e taşımak gerek (büyük). |
+| 4 | WORKSPACES (rWS/rDocTabs no-op temizliği) | 1151-1181, 1423-1513 | ⬜ | React WorkspaceTabs tam karşılıyor; `rDocTabs` ve `rWS` çağrı yerleri no-op mu? |
 | 4 | REFS kart aksiyonları | 6655-7257 | ⬜ | RefSidebar ile örtüşme. |
 | 5 | UI modals / dropdowns | 8346-8619 | ⬜ | React modal'a. |
 | 6 | PDF / TIPTAP / EXPORT (Kategori C) | — | ⬜ | Büyük ölçüde legacy kalır; kapsam dışı. |
