@@ -53,9 +53,22 @@ Her domain için adımlar:
 | 4 | WORKSPACES (rWS/rDocTabs no-op temizliği) | dağınık | ✅ tamam | rWS (`wsbar`→yok) + rDocTabs (`doctabs`→yok) no-op; React WorkspaceTabs/DocumentTabs karşılıyor. 18 çağrı (rWS=7, rDocTabs=11) + 2 tanım kaldırıldı (~35 satır). browser-capture.js guard'lı çağrıları (typeof check) dokunulmadı. node --check + tsc + vitest(720) yeşil; canlı doğrulandı (workspace ekle modal). |
 | 5a | LIBRARY render (rLib) emekliliği | rLib | ✅ tamam | rLib `getElementById('liblist')`→yok→no-op; React RefSidebar `references={activeWorkspace.lib}` karşılıyor. 47 çağrı + tanım (~326 satır) kaldırıldı → dosya 14k altına (13979). React adapter'lar (legacy-dom-helpers/quality-surface) typeof-guard'lı, dokunulmadı. node --check + tsc + vitest(720) yeşil; canlı doğrulandı (reference sidebar). |
 | 5b | LABEL render zinciri emekliliği | rLabelFilter, openLabelPickerPanel, showLabelMenu, closeCtxLabelPanel, setLabelFilterPanelOpen, toggleLabelFilterPanel, deleteCustomLabel + activeLabelFilter/labelFilterPanelOpen | ✅ tamam | 7 no-op fn + deleteCustomLabel reassign + 2 state (activeLabelFilter/labelFilterPanelOpen) kaldırıldı (~301 satır → 13979→13678). Dış çağrılar elle ayıklandı: rRefs contextmenu bloğu, showSidebarRefMenu "Etiket Ekle"+closeCtxLabelPanel, hideCtx closeCtxLabelPanel, label-panel outside-click handler. React command-palette kaydı (legacy-feature-adapter.ts 'reference-labels') silindi. Label create/delete/toggle React'te (App.tsx → appStore). node --check + tsc + vitest(720) yeşil. |
-| 4 | REFS kart aksiyonları | 6655-7257 | ⬜ | RefSidebar ile örtüşme. |
-| 5 | UI modals / dropdowns | 8346-8619 | ⬜ | React modal'a. |
-| 6 | PDF / TIPTAP / EXPORT (Kategori C) | — | ⬜ | Büyük ölçüde legacy kalır; kapsam dışı. |
+| 6 | PDF / TIPTAP / EXPORT (Kategori C) | — | ⏹️ kapsam dışı (kasıtlı) | Bu domain'ler pdfjs/imperatif DOM ve aq-engine sınırına bağlı; React state'e taşınmaları anlamsız/zararlı. legacy-runtime.js'in kalıcı çekirdeği olarak BIRAKILIR. State emekliliği hedefi bu domain'leri kapsamaz. |
+
+> **DURUM (2026-06-04): Planlanan tüm state-emekliliği dilimleri TAMAM.**
+> legacy-runtime.js: **14835 → 13678 satır** (~1157 satır / 7.8% temizlendi).
+> Emekli edilen: 6 (doc-tab) + 13 (ölü süpürme) + 2 (rWS/rDocTabs) + 1 (rLib) +
+> 7 (label zinciri) + 2 state var = **28 fonksiyon + 2 state**. Her dilim ayrı
+> commit, tsc+vitest(720)+node --check yeşil. Kategori A/B'de kalan render fn'leri
+> (rNotes, rNB, rRefs, renderRelatedPapers vb.) benzer desende ileride
+> emekli edilebilir (gelecek fırsat); Kategori C kalıcı.
+
+### Gelecek fırsatlar (opsiyonel, bu hedefin dışında)
+- REFS kart aksiyonları (rRefs delege/no-op zinciri), UI modals/dropdowns, OUTLINE/TOC,
+  THUMBNAIL, FIND&REPLACE — RefSidebar/React modallarıyla örtüşenler no-op olabilir;
+  dilim 1-5 desenindeki gibi (DOM-id yoklama → çağrı sayımı → token-strip) ayıklanabilir.
+- "occurrence=1 ama dış çağıranı var" 43 fn: window-expose adapter'ları (legacy-feature-adapter
+  command palette) emekli edildikçe ölebilir.
 
 ## 4) Bulgular (dilim 1 analizi)
 - React `DocumentTabs` (App.tsx:2016) handler'ları TAMAMEN appStore:
