@@ -21,13 +21,13 @@ test('npm build now targets Tauri while Electron build remains available', () =>
   assert.equal(pkg.scripts['release:baseline'], 'npm run build && npm run gate:release');
 });
 
-test('release versions stay synchronized for the beta cutover build', () => {
+test('release versions stay synchronized for the stable cutover build', () => {
   const pkg = json('package.json');
   const lock = json('package-lock.json');
   const conf = json('src-tauri', 'tauri.conf.json');
   const cargoToml = read('src-tauri', 'Cargo.toml');
 
-  assert.equal(pkg.version, '1.24.0-beta.9');
+  assert.equal(pkg.version, '1.24.0');
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[''].version, pkg.version);
   assert.equal(conf.version, pkg.version);
