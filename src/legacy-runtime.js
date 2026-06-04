@@ -646,7 +646,7 @@ function switchWs(wsId){
 
   // 4. Save and update UI
   save();
-  rLib();switchWsPdfTabs();uSt();
+  switchWsPdfTabs();uSt();
   setTimeout(function(){save();},260);
   }catch(e){
     logStability('switchWs',e,{wsId:wsId});
@@ -1299,7 +1299,7 @@ function delWs(id){
     ensureWorkspaceDocs();
   }
   save();
-  rLib();rRefs();switchWsPdfTabs();uSt();
+  rRefs();switchWsPdfTabs();uSt();
   var active=(S.docs||[]).find(function(doc){return doc.id===S.curDoc;});
   if(active)__aqSetEditorDoc(active.content||__aqBlankDocHTML(),false);
   }catch(e){
@@ -1350,7 +1350,7 @@ function doAddWs(){
   __aqSetEditorDoc(__aqBlankDocHTML(),false);
   hideM('wsm');
   save();
-  rLib();switchWsPdfTabs();uSt();
+  switchWsPdfTabs();uSt();
   setTimeout(function(){save();},260);
   }catch(e){
     logStability('doAddWs',e);
@@ -1938,7 +1938,7 @@ function addDOI(){
       moreUrls.forEach(function(u){if(oaUrls.indexOf(u)<0)oaUrls.push(u);});
     }catch(e){}
     if(oaUrls.length>0){
-      ref.pdfUrl=oaUrls[0];save();rLib();
+      ref.pdfUrl=oaUrls[0];save();
       setDst('OA PDF bulundu ('+oaUrls.length+' kaynak), indiriliyor...','ld');
       var allUrls=[];
       oaUrls.forEach(function(u){buildPDFUrls(u).forEach(function(v){if(allUrls.indexOf(v)<0)allUrls.push(v);});});
@@ -1974,7 +1974,7 @@ async function fetchCitationCount(ref){
     if(data&&typeof data.citationCount==='number'){
       ref.citationCount=data.citationCount;
       ref.citationFetchDate=new Date().toISOString().substring(0,10);
-      save();rLib();
+      save();
     }
   }catch(e){
     logStability('fetchCitationCount',e,{doi:ref&&ref.doi?ref.doi:null});
@@ -2200,12 +2200,12 @@ function addToLib(ref){
   if(existing){
     mergeRefFields(existing,ref);
     if(existing.pdfData)persistBorrowedPDF(existing);
-    save();rLib();rRefs();
+    save();rRefs();
     return existing;
   }
   lib.push(ref);
   if(ref.pdfData)persistBorrowedPDF(ref);
-  save();rLib();rRefs();
+  save();rRefs();
   return ref;
 }
 
@@ -2230,7 +2230,7 @@ function deleteCustomLabel(name){
   if(activeLabelFilter===labelName)activeLabelFilter=null;
   save();
   rLabelFilter();
-  rLib();
+  
 }
 function downloadPDF(id,overrideUrl){
   var r=findRef(id);
@@ -2286,7 +2286,7 @@ function downloadPDF(id,overrideUrl){
           if(pr.ok){
             propagatePDF(pr.buffer,res.verification||null);
             curRef=r;
-            rLib();
+            
             renderPDF(pr.buffer,activeTabId||null);
             var trust=pdfVerificationSummaryText(r);
             setDst(trust?('PDF indirildi · '+trust):'? PDF indirildi (Electron)','ok');
@@ -2296,14 +2296,14 @@ function downloadPDF(id,overrideUrl){
       } else {
         var failure=(res&&res.failure)||classifyPdfDownloadFailureLocal(res||{error:(res&&res.error)||''});
         if(fetchUrl&&!r.pdfUrl)r.pdfUrl=fetchUrl;
-        save();rLib();rRefs();
+        save();rRefs();
         setDst((failure&&failure.userMessage)||('PDF indirilemedi: '+((res&&res.error)||'Bilinmeyen hata')),'er');
         showPdfDownloadFallback(r,failure);
       }
     }).catch(function(e){
       var failure=classifyPdfDownloadFailureLocal((e&&e.message)?e.message:String(e));
       if(fetchUrl&&!r.pdfUrl)r.pdfUrl=fetchUrl;
-      save();rLib();rRefs();
+      save();rRefs();
       setDst((failure&&failure.userMessage)||'PDF indirilemedi.','er');
       showPdfDownloadFallback(r,failure);
     });
@@ -2325,7 +2325,7 @@ function downloadPDF(id,overrideUrl){
         localStorage.setItem('aqPDF2',JSON.stringify(pm));
       }catch(e){}
       curRef=r;
-      rLib();rRefs();
+      rRefs();
       renderPDF(buf,activeTabId||null);
       setDst('? PDF indirildi ve önbelleğe alındı','ok');
       setTimeout(function(){setDst('','');},3000);
@@ -2356,7 +2356,7 @@ async function openRef(id){
     sanitizeRefPdfData(r);
     if(r.pdfData)persistBorrowedPDF(r);
   }
-  curRef=r;rLib();renderRelatedPapers();
+  curRef=r;renderRelatedPapers();
   document.getElementById('pdfpanel').classList.add('open');
   document.getElementById('pdftitle').textContent=(r.title||r.doi||'PDF').substring(0,55);
   if(sanitizeRefPdfData(r)){addPdfTab(r.title||r.doi||'PDF',r.pdfData,r.id);return;}
@@ -2365,7 +2365,7 @@ async function openRef(id){
       var hydrated=await hydrateRefPDF(r);
       if(hydrated&&sanitizeRefPdfData(r)){
         save();
-        rLib();
+        
         addPdfTab(r.title||r.doi||'PDF',r.pdfData,r.id);
         return;
       }
@@ -2381,7 +2381,7 @@ function dRefIn(id,wsId){
   if(ws)ws.lib=ws.lib.filter(function(r){return r.id!==id;});
   if(eq&&curRef&&curRef.id===id)curRef=eq;
   else if(curRef&&curRef.id===id)curRef=null;
-  save();rLib();rRefs();renderRelatedPapers();
+  save();rRefs();renderRelatedPapers();
 }
 
 function editRefMetadata(ref){
@@ -2405,7 +2405,7 @@ function editRefMetadata(ref){
     if(curRef){
       Object.keys(updated).forEach(function(k){if(curRef)curRef[k]=Array.isArray(updated[k])?updated[k].slice():updated[k];});
     }
-    rLib();
+    
     rRefs();
     updateRefSection();
     save();
@@ -2463,7 +2463,7 @@ function openLabelPickerPanel(anchorBtn,ref){
       if(hasLabel)ref.labels=ref.labels.filter(function(rl){return rl&&rl.name!==l.name;});
       else ref.labels.push({name:l.name,color:l.color});
       save();
-      rLib();
+      
       hideCtx();
     };
     panel.appendChild(btn);
@@ -2498,7 +2498,7 @@ function openLabelPickerPanel(anchorBtn,ref){
           ref.labels=ref.labels.filter(function(rl){return rl&&rl.name!==label.name;});
         }
         save();
-        rLib();
+        
         openLabelPickerPanel(anchorBtn,ref);
       };
       panel.appendChild(delBtn);
@@ -2521,7 +2521,7 @@ function openLabelPickerPanel(anchorBtn,ref){
       if(!Array.isArray(ref.labels))ref.labels=[];
       if(!ref.labels.some(function(label){return label&&label.name===newLabel.name;}))ref.labels.push(newLabel);
       save();
-      rLib();
+      
       hideCtx();
     });
   };
@@ -2652,7 +2652,7 @@ function moveRefToWs(ref,fromWsId,toWsId){
     ref.wsId=toWsId;
     to.lib.push(ref);
   }
-  save();rLib();rRefs();
+  save();rRefs();
 }
 function copyRefToWs(ref,toWsId){
   var to=S.wss.find(function(w){return w.id===toWsId;});
@@ -2671,13 +2671,13 @@ function copyRefToWs(ref,toWsId){
         return !!(l&&l.name);
       });
     }
-    save();rLib();
+    save();
     return;
   }
   var copy=JSON.parse(JSON.stringify(ref));
   copy.id=uid();copy.wsId=toWsId;copy.pdfData=ref.pdfData;
   to.lib.push(copy);
-  save();rLib();
+  save();
 }
 
 // ¦¦ PDF UPLOAD ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
@@ -2745,7 +2745,7 @@ function pPF(file){
             if(typeof window.electronAPI!=='undefined'){
               window.electronAPI.savePDF(curRef.id,orig).catch(function(e){console.warn('PDF kayit:',e);});
             }
-            save();rLib();rRefs();
+            save();rRefs();
             setDst('? PDF eklendi'+(curRef.doi?' + metadata':''),'ok');
             setTimeout(function(){setDst('','');},3000);
           }
@@ -2761,7 +2761,7 @@ function pPF(file){
         if(typeof window.electronAPI!=='undefined'){
           window.electronAPI.savePDF(curRef.id,orig).catch(function(e){console.warn('PDF kayit:',e);});
         }
-        save();rLib();rRefs();
+        save();rRefs();
         setDst('? PDF eklendi','ok');setTimeout(function(){setDst('','');},3000);
       });
     }).catch(function(e){setDst('PDF açılamadı: '+e.message,'er');});
@@ -2921,7 +2921,7 @@ function attachFetchedPDF(refId,buffer,url,verification){
   });
   persistBorrowedPDF(ref);
   save();
-  rLib();
+  
 }
 
 function electronFetchChain(urls,idx,refId,fetchToken){
@@ -2968,7 +2968,7 @@ function electronFetchChain(urls,idx,refId,fetchToken){
         var failure=(res&&res.failure)||classifyPdfDownloadFailureLocal((res&&res.error)?String(res.error):'Indirme basarisiz');
         if(idx>=urls.length-1&&failure&&failure.isProtectedAccess){
           if(ref&&u&&!ref.pdfUrl)ref.pdfUrl=u;
-          save();rLib();rRefs();
+          save();rRefs();
           setDst(failure.userMessage,'er');
           showPdfDownloadFallback(ref||{pdfUrl:u},failure);
           return;
@@ -2982,7 +2982,7 @@ function electronFetchChain(urls,idx,refId,fetchToken){
       var failure=classifyPdfDownloadFailureLocal((e&&e.message)?e.message:String(e));
       if(idx>=urls.length-1&&failure&&failure.isProtectedAccess){
         if(ref&&u&&!ref.pdfUrl)ref.pdfUrl=u;
-        save();rLib();rRefs();
+        save();rRefs();
         setDst(failure.userMessage,'er');
         showPdfDownloadFallback(ref||{pdfUrl:u},failure);
         return;
@@ -8648,7 +8648,7 @@ async function restoreDocumentHistoryVersion(snapshotId){
     setSL('Belge surumu geri yukleniyor...','ld');
     await window.electronAPI.restoreDocumentHistorySnapshot(docId,versionId);
     await syncLoad();
-    rNB();rLib();renderRelatedPapers();rNotes();rRefs();applyCurrentDocTrackChangesMode({source:'history-restore'});uSt();
+    rNB();renderRelatedPapers();rNotes();rRefs();applyCurrentDocTrackChangesMode({source:'history-restore'});uSt();
     setSL('Belge surumu geri yuklendi','ok');
     setTimeout(function(){if(!autosaveState.dirty&&!autosaveState.saving)setSL('Kaydedildi','ok');},2200);
     refreshDocumentHistory().catch(function(){});
@@ -8741,7 +8741,7 @@ async function doPdfSync(){
             if(!r.pdfData){try{await hydrateRefPDF(r);}catch(e){}}
           }
         }
-        rLib();
+        
       }
     }else{
       document.getElementById('pdfsyncstatus').innerHTML='<span style="color:var(--red)">Hata: '+(res.error||'bilinmeyen')+'</span>';
@@ -9426,7 +9426,7 @@ async function batchDownloadOA(){
   var workers=[];
   for(var wi=0;wi<concurrency;wi++)workers.push(worker());
   await Promise.allSettled(workers);
-  save();rLib();
+  save();
   var msg='Toplu indirme bitti: '+done+'/'+queue.length+' basarili';
   if(fail>0)msg+=', '+fail+' basarisiz';
   if(alreadyLocal>0)msg+=', '+alreadyLocal+' zaten mevcuttu';
@@ -10301,7 +10301,7 @@ function importBib(e){
       if(ref.pdfData)persistBorrowedPDF(ref);
       added++;
     });
-    save();rLib();rRefs();
+    save();rRefs();
     setDst(added+' yeni, '+merged+' birleştirildi','ok');
     setTimeout(function(){setDst('','');},4000);
   };
@@ -10395,7 +10395,7 @@ function importReferenceEntries(entries,options){
     doc.bibliographyManual=false;
     if(options.includeInBibliography)markRefsForBibliographyPage(summary.referenceIds);
   }
-  save();rLib();rRefs();
+  save();rRefs();
   if(options.includeInBibliography&&typeof updateRefSection==='function'){
     updateRefSection(true);
     if(options.revealBibliography&&typeof openBibliographySection==='function'){
@@ -10911,7 +10911,7 @@ function renderCollectionFilter(){
 function setCollectionFilter(value){
   activeCollectionFilter=String(value||'all').trim()||'all';
   renderCollectionFilter();
-  rLib();
+  
 }
 function createCollectionFromInput(){
   var inp=document.getElementById('collectionNameInp');
@@ -10929,7 +10929,7 @@ function createCollectionFromInput(){
   save();
   renderCollectionFilter();
   renderCollectionManager();
-  rLib();
+  
 }
 function renameCollectionById(id){
   var ws=currentWorkspaceForCollections();
@@ -10943,7 +10943,7 @@ function renameCollectionById(id){
     save();
     renderCollectionFilter();
     renderCollectionManager();
-    rLib();
+    
   });
 }
 function deleteCollectionById(id){
@@ -10959,7 +10959,7 @@ function deleteCollectionById(id){
   save();
   renderCollectionFilter();
   renderCollectionManager();
-  rLib();
+  
 }
 function toggleReferenceCollection(ref,colId){
   if(!ref||!colId)return;
@@ -10968,7 +10968,7 @@ function toggleReferenceCollection(ref,colId){
   if(idx>=0)ref.collectionIds.splice(idx,1);
   else ref.collectionIds.push(colId);
   save();
-  rLib();
+  
 }
 function renderCollectionManager(){
   var list=document.getElementById('collectionList');
@@ -11031,7 +11031,7 @@ function rLabelFilter(){
     var btn=document.createElement('button');
     btn.className='label-chip'+(activeLabelFilter===l.name?' is-active':'');
     btn.style.setProperty('--chip-color',String(l.color||'#9aa'));
-    btn.onclick=function(){activeLabelFilter=activeLabelFilter===l.name?null:l.name;rLabelFilter();rLib();};
+    btn.onclick=function(){activeLabelFilter=activeLabelFilter===l.name?null:l.name;rLabelFilter();};
     var label=document.createElement('span');
     label.className='label-chip-text';
     label.textContent=l.name;
@@ -11770,7 +11770,7 @@ function initTipTapEditor(){
 function __refreshUIAfterBrowserCapture(detail){
   var info=detail&&typeof detail==='object'?detail:{};
   return syncLoad().then(function(){
-    rNB();rLib();renderRelatedPapers();rNotes();rRefs();applyCurrentDocTrackChangesMode({source:'capture-refresh'});uSt();
+    rNB();renderRelatedPapers();rNotes();rRefs();applyCurrentDocTrackChangesMode({source:'capture-refresh'});uSt();
     if(info.focusWorkspace&&info.workspaceId){
       try{switchWs(String(info.workspaceId));}catch(_e){}
     }
@@ -11787,7 +11787,7 @@ syncLoad().then(function(){
   window.__aqLegacyRuntimePhase='post-syncLoad';
   resetTransientChrome();
   __bindLibraryContextMenuGlobal();
-  rNB();rLib();renderRelatedPapers();rNotes();rRefs();applyCurrentDocTrackChangesMode({source:'init-load'});uSt();
+  rNB();renderRelatedPapers();rNotes();rRefs();applyCurrentDocTrackChangesMode({source:'init-load'});uSt();
   setTimeout(function(){
     try{rNotes();}catch(_e){}
   },120);
@@ -12140,333 +12140,7 @@ function showSidebarRefMenu(x,y,ref){
   menu.style.left=Math.min(x,window.innerWidth-240)+'px';
   menu.classList.add('show');
 }
-function rLib(){
-  var q=(document.getElementById('libsrch').value||'').toLowerCase();
-  var el=document.getElementById('liblist');if(!el)return;
-  function closeInlineCollectionPanels(exceptPanel){
-    document.querySelectorAll('.lcard-inline-submenu.open').forEach(function(panel){
-      if(exceptPanel&&panel===exceptPanel)return;
-      panel.classList.remove('open');
-    });
-  }
-  function closeInlineCardMenus(exceptMenu){
-    closeInlineCollectionPanels();
-    el.querySelectorAll('.lcard-inline-menu.open').forEach(function(menu){
-      if(exceptMenu&&menu===exceptMenu)return;
-      menu.classList.remove('open');
-      if(menu.parentElement&&menu.parentElement.classList)menu.parentElement.classList.remove('menu-open');
-    });
-  }
-  function ensureInlineCollectionPanel(card,menu,ref,anchorBtn){
-    var panel=document.getElementById('libCollectionSubmenu');
-    if(!panel){
-      panel=document.createElement('div');
-      panel.id='libCollectionSubmenu';
-      panel.className='lcard-inline-submenu';
-      var title=document.createElement('div');
-      title.className='lcard-inline-submenu-title';
-      title.textContent='Koleksiyonlar';
-      panel.appendChild(title);
-      var list=document.createElement('div');
-      list.className='lcard-inline-submenu-list';
-      panel.appendChild(list);
-      var manageBtn=document.createElement('button');
-      manageBtn.type='button';
-      manageBtn.className='lcard-inline-subitem lcard-inline-subitem-manage';
-      manageBtn.textContent='Koleksiyon Yonet';
-      manageBtn.addEventListener('click',function(event){
-        if(event){event.preventDefault();event.stopPropagation();}
-        closeInlineCollectionPanels();
-        closeInlineCardMenus();
-        try{openCollectionManager();}catch(_e){}
-      });
-      panel.appendChild(manageBtn);
-      document.body.appendChild(panel);
-    }
-    panel.__aqRef=ref;
-    panel.__aqAnchor=anchorBtn;
-    panel.__aqMenu=menu;
-    var listEl=panel.querySelector('.lcard-inline-submenu-list');
-    if(listEl){
-      listEl.innerHTML='';
-      var ws=currentWorkspaceForCollections();
-      var collections=ensureWorkspaceCollections(ws);
-      if(!collections.length){
-        var empty=document.createElement('div');
-        empty.className='lcard-inline-subempty';
-        empty.textContent='Koleksiyon yok';
-        listEl.appendChild(empty);
-      }else{
-        collections.forEach(function(col){
-          var activeRef=panel.__aqRef||ref;
-          if(!Array.isArray(activeRef.collectionIds))activeRef.collectionIds=[];
-          var has=(activeRef.collectionIds||[]).some(function(id){return String(id)===String(col.id);});
-          var btn=document.createElement('button');
-          btn.type='button';
-          btn.className='lcard-inline-subitem'+(has?' on':'');
-          var check=document.createElement('span');
-          check.className='lcard-inline-subcheck';
-          check.textContent=has?'✓':'';
-          btn.appendChild(check);
-          var txt=document.createElement('span');
-          txt.className='lcard-inline-subtext';
-          txt.textContent=String(col.name||'');
-          btn.appendChild(txt);
-          btn.addEventListener('click',function(event){
-            if(event){event.preventDefault();event.stopPropagation();}
-            var refNow=panel.__aqRef||ref;
-            if(!refNow)return;
-            window.__aqSidebarCtxAt=Date.now();
-            toggleReferenceCollection(refNow,col.id);
-          });
-          listEl.appendChild(btn);
-        });
-      }
-    }
-    return panel;
-  }
-  function toggleInlineCollectionPanel(card,menu,ref,anchorBtn){
-    var panel=ensureInlineCollectionPanel(card,menu,ref,anchorBtn);
-    var shouldOpen=!panel.classList.contains('open');
-    closeInlineCollectionPanels(shouldOpen?panel:null);
-    if(!shouldOpen){
-      panel.classList.remove('open');
-      return;
-    }
-    var anchorRect=anchorBtn.getBoundingClientRect();
-    var panelWidth=210;
-    var panelHeight=260;
-    var left=Math.round(anchorRect.right+6);
-    var top=Math.round(anchorRect.top-2);
-    if(left+panelWidth>window.innerWidth-8){
-      left=Math.max(8,Math.round(anchorRect.left-panelWidth-6));
-    }
-    if(top+panelHeight>window.innerHeight-8){
-      top=Math.max(8,window.innerHeight-panelHeight-8);
-    }
-    top=Math.max(8,top);
-    panel.style.left=left+'px';
-    panel.style.top=top+'px';
-    panel.classList.add('open');
-    card.classList.add('menu-open');
-    window.__aqSidebarCtxAt=Date.now();
-  }
-  function ensureInlineCardMenu(card,ref){
-    var menu=card.querySelector('.lcard-inline-menu');
-    if(menu){
-      menu.__aqRef=ref;
-      return menu;
-    }
-    menu=document.createElement('div');
-    menu.className='lcard-inline-menu';
-    menu.setAttribute('role','menu');
-    var editAction=document.createElement('button');
-    editAction.type='button';
-    editAction.className='lcard-inline-action';
-    editAction.textContent='Kunyeyi Duzenle';
-    editAction.addEventListener('click',function(event){
-      if(event){event.preventDefault();event.stopPropagation();}
-      closeInlineCardMenus();
-      try{editRefMetadata(menu.__aqRef||ref);}catch(_e){}
-    });
-    menu.appendChild(editAction);
-    var labelAction=document.createElement('button');
-    labelAction.type='button';
-    labelAction.className='lcard-inline-action';
-    labelAction.textContent='Etiketleri Duzenle';
-    labelAction.addEventListener('click',function(event){
-      if(event){event.preventDefault();event.stopPropagation();}
-      try{openLabelPickerPanel(labelAction,menu.__aqRef||ref);}catch(_e){}
-    });
-    menu.appendChild(labelAction);
-    var collectionAction=document.createElement('button');
-    collectionAction.type='button';
-    collectionAction.className='lcard-inline-action';
-    collectionAction.textContent='Koleksiyonlara Ekle';
-    collectionAction.addEventListener('click',function(event){
-      if(event){event.preventDefault();event.stopPropagation();}
-      var activeRef=menu.__aqRef||ref;
-      if(!activeRef)return;
-      toggleInlineCollectionPanel(card,menu,activeRef,collectionAction);
-    });
-    menu.appendChild(collectionAction);
-    var manageCollectionsAction=document.createElement('button');
-    manageCollectionsAction.type='button';
-    manageCollectionsAction.className='lcard-inline-action';
-    manageCollectionsAction.textContent='Koleksiyon Yonet';
-    manageCollectionsAction.addEventListener('click',function(event){
-      if(event){event.preventDefault();event.stopPropagation();}
-      closeInlineCardMenus();
-      try{openCollectionManager();}catch(_e){}
-    });
-    menu.appendChild(manageCollectionsAction);
-    card.appendChild(menu);
-    menu.__aqRef=ref;
-    return menu;
-  }
-  function openInlineCardMenu(card,ref,coords){
-    if(!card||!ref)return false;
-    var menu=ensureInlineCardMenu(card,ref);
-    closeInlineCardMenus(menu);
-    if(coords&&typeof coords.x==='number'&&typeof coords.y==='number'){
-      var rect=card.getBoundingClientRect();
-      var menuWidth=188;
-      var menuHeight=164;
-      var left=Math.round(coords.x-rect.left);
-      var top=Math.round(coords.y-rect.top);
-      left=Math.max(8,Math.min(left,Math.max(8,card.clientWidth-menuWidth-8)));
-      top=Math.max(28,Math.min(top,Math.max(28,card.clientHeight-menuHeight-6)));
-      menu.style.left=left+'px';
-      menu.style.top=top+'px';
-      menu.style.right='auto';
-    }else{
-      menu.style.left='';
-      menu.style.top='';
-      menu.style.right='';
-    }
-    menu.classList.add('open');
-    closeInlineCollectionPanels();
-    card.classList.add('menu-open');
-    window.__aqSidebarCtxAt=Date.now();
-    return true;
-  }
-  function resolveRefFromCard(card){
-    if(!card)return null;
-    var refId=String(card.getAttribute('data-ref-id')||'').trim();
-    if(!refId)return null;
-    var ref=findRef(refId,S.cur)||findRef(refId);
-    if(!ref){
-      var ws=S.wss.find(function(x){return x&&x.id===S.cur;});
-      ref=(ws&&ws.lib||[]).find(function(item){return item&&String(item.id||'')===refId;})||null;
-    }
-    return ref;
-  }
-  function openCardContextMenu(event,card){
-    var ref=resolveRefFromCard(card);
-    if(!ref)return false;
-    if(event&&typeof event.preventDefault==='function')event.preventDefault();
-    if(event&&typeof event.stopPropagation==='function')event.stopPropagation();
-    if(event&&typeof event.stopImmediatePropagation==='function')event.stopImmediatePropagation();
-    var coords=(event&&typeof event.clientX==='number'&&typeof event.clientY==='number')
-      ? {x:event.clientX,y:event.clientY}
-      : null;
-    return openInlineCardMenu(card,ref,coords);
-  }
-  if(!document.__aqLibInlineMenuCloseBound){
-    document.__aqLibInlineMenuCloseBound=true;
-    document.addEventListener('mousedown',function(event){
-      var target=event&&event.target?event.target:null;
-      if(target&&target.nodeType===3)target=target.parentElement;
-      if(target&&target.closest&&(target.closest('#liblist .lcard-inline-menu')||target.closest('.lcard-inline-submenu')||target.closest('#liblist .lcard-menu')))return;
-      var listEl=document.getElementById('liblist');
-      if(!listEl)return;
-      listEl.querySelectorAll('.lcard-inline-menu.open').forEach(function(menu){
-        menu.classList.remove('open');
-        if(menu.parentElement&&menu.parentElement.classList)menu.parentElement.classList.remove('menu-open');
-      });
-      document.querySelectorAll('.lcard-inline-submenu.open').forEach(function(panel){panel.classList.remove('open');});
-    });
-  }
-  if(!el.__aqContextBound){
-    el.__aqContextBound=true;
-    el.addEventListener('contextmenu',function(e){
-      var target=e&&e.target?e.target:null;
-      if(target&&target.nodeType===3)target=target.parentElement;
-      var card=target&&target.closest?target.closest('.lcard'):null;
-      if(!card)return;
-      openCardContextMenu(e,card);
-    });
-    el.addEventListener('mousedown',function(e){
-      if(!e||e.button!==2)return;
-      var target=e.target;
-      if(target&&target.nodeType===3)target=target.parentElement;
-      var card=target&&target.closest?target.closest('.lcard'):null;
-      if(!card)return;
-      openCardContextMenu(e,card);
-    });
-    el.addEventListener('mouseup',function(e){
-      if(!e||e.button!==2)return;
-      var target=e.target;
-      if(target&&target.nodeType===3)target=target.parentElement;
-      var card=target&&target.closest?target.closest('.lcard'):null;
-      if(!card)return;
-      openCardContextMenu(e,card);
-    });
-  }
-  el.innerHTML='';
-  rLabelFilter();
-  var ws=S.wss.find(function(x){return x.id===S.cur;});
-  if(!ws){el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">Çalışma alanı yok.</div>';return;}
-  function labelName(l){return typeof l==='string'?l:((l&&l.name)||'');}
-  function labelColor(l){return typeof l==='string'?'#b6873f':((l&&l.color)||'#b6873f');}
-  var fl=window.AQLibraryState&&typeof window.AQLibraryState.filterLibraryItems==='function'
-    ? window.AQLibraryState.filterLibraryItems(ws.lib||[],q,activeLabelFilter,{getLabelName:labelName,collectionFilter:activeCollectionFilter})
-    : (ws.lib||[]).filter(function(r){
-        if(q&&!((r.title||'')+(r.authors||[]).join(' ')+(r.year||'')+(r.journal||'')+(r.publisher||'')+(r.websiteName||'')).toLowerCase().includes(q))return false;
-        if(activeLabelFilter&&!(r.labels||[]).some(function(l){return labelName(l)===activeLabelFilter;}))return false;
-        if(activeCollectionFilter&&activeCollectionFilter!=='all'&&!(Array.isArray(r.collectionIds)&&r.collectionIds.indexOf(activeCollectionFilter)>=0))return false;
-        return true;
-      });
-  if(!fl.length){el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">'+(q||activeLabelFilter?'Eşleşme yok.':'DOI/URL gir veya PDF yükle.')+'</div>';return;}
-  fl.forEach(function(r){
-    var a=r.authors&&r.authors[0]?r.authors[0].split(',')[0]:'?';
-    if(r.authors&&r.authors.length>1)a+=' vd.';
-    var div=document.createElement('div');
-    div.className='lcard'+(curRef&&curRef.id===r.id?' on':'');
-    div.setAttribute('data-ref-id',String(r.id||''));
-    var hasPDFlocal=!!r.pdfData;
-    var hasOAurl=!!(r.pdfUrl);
-    var pdfVerificationHtml=hasPDFlocal?pdfVerificationBadgeHTML(r):'';
-    var pdfStatus=hasPDFlocal?('<span class="lbadge pdf" title="'+__escHtml(pdfVerificationSummaryText(r)||'PDF bu cihazda mevcut')+'">PDF ✓</span>'+pdfVerificationHtml):(hasOAurl?'<span class="lbadge oa">OA v</span>':'');
-    var labelHTML=(r.labels||[]).map(function(l){
-      var nm=labelName(l);if(!nm)return '';
-      var color=labelColor(l);
-      return '<span class="lbadge lbadge-tag" style="--badge-color:'+color+';">'+nm+'</span>';
-    }).join('');
-    var citeStr='';
-    if(typeof r.citationCount==='number')citeStr='<span class="lbadge lbadge-cite" title="Atıf sayısı">'+r.citationCount+' atıf</span>';
-    div.innerHTML='<div class="ltitle">'+(r.title||'Başlıksız').substring(0,62)+'</div>'+'<div class="lmeta">'+a+' '+(r.year||'t.y.')+(r.journal?' · '+r.journal.substring(0,22):'')+(r.volume?(' · '+r.volume+(r.issue?'('+r.issue+')':'')):'')+'</div>'+'<div class="lbadges">'+pdfStatus+(r.doi?'<span class="lbadge doi">DOI</span>':'')+citeStr+labelHTML+'</div>';
-    if(hasOAurl&&!hasPDFlocal){
-      var dlBtn=document.createElement('button');
-      dlBtn.className='lcard-dl';
-      dlBtn.textContent='v İndir';
-      dlBtn.title='PDF bu cihaza indirilir';
-      div.addEventListener('mouseenter',function(){dlBtn.style.opacity='1';});
-      div.addEventListener('mouseleave',function(){dlBtn.style.opacity='0';});
-      dlBtn.addEventListener('click',function(e){e.stopPropagation();downloadPDF(r.id);});
-      div.appendChild(dlBtn);
-    }
-    var del=document.createElement('button');del.className='ldel';del.textContent='×';
-    del.addEventListener('click',function(e){e.stopPropagation();dRefIn(r.id,S.cur);});
-    div.appendChild(del);
-    var menuBtn=document.createElement('button');
-    menuBtn.className='lcard-menu';
-    menuBtn.type='button';
-    menuBtn.title='Kaynak menusu';
-    menuBtn.textContent='...';
-    menuBtn.addEventListener('click',function(e){
-      if(e&&typeof e.preventDefault==='function')e.preventDefault();
-      if(e&&typeof e.stopPropagation==='function')e.stopPropagation();
-      var rect=menuBtn.getBoundingClientRect();
-      openInlineCardMenu(div,r,{x:rect.right-10,y:rect.bottom+8});
-    });
-    div.appendChild(menuBtn);
-    div.addEventListener('contextmenu',function(e){
-      if(e&&typeof e.preventDefault==='function')e.preventDefault();
-      if(e&&typeof e.stopPropagation==='function')e.stopPropagation();
-      if(e&&typeof e.stopImmediatePropagation==='function')e.stopImmediatePropagation();
-      openInlineCardMenu(div,r,{x:e.clientX,y:e.clientY});
-    });
-    div.addEventListener('click',function(e){
-      var actionTarget=e&&e.target&&e.target.closest?e.target.closest('.lcard-inline-menu,.lcard-inline-submenu,.lcard-menu'):null;
-      if(actionTarget)return;
-      closeInlineCardMenus();
-      if(Date.now()-Number(window.__aqSidebarCtxAt||0)<420)return;
-      openRef(r.id);
-    });
-    el.appendChild(div);
-  });
-}
+
 function __bindLibraryContextMenuGlobal(){
   if(document.__aqLibContextBound)return;
   document.__aqLibContextBound=true;
@@ -12645,7 +12319,7 @@ function __mergeDuplicateGroup(signature,options){
     __replaceCitationRefIdInDocs(oldId,primary.id);
   });
   if(curRef&&removeMap[curRef.id])curRef=primary;
-  save();rLib();rRefs();updateRefSection();
+  save();rRefs();updateRefSection();
   __removeDuplicateGroup(signature);
   if(options.silentUI)return true;
   __renderDuplicateReviewModal();
@@ -12731,7 +12405,7 @@ function __handleMetadataHealthActionV2(action,refId){
         return;
       }
       mergeRefFields(ref,fetched);
-      save();rLib();rRefs();updateRefSection();
+      save();rRefs();updateRefSection();
       __renderMetadataHealth();
       setDst('Metadata guncellendi.','ok');
       setTimeout(function(){setDst('','');},3000);
@@ -12746,7 +12420,7 @@ function __handleMetadataHealthActionV2(action,refId){
       }
     }
     normalizeRefRecord(ref);
-    save();rLib();rRefs();updateRefSection();
+    save();rRefs();updateRefSection();
     __renderMetadataHealth();
     setDst('Kayit normalize edildi.','ok');
     setTimeout(function(){setDst('','');},2500);
@@ -13262,7 +12936,7 @@ function __handleWebRelatedAction(action,payload){
       try{
         var out=await __oaDownloadOneRef(ref);
         if(out&&out.ok){
-          save();rLib();rRefs();
+          save();rRefs();
           setDst('OA PDF bulundu ve eklendi.','ok');
           setTimeout(function(){setDst('','');},2800);
         }else{
@@ -13582,7 +13256,7 @@ function __bindSprint1PanelEvents(){
         fetchCR(ref.doi,function(err,fetched){
           if(err||!fetched){setDst('DOI metadata alınamadı.','er');return;}
           mergeRefFields(ref,fetched);
-          save();rLib();rRefs();updateRefSection();
+          save();rRefs();updateRefSection();
           __renderMetadataHealth();
           setDst('Metadata güncellendi.','ok');
           setTimeout(function(){setDst('','');},3000);
@@ -13595,7 +13269,7 @@ function __bindSprint1PanelEvents(){
           if(result&&result.ref){
             Object.keys(result.ref).forEach(function(key){ref[key]=result.ref[key];});
             normalizeRefRecord(ref);
-            save();rLib();rRefs();
+            save();rRefs();
             __renderMetadataHealth();
             setDst((result.changes||[]).length?'Kayıt normalize edildi.':'Değişiklik gerekmedi.','ok');
             setTimeout(function(){setDst('','');},2500);
@@ -14230,7 +13904,7 @@ deleteCustomLabel=function(name){
   });
   if(activeLabelFilter===labelName)activeLabelFilter=null;
   rLabelFilter();
-  rLib();
+  
   save();
 };
 updatePageHeight=function(){
