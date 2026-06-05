@@ -7925,7 +7925,16 @@ function refreshDocumentOutlineIfOpen(){ /* retired no-op: React outline-modals.
 
 async function openDocumentOutline(){ /* retired no-op: React outline-modals.ts owns the document outline (TECH_DEBT #1) */ }
 
-function jumpToDocumentOutlineTarget(targetId){ /* retired no-op: React outline-modals.ts owns the document outline (TECH_DEBT #1) */ }
+function jumpToDocumentOutlineTarget(targetId){
+  // Kept as a thin AQDocumentOutline.scrollToEntry wrapper: the React outline owns
+  // its own jump, but Caption Manager's "Git" button still calls this to scroll to
+  // a table/figure target. (Outline render chain itself is retired — TECH_DEBT #1.)
+  var outlineApi=window.AQDocumentOutline||null;
+  if(!outlineApi||typeof outlineApi.scrollToEntry!=='function')return false;
+  var activeEditor=(typeof getActiveEditorInstance==='function'?getActiveEditorInstance():(editor||null));
+  var rootEl=(activeEditor&&activeEditor.view&&activeEditor.view.dom)?activeEditor.view.dom:document.getElementById('apaed');
+  return !!outlineApi.scrollToEntry({root:rootEl,editor:activeEditor||null,document:document,id:String(targetId||'')});
+}
 
 function jumpToCurrentDocumentOutlineTarget(){ /* retired no-op: React outline-modals.ts owns the document outline (TECH_DEBT #1) */ }
 
