@@ -77,3 +77,32 @@ Her domain için adımlar:
 - `#doctabs` DOM elementi index.html'de YOK → `rDocTabs` no-op.
 - Kaldırılan 6 fonksiyonun HTML onclick / window expose çağrısı yok (yalnızca
   `academiq-research.html` arşivinde duplicate tanım var — canlı değil).
+
+---
+
+## Final status — 2026-06-05
+
+**No-op render retirement track: COMPLETE.** legacy-runtime.js went
+**14,835 → 13,395 lines** (~1,440 removed, ~40 functions retired/stubbed across
+all slices): DOCUMENT TABS, WORKSPACES (rWS/rDocTabs), rLib, the label render
+chain, rNB/rNotes/renderRelatedPapers, plus 13 orphan functions and a second
+audited batch (recovery banner, data-safety summary, citation-style selector,
+note-filter options, toolbar enhance, collection filter, theme button, doc
+history). Every slice: `node --check` + tsc + vitest(720) + live-verified.
+
+**Kept intentionally (NOT dead):** `rRefs` (delegates to AQBibliographyState +
+dynamic #reflist), `showSidebarRefMenu` (#ctxmenu is React-rendered), `setSL`
+(aq-engine contract), and ~48 renderers whose DOM is dynamically created.
+
+**Remaining ~13.4k lines = the durable core, deliberately NOT modularized:**
+- **Category C (imperative, must stay in renderer):** PDF render/upload/tabs/
+  annotations/drawing/search (pdfjs runtime, ~1.4k lines), export bridges.
+  Backends moved to Rust; the pdfjs/DOM render layer belongs in the renderer.
+- **aq-engine bridge (246 refs):** do-not-touch UMD editor contract (TECH_DEBT #3).
+- **Persistence / `window.S`:** retires only as the dual-state seam closes
+  (TECH_DEBT #2) — a long, separate effort, not a safe single-pass module extract
+  (everything shares one global scope; ES-module extraction would break it).
+
+**Conclusion:** the safe, high-value modularization (dead-render removal) is done.
+Further "splitting" of the core is either Category-C code that should remain, the
+frozen aq-engine, or the multi-week S-retirement — all tracked in TECH_DEBT.md.
