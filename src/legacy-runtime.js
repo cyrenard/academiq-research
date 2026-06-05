@@ -238,82 +238,9 @@ function escapeHTML(text){
     .replace(/"/g,'&quot;')
     .replace(/'/g,'&#39;');
 }
-function hideRecoveryBanner(){
-  var el=document.getElementById('recoveryBanner');
-  if(!el)return;
-  el.classList.remove('show');
-}
-function showRecoveryBanner(message){
-  var wrap=document.getElementById('recoveryBanner');
-  var textEl=document.getElementById('recoveryBannerText');
-  var closeBtn=document.getElementById('recoveryBannerClose');
-  if(!wrap||!textEl)return;
-  textEl.textContent=String(message||'Son guvenli kayit geri yuklendi.');
-  wrap.classList.add('show');
-  if(closeBtn&&!closeBtn.__aqBound){
-    closeBtn.__aqBound=true;
-    closeBtn.addEventListener('click',hideRecoveryBanner);
-  }
-}
-function renderDataSafetySummary(info){
-  var summaryEl=document.getElementById('dataSafetySummary');
-  var detailEl=document.getElementById('dataSafetyDetail');
-  if(!summaryEl||!detailEl)return;
-  var appInfo=info&&typeof info==='object'?info:(lastAppInfoSnapshot||{});
-  var session=appInfo&&appInfo.sessionState&&typeof appInfo.sessionState==='object'?appInfo.sessionState:{};
-  var summary='Autosave hazir';
-  var details=[];
-  if(autosaveState.lastError){
-    summary='Kaydetme hatasi algilandi';
-    details.push('Son hata: '+String(autosaveState.lastError));
-  }else if(autosaveState.saving){
-    summary='Kaydediliyor...';
-    details.push('Degisiklikler guvenli sekilde diske yaziliyor.');
-  }else if(autosaveState.dirty){
-    summary='Kaydedilmemis degisiklik var';
-    details.push('Editor sessizlestiginde autosave devreye girecek.');
-  }else if(autosaveState.lastSavedAt>0){
-    summary='Son guvenli kayit '+formatAutosaveTime(autosaveState.lastSavedAt);
-    details.push('Degisiklikler yerel recovery snapshot ile korunuyor.');
-  }else if(Number(session.lastSavedAt||0)>0){
-    summary='Son guvenli kayit '+formatAutosaveTime(session.lastSavedAt);
-    details.push('Son kayit uygulama verisine yazildi.');
-  }else{
-    details.push('Autosave editor, kutuphane ve workspace degisikliklerini korur.');
-  }
-  if(autosaveState.lastRecoveredAt>0){
-    details.unshift('Beklenmeyen kapanis sonrasi son guvenli kayit geri yuklendi.');
-  }else if(session.previousCleanExit===false){
-    details.unshift('Onceki oturum temiz kapanmadi; recovery snapshot hazir tutuldu.');
-  }
-  if(Number(session.lastSavedAt||0)>0 && autosaveState.lastSavedAt<=0){
-    details.push('Diskteki son kayit: '+formatAutosaveTime(session.lastSavedAt));
-  }
-  var draft=appInfo&&appInfo.editorDraft&&typeof appInfo.editorDraft==='object'?appInfo.editorDraft:null;
-  if(draft&&draft.exists){
-    if(draft.valid&&draft.recoverableAfterUncleanShutdown){
-      details.push('Crash recovery draft hazir: '+formatAutosaveDateTime(draft.updatedAt));
-    }else if(draft.valid&&draft.isNewerThanLastSave){
-      details.push('Son draft diskte hazir: '+formatAutosaveDateTime(draft.updatedAt));
-    }else if(!draft.valid){
-      details.push('Draft dosyasi gecersiz gorunuyor; normal autosave verisi korunuyor.');
-    }
-  }
-  summaryEl.textContent=summary;
-  detailEl.textContent=details.join(' ');
-  var historyEl=document.getElementById('dataSafetyHistoryMeta');
-  if(historyEl){
-    var history=appInfo&&appInfo.documentHistory&&typeof appInfo.documentHistory==='object'?appInfo.documentHistory:{};
-    var docCount=Number(history.docCount||0);
-    var snapshotCount=Number(history.snapshotCount||0);
-    var latestText=formatAutosaveDateTime(history.latestSnapshotAt||0);
-    if(snapshotCount>0){
-      historyEl.textContent='Belge gecmisi hazir: '+snapshotCount+' snapshot, '+docCount+' belge' + (latestText ? (' • Son snapshot '+latestText) : '');
-    }else{
-      historyEl.textContent='Belge gecmisi henuz olusmadi. Ilk snapshot autosave ile olusacak.';
-    }
-  }
-}
+function hideRecoveryBanner(){ /* retired no-op: DOM target is React-owned; body removed (TECH_DEBT.md #1) */ }
+function showRecoveryBanner(message){ /* retired no-op: DOM target is React-owned; body removed (TECH_DEBT.md #1) */ }
+function renderDataSafetySummary(info){ /* retired no-op: DOM target is React-owned; body removed (TECH_DEBT.md #1) */ }
 function normalizeToolbarMenuButtonLabels(){
   var labels={
     tbInsertMenuBtn:'Ekle',
@@ -1248,12 +1175,7 @@ function setCitationStyle(styleId){
   rRefs();
   updateRefSection(true);
 }
-function updateCitationStyleSelector(){
-  var sel=document.getElementById('citationStyleSel');
-  if(!sel)return;
-  var next=getCurrentCitationStyle();
-  if(sel.value!==next)sel.value=next;
-}
+function updateCitationStyleSelector(){ /* retired no-op: DOM target is React-owned; body removed (TECH_DEBT.md #1) */ }
 function formatRef(ref,options){
   options=options||{};
   var style=getCurrentCitationStyle();
@@ -5965,25 +5887,7 @@ function noteTypeLabel(noteType){
   var key=String(noteType||'summary').trim();
   return map[key]||'Not';
 }
-function syncNoteFilterReferenceOptions(){
-  var sel=document.getElementById('noteFilterRef');
-  if(!sel)return;
-  var ws=S.wss.find(function(x){return x&&x.id===S.cur;});
-  var refs=(ws&&ws.lib)||[];
-  var prev=String(noteViewFilters.refId||'all');
-  var html='<option value="all">Tüm Kaynaklar</option>';
-  html+=refs.map(function(ref){
-    var title=String(ref&&ref.title||'Başlıksız').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    return '<option value="'+String(ref.id||'')+'">'+title.substring(0,64)+'</option>';
-  }).join('');
-  sel.innerHTML=html;
-  if(Array.from(sel.options).some(function(opt){return opt.value===prev;})){
-    sel.value=prev;
-  }else{
-    sel.value='all';
-    noteViewFilters.refId='all';
-  }
-}
+function syncNoteFilterReferenceOptions(){ /* retired no-op: DOM target is React-owned; body removed (TECH_DEBT.md #1) */ }
 function setNoteFilterType(value){
   noteViewFilters.type=String(value||'all').trim()||'all';
   rNotes();
@@ -7772,31 +7676,7 @@ function enhanceMenus(){
     ensureExportBtn('ddExpCslJsonBtn','CSL-JSON',expCSLJSON,'ddExpNotesBtn');
   }
 }
-function enhanceToolbar(){
-  var tb=document.getElementById('etb');
-  var toolsGroup=document.getElementById('editorTransformGroup');
-  if(!tb||!toolsGroup||toolsGroup.querySelector('[data-aq="sup"]'))return;
-  ['txtColor','hlColor'].forEach(function(id){
-    var inp=document.getElementById(id);
-    if(inp)inp.style.cssText+=';appearance:none;-webkit-appearance:none;background:transparent;overflow:hidden;width:26px;height:26px;padding:0;border-radius:6px;border:1px solid var(--b);cursor:pointer;';
-  });
-  var mk=function(label,title,fn,key){
-    var b=document.createElement('button');
-    b.className='efmt efmt-state';
-    b.dataset.aq=key;
-    if(key==='sup') b.id='btnSuperscript';
-    if(key==='sub') b.id='btnSubscript';
-    b.textContent=label;
-    b.title=title;
-    b.onclick=fn;
-    return b;
-  };
-  toolsGroup.appendChild(mk('X²','Üst simge',function(){ec('superscript');},'sup'));
-  toolsGroup.appendChild(mk('X₂','Alt simge',function(){ec('subscript');},'sub'));
-  toolsGroup.appendChild(mk('AA','Tümünü büyük harf',function(){transformSelectedText('upper');},'upper'));
-  toolsGroup.appendChild(mk('Aa','Kelime başlarını büyüt',function(){transformSelectedText('title');},'title'));
-  toolsGroup.appendChild(mk('aa','Tümünü küçük harf',function(){transformSelectedText('lower');},'lower'));
-}
+function enhanceToolbar(){ /* retired no-op: DOM target is React-owned; body removed (TECH_DEBT.md #1) */ }
 function tSB(side){var el=document.getElementById(side);var btn=document.getElementById('btn'+side);el.classList.toggle('closed');btn.classList.toggle('on');}
 function swR(name,btn){
   document.querySelectorAll('.rtab').forEach(function(t){t.classList.remove('on');});
@@ -8020,40 +7900,7 @@ async function doClearSyncDir(){
   }catch(e){}
 }
 
-function renderDocumentHistory(result){
-  var summaryEl=document.getElementById('docHistorySummary');
-  var listEl=document.getElementById('docHistoryList');
-  if(!summaryEl||!listEl)return;
-  var payload=result&&typeof result==='object'?result:{};
-  var snapshots=Array.isArray(payload.snapshots)?payload.snapshots:[];
-  docHistoryRuntime.docId=String(payload.docId||'');
-  docHistoryRuntime.docName=String(payload.docName||'');
-  docHistoryRuntime.snapshots=snapshots.slice();
-  summaryEl.textContent=snapshots.length
-    ? ((payload.docName||'Belge')+' • '+snapshots.length+' snapshot')
-    : ((payload.docName||'Belge')+' için snapshot bulunmuyor.');
-  if(!snapshots.length){
-    listEl.innerHTML='<div class="doc-history-empty">Henüz belge geçmişi oluşmadı. Düzenleme yapıp autosave çalıştığında ilk snapshot burada görünecek.</div>';
-    return;
-  }
-  listEl.innerHTML=snapshots.map(function(snapshot){
-    var createdAt=formatAutosaveDateTime(snapshot&&snapshot.createdAt||0)||'Bilinmeyen zaman';
-    var metaParts=[createdAt];
-    if(Number(snapshot&&snapshot.wordCount||0)>0)metaParts.push(String(snapshot.wordCount)+' kelime');
-    if(snapshot&&snapshot.source)metaParts.push(String(snapshot.source));
-    return ''+
-      '<div class="doc-history-item" data-doc-history-id="'+escapeHTML(snapshot&&snapshot.id||'')+'">'+
-        '<div class="doc-history-head">'+
-          '<div class="doc-history-title">'+escapeHTML(snapshot&&snapshot.docName||payload.docName||'Belge')+'</div>'+
-          '<div class="doc-history-meta">'+escapeHTML(metaParts.join(' • '))+'</div>'+
-        '</div>'+
-        '<div class="doc-history-excerpt">'+escapeHTML(snapshot&&snapshot.excerpt||'Onizleme yok')+'</div>'+
-        '<div class="doc-history-actions">'+
-          '<button class="mbtn s" data-doc-history-restore="'+escapeHTML(snapshot&&snapshot.id||'')+'">Bu Surume Don</button>'+
-        '</div>'+
-      '</div>';
-  }).join('');
-}
+function renderDocumentHistory(result){ /* retired no-op: DOM target is React-owned; body removed (TECH_DEBT.md #1) */ }
 
 async function refreshDocumentHistory(){
   var currentDoc=getCurrentDocRecord();
@@ -10200,14 +10047,7 @@ function importExternalReferenceDoi(){
 }
 
 // ¦¦ DARK THEME ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
-function updateThemeButton(){
-  var btn=document.getElementById('themebtn');
-  if(!btn)return;
-  btn.classList.add('aq-hidden');
-  btn.disabled=true;
-  btn.textContent='Açık';
-  btn.title='Koyu tema devre dışı';
-}
+function updateThemeButton(){ /* retired no-op: DOM target is React-owned; body removed (TECH_DEBT.md #1) */ }
 function toggleTheme(){
   document.documentElement.dataset.theme='';
   if(document.body) document.body.setAttribute('data-theme','');
@@ -10576,22 +10416,7 @@ function ensureWorkspaceCollections(ws){
   }).filter(Boolean);
   return ws.collections;
 }
-function renderCollectionFilter(){
-  var sel=document.getElementById('collectionFilterSel');
-  if(!sel)return;
-  var ws=currentWorkspaceForCollections();
-  var collections=ensureWorkspaceCollections(ws);
-  var prev=activeCollectionFilter||'all';
-  sel.innerHTML='<option value="all">Tüm Koleksiyonlar</option>'+collections.map(function(col){
-    return '<option value="'+__escHtml(col.id)+'">'+__escHtml(col.name)+'</option>';
-  }).join('');
-  if(Array.from(sel.options).some(function(opt){return opt.value===prev;})){
-    sel.value=prev;
-  }else{
-    activeCollectionFilter='all';
-    sel.value='all';
-  }
-}
+function renderCollectionFilter(){ /* retired no-op: DOM target is React-owned; body removed (TECH_DEBT.md #1) */ }
 function setCollectionFilter(value){
   activeCollectionFilter=String(value||'all').trim()||'all';
   renderCollectionFilter();
