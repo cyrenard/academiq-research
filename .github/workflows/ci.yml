@@ -46,7 +46,6 @@ jobs:
 
       - name: Editor stability gate
         run: npm run gate:editor
-        continue-on-error: true  # advisory until stable in CI
 
   build-renderer:
     name: Build renderer (Vite)
