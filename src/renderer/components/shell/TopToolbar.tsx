@@ -803,6 +803,32 @@ export function TopToolbar({ selectedReferenceId, onOpenAudit, onOpenFeatureModa
     return true;
   };
 
+  const closeFind = () => {
+    const api = (window as any).AQTipTapWordFind;
+    if (api && typeof api.clearHighlights === 'function') {
+      try { api.clearHighlights({ host: document.getElementById('apaed') }); } catch (_e) { /* noop */ }
+    }
+    const countEl = document.getElementById('toolbarFindCount');
+    if (countEl) { countEl.textContent = '--'; countEl.classList.add('hidden'); }
+    try {
+      const st = findStateRef.current as any;
+      if (st) { st.matches = []; st.index = -1; }
+    } catch (_e) { /* noop */ }
+  };
+
+  // Route the command-palette find actions (and Escape) through the React find
+  // handlers so the legacy toggleFindBar/findNext/findPrev/closeFindBar can retire.
+  useEffect(() => {
+    const w = window as any;
+    w.toggleFindBar = () => {
+      const el = document.getElementById('toolbarFindInp') as HTMLInputElement | null;
+      if (el) { try { el.focus(); el.select(); } catch (_e) { /* noop */ } }
+    };
+    w.findNext = () => navigateFind(true);
+    w.findPrev = () => navigateFind(false);
+    w.closeFindBar = closeFind;
+  }, []);
+
   const handleFindInput = (value: string) => {
     setFindQuery(value);
     if (findTimerRef.current != null) window.clearTimeout(findTimerRef.current);
@@ -818,7 +844,7 @@ export function TopToolbar({ selectedReferenceId, onOpenAudit, onOpenFeatureModa
       navigateFind(!event.shiftKey);
     } else if (event.key === 'Escape') {
       event.preventDefault();
-      callLegacy('closeFindBar');
+      closeFind();
     }
   };
 
