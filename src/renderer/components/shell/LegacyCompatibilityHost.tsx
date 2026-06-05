@@ -59,7 +59,7 @@ import {
 } from '../../lib/metadata-lookup';
 import { mergeRefFields, normalizeRefRecord } from '../../lib/reference-format';
 import { useKeyboardShortcut, keyboardRouter } from '../../lib/keyboard-router';
-import { appStore, ensureNotebooks, addNote } from '../../lib/app-store';
+import { appStore, ensureNotebooks, addNote, selectCurrentWorkspace, selectWorkspaceLibrary, selectNotes } from '../../lib/app-store';
 
 type LegacyCompatibilityHostProps = {
   onStatus: (message: string) => void;
@@ -666,16 +666,14 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         const el = document.getElementById('pdfrelated');
         if (!el) return;
         const ref = win.__aqCurrentPdfReference;
-        const refs = Array.isArray(win.S?.wss)
-          ? ((win.S.wss.find((workspace: any) => workspace?.id === win.S?.cur)?.lib) || [])
-          : [];
+        const refs = selectWorkspaceLibrary(appStore.getState());
         const recApi = win.AQReferenceRecommendation;
         if (!ref) {
           el.innerHTML = '<div class="aq-empty-note">Benzer makale icin seçili kaynak yok.</div>';
           return;
         }
         const related = recApi && typeof recApi.relatedPapers === 'function'
-          ? recApi.relatedPapers(ref, refs, { notes: win.S?.notes || [] }).slice(0, 8)
+          ? recApi.relatedPapers(ref, refs, { notes: selectNotes(appStore.getState()) }).slice(0, 8)
           : [];
         const localHtml = related.length ? related.map((item: any) => {
           const relatedRef = item.ref || {};
@@ -852,7 +850,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         if (webAction === 'add') {
           const idx = Number(button.getAttribute('data-web-related-index') || '-1');
           const item = Array.isArray(win.__aqPdfWebRelatedItems) ? win.__aqPdfWebRelatedItems[idx] : null;
-          const ws = Array.isArray(win.S?.wss) ? win.S.wss.find((workspace: any) => workspace?.id === win.S?.cur) : null;
+          const ws = selectCurrentWorkspace(appStore.getState());
           const api = win.AQWebRelatedPapers;
           if (!item || !ws || !api || typeof api.buildWorkspaceReference !== 'function') {
             onStatus('Web sonucu kaynağa donusturulemedi');
@@ -1233,9 +1231,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       if (ref) {
         ref._hlData = normalized.slice();
         try {
-          const workspace = Array.isArray(win.S?.wss)
-            ? win.S.wss.find((item: any) => item && item.id === win.S?.cur)
-            : null;
+          const workspace = selectCurrentWorkspace(appStore.getState());
           const linkedRef = Array.isArray(workspace?.lib)
             ? workspace.lib.find((item: any) => item && item.id === ref.id)
             : null;
@@ -1586,9 +1582,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       if (ref) {
         ref._annots = annots;
         try {
-          const workspace = Array.isArray(win.S?.wss)
-            ? win.S.wss.find((item: any) => item && item.id === win.S?.cur)
-            : null;
+          const workspace = selectCurrentWorkspace(appStore.getState());
           const linkedRef = Array.isArray(workspace?.lib)
             ? workspace.lib.find((item: any) => item && item.id === ref.id)
             : null;
