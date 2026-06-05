@@ -1362,57 +1362,7 @@ function doAddWs(){
 }
 
 // ¦¦ NOTEBOOKS ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
-function rNB(){
-  var bar=document.getElementById('nbtabs');
-  if(!bar)return;
-  bar.innerHTML='';
-  var notebooks=(window.AQNotebookState&&typeof window.AQNotebookState.buildNotebookViewModel==='function')
-    ? window.AQNotebookState.buildNotebookViewModel({notebooks:S.notebooks,currentNotebookId:S.curNb})
-    : (S.notebooks||[]).map(function(nb){return{id:nb.id,name:nb.name,active:nb.id===S.curNb,deletable:(S.notebooks||[]).length>1};});
-  notebooks.forEach(function(nb){
-    var btn=document.createElement('button');btn.className='nbtab'+(nb.active?' on':'');
-    btn.style.cssText='display:flex;align-items:center;gap:3px;';
-    var lbl=document.createElement('span');lbl.textContent=nb.name;
-    btn.appendChild(lbl);
-    // Delete button (visible on hover)
-    if(nb.deletable){
-      var del=document.createElement('span');
-      del.textContent='×';del.title='Sil';
-      del.style.cssText='font-size:12px;color:var(--txt3);cursor:pointer;padding:0 2px;display:none;';
-      btn.addEventListener('mouseenter',function(){del.classList.remove('aq-hidden');});
-      btn.addEventListener('mouseleave',function(){del.classList.add('aq-hidden');});
-      del.onclick=function(e){
-        e.stopPropagation();
-        if(!confirm('"'+nb.name+'" silinsin?'))return;
-        var next=(window.AQNotebookState&&typeof window.AQNotebookState.deleteNotebook==='function')
-          ? window.AQNotebookState.deleteNotebook({notebooks:S.notebooks,currentNotebookId:S.curNb},nb.id)
-          : {notebooks:S.notebooks.filter(function(x){return x.id!==nb.id;}),currentNotebookId:(S.curNb===nb.id&&S.notebooks[0]?S.notebooks[0].id:S.curNb)};
-        S.notebooks=next.notebooks;S.curNb=next.currentNotebookId;save();rNB();rNotes();
-      };
-      btn.appendChild(del);
-    }
-    btn.onclick=function(){
-      var next=(window.AQNotebookState&&typeof window.AQNotebookState.selectNotebook==='function')
-        ? window.AQNotebookState.selectNotebook({notebooks:S.notebooks,currentNotebookId:S.curNb},nb.id)
-        : {notebooks:S.notebooks,currentNotebookId:nb.id};
-      S.notebooks=next.notebooks;S.curNb=next.currentNotebookId;rNB();rNotes();
-    };
-    btn.ondblclick=function(){
-      customPrompt('Not defteri adı:',nb.name).then(function(n){
-        if(n&&n.trim()){
-          var next=(window.AQNotebookState&&typeof window.AQNotebookState.renameNotebook==='function')
-            ? window.AQNotebookState.renameNotebook({notebooks:S.notebooks,currentNotebookId:S.curNb},nb.id,n)
-            : {notebooks:S.notebooks.map(function(x){return x.id===nb.id?Object.assign({},x,{name:n.trim()}):x;}),currentNotebookId:S.curNb};
-          S.notebooks=next.notebooks;S.curNb=next.currentNotebookId;save();rNB();
-        }
-      });
-    };
-    bar.appendChild(btn);
-  });
-  var add=document.createElement('button');add.id='nb-add';add.textContent='+';add.title='Yeni not defteri';
-  add.onclick=function(){showM('nbm');setTimeout(function(){document.getElementById('nbminp').focus();},50);};
-  bar.appendChild(add);
-}
+function rNB(){ /* retired no-op: rNB DOM target is React-owned; body removed (LEGACY_RUNTIME_SPLIT_PLAN.md) */ }
 function doAddNb(){
   var n=document.getElementById('nbminp').value.trim();
   if(!n)return;
@@ -6076,34 +6026,7 @@ function createStructuredPdfNote(noteType, quoteText, options){
   normalizeResearchNote(note);
   return note;
 }
-function rNotes(){
-  var el=document.getElementById('notelist');
-  var notes=curNotes();
-  if(!el)return;
-  syncNoteFilterReferenceOptions();
-  var cardStyle='background:rgba(255,248,236,.98);border:1px solid rgba(110,91,60,.34);color:#2d2419;box-shadow:none;';
-  var srcStyle='color:#6a563d;';
-  var txtStyle='color:#2d2419;';
-  var quoteStyle='color:#5f4e38;background:rgba(255,250,241,.82);';
-  var btnStyle='color:#6a563d;border-color:rgba(110,91,60,.34);background:rgba(255,251,244,.95);';
-  var delStyle='color:#6a563d;';
-  if(window.AQNotesState&&typeof window.AQNotesState.renderNotesHTML==='function'){
-    el.innerHTML=window.AQNotesState.renderNotesHTML(notes,{
-      cardStyle:cardStyle,
-      srcStyle:srcStyle,
-      txtStyle:txtStyle,
-      quoteStyle:quoteStyle,
-      btnStyle:btnStyle,
-      delStyle:delStyle,
-      noteTypeLabel:noteTypeLabel
-    });
-    return;
-  }
-  if(!notes.length){
-    el.innerHTML='<div style="color:var(--txt3);font-size:12px;padding:14px;text-align:center;">PDF\'ten metin seç › Nota Kaydet<br/>veya aşağıdan yaz.</div>';
-    return;
-  }
-}
+function rNotes(){ /* retired no-op: rNotes DOM target is React-owned; body removed (LEGACY_RUNTIME_SPLIT_PLAN.md) */ }
 function dNote(id){
   var removed=(S.notes||[]).find(function(n){return n&&n.id==id;})||null;
   S.notes=(window.AQNotesState&&typeof window.AQNotesState.deleteNote==='function')
@@ -11688,38 +11611,7 @@ function updateRefSection(forceAuto){
   
   save();
 }
-function renderRelatedPapers(){
-  var panel=document.getElementById('relatedPanel');
-  var list=document.getElementById('relatedList');
-  if(!panel||!list)return;
-  if(!curRef){
-    panel.classList.add('aq-hidden');
-    list.innerHTML='<div class="rmeta">Bir kaynak seçildiğinde benzer çalışmalar burada görünür.</div>';
-    return;
-  }
-  panel.classList.remove('aq-hidden');
-  var ws=S.wss.find(function(x){return x&&x.id===S.cur;});
-  var refs=(ws&&ws.lib)||[];
-  var recApi=window.AQReferenceRecommendation||null;
-  if(!(recApi&&typeof recApi.relatedPapers==='function')){
-    list.innerHTML='<div class="rmeta">Related öneri motoru hazır değil.</div>';
-    return;
-  }
-  var related=recApi.relatedPapers(curRef,refs,{notes:S.notes||[]}).slice(0,5);
-  if(!related.length){
-    list.innerHTML='<div class="rmeta">Benzer kayıt bulunamadı.</div>';
-    return;
-  }
-  list.innerHTML=related.map(function(item){
-    var ref=item.ref||{};
-    var reason=(item.reasons||[]).slice(0,2).join(' · ');
-    var authors=(Array.isArray(ref.authors)?ref.authors:[]).map(function(a){return String(a||'').split(',')[0].trim();}).filter(Boolean).slice(0,2).join(', ');
-    return '<div class="related-item" data-related-ref="'+__escHtml(ref.id||'')+'">'+
-      '<div class="rttl">'+__escHtml((ref.title||'Başlıksız').substring(0,86))+'</div>'+
-      '<div class="rmeta">'+__escHtml(authors||'Bilinmeyen')+' · '+__escHtml(ref.year||'t.y.')+(reason?(' · '+__escHtml(reason)):'')+'</div>'+
-    '</div>';
-  }).join('');
-}
+function renderRelatedPapers(){ /* retired no-op: renderRelatedPapers DOM target is React-owned; body removed (LEGACY_RUNTIME_SPLIT_PLAN.md) */ }
 renderRelatedPapers=function(){
   var panel=document.getElementById('relatedPanel');
   var list=document.getElementById('relatedList');
