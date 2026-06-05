@@ -41,11 +41,22 @@ runtime still owns some mutation paths (matrix, PDF runtime, persistence).
 
 **Current state:** works, but it's the #1 source of latent "stale UI" bugs.
 
-**Next step (incremental, not one-shot):** as each legacy mutation domain is ported
-to appStore, delete its `S` mutation + manual sync. For the irreducible remainder,
-consider wrapping `S` in a Proxy that auto-fires `__aqReactSyncFromLegacy` on write,
-so the sync can never be forgotten. (Proxy approach is a focused, testable change —
-candidate for the next debt slice.)
+**Proxy auto-sync was evaluated and rejected** — it is not safe in this architecture:
+1. `publishStateToLegacyWindow` reassigns `win.S = {...}` (a fresh object) on every
+   React tick (App.tsx useEffect[appState]), so any Proxy wrapper is dropped each render.
+2. legacy-runtime hydrate paths reassign `S` wholesale (`S = AQStateSchema.hydrate(...)`),
+   bypassing a Proxy entirely (see legacy-state-bridge.ts header).
+3. A top-level Proxy `set` trap never fires for nested mutation (`S.docs.push(...)`,
+   `ws.lib[i].x = y`), which is the dominant legacy pattern.
+A deep, reassign-surviving Proxy would be both slow and fragile.
+
+**Actual fix (the only durable one): retire `S`.** As each legacy mutation domain is
+ported to appStore (the legacy-runtime modularization track, item 1), its direct `S`
+mutation + manual sync call disappears. The dual-state risk shrinks monotonically as
+the monolith shrinks; it cannot be patched away in isolation. Current sync is already
+called at the 6 main mutation seams (save chain, matrix, refsidebar, file-import) via
+`__aqReactSyncFromLegacy`; the residual risk is only *newly added* legacy mutation
+paths forgetting the call — mitigated by there being fewer and fewer such paths.
 
 ---
 
