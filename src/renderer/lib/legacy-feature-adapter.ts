@@ -202,8 +202,9 @@ export const legacyFeatures: LegacyFeature[] = [
   { id: 'matrix-open', group: 'Literatür Matrisi', label: 'Literatür matrisini aç', fn: 'openLiteratureMatrix' },
   { id: 'matrix-toggle', group: 'Literatür Matrisi', label: 'Literatür matrisini aç/kapat', fn: 'toggleLiteratureMatrix' },
   { id: 'theme-toggle', group: 'Görünüm', label: 'Tema değiştir', fn: 'toggleTheme' },
-  { id: 'zen-toggle', group: 'Görünüm', label: 'Odak/Zen modu', fn: 'toggleZenMode' },
-  { id: 'sync-settings', group: 'Ayarlar', label: 'Sync ayarlari', fn: 'showSyncSettings' }
+  { id: 'zen-toggle', group: 'Görünüm', label: 'Odak/Zen modu', fn: 'toggleZenMode' }
+  // 'sync-settings' (legacy showSyncSettings) retired: React FeatureModals "Ayarlar"
+  // modal owns sync dir / app info / page numbers / data safety / history.
 ];
 
 export function getLegacyFeatures(group?: string) {

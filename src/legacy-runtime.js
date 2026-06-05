@@ -7866,30 +7866,7 @@ function cpStr(s){var ta=document.createElement('textarea');ta.value=s;ta.style.
 document.querySelectorAll('.modal-bg').forEach(function(bg){bg.addEventListener('click',function(e){if(e.target===bg)bg.classList.remove('show');});});
 
 // ¦¦ SYNC SETTINGS UI ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
-async function showSyncSettings(){
-  window.__aqLegacyRuntimePhase='showSyncSettings';
-  showM('syncmodal');
-  // Update preference checkboxes
-  var pnCb=document.getElementById('prefPageNum');if(pnCb)pnCb.checked=!!S.showPageNumbers;
-  var dirEl=document.getElementById('syncdirshow');
-  var infoEl=document.getElementById('syncappinfo');
-  if(typeof window.electronAPI!=='undefined'){
-    try{
-      var info=await window.electronAPI.getAppInfo();
-      lastAppInfoSnapshot=info||null;
-      dirEl.innerHTML='<span style="color:var(--green)">'+info.appDir+'</span>';
-      infoEl.innerHTML='PDF: '+info.pdfDir+' ('+info.pdfCount+' dosya)<br/>Surum: v'+info.version;
-      renderDataSafetySummary(info);
-    }catch(e){dirEl.textContent='Bilgi alinamadi';infoEl.textContent='';}
-  } else {
-    dirEl.innerHTML='<span style="color:var(--txt3)">Tarayici modu - localStorage kullaniliyor</span>';
-    infoEl.innerHTML='';
-    renderDataSafetySummary(null);
-  }
-  if(window.AQBrowserCapture&&typeof window.AQBrowserCapture.refreshSettings==='function'){
-    try{ await window.AQBrowserCapture.refreshSettings(); }catch(_e){}
-  }
-}
+async function showSyncSettings(){ /* retired no-op: React FeatureModals "Ayarlar" modal owns sync dir / app info / page numbers / data safety (TECH_DEBT #1) */ }
 async function doClearSyncDir(){
   if(typeof window.electronAPI==='undefined')return;
   try{
@@ -8204,9 +8181,6 @@ async function restoreDocumentHistoryVersion(snapshotId){
     setSL('Belge surumu geri yuklendi','ok');
     setTimeout(function(){if(!autosaveState.dirty&&!autosaveState.saving)setSL('Kaydedildi','ok');},2200);
     refreshDocumentHistory().catch(function(){});
-    if(typeof showSyncSettings==='function'){
-      try{ showSyncSettings(); }catch(_e){}
-    }
   }catch(e){
     setAutosaveError(e&&e.message?e.message:'Belge gecmisi geri yuklenemedi');
     alert('Belge gecmisi geri yuklenemedi: '+(e&&e.message?e.message:'Bilinmeyen hata'));
