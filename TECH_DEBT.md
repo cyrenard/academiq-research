@@ -122,8 +122,16 @@ version-sync test in lockstep.
 
 ---
 
-## 8. Doc/reality drift — 🟡 watch
+## 8. Doc/reality drift — ✅ verified (2026-06-05)
 
-`MIGRATION_BLOCKER.md` / migrate-plan marked phase 7 "release pipeline DONE", but
-no release workflow existed until this cleanup. Treat migration-doc "DONE" claims
-as needing verification against the actual tree.
+Audited migrate-plan's phase "DONE" claims against `src-tauri/src`. **They hold:**
+- Phase 2 SQLite+FTS5 → `db/migrate.rs`, `db/mod.rs`
+- Phase 3 PDF storage/annotation → `pdf/{annotations,extract,metadata,export,fonts}.rs` (16 files)
+- Phase 4 spell/OCR/net → `commands/{spell,ocr,net}.rs`
+- Phase 5 export PDF/DOCX → `commands/export.rs`, `pdf/export.rs`, `commands/word.rs`
+- Phase 6 browser-capture sidecar → `capture/{bridge,mod}.rs`, `commands/browser_capture.rs`
+- Phase 7 updater → `commands/update.rs`
+
+The **only** real drift was phase 7's "release pipeline DONE" claim — no GitHub
+release workflow actually existed. Fixed in this cleanup (`.github/workflows/release.yml`).
+No other doc/reality gaps found.
