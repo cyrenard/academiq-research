@@ -73,9 +73,10 @@ and track-changes correctness live here and are validated by gates, not types.
 **Current state:** stable but brittle — `trackChangesEnabled` is read inside the
 engine and fed via `window.S` write-through (can't be cleanly typed/owned by React).
 
-**Next step:** no rewrite planned. If touched, it must go through full
-`tauri:dev` manual smoke (tests/MANUAL_SMOKE.md), not just unit tests. Document
-the mount contract before any change.
+**Next step:** no rewrite planned. The mount contract, public `window.*` surface,
+load order, and the trackChanges seam are now documented in **AQ_ENGINE_CONTRACT.md**.
+If touched, follow that contract + full `tauri:dev` manual smoke (tests/MANUAL_SMOKE.md),
+not just unit tests.
 
 ---
 
