@@ -68,24 +68,40 @@ export function openDocumentOutline() {
   const api = win.AQDocumentOutline;
   const editor = win.editor || null;
   const root = document.getElementById('apaed');
+  const scrollEl = document.getElementById('escroll');
+  const searchEl = document.getElementById('docOutlineSearch') as HTMLInputElement | null;
+  const filterEl = document.getElementById('docOutlineFilter') as HTMLSelectElement | null;
   if (!summary || !list || !api || typeof api.collectEntries !== 'function') return;
-  const entries = api.collectEntries({ root, editor, document }) || [];
-  const built = typeof api.buildSummary === 'function' ? api.buildSummary(entries) : {};
-  const headingCount = countSummaryValue(built, 'headingCount', 'headings');
-  const tableCount = countSummaryValue(built, 'tableCount', 'tables');
-  const figureCount = countSummaryValue(built, 'figureCount', 'figures');
-  summary.textContent = entries.length
-    ? `${headingCount} başlık, ${tableCount} tablo, ${figureCount} şekil`
-    : 'Anahat için başlık, tablo veya şekil bulunamadı.';
-  list.innerHTML = entries.length
-    ? entries.map((entry: any) => {
-      const type = String(entry.type || 'heading');
-      const label = String(entry.label || entry.text || (type === 'table' ? 'Tablo' : type === 'figure' ? 'Şekil' : 'Başlık'));
-      const title = String(entry.title && entry.title !== label ? entry.title : '');
-      const level = Number(entry.level || 0);
-      return `<button class="doc-outline-item" type="button" data-outline-id="${escapeHTML(entry.id || '')}" data-outline-type="${escapeHTML(type)}" data-level="${level || ''}"><span>${escapeHTML(label)}</span>${title ? `<span class="doc-outline-meta">${escapeHTML(title)}</span>` : ''}</button>`;
-    }).join('')
-    : '<div class="empty">Belgede başlık, tablo veya şekil yok.</div>';
+
+  let entries: any[] = api.collectEntries({ root, editor, document }) || [];
+  let query = (searchEl?.value || '').trim();
+  let filter = filterEl?.value || 'all';
+
+  const render = () => {
+    const filtered = typeof api.filterEntries === 'function'
+      ? (api.filterEntries(entries, { type: filter, query }) || [])
+      : entries;
+    const built = typeof api.buildSummary === 'function' ? api.buildSummary(entries) : {};
+    const headingCount = countSummaryValue(built, 'headingCount', 'headings');
+    const tableCount = countSummaryValue(built, 'tableCount', 'tables');
+    const figureCount = countSummaryValue(built, 'figureCount', 'figures');
+    summary.textContent = entries.length
+      ? `${headingCount} başlık, ${tableCount} tablo, ${figureCount} şekil${query ? ` • filtre: ${query}` : ''}`
+      : 'Anahat için başlık, tablo veya şekil bulunamadı.';
+    list.innerHTML = filtered.length
+      ? filtered.map((entry: any) => {
+        const type = String(entry.type || 'heading');
+        const label = String(entry.label || entry.text || (type === 'table' ? 'Tablo' : type === 'figure' ? 'Şekil' : 'Başlık'));
+        const title = String(entry.title && entry.title !== label ? entry.title : '');
+        const level = Number(entry.level || 0);
+        return `<button class="doc-outline-item" type="button" data-outline-id="${escapeHTML(entry.id || '')}" data-outline-type="${escapeHTML(type)}" data-level="${level || ''}"><span>${escapeHTML(label)}</span>${title ? `<span class="doc-outline-meta">${escapeHTML(title)}</span>` : ''}</button>`;
+      }).join('')
+      : (entries.length
+        ? '<div class="empty">Bu filtreyle görünür başlık, tablo veya şekil yok.</div>'
+        : '<div class="empty">Belgede başlık, tablo veya şekil yok.</div>');
+  };
+  render();
+
   list.onclick = (event) => {
     const target = event.target as HTMLElement | null;
     const button = target?.closest?.('[data-outline-id]') as HTMLElement | null;
@@ -93,11 +109,23 @@ export function openDocumentOutline() {
     api.scrollToEntry({ root, editor, id: button.getAttribute('data-outline-id') || '' });
     closeModalWithBackdrop('docOutlineModal', backdropClose);
   };
-  document.getElementById('docOutlineCloseBtn')?.addEventListener(
-    'click',
-    () => closeModalWithBackdrop('docOutlineModal', backdropClose),
-    { once: true }
-  );
+  // Search / filter / refresh / current — on* handlers are idempotent, so the
+  // legacy addEventListener bindings (__aqBound) are no longer needed.
+  if (searchEl) searchEl.oninput = () => { query = (searchEl.value || '').trim(); render(); };
+  if (filterEl) filterEl.onchange = () => { filter = filterEl.value || 'all'; render(); };
+  const refreshBtn = document.getElementById('docOutlineRefreshBtn') as HTMLElement | null;
+  if (refreshBtn) refreshBtn.onclick = () => { entries = api.collectEntries({ root, editor, document }) || []; render(); };
+  const currentBtn = document.getElementById('docOutlineCurrentBtn') as HTMLElement | null;
+  if (currentBtn) currentBtn.onclick = () => {
+    if (typeof api.findActiveEntry !== 'function' || typeof api.scrollToEntry !== 'function') return;
+    const active = api.findActiveEntry(entries, { root, editor, document, scrollEl });
+    if (active && active.id) {
+      api.scrollToEntry({ root, editor, id: active.id });
+      closeModalWithBackdrop('docOutlineModal', backdropClose);
+    }
+  };
+  const closeBtn = document.getElementById('docOutlineCloseBtn') as HTMLElement | null;
+  if (closeBtn) closeBtn.onclick = () => closeModalWithBackdrop('docOutlineModal', backdropClose);
 }
 
 /**

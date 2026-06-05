@@ -7904,108 +7904,11 @@ async function openDocumentHistory(){
   await refreshDocumentHistory();
 }
 
-function renderDocumentOutline(){
-  var summaryEl=document.getElementById('docOutlineSummary');
-  var listEl=document.getElementById('docOutlineList');
-  if(!summaryEl||!listEl)return;
-  var outlineApi=window.AQDocumentOutline||null;
-  if(!outlineApi||typeof outlineApi.filterEntries!=='function'||typeof outlineApi.buildSummary!=='function'){
-    summaryEl.textContent='Belge anahati kullanilamiyor.';
-    listEl.innerHTML='<div class="doc-outline-empty">Anahat modulu yuklenemedi.</div>';
-    return;
-  }
-  var filtered=outlineApi.filterEntries(docOutlineRuntime.entries,{
-    type:docOutlineRuntime.filter,
-    query:docOutlineRuntime.query
-  });
-  var summary=outlineApi.buildSummary(docOutlineRuntime.entries);
-  var summaryParts=[
-    String(summary.total||0)+' oge',
-    String(summary.headings||0)+' baslik',
-    String(summary.tables||0)+' tablo',
-    String(summary.figures||0)+' sekil'
-  ];
-  if(docOutlineRuntime.query)summaryParts.push('filtre: '+docOutlineRuntime.query);
-  var activeEntry=(docOutlineRuntime.activeId?docOutlineRuntime.entries.find(function(entry){ return entry&&entry.id===docOutlineRuntime.activeId; }):null)||null;
-  if(activeEntry)summaryParts.unshift('Konum: '+(activeEntry.label||'Belgede'));
-  summaryEl.textContent=summaryParts.join(' • ');
-  var searchEl=document.getElementById('docOutlineSearch');
-  if(searchEl&&searchEl.value!==docOutlineRuntime.query)searchEl.value=docOutlineRuntime.query;
-  var filterEl=document.getElementById('docOutlineFilter');
-  if(filterEl&&filterEl.value!==docOutlineRuntime.filter)filterEl.value=docOutlineRuntime.filter;
-  if(!filtered.length){
-    listEl.innerHTML='<div class="doc-outline-empty">Bu filtreyle gorunur bir baslik, tablo veya sekil bulunamadi.</div>';
-    return;
-  }
-  listEl.innerHTML=filtered.map(function(entry){
-    var badgeText=entry.type==='heading'?'Baslik':(entry.type==='table'?'Tablo':'Sekil');
-    var metaParts=[];
-    if(entry.type==='heading')metaParts.push('Seviye '+String(entry.level||1));
-    if(entry.title&&entry.title!==entry.label)metaParts.push(entry.title);
-    var indent=Math.max(0,((Number(entry.level||1)-1)*14));
-    return ''+
-      '<div class="doc-outline-item'+(docOutlineRuntime.activeId===entry.id?' active':'')+'" data-outline-id="'+escapeHTML(entry.id||'')+'">'+
-        '<div class="doc-outline-copy">'+
-          '<div class="doc-outline-label" data-outline-type="'+escapeHTML(entry.type||'heading')+'" style="padding-left:'+indent+'px">'+escapeHTML(entry.label||'Adsiz oge')+'</div>'+
-          '<div class="doc-outline-meta">'+escapeHTML(metaParts.join(' • ')||'Belgede konuma gitmek icin acin')+'</div>'+
-        '</div>'+
-        '<div class="doc-outline-actions">'+
-          '<span class="doc-outline-badge '+escapeHTML(entry.type||'heading')+'">'+escapeHTML(badgeText)+'</span>'+
-          '<button class="mbtn s" data-outline-jump="'+escapeHTML(entry.id||'')+'">Git</button>'+
-        '</div>'+
-      '</div>';
-  }).join('');
-}
+function renderDocumentOutline(){ /* retired no-op: React outline-modals.ts owns the document outline (TECH_DEBT #1) */ }
 
-function refreshDocumentOutline(){
-  var summaryEl=document.getElementById('docOutlineSummary');
-  var listEl=document.getElementById('docOutlineList');
-  if(summaryEl)summaryEl.textContent='Belge anahati yukleniyor...';
-  if(listEl)listEl.innerHTML='';
-  var outlineApi=window.AQDocumentOutline||null;
-  if(!outlineApi||typeof outlineApi.collectEntries!=='function'){
-    docOutlineRuntime.entries=[];
-    renderDocumentOutline();
-    return;
-  }
-  var activeEditor=(typeof getActiveEditorInstance==='function'?getActiveEditorInstance():(editor||null));
-  var rootEl=(activeEditor&&activeEditor.view&&activeEditor.view.dom)?activeEditor.view.dom:document.getElementById('apaed');
-  try{
-    docOutlineRuntime.entries=outlineApi.collectEntries({
-      root:rootEl,
-      editor:activeEditor||null,
-      academicApi:window.AQAcademicObjects||null,
-      document:document
-    });
-  }catch(_e){
-    docOutlineRuntime.entries=[];
-  }
-  refreshDocumentOutlineActive();
-  renderDocumentOutline();
-}
+function refreshDocumentOutline(){ /* retired no-op: React outline-modals.ts owns the document outline (TECH_DEBT #1) */ }
 
-function refreshDocumentOutlineActive(){
-  var outlineApi=window.AQDocumentOutline||null;
-  if(!outlineApi||typeof outlineApi.findActiveEntry!=='function'){
-    docOutlineRuntime.activeId='';
-    return;
-  }
-  var activeEditor=(typeof getActiveEditorInstance==='function'?getActiveEditorInstance():(editor||null));
-  var rootEl=(activeEditor&&activeEditor.view&&activeEditor.view.dom)?activeEditor.view.dom:document.getElementById('apaed');
-  var scrollEl=document.getElementById('escroll');
-  var active=null;
-  try{
-    active=outlineApi.findActiveEntry(docOutlineRuntime.entries,{
-      root:rootEl,
-      editor:activeEditor||null,
-      document:document,
-      scrollEl:scrollEl
-    });
-  }catch(_e){
-    active=null;
-  }
-  docOutlineRuntime.activeId=active&&active.id?String(active.id):'';
-}
+function refreshDocumentOutlineActive(){ /* retired no-op: React outline-modals.ts owns the document outline (TECH_DEBT #1) */ }
 
 function scheduleDocumentOutlineRefresh(){
   clearTimeout(docOutlineRefreshTimer);
@@ -8018,41 +7921,13 @@ function scheduleDocumentOutlineRefresh(){
   },220);
 }
 
-function refreshDocumentOutlineIfOpen(){
-  scheduleDocumentOutlineRefresh();
-}
+function refreshDocumentOutlineIfOpen(){ /* retired no-op: React outline-modals.ts owns the document outline (TECH_DEBT #1) */ }
 
-async function openDocumentOutline(){
-  showM('docOutlineModal');
-  refreshDocumentOutline();
-  setTimeout(function(){
-    var input=document.getElementById('docOutlineSearch');
-    if(input&&typeof input.focus==='function')input.focus();
-  },30);
-}
+async function openDocumentOutline(){ /* retired no-op: React outline-modals.ts owns the document outline (TECH_DEBT #1) */ }
 
-function jumpToDocumentOutlineTarget(targetId){
-  var outlineApi=window.AQDocumentOutline||null;
-  if(!outlineApi||typeof outlineApi.scrollToEntry!=='function')return false;
-  var activeEditor=(typeof getActiveEditorInstance==='function'?getActiveEditorInstance():(editor||null));
-  var rootEl=(activeEditor&&activeEditor.view&&activeEditor.view.dom)?activeEditor.view.dom:document.getElementById('apaed');
-  hideM('docOutlineModal');
-  return !!outlineApi.scrollToEntry({
-    root:rootEl,
-    editor:activeEditor||null,
-    document:document,
-    id:String(targetId||'')
-  });
-}
+function jumpToDocumentOutlineTarget(targetId){ /* retired no-op: React outline-modals.ts owns the document outline (TECH_DEBT #1) */ }
 
-function jumpToCurrentDocumentOutlineTarget(){
-  refreshDocumentOutlineActive();
-  if(!docOutlineRuntime.activeId){
-    refreshDocumentOutline();
-  }
-  if(!docOutlineRuntime.activeId)return false;
-  return jumpToDocumentOutlineTarget(docOutlineRuntime.activeId);
-}
+function jumpToCurrentDocumentOutlineTarget(){ /* retired no-op: React outline-modals.ts owns the document outline (TECH_DEBT #1) */ }
 
 function renderCaptionManager(){
   var summaryEl=document.getElementById('captionManagerSummary');

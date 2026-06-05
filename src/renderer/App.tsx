@@ -36,6 +36,7 @@ import {
 } from './lib/app-state';
 import { WorkspaceTabs } from './components/shell/WorkspaceTabs';
 import { DocumentTabs } from './components/shell/DocumentTabs';
+import { openDocumentOutline as reactOpenDocumentOutline } from './lib/outline-modals';
 import type { CommandItem } from './components/shell/CommandPalette';
 import { useKeyboardShortcut } from './lib/keyboard-router';
 import type { FeatureModal } from './components/shell/FeatureModals';
@@ -337,6 +338,14 @@ export default function App() {
   useEffect(() => {
     publishStateToLegacyWindow(appState);
   }, [appState]);
+
+  useEffect(() => {
+    // The React outline helper owns the "Belge Anahatı" modal end-to-end
+    // (collect/filter/search/jump via AQDocumentOutline). Route every trigger
+    // (command palette, legacy modal buttons) through it so the legacy
+    // render chain can be retired.
+    (window as any).openDocumentOutline = reactOpenDocumentOutline;
+  }, []);
 
   useEffect(() => {
     (window as any).__aqReactSyncFromLegacy = (legacyState: unknown) => {
