@@ -1231,15 +1231,8 @@ function delWs(id){
     },120);
   }
 }
-function promptAddWs(){
-  customPrompt('Çalışma alanı adı:','').then(function(name){
-    name=(name||'').trim();
-    if(!name)return;
-    var inp=document.getElementById('wsminp');
-    if(inp)inp.value=name;
-    doAddWs();
-  });
-}
+// promptAddWs retired: workspace creation is React-side (WorkspaceTabs +
+// App.tsx handleAddWorkspace). No remaining callers. (TECH_DEBT #1)
 function doAddWs(){
   if(workspaceMutationBusy)return;
   workspaceMutationBusy=true;
