@@ -100,7 +100,14 @@ declare global {
     };
     AQTipTapWordInit?: { init: () => LegacyAny };
     AQTipTapWordTOC?: LegacyAny;
-    AQTipTapWordFind?: LegacyAny;
+    /** aq-engine find/replace bridge (see AQ_ENGINE_CONTRACT.md). */
+    AQTipTapWordFind?: {
+      navigateSearch?: (opts: { state: LegacyAny; editor: LegacyAny; countEl: LegacyAny; forward: boolean }) => LegacyAny;
+      clearHighlights?: (opts: { host: HTMLElement | null }) => boolean;
+      search?: (opts: LegacyAny) => LegacyAny;
+      replace?: (opts: LegacyAny) => LegacyAny;
+      replaceAll?: (opts: LegacyAny) => LegacyAny;
+    };
     AQTipTapWordCitation?: LegacyAny;
     AQBibliographyState?: LegacyAny;
     AQCitationRuntime?: {
@@ -118,7 +125,14 @@ declare global {
       sortReferences?: (refs: LegacyAny[], options?: Record<string, unknown>) => LegacyAny[];
     };
     AQReferenceManager?: LegacyAny;
-    AQDocumentOutline?: LegacyAny;
+    /** aq-engine document-outline extraction API (see AQ_ENGINE_CONTRACT.md). */
+    AQDocumentOutline?: {
+      collectEntries?: (opts: { root: HTMLElement | null; editor: LegacyAny; document: Document }) => LegacyAny[];
+      filterEntries?: (entries: LegacyAny[], opts: { type: string; query: string }) => LegacyAny[];
+      buildSummary?: (entries: LegacyAny[]) => Record<string, number>;
+      scrollToEntry?: (opts: { root: HTMLElement | null; editor: LegacyAny; id: string }) => boolean;
+      findActiveEntry?: (entries: LegacyAny[], opts: { root: HTMLElement | null; editor: LegacyAny; document: Document; scrollEl: HTMLElement | null }) => LegacyAny;
+    };
     AQAcademicObjects?: LegacyAny;
     AQFootnotes?: LegacyAny;
     AQMarginNotes?: LegacyAny;
