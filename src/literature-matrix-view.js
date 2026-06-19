@@ -1928,39 +1928,6 @@
     window.showLabelMenu = wrapped;
   }
 
-  function patchWorkspaceTransitions(){
-    if(typeof window.switchWs === 'function' && !window.switchWs.__aqMatrixWrapped){
-      var legacySwitch = window.switchWs;
-      var wrappedSwitch = function(wsId){
-        var result = legacySwitch.call(window, wsId);
-        setTimeout(function(){
-          ensureMatrixShell();
-          bindTopMatrixButton();
-          renderMatrix();
-          setView(currentView);
-        }, 0);
-        return result;
-      };
-      wrappedSwitch.__aqMatrixWrapped = true;
-      window.switchWs = wrappedSwitch;
-    }
-    if(typeof window.delWs === 'function' && !window.delWs.__aqMatrixWrapped){
-      var legacyDelete = window.delWs;
-      var wrappedDelete = function(){
-        var result = legacyDelete.apply(window, arguments);
-        setTimeout(function(){
-          ensureMatrixShell();
-          bindTopMatrixButton();
-          renderMatrix();
-          setView(currentView);
-        }, 0);
-        return result;
-      };
-      wrappedDelete.__aqMatrixWrapped = true;
-      window.delWs = wrappedDelete;
-    }
-  }
-
   function bind(){
     if(bound) return;
     bound = true;
@@ -2001,7 +1968,6 @@
     ensureMatrixWorkspaceState();
     bind();
     patchContextMenu();
-    patchWorkspaceTransitions();
     renderMatrix();
     setView(currentView);
   }

@@ -857,6 +857,11 @@ export default function App() {
 
   useEffect(() => {
     (window as any).AQReactWorkspaceBridge = {
+      switchWorkspace: (workspaceId?: string) => {
+        if (!workspaceId) return false;
+        void handleWorkspaceChange(workspaceId);
+        return true;
+      },
       deleteWorkspace: (workspaceId?: string) => {
         void handleDeleteWorkspace(workspaceId);
         return true;

@@ -152,7 +152,6 @@ var editorDraftTimer=null,editorDraftInFlight=false,editorDraftQueued=false;
 var citationBatchBusy=false;
 var oaBatchBusy=false;
 var addDoiBusy=false;
-var switchWsBusy=false;
 var relatedPanelCollapsed=false;
 var webRelatedRuntime={
   token:0,
@@ -534,49 +533,15 @@ function ensureStableState(reason){
   }
 }
 function switchWs(wsId){
-  if(switchWsBusy)return;
-  switchWsBusy=true;
   try{
-  ensureStableState('switchWs.before');
-  // 1. Save current doc content to its record BEFORE changing curDoc
-  var oldHtml=getCurrentEditorHTML();
-  oldHtml=sanitizeDocHTML(oldHtml);
-  var oldDoc=(S.docs||[]).find(function(d){return d.id===S.curDoc;});
-  if(oldDoc)oldDoc.content=oldHtml;
-
-  // 2. Switch workspace
-  var next=(window.AQDocTabsState&&typeof window.AQDocTabsState.switchWorkspaceState==='function')
-    ? window.AQDocTabsState.switchWorkspaceState(S,wsId,{sanitize:sanitizeDocHTML})
-    : null;
-  if(!next){
-    var ws=(S.wss||[]).find(function(entry){return entry&&entry.id===wsId;});
-    if(!ws)return;
-    S.cur=ws.id;
-    S.curDoc=ws.docId;
-    var doc=(S.docs||[]).find(function(entry){return entry&&entry.id===ws.docId;});
-    if(doc){
-      doc.name=ws.name;
-      doc.content=sanitizeDocHTML(doc.content||__aqBlankDocHTML());
-      S.doc=doc.content;
+    if(window.AQReactWorkspaceBridge&&typeof window.AQReactWorkspaceBridge.switchWorkspace==='function'){
+      return window.AQReactWorkspaceBridge.switchWorkspace(wsId);
     }
-  }
-
-  // 3. Load new doc into editor through the unified document loader
-  var active=(S.docs||[]).find(function(doc){return doc.id===S.curDoc;});
-  var newHtml=active&&active.content?active.content:__aqBlankDocHTML();
-  S.doc=newHtml;
-  __aqSetEditorDoc(newHtml,false);
-  applyCurrentDocTrackChangesMode({source:'switch-workspace'});
-
-  // 4. Save and update UI
-  save();
-  switchWsPdfTabs();uSt();
-  setTimeout(function(){save();},260);
+    setDst('Workspace geçiş arayüzü hazır değil.','er');
   }catch(e){
     logStability('switchWs',e,{wsId:wsId});
-  }finally{
-    setTimeout(function(){switchWsBusy=false;},80);
   }
+  return false;
 }
 function curWs(){return S.wss.find(function(x){return x.id===S.cur;})||null;}
 function cLib(){var w=curWs();return w?w.lib:[];}
