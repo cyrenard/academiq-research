@@ -638,14 +638,6 @@
     on('refMetaCancelBtn', 'click', function(){ call('closeRefMetadataModal', false); });
     on('refMetaSaveBtn', 'click', function(){ call('closeRefMetadataModal', true); });
 
-    on('wsminp', 'keydown', function(event){
-      if(event && event.key === 'Enter'){
-        event.preventDefault();
-        call('doAddWs');
-      }
-    });
-    on('wsCancelBtn', 'click', function(){ call('hideM', 'wsm'); });
-    on('wsCreateBtn', 'click', function(){ call('doAddWs'); });
     on('nbminp', 'keydown', function(event){
       if(event && event.key === 'Enter'){
         event.preventDefault();
