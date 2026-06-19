@@ -2397,6 +2397,72 @@ mod tests {
     }
 
     #[test]
+    fn save_draft_does_not_replace_state_blob_until_promoted() {
+        let dir = temp_dir("draft-does-not-promote");
+        let saved = json!({
+            "schemaVersion": 3,
+            "cur": "ws1",
+            "curDoc": "doc1",
+            "doc": "<p>Saved</p>",
+            "docs": [{ "id": "doc1", "name": "Doc", "content": "<p>Saved</p>" }],
+            "wss": [{ "id": "ws1", "name": "Workspace", "docId": "doc1", "lib": [] }],
+            "notes": []
+        })
+        .to_string();
+        let draft = json!({
+            "schemaVersion": 3,
+            "cur": "ws1",
+            "curDoc": "doc1",
+            "doc": "<p>Draft</p>",
+            "docs": [{ "id": "doc1", "name": "Doc", "content": "<p>Draft</p>" }],
+            "wss": [{ "id": "ws1", "name": "Workspace", "docId": "doc1", "lib": [] }],
+            "notes": []
+        })
+        .to_string();
+
+        save_state(&dir, &saved, "persistState").unwrap();
+        save_draft(&dir, &draft).unwrap();
+
+        let loaded = parse_json(&load_state(&dir).unwrap().unwrap()).unwrap();
+        assert_eq!(loaded.get("doc").and_then(Value::as_str), Some("<p>Saved</p>"));
+        let draft_blob = kv_get(&dir, DRAFT_BLOB_KEY).unwrap().unwrap();
+        assert_eq!(
+            parse_json(&draft_blob)
+                .unwrap()
+                .get("doc")
+                .and_then(Value::as_str),
+            Some("<p>Draft</p>")
+        );
+    }
+
+    #[test]
+    fn save_draft_rejects_invalid_json_without_overwriting_previous_draft() {
+        let dir = temp_dir("draft-invalid-rejected");
+        let valid_draft = json!({
+            "schemaVersion": 3,
+            "cur": "ws1",
+            "curDoc": "doc1",
+            "doc": "<p>Valid draft</p>",
+            "docs": [{ "id": "doc1", "name": "Doc", "content": "<p>Valid draft</p>" }],
+            "wss": [{ "id": "ws1", "name": "Workspace", "docId": "doc1", "lib": [] }],
+            "notes": []
+        })
+        .to_string();
+
+        save_draft(&dir, &valid_draft).unwrap();
+        assert!(save_draft(&dir, "{\"broken\"").is_err());
+
+        let draft_blob = kv_get(&dir, DRAFT_BLOB_KEY).unwrap().unwrap();
+        assert_eq!(
+            parse_json(&draft_blob)
+                .unwrap()
+                .get("doc")
+                .and_then(Value::as_str),
+            Some("<p>Valid draft</p>")
+        );
+    }
+
+    #[test]
     fn save_state_projection_preserves_existing_revisions() {
         let dir = temp_dir("projection-keeps-revisions");
         let mut state = parse_json(&sample_state()).unwrap();
