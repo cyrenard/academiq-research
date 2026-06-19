@@ -92,91 +92,9 @@
     return currentWs || null;
   }
 
-  function switchWorkspaceState(state, workspaceId, options){
-    options = options || {};
-    var sanitize = options.sanitize || function(html){ return html || blankDoc(); };
-    var next = state || {};
-    if(!Array.isArray(next.wss) || !workspaceId) return null;
-    var workspace = next.wss.find(function(entry){ return entry && entry.id === workspaceId; });
-    if(!workspace) return null;
-    var doc = (Array.isArray(next.docs) ? next.docs : []).find(function(entry){
-      return entry && entry.id === workspace.docId;
-    });
-    if(!doc) return null;
-    doc.content = sanitize(doc.content || blankDoc());
-    doc.name = workspace.name;
-    next.cur = workspace.id;
-    next.curDoc = doc.id;
-    next.doc = doc.content;
-    return { workspace: workspace, doc: doc };
-  }
-
-  function createDocState(state, name, options){
-    options = options || {};
-    var uid = options.uid || function(){ return 'doc-' + Date.now(); };
-    var sanitize = options.sanitize || function(html){ return html || blankDoc(); };
-    var next = state || {};
-    var trimmed = String(name || '').trim();
-    if(!trimmed) return null;
-    var doc = {
-      id: uid(),
-      name: trimmed,
-      content: sanitize(blankDoc()),
-      bibliographyHTML: '',
-      bibliographyManual: false,
-      bibliographyExtraRefIds: [],
-      coverHTML: '',
-      tocHTML: '',
-      abstractHTML: '',
-      appendicesHTML: '',
-      citationStyle: 'apa7'
-    };
-    next.docs = Array.isArray(next.docs) ? next.docs.slice() : [];
-    next.docs.push(doc);
-    next.curDoc = doc.id;
-    next.doc = doc.content;
-    return doc;
-  }
-
-  function switchDocState(state, docId, options){
-    options = options || {};
-    var sanitize = options.sanitize || function(html){ return html || blankDoc(); };
-    var next = state || {};
-    if(!Array.isArray(next.docs) || !docId) return null;
-    var doc = next.docs.find(function(entry){ return entry && entry.id === docId; });
-    if(!doc) return null;
-    doc.content = sanitize(doc.content || blankDoc());
-    next.curDoc = docId;
-    next.doc = doc.content;
-    return doc;
-  }
-
-  function deleteDocState(state, docId, options){
-    options = options || {};
-    var sanitize = options.sanitize || function(html){ return html || blankDoc(); };
-    var next = state || {};
-    if(!Array.isArray(next.docs) || next.docs.length <= 1) return null;
-    var remaining = next.docs.filter(function(doc){ return doc && doc.id !== docId; });
-    if(remaining.length === next.docs.length) return null;
-    next.docs = remaining;
-    if(next.curDoc === docId || !remaining.some(function(doc){ return doc.id === next.curDoc; })){
-      next.curDoc = remaining[0].id;
-    }
-    var current = remaining.find(function(doc){ return doc.id === next.curDoc; }) || remaining[0];
-    if(current){
-      current.content = sanitize(current.content || blankDoc());
-      next.doc = current.content;
-    }
-    return current || null;
-  }
-
   var api = {
     blankDoc: blankDoc,
-    ensureWorkspaceDocsState: ensureWorkspaceDocsState,
-    switchWorkspaceState: switchWorkspaceState,
-    createDocState: createDocState,
-    switchDocState: switchDocState,
-    deleteDocState: deleteDocState
+    ensureWorkspaceDocsState: ensureWorkspaceDocsState
   };
 
   if(typeof module !== 'undefined' && module.exports){

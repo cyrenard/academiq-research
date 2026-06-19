@@ -7,60 +7,6 @@ function sanitize(html) {
   return String(html || '').trim() || '<p></p>';
 }
 
-test('createDocState appends a new blank document and selects it', () => {
-  const state = {
-    docs: [{ id: 'doc1', name: 'Belge 1', content: '<p>Old</p>' }],
-    curDoc: 'doc1',
-    doc: '<p>Old</p>'
-  };
-
-  const created = docTabsState.createDocState(state, 'Yeni Belge', {
-    uid: () => 'doc2',
-    sanitize
-  });
-
-  assert.equal(created.id, 'doc2');
-  assert.equal(state.docs.length, 2);
-  assert.equal(state.curDoc, 'doc2');
-  assert.equal(state.doc, '<p></p>');
-});
-
-test('switchDocState selects and normalizes target doc', () => {
-  const state = {
-    docs: [
-      { id: 'doc1', name: 'A', content: '<p>One</p>' },
-      { id: 'doc2', name: 'B', content: '' }
-    ],
-    curDoc: 'doc1',
-    doc: '<p>One</p>'
-  };
-
-  const switched = docTabsState.switchDocState(state, 'doc2', { sanitize });
-
-  assert.equal(switched.id, 'doc2');
-  assert.equal(state.curDoc, 'doc2');
-  assert.equal(state.doc, '<p></p>');
-  assert.equal(state.docs[1].content, '<p></p>');
-});
-
-test('deleteDocState removes doc and falls back to first remaining current doc', () => {
-  const state = {
-    docs: [
-      { id: 'doc1', name: 'A', content: '<p>One</p>' },
-      { id: 'doc2', name: 'B', content: '<p>Two</p>' }
-    ],
-    curDoc: 'doc2',
-    doc: '<p>Two</p>'
-  };
-
-  const current = docTabsState.deleteDocState(state, 'doc2', { sanitize });
-
-  assert.equal(state.docs.length, 1);
-  assert.equal(state.curDoc, 'doc1');
-  assert.equal(state.doc, '<p>One</p>');
-  assert.equal(current.id, 'doc1');
-});
-
 test('ensureWorkspaceDocsState assigns one document per workspace and current doc follows workspace', () => {
   const state = {
     wss: [
@@ -87,31 +33,4 @@ test('ensureWorkspaceDocsState assigns one document per workspace and current do
   assert.equal(state.docs[1].name, 'Alan 2');
   assert.equal(state.curDoc, 'doc2');
   assert.equal(state.doc, '<p></p>');
-});
-
-test('switchWorkspaceState keeps auxiliary sections scoped to each workspace document', () => {
-  const state = {
-    wss: [
-      { id: 'ws1', name: 'Alan 1', lib: [], docId: 'doc1' },
-      { id: 'ws2', name: 'Alan 2', lib: [], docId: 'doc2' }
-    ],
-    docs: [
-      { id: 'doc1', name: 'Alan 1', content: '<p>A</p>', tocHTML: '<div>toc-a</div>', bibliographyHTML: '<p>b-a</p>', appendicesHTML: '<section>ek-a</section>', bibliographyManual: false },
-      { id: 'doc2', name: 'Alan 2', content: '<p>B</p>', tocHTML: '<div>toc-b</div>', bibliographyHTML: '<p>b-b</p>', appendicesHTML: '<section>ek-b</section>', bibliographyManual: true }
-    ],
-    cur: 'ws1',
-    curDoc: 'doc1',
-    doc: '<p>A</p>'
-  };
-
-  const switched = docTabsState.switchWorkspaceState(state, 'ws2', { sanitize });
-
-  assert.equal(switched.workspace.id, 'ws2');
-  assert.equal(switched.doc.id, 'doc2');
-  assert.equal(switched.doc.tocHTML, '<div>toc-b</div>');
-  assert.equal(switched.doc.bibliographyHTML, '<p>b-b</p>');
-  assert.equal(switched.doc.appendicesHTML, '<section>ek-b</section>');
-  assert.equal(state.docs.find(d => d.id === 'doc1').tocHTML, '<div>toc-a</div>');
-  assert.equal(state.docs.find(d => d.id === 'doc1').bibliographyHTML, '<p>b-a</p>');
-  assert.equal(state.docs.find(d => d.id === 'doc1').appendicesHTML, '<section>ek-a</section>');
 });
