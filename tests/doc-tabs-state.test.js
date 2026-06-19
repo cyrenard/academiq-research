@@ -89,62 +89,6 @@ test('ensureWorkspaceDocsState assigns one document per workspace and current do
   assert.equal(state.doc, '<p></p>');
 });
 
-test('addWorkspaceWithDocState creates a workspace-owned document and selects it', () => {
-  const state = {
-    wss: [{ id: 'ws1', name: 'Alan 1', lib: [], docId: 'doc1' }],
-    docs: [{ id: 'doc1', name: 'Alan 1', content: '<p>A</p>' }],
-    cur: 'ws1',
-    curDoc: 'doc1',
-    doc: '<p>A</p>'
-  };
-
-  const result = docTabsState.addWorkspaceWithDocState(state, {
-    id: 'ws2',
-    name: 'Alan 2',
-    lib: []
-  }, {
-    uid: (() => {
-      const ids = ['doc2'];
-      return () => ids.shift();
-    })(),
-    sanitize
-  });
-
-  assert.equal(result.workspace.id, 'ws2');
-  assert.equal(result.workspace.docId, 'doc2');
-  assert.equal(result.doc.name, 'Alan 2');
-  assert.equal(state.cur, 'ws2');
-  assert.equal(state.curDoc, 'doc2');
-  assert.equal(state.doc, '<p></p>');
-});
-
-test('deleteWorkspaceWithDocState removes linked document and falls back to remaining workspace', () => {
-  const state = {
-    wss: [
-      { id: 'ws1', name: 'Alan 1', lib: [], docId: 'doc1' },
-      { id: 'ws2', name: 'Alan 2', lib: [], docId: 'doc2' }
-    ],
-    docs: [
-      { id: 'doc1', name: 'Alan 1', content: '<p>One</p>' },
-      { id: 'doc2', name: 'Alan 2', content: '<p>Two</p>' }
-    ],
-    cur: 'ws2',
-    curDoc: 'doc2',
-    doc: '<p>Two</p>'
-  };
-
-  const current = docTabsState.deleteWorkspaceWithDocState(state, 'ws2', { sanitize });
-
-  assert.equal(state.wss.length, 1);
-  assert.equal(state.docs.length, 1);
-  assert.equal(state.wss[0].id, 'ws1');
-  assert.equal(state.docs[0].id, 'doc1');
-  assert.equal(state.cur, 'ws1');
-  assert.equal(state.curDoc, 'doc1');
-  assert.equal(state.doc, '<p>One</p>');
-  assert.equal(current.doc.id, 'doc1');
-});
-
 test('switchWorkspaceState keeps auxiliary sections scoped to each workspace document', () => {
   const state = {
     wss: [

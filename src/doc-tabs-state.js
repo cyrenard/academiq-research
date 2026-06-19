@@ -92,67 +92,6 @@
     return currentWs || null;
   }
 
-  function addWorkspaceWithDocState(state, workspace, options){
-    options = options || {};
-    var uid = options.uid || function(){ return 'doc-' + Date.now(); };
-    var sanitize = options.sanitize || function(html){ return html || blankDoc(); };
-    var next = state || {};
-    var wsInput = workspace || {};
-    var wsName = String(wsInput.name || '').trim();
-    if(!wsName) return null;
-
-    next.wss = Array.isArray(next.wss) ? next.wss.slice() : [];
-    next.docs = Array.isArray(next.docs) ? next.docs.slice() : [];
-
-    var doc = {
-      id: uid(),
-      name: wsName,
-      content: sanitize(blankDoc()),
-      bibliographyHTML: '',
-      bibliographyManual: false,
-      bibliographyExtraRefIds: [],
-      coverHTML: '',
-      tocHTML: '',
-      abstractHTML: '',
-      appendicesHTML: '',
-      citationStyle: 'apa7'
-    };
-    var ws = {
-      id: wsInput.id || uid(),
-      name: wsName,
-      lib: Array.isArray(wsInput.lib) ? wsInput.lib.slice() : [],
-      docId: doc.id
-    };
-
-    next.docs.push(doc);
-    next.wss.push(ws);
-    next.cur = ws.id;
-    next.curDoc = doc.id;
-    next.doc = doc.content;
-
-    return { workspace: ws, doc: doc };
-  }
-
-  function deleteWorkspaceWithDocState(state, workspaceId, options){
-    options = options || {};
-    var sanitize = options.sanitize || function(html){ return html || blankDoc(); };
-    var next = state || {};
-    if(!Array.isArray(next.wss) || next.wss.length <= 1) return null;
-    var workspace = next.wss.find(function(entry){ return entry && entry.id === workspaceId; });
-    if(!workspace) return null;
-
-    next.wss = next.wss.filter(function(entry){ return entry && entry.id !== workspaceId; });
-    next.docs = (Array.isArray(next.docs) ? next.docs : []).filter(function(doc){
-      return doc && doc.id !== workspace.docId;
-    });
-
-    if(!next.cur || next.cur === workspaceId || !next.wss.some(function(ws){ return ws.id === next.cur; })){
-      next.cur = next.wss[0].id;
-    }
-
-    return switchWorkspaceState(next, next.cur, { sanitize: sanitize });
-  }
-
   function switchWorkspaceState(state, workspaceId, options){
     options = options || {};
     var sanitize = options.sanitize || function(html){ return html || blankDoc(); };
@@ -234,8 +173,6 @@
   var api = {
     blankDoc: blankDoc,
     ensureWorkspaceDocsState: ensureWorkspaceDocsState,
-    addWorkspaceWithDocState: addWorkspaceWithDocState,
-    deleteWorkspaceWithDocState: deleteWorkspaceWithDocState,
     switchWorkspaceState: switchWorkspaceState,
     createDocState: createDocState,
     switchDocState: switchDocState,
