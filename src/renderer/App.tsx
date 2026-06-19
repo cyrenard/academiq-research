@@ -855,6 +855,15 @@ export default function App() {
     setActiveReferenceId(getActiveWorkspace(next).lib[0]?.id || '');
   };
 
+  useEffect(() => {
+    (window as any).AQReactWorkspaceBridge = {
+      deleteWorkspace: (workspaceId?: string) => {
+        void handleDeleteWorkspace(workspaceId);
+        return true;
+      }
+    };
+  });
+
   const handleReferenceSearch = async (query: string) => {
     const trimmed = query.trim();
     if (!trimmed) return;

@@ -152,7 +152,6 @@ var editorDraftTimer=null,editorDraftInFlight=false,editorDraftQueued=false;
 var citationBatchBusy=false;
 var oaBatchBusy=false;
 var addDoiBusy=false;
-var workspaceMutationBusy=false;
 var switchWsBusy=false;
 var relatedPanelCollapsed=false;
 var webRelatedRuntime={
@@ -1201,35 +1200,15 @@ function formatRef(ref,options){
 // ¦¦ WORKSPACES ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
 
 function delWs(id){
-  if(workspaceMutationBusy)return;
-  workspaceMutationBusy=true;
-  refreshBusyControls();
   try{
-  ensureStableState('delWs.before');
-  if(S.wss.length<=1){alert('En az bir alan gerekli.');return;}
-  var ws=(S.wss||[]).find(function(entry){return entry&&entry.id===id;});
-  if(!ws)return;
-  if(!confirm('"'+ws.name+'" alanı ve bağlı belgesi silinsin?'))return;
-  var next=(window.AQDocTabsState&&typeof window.AQDocTabsState.deleteWorkspaceWithDocState==='function')
-    ? window.AQDocTabsState.deleteWorkspaceWithDocState(S,id,{sanitize:sanitizeDocHTML})
-    : null;
-  if(!next){
-    S.wss=S.wss.filter(function(entry){return entry&&entry.id!==id;});
-    S.docs=(S.docs||[]).filter(function(doc){return doc&&doc.id!==ws.docId;});
-    ensureWorkspaceDocs();
-  }
-  save();
-  rRefs();switchWsPdfTabs();uSt();
-  var active=(S.docs||[]).find(function(doc){return doc.id===S.curDoc;});
-  if(active)__aqSetEditorDoc(active.content||__aqBlankDocHTML(),false);
+    if(window.AQReactWorkspaceBridge&&typeof window.AQReactWorkspaceBridge.deleteWorkspace==='function'){
+      return window.AQReactWorkspaceBridge.deleteWorkspace(id);
+    }
+    setDst('Workspace silme arayüzü hazır değil.','er');
   }catch(e){
     logStability('delWs',e,{wsId:id});
-  }finally{
-    setTimeout(function(){
-      workspaceMutationBusy=false;
-      refreshBusyControls();
-    },120);
   }
+  return false;
 }
 // Workspace creation is React-side (WorkspaceTabs + App.tsx handleAddWorkspace).
 // Legacy keeps only switch/delete helpers until those flows are ported.
