@@ -1944,21 +1944,6 @@
       wrappedSwitch.__aqMatrixWrapped = true;
       window.switchWs = wrappedSwitch;
     }
-    if(typeof window.doAddWs === 'function' && !window.doAddWs.__aqMatrixWrapped){
-      var legacyAdd = window.doAddWs;
-      var wrappedAdd = function(){
-        var result = legacyAdd.apply(window, arguments);
-        setTimeout(function(){
-          ensureMatrixShell();
-          bindTopMatrixButton();
-          renderMatrix();
-          setView(currentView);
-        }, 0);
-        return result;
-      };
-      wrappedAdd.__aqMatrixWrapped = true;
-      window.doAddWs = wrappedAdd;
-    }
     if(typeof window.delWs === 'function' && !window.delWs.__aqMatrixWrapped){
       var legacyDelete = window.delWs;
       var wrappedDelete = function(){

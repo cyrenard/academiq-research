@@ -1231,50 +1231,8 @@ function delWs(id){
     },120);
   }
 }
-// promptAddWs retired: workspace creation is React-side (WorkspaceTabs +
-// App.tsx handleAddWorkspace). No remaining callers. (TECH_DEBT #1)
-function doAddWs(){
-  if(workspaceMutationBusy)return;
-  workspaceMutationBusy=true;
-  refreshBusyControls();
-  try{
-  ensureStableState('doAddWs.before');
-  var n=document.getElementById('wsminp').value.trim();
-  if(!n)return;
-  // Save current doc BEFORE changing curDoc
-  var oldHtml=getCurrentEditorHTML();
-  oldHtml=sanitizeDocHTML(oldHtml);
-  var oldDoc=(S.docs||[]).find(function(d){return d.id===S.curDoc;});
-  if(oldDoc)oldDoc.content=oldHtml;
-
-  var created=(window.AQDocTabsState&&typeof window.AQDocTabsState.addWorkspaceWithDocState==='function')
-    ? window.AQDocTabsState.addWorkspaceWithDocState(S,{id:uid(),name:n,lib:[]},{uid:uid,sanitize:sanitizeDocHTML})
-    : null;
-  if(!created){
-    var doc={id:uid(),name:n,content:__aqBlankDocHTML(),bibliographyHTML:'',bibliographyManual:false,coverHTML:'',tocHTML:''};
-    var ws={id:uid(),name:n,lib:[],docId:doc.id};
-    S.docs=(S.docs||[]).concat([doc]);
-    S.wss.push(ws);
-    S.cur=ws.id;
-    S.curDoc=doc.id;
-    S.doc=doc.content;
-  }
-  // Set editor to blank through unified loader to avoid cross-doc sync leakage.
-  __aqSetEditorDoc(__aqBlankDocHTML(),false);
-  hideM('wsm');
-  save();
-  switchWsPdfTabs();uSt();
-  setTimeout(function(){save();},260);
-  }catch(e){
-    logStability('doAddWs',e);
-    setDst('Çalışma alanı eklenemedi.','er');
-  }finally{
-    setTimeout(function(){
-      workspaceMutationBusy=false;
-      refreshBusyControls();
-    },120);
-  }
-}
+// Workspace creation is React-side (WorkspaceTabs + App.tsx handleAddWorkspace).
+// Legacy keeps only switch/delete helpers until those flows are ported.
 
 // ¦¦ NOTEBOOKS ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
 function rNB(){ /* retired no-op: rNB DOM target is React-owned; body removed (LEGACY_RUNTIME_SPLIT_PLAN.md) */ }
@@ -2008,12 +1966,6 @@ function refreshBusyControls(){
   setBusyControl('doiFetchBtn',!!addDoiBusy,'Bekle...');
   setBusyControl('batchOABtn',!!oaBatchBusy,'İndiriliyor...');
   setBusyControl('batchCiteBtn',!!citationBatchBusy,'Güncelleniyor...');
-  setBusyControl('wsCreateBtn',!!workspaceMutationBusy,'Oluşturuluyor...');
-  var wsAdd=document.getElementById('wsadd');
-  if(wsAdd){
-    wsAdd.disabled=!!workspaceMutationBusy;
-    wsAdd.setAttribute('aria-busy',workspaceMutationBusy?'true':'false');
-  }
   var doiInp=document.getElementById('doiinp');
   if(doiInp)doiInp.disabled=!!addDoiBusy;
 }
@@ -13243,4 +13195,3 @@ updatePageHeight=function(){
     '[data-theme="dark"] #noteta::placeholder,[data-theme="dark"] #notetag::placeholder{color:#8c7860!important;}';
   document.head.appendChild(st);
 })();
-
