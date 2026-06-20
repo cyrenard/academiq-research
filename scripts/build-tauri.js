@@ -38,17 +38,60 @@ function runNpmScript(scriptName) {
   run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', scriptName], `npm run ${scriptName}`);
 }
 
-function findInstallers(pkg) {
-  const nsisDir = path.join(srcTauriDir, 'target', 'release', 'bundle', 'nsis');
-  if (!fs.existsSync(nsisDir)) return [];
-  const allInstallers = fs.readdirSync(nsisDir)
-    .filter((name) => name.toLowerCase().endsWith('.exe'))
-    .map((name) => path.join(nsisDir, name));
-  const currentVersionInstallers = allInstallers.filter((installer) => {
-    const name = path.basename(installer).toLowerCase();
-    return name.includes(pkg.version.toLowerCase());
+function bundleProfile(platform = process.platform) {
+  if (platform === 'win32') {
+    return {
+      platformKey: 'windows-x86_64',
+      extraPlatformKeys: ['windows-x86_64-nsis'],
+      bundleDirs: ['nsis'],
+      installerPattern: /\.exe$/i,
+      distCleanupPattern: /\.exe(\.sig)?$/i,
+      currentVersionOnly: true,
+      signed: true,
+      releaseInstallerName: (pkg) => `AcademiQ-Setup-${pkg.version}.exe`
+    };
+  }
+  if (platform === 'linux') {
+    return {
+      platformKey: 'linux-x86_64',
+      extraPlatformKeys: [],
+      bundleDirs: ['appimage', 'rpm', 'deb'],
+      installerPattern: /\.(appimage|rpm|deb)$/i,
+      distCleanupPattern: /\.(appimage|rpm|deb)$/i,
+      currentVersionOnly: false,
+      signed: false,
+      releaseInstallerName: null
+    };
+  }
+  if (platform === 'darwin') {
+    return {
+      platformKey: 'darwin-x86_64',
+      extraPlatformKeys: [],
+      bundleDirs: ['dmg', 'macos'],
+      installerPattern: /\.(dmg|app\.tar\.gz)$/i,
+      distCleanupPattern: /\.(dmg|app\.tar\.gz)$/i,
+      currentVersionOnly: false,
+      signed: false,
+      releaseInstallerName: null
+    };
+  }
+  throw new Error(`Unsupported Tauri bundle platform: ${platform}`);
+}
+
+function findInstallers(pkg, platform = process.platform) {
+  const profile = bundleProfile(platform);
+  const bundleRoot = path.join(srcTauriDir, 'target', 'release', 'bundle');
+  const allInstallers = profile.bundleDirs.flatMap((dirName) => {
+    const dir = path.join(bundleRoot, dirName);
+    if (!fs.existsSync(dir)) return [];
+    return fs.readdirSync(dir)
+      .filter((name) => profile.installerPattern.test(name))
+      .map((name) => path.join(dir, name));
   });
-  return currentVersionInstallers;
+  const installers = profile.currentVersionOnly
+    ? allInstallers.filter((installer) => path.basename(installer).toLowerCase().includes(pkg.version.toLowerCase()))
+    : allInstallers;
+  return installers.sort((a, b) => path.basename(a).localeCompare(path.basename(b)));
 }
 
 function sha256(filePath) {
@@ -58,16 +101,17 @@ function sha256(filePath) {
 }
 
 function releaseInstallerName(pkg) {
-  return `AcademiQ-Setup-${pkg.version}.exe`;
+  return bundleProfile('win32').releaseInstallerName(pkg);
 }
 
-function copyArtifacts(installers, pkg) {
+function copyArtifacts(installers, pkg, platform = process.platform) {
+  const profile = bundleProfile(platform);
   fs.mkdirSync(distDir, { recursive: true });
   fs.readdirSync(distDir)
-    .filter((name) => name.toLowerCase().endsWith('.exe') || name.toLowerCase().endsWith('.exe.sig'))
+    .filter((name) => profile.distCleanupPattern.test(name))
     .forEach((name) => fs.rmSync(path.join(distDir, name), { force: true }));
   const rootDist = path.join(rootDir, 'dist');
-  if (fs.existsSync(rootDist)) {
+  if (platform === 'win32' && fs.existsSync(rootDist)) {
     fs.readdirSync(rootDist, { withFileTypes: true })
       .filter((entry) => entry.isFile())
       .map((entry) => entry.name)
@@ -80,20 +124,22 @@ function copyArtifacts(installers, pkg) {
         fs.renameSync(source, backup);
       });
   }
-  fs.rmSync(path.join(rootDir, 'dist', releaseInstallerName(pkg)), { force: true });
-  fs.rmSync(path.join(distDir, releaseInstallerName(pkg)), { force: true });
+  if (platform === 'win32') {
+    fs.rmSync(path.join(rootDir, 'dist', releaseInstallerName(pkg)), { force: true });
+    fs.rmSync(path.join(distDir, releaseInstallerName(pkg)), { force: true });
+  }
   const copied = [];
   installers.forEach((installer, index) => {
-    const name = index === 0 ? releaseInstallerName(pkg) : path.basename(installer);
+    const name = platform === 'win32' && index === 0 ? releaseInstallerName(pkg) : path.basename(installer);
     const target = path.join(distDir, name);
     fs.copyFileSync(installer, target);
-    if (index === 0) {
+    if (platform === 'win32' && index === 0) {
       fs.copyFileSync(installer, path.join(rootDir, 'dist', name));
     }
     const sig = `${installer}.sig`;
     if (fs.existsSync(sig)) {
       fs.copyFileSync(sig, `${target}.sig`);
-      if (index === 0) {
+      if (platform === 'win32' && index === 0) {
         fs.copyFileSync(sig, path.join(rootDir, 'dist', `${name}.sig`));
       }
     }
@@ -113,29 +159,34 @@ function copyThirdPartyNotices() {
   console.log(`[build-tauri] copied ${path.relative(rootDir, target)}`);
 }
 
-function latestJsonFor(installerPath) {
+function latestJsonFor(installerPath, platform = process.platform) {
   const pkg = readPackage();
+  const profile = bundleProfile(platform);
   const sigPath = `${installerPath}.sig`;
   const signature = fs.existsSync(sigPath) ? fs.readFileSync(sigPath, 'utf8').trim() : '';
-  const url = `https://updates.academiq.research/windows-x86_64/${pkg.version}/${path.basename(installerPath)}`;
+  const url = `https://updates.academiq.research/${profile.platformKey}/${pkg.version}/${path.basename(installerPath)}`;
+  const platformEntry = {
+    signature,
+    url
+  };
+  const platforms = {
+    [profile.platformKey]: platformEntry
+  };
+  for (const key of profile.extraPlatformKeys) {
+    platforms[key] = platformEntry;
+  }
   return {
     version: pkg.version,
     notes: pkg.version.includes('-beta') ? 'Beta release - see CHANGELOG.md' : 'AcademiQ Research Tauri release',
     pub_date: new Date().toISOString(),
-    platforms: {
-      'windows-x86_64': {
-        signature,
-        url
-      },
-      'windows-x86_64-nsis': {
-        signature,
-        url
-      }
-    }
+    platforms
   };
 }
 
-function signInstaller(installerPath) {
+function signInstaller(installerPath, platform = process.platform) {
+  if (!bundleProfile(platform).signed) {
+    return;
+  }
   if (process.env.ACADEMIQ_SKIP_SIGN === '1') {
     console.warn('[build-tauri] ACADEMIQ_SKIP_SIGN=1, skipping Authenticode signing.');
     return;
@@ -155,11 +206,16 @@ function main() {
     env.TAURI_SIGNING_PRIVATE_KEY_PATH = signingKeyPath;
   }
 
-  run('cargo', ['tauri', 'build'], 'cargo tauri build', { cwd: srcTauriDir, env });
+  const buildArgs = ['tauri', 'build'];
+  const bundleOverride = process.env.ACADEMIQ_TAURI_BUNDLES || process.env.TAURI_BUNDLES || '';
+  if (bundleOverride) {
+    buildArgs.push('--bundles', bundleOverride);
+  }
+  run('cargo', buildArgs, 'cargo tauri build', { cwd: srcTauriDir, env });
 
   const installers = findInstallers(pkg);
   if (!installers.length) {
-    throw new Error(`No NSIS installer for ${pkg.version} found under src-tauri/target/release/bundle/nsis`);
+    throw new Error(`No ${process.platform} installer for ${pkg.version} found under src-tauri/target/release/bundle`);
   }
   for (const installer of installers) {
     signInstaller(installer);
@@ -177,9 +233,19 @@ function main() {
   console.log(`[build-tauri] wrote ${path.relative(rootDir, path.join(distDir, 'latest.json'))}`);
 }
 
-try {
-  main();
-} catch (error) {
-  console.error('[build-tauri] FAIL:', error && error.message ? error.message : error);
-  process.exit(1);
+if (require.main === module) {
+  try {
+    main();
+  } catch (error) {
+    console.error('[build-tauri] FAIL:', error && error.message ? error.message : error);
+    process.exit(1);
+  }
 }
+
+module.exports = {
+  bundleProfile,
+  copyArtifacts,
+  findInstallers,
+  latestJsonFor,
+  releaseInstallerName
+};

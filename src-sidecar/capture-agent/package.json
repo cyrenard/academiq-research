@@ -5,7 +5,7 @@
   "bin": "index.js",
   "scripts": {
     "start": "node index.js",
-    "build": "pkg index.js --targets node18-win-x64 --output ../../src-tauri/binaries/capture-agent-x86_64-pc-windows-msvc.exe"
+    "build": "node ../../scripts/build-sidecar.js"
   },
   "pkg": {
     "scripts": [

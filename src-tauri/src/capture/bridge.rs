@@ -246,6 +246,26 @@ struct SidecarCommand {
     is_binary: bool,
 }
 
+#[cfg(target_os = "windows")]
+fn sidecar_binary_name() -> &'static str {
+    "capture-agent-x86_64-pc-windows-msvc.exe"
+}
+
+#[cfg(target_os = "linux")]
+fn sidecar_binary_name() -> &'static str {
+    "capture-agent-x86_64-unknown-linux-gnu"
+}
+
+#[cfg(target_os = "macos")]
+fn sidecar_binary_name() -> &'static str {
+    "capture-agent-x86_64-apple-darwin"
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+fn sidecar_binary_name() -> &'static str {
+    "capture-agent"
+}
+
 fn sidecar_command() -> Result<SidecarCommand, String> {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let dir = manifest
@@ -263,9 +283,7 @@ fn sidecar_command() -> Result<SidecarCommand, String> {
         });
     }
 
-    let binary = manifest
-        .join("binaries")
-        .join("capture-agent-x86_64-pc-windows-msvc.exe");
+    let binary = manifest.join("binaries").join(sidecar_binary_name());
     if binary.exists() {
         return Ok(SidecarCommand {
             program: binary,
@@ -282,5 +300,32 @@ fn sidecar_command() -> Result<SidecarCommand, String> {
             is_binary: false,
         });
     }
-    Err(format!("capture_sidecar_not_found: {}", dir.display()))
+    Err(format!(
+        "capture_sidecar_not_found: expected {} under {}",
+        sidecar_binary_name(),
+        manifest.join("binaries").display()
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sidecar_binary_name;
+
+    #[test]
+    fn sidecar_binary_name_matches_current_target() {
+        #[cfg(target_os = "windows")]
+        assert_eq!(
+            sidecar_binary_name(),
+            "capture-agent-x86_64-pc-windows-msvc.exe"
+        );
+
+        #[cfg(target_os = "linux")]
+        assert_eq!(
+            sidecar_binary_name(),
+            "capture-agent-x86_64-unknown-linux-gnu"
+        );
+
+        #[cfg(target_os = "macos")]
+        assert_eq!(sidecar_binary_name(), "capture-agent-x86_64-apple-darwin");
+    }
 }

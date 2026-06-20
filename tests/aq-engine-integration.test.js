@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const legacyHtmlPath = path.join(__dirname, '..', 'legacy', 'academiq-research.html');
+
 test('AQ Engine render centers pages inside the stage', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'engine.js'), 'utf8');
   assert.match(source, /container\.style\.display = 'flex'/);
@@ -280,7 +282,7 @@ test('AQ Engine HTML roundtrip preserves bibliography and appendix section seman
 test('AQ Engine export marks bibliography and appendix page breaks without legacy duplicates', () => {
   const adapter = require(path.join(__dirname, '..', 'experiments', 'aq-engine', 'tiptap-adapter.js'));
   const legacy = fs.readFileSync(path.join(__dirname, '..', 'src', 'legacy-runtime.js'), 'utf8');
-  const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  const html = fs.readFileSync(legacyHtmlPath, 'utf8');
   const exported = adapter.exportToTipTap([
     { type:'paragraph', runs:[{ text:'Ana metin' }] },
     { type:'heading', level:1, _isBibHeading:true, runs:[{ text:'KAYNAKÇA' }] },
@@ -302,7 +304,7 @@ test('AQ Engine TOC uses engine layout page numbers', () => {
   const toc = fs.readFileSync(path.join(__dirname, '..', 'src', 'tiptap-word-toc.js'), 'utf8');
   const compat = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'compat-shim.js'), 'utf8');
   const legacy = fs.readFileSync(path.join(__dirname, '..', 'src', 'legacy-runtime.js'), 'utf8');
-  const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  const html = fs.readFileSync(legacyHtmlPath, 'utf8');
   assert.match(toc, /function collectAQEngineHeadings\(editor, deps\)/);
   assert.match(toc, /pageByBlock\[index\] \|\| 1/);
   assert.match(toc, /function buildAQEngineTOCHTML\(editor, deps\)/);
@@ -314,7 +316,7 @@ test('AQ Engine TOC uses engine layout page numbers', () => {
 test('DOCX import targets the active AQ Engine editor', () => {
   const io = fs.readFileSync(path.join(__dirname, '..', 'src', 'tiptap-word-io.js'), 'utf8');
   const legacy = fs.readFileSync(path.join(__dirname, '..', 'src', 'legacy-runtime.js'), 'utf8');
-  const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  const html = fs.readFileSync(legacyHtmlPath, 'utf8');
   assert.match(io, /function applyAQEngineImportedHTML\(editor, html, options\)/);
   assert.match(io, /AQEngineCompat[\s\S]{0,80}htmlToBlocks/);
   assert.match(io, /editor\._docModel\.replace\(blocks\)/);
@@ -404,7 +406,7 @@ test('AQ Engine footnotes use the engine document model', () => {
   const footnotes = fs.readFileSync(path.join(__dirname, '..', 'src', 'tiptap-word-footnotes.js'), 'utf8');
   const adapter = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'tiptap-adapter.js'), 'utf8');
   const compat = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'compat-shim.js'), 'utf8');
-  const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  const html = fs.readFileSync(legacyHtmlPath, 'utf8');
   assert.match(footnotes, /function insertAQEngineFootnote\(editor, type\)/);
   assert.match(footnotes, /docModel\.applyMark\(from, from \+ 1, 'footnote'/);
   assert.match(footnotes, /syncAQEngineFootnoteNumbers\(editor\)/);
@@ -426,7 +428,7 @@ test('AQ Engine cross references use the engine document model', () => {
   const compat = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'compat-shim.js'), 'utf8');
   const engine = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'engine.js'), 'utf8');
   const documentSource = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'document.js'), 'utf8');
-  const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  const html = fs.readFileSync(legacyHtmlPath, 'utf8');
   assert.match(footnotes, /function collectAQEngineCrossRefTargets\(editor\)/);
   assert.match(footnotes, /function ensureAQEngineCrossRefIds\(editor\)/);
   assert.match(footnotes, /docModel\.applyMark\(from, from \+ text\.length, 'crossRef'/);
@@ -444,7 +446,7 @@ test('AQ Engine imports and renders inserted images as image blocks', () => {
   const adapter = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'tiptap-adapter.js'), 'utf8');
   const engine = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'engine.js'), 'utf8');
   const content = fs.readFileSync(path.join(__dirname, '..', 'src', 'tiptap-word-content.js'), 'utf8');
-  const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  const html = fs.readFileSync(legacyHtmlPath, 'utf8');
   assert.match(compat, /table\|image/);
   assert.match(compat, /tag === 'figure'/);
   assert.match(compat, /tag === 'figcaption'/);
@@ -459,7 +461,7 @@ test('AQ Engine imports and renders inserted images as image blocks', () => {
 test('AQ Engine caption manager reads and updates model objects', () => {
   const academic = fs.readFileSync(path.join(__dirname, '..', 'src', 'academic-objects.js'), 'utf8');
   const legacy = fs.readFileSync(path.join(__dirname, '..', 'src', 'legacy-runtime.js'), 'utf8');
-  const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  const html = fs.readFileSync(legacyHtmlPath, 'utf8');
   assert.match(academic, /function collectAQCaptionManagerEntries\(options\)/);
   assert.match(academic, /function updateAQCaption\(options\)/);
   assert.match(academic, /function ensureAQObjectIds\(editor\)/);
@@ -474,14 +476,15 @@ test('AQ Engine document outline reads model entries and page layout', () => {
   const outline = fs.readFileSync(path.join(__dirname, '..', 'src', 'document-outline.js'), 'utf8');
   const legacy = fs.readFileSync(path.join(__dirname, '..', 'src', 'legacy-runtime.js'), 'utf8');
   const engine = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'engine.js'), 'utf8');
-  const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  const html = fs.readFileSync(legacyHtmlPath, 'utf8');
   assert.match(outline, /function collectAQEngineEntries\(editor\)/);
   assert.match(outline, /function ensureAQOutlineIds\(editor\)/);
   assert.match(outline, /editor\._aqLayout/);
   assert.match(outline, /pageByBlock\[index\] \|\| 1/);
   assert.match(outline, /\[data-ref-id="/);
-  assert.match(legacy, /collectEntries\(\{\s*root:rootEl,\s*editor:activeEditor\|\|null,/);
-  assert.match(legacy, /scrollToEntry\(\{\s*root:rootEl,\s*editor:activeEditor\|\|null,/);
+  assert.match(legacy, /renderDocumentOutline\(\)\{ \/\* retired no-op: React outline-modals\.ts owns the document outline/);
+  assert.match(legacy, /AQDocumentOutline\.scrollToEntry wrapper/);
+  assert.match(legacy, /scrollToEntry\(\{root:rootEl,editor:activeEditor\|\|null,document:document,id:String/);
   assert.match(engine, /refId: \(block\.attrs && block\.attrs\.refId\) \|\| block\._refId \|\| null/);
   assert.match(engine, /imgEl\.dataset\.refId = line\.refId/);
   assert.match(engine, /rowEl\.dataset\.refId = line\.refId/);
@@ -491,7 +494,7 @@ test('AQ Engine document outline reads model entries and page layout', () => {
 test('AQ Engine find and replace use native document model offsets', () => {
   const findSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'tiptap-word-find.js'), 'utf8');
   const legacy = fs.readFileSync(path.join(__dirname, '..', 'src', 'legacy-runtime.js'), 'utf8');
-  const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  const html = fs.readFileSync(legacyHtmlPath, 'utf8');
   assert.match(findSource, /function buildAQEngineSearchBuffer\(editor\)/);
   assert.match(findSource, /function buildAQEngineSearchRanges\(editor, query, useRegex, caseSensitive\)/);
   assert.match(findSource, /isAQEngineEditor\(editor\)/);
@@ -525,7 +528,7 @@ test('AQ Engine track changes use run marks and model decisions', () => {
 
 test('AQ Engine bibliography titles render as KAYNAKCA uppercase heading', () => {
   const bibliography = fs.readFileSync(path.join(__dirname, '..', 'src', 'bibliography-state.js'), 'utf8');
-  const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  const html = fs.readFileSync(legacyHtmlPath, 'utf8');
   assert.match(bibliography, /text: 'KAYNAK\\u00c7A'/);
   assert.match(bibliography, /<h1>KAYNAKÇA<\/h1>/);
   assert.ok(html.includes('<script src="./src/bibliography-state.js">'), 'bibliography-state module must be loaded as src/ script');
@@ -533,7 +536,7 @@ test('AQ Engine bibliography titles render as KAYNAKCA uppercase heading', () =>
 
 test('AQ Engine bibliography entries keep APA 7 hanging indent and double spacing', () => {
   const bibliography = fs.readFileSync(path.join(__dirname, '..', 'src', 'bibliography-state.js'), 'utf8');
-  const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  const html = fs.readFileSync(legacyHtmlPath, 'utf8');
   const adapter = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'tiptap-adapter.js'), 'utf8');
   const compat = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'compat-shim.js'), 'utf8');
   // applyAPA7BibliographyEntryStyle is deduped to one canonical source in

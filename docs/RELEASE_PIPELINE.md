@@ -18,7 +18,7 @@ Generate a local self-signed Authenticode certificate:
 
 This writes `scripts/.signing-thumbprint`, which is ignored by Git.
 
-## Build
+## Local Windows Build
 
 ```powershell
 npm run build
@@ -38,6 +38,27 @@ For a temporary unsigned local build:
 $env:ACADEMIQ_SKIP_SIGN = "1"
 npm run build
 ```
+
+## GitHub Release Build
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`.
+
+The workflow builds:
+
+- Windows NSIS installer on `windows-latest`.
+- Fedora beta Linux bundles on `ubuntu-22.04` as `.rpm` and `.AppImage`.
+- A single GitHub Release that contains both platform artifact sets.
+
+Beta tags such as `v1.24.1-beta.1` are published as prereleases.
+
+The Linux job does not change the committed Windows Tauri config. It runs:
+
+```bash
+ACADEMIQ_TAURI_BUNDLES=rpm,appimage node scripts/configure-tauri-linux.js
+ACADEMIQ_TAURI_BUNDLES=rpm,appimage ACADEMIQ_SKIP_SIGN=1 npm run build
+```
+
+That temporary CI config switches bundle targets to `rpm,appimage` and bundles `binaries/libpdfium.so`.
 
 ## Updater Manifest
 

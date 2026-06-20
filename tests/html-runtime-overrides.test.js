@@ -3,8 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const legacyHtmlPath = path.join(__dirname, '..', 'legacy', 'academiq-research.html');
+
 test('canonical editor runtime modules load from src/ as the single source of truth', () => {
-  const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  const html = fs.readFileSync(legacyHtmlPath, 'utf8');
   [
     'tiptap-word-document.js',
     'tiptap-word-paste.js',
@@ -21,7 +23,7 @@ test('canonical editor runtime modules load from src/ as the single source of tr
 });
 
 test('plain citation linking runtime is loaded in legacy and Tauri entries', () => {
-  const legacyHtml = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  const legacyHtml = fs.readFileSync(legacyHtmlPath, 'utf8');
   const tauriHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   assert.match(legacyHtml, /<script src="\.\/src\/plain-citation-linking\.js"><\/script>/);
   assert.match(tauriHtml, /<script src="\/src\/plain-citation-linking\.js"><\/script>/);
@@ -36,7 +38,7 @@ test('plain citation linking runtime is loaded in legacy and Tauri entries', () 
 });
 
 test('startup retries TipTap init until canonical init module is available', () => {
-  const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  const html = fs.readFileSync(legacyHtmlPath, 'utf8');
   const legacy = fs.readFileSync(path.join(__dirname, '..', 'src', 'legacy-runtime.js'), 'utf8');
   [html, legacy].forEach((source) => {
     assert.match(source, /__aqTipTapInitRetryTimer/);
@@ -49,7 +51,7 @@ test('startup retries TipTap init until canonical init module is available', () 
 });
 
 test('AQ Engine browser modules are loaded only once', () => {
-  const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  const html = fs.readFileSync(legacyHtmlPath, 'utf8');
   [
     'engine',
     'document',
@@ -65,7 +67,7 @@ test('AQ Engine browser modules are loaded only once', () => {
 });
 
 test('embedded citation runtime does not keep stale popup item insertion handlers', () => {
-  const html = fs.readFileSync(path.join(__dirname, '..', 'academiq-research.html'), 'utf8');
+  const html = fs.readFileSync(legacyHtmlPath, 'utf8');
   const marker = 'window.AQCitationRuntime = runtime.publicApi;';
   const markerIndex = html.indexOf(marker);
   assert.notEqual(markerIndex, -1, 'embedded citation runtime marker missing');
