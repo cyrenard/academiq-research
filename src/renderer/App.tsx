@@ -1295,6 +1295,25 @@ export default function App() {
       if (metaNode) metaNode.textContent = title;
       win.__aqPdfFallbackHighlights = savedHighlights.slice();
       win.__aqPdfFallbackState = { buffer, title, scale, page: 1, total, pdf, pdfjs };
+      win.__aqRefreshPdfFallback = (delay = 120) => {
+        window.clearTimeout(win.__aqPdfFallbackRefreshTimer);
+        win.__aqPdfFallbackRefreshTimer = window.setTimeout(async () => {
+          if (win.__aqPdfFallbackRefreshing) return;
+          const state = win.__aqPdfFallbackState;
+          const activePanel = document.getElementById('pdfpanel');
+          if (!state?.buffer || !activePanel?.classList.contains('open')) return;
+          const activeScroll = document.getElementById('pdfscroll');
+          const scrollTop = activeScroll?.scrollTop || 0;
+          win.__aqPdfFallbackRefreshing = true;
+          try {
+            await renderPdfBufferFallback(state.buffer, String(state.title || 'PDF'), Number(state.scale || scale || 1.25));
+            const nextScroll = document.getElementById('pdfscroll');
+            if (nextScroll) nextScroll.scrollTop = scrollTop;
+          } finally {
+            win.__aqPdfFallbackRefreshing = false;
+          }
+        }, delay);
+      };
       const statsNode = document.getElementById('pdfreadstats');
       if (statsNode) {
         const noteCount = Array.isArray(win.__aqCurrentPdfReference?._annots) ? win.__aqCurrentPdfReference._annots.length : 0;
@@ -1315,8 +1334,31 @@ export default function App() {
   useEffect(() => {
     const win = window as any;
     win.__aqRenderPdfFallback = renderPdfBufferFallback;
+    const refresh = () => {
+      if (typeof win.__aqRefreshPdfFallback === 'function') win.__aqRefreshPdfFallback(140);
+    };
+    window.addEventListener('resize', refresh);
+    document.addEventListener('fullscreenchange', refresh);
+    const panel = document.getElementById('pdfpanel');
+    const scroll = document.getElementById('pdfscroll');
+    const mutationObserver = panel && typeof MutationObserver !== 'undefined'
+      ? new MutationObserver(refresh)
+      : null;
+    if (panel) mutationObserver?.observe(panel, { attributes: true, attributeFilter: ['class', 'style'] });
+    const resizeObserver = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(refresh)
+      : null;
+    if (panel) resizeObserver?.observe(panel);
+    if (scroll) resizeObserver?.observe(scroll);
     return () => {
+      window.removeEventListener('resize', refresh);
+      document.removeEventListener('fullscreenchange', refresh);
+      mutationObserver?.disconnect();
+      resizeObserver?.disconnect();
       delete win.__aqRenderPdfFallback;
+      delete win.__aqRefreshPdfFallback;
+      window.clearTimeout(win.__aqPdfFallbackRefreshTimer);
+      delete win.__aqPdfFallbackRefreshTimer;
     };
   }, []);
 

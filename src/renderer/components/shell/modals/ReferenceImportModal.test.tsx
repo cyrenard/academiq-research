@@ -18,6 +18,7 @@ vi.mock('../../../lib/external-reference-import', () => ({
 describe('ReferenceImportModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete (window as any).electronAPI;
   });
 
   it('renders nothing when open=false', () => {
@@ -132,5 +133,32 @@ describe('ReferenceImportModal', () => {
     expect(parseExternalReferenceText).toHaveBeenCalledWith('Some raw data', 'auto');
     expect(dispatchSpy).toHaveBeenCalled();
     expect(onStatus).toHaveBeenCalledWith('1 kaynak aktarıldı');
+  });
+
+  it('imports bibliography files through the native Tauri dialog', async () => {
+    const onStatus = vi.fn();
+    const mockEntries = [
+      { title: 'BibTeX Reference', authors: ['Author 1'], year: '2026' }
+    ];
+    vi.mocked(parseExternalReferenceText).mockReturnValue(mockEntries);
+    (window as any).electronAPI = {
+      openBibliographyDialog: vi.fn(async () => ({
+        ok: true,
+        files: [{ name: 'refs.bib', text: '@article{demo,title={BibTeX Reference}}' }]
+      }))
+    };
+
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+
+    render(<ReferenceImportModal open onClose={() => {}} onStatus={onStatus} />);
+    await userEvent.click(screen.getByRole('button', { name: /Dosya \/ Metin/ }));
+    await userEvent.click(screen.getByRole('button', { name: /\.bib/ }));
+
+    await waitFor(() => {
+      expect((window as any).electronAPI.openBibliographyDialog).toHaveBeenCalled();
+    });
+    expect(parseExternalReferenceText).toHaveBeenCalledWith('@article{demo,title={BibTeX Reference}}', 'bibtex');
+    expect(dispatchSpy).toHaveBeenCalled();
+    expect(onStatus).toHaveBeenCalled();
   });
 });

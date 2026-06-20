@@ -21,6 +21,8 @@ declare global {
       netFetchText: (url: string, options?: unknown) => IpcResult<unknown>;
       pdfSyncAll: () => IpcResult<unknown>;
       openPDFDialog: () => IpcResult<unknown>;
+      openWordDialog?: () => IpcResult<unknown>;
+      openBibliographyDialog?: () => IpcResult<unknown>;
       wordToHtml: (filePath: string) => IpcResult<unknown>;
       exportPDF: (options?: unknown) => IpcResult<unknown>;
       exportAnnotatedPdfNative: (options?: unknown) => IpcResult<unknown>;
@@ -37,7 +39,7 @@ declare global {
       getDocumentHistory: (docId: string, limit?: number) => IpcResult<unknown>;
       restoreDocumentHistorySnapshot: (docId: string, snapshotId: string) => IpcResult<unknown>;
       getBrowserCaptureStatus: () => IpcResult<unknown>;
-      prepareBrowserCaptureSetup: () => IpcResult<unknown>;
+      prepareBrowserCaptureSetup: (browserFamily?: string) => IpcResult<unknown>;
       runBrowserCaptureAction: (action: string, browserFamily?: string) => IpcResult<unknown>;
       testBrowserCaptureConnection: () => IpcResult<unknown>;
       lookupBrowserCaptureTarget: (payload: unknown) => IpcResult<unknown>;
@@ -89,4 +91,3 @@ declare global {
     };
   }
 }
-

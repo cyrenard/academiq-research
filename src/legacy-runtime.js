@@ -4784,6 +4784,10 @@ function togglePdfFullscreen(){
     renderPdfCompareView();
     return;
   }
+  if(typeof window.__aqRefreshPdfFallback==='function'){
+    window.__aqRefreshPdfFallback(90);
+    window.__aqRefreshPdfFallback(260);
+  }
   if(pdfDoc&&curRef&&curRef.pdfData){pdfScale=0;renderPDF(curRef.pdfData,activeTabId||null);}
 }
 function goToPage(){if(!pdfTotal)return;customPrompt('Sayfa numarası (1-'+pdfTotal+'):',pdfPg).then(function(v){var n=parseInt(v);if(n>=1&&n<=pdfTotal){pdfPg=n;scrollToPage(n);}});}
@@ -13243,4 +13247,3 @@ updatePageHeight=function(){
     '[data-theme="dark"] #noteta::placeholder,[data-theme="dark"] #notetag::placeholder{color:#8c7860!important;}';
   document.head.appendChild(st);
 })();
-

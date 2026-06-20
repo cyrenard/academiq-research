@@ -1,4 +1,4 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tauri::{AppHandle, State};
 
 use crate::capture::bridge::CaptureSidecarState;
@@ -10,6 +10,56 @@ async fn call(
     params: Value,
 ) -> Result<Value, String> {
     state.call(&app, method, params).await
+}
+
+fn open_path_best_effort(path: &str) -> Result<(), String> {
+    match tauri_plugin_opener::open_path(path, None::<&str>) {
+        Ok(()) => Ok(()),
+        Err(first_error) => {
+            #[cfg(target_os = "linux")]
+            {
+                std::process::Command::new("xdg-open")
+                    .arg(path)
+                    .spawn()
+                    .map(|_| ())
+                    .map_err(|fallback_error| {
+                        format!(
+                            "open_path failed: {}; xdg-open failed: {}",
+                            first_error, fallback_error
+                        )
+                    })
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                Err(first_error.to_string())
+            }
+        }
+    }
+}
+
+fn open_url_best_effort(url: &str) -> Result<(), String> {
+    match tauri_plugin_opener::open_url(url, None::<&str>) {
+        Ok(()) => Ok(()),
+        Err(first_error) => {
+            #[cfg(target_os = "linux")]
+            {
+                std::process::Command::new("xdg-open")
+                    .arg(url)
+                    .spawn()
+                    .map(|_| ())
+                    .map_err(|fallback_error| {
+                        format!(
+                            "open_url failed: {}; xdg-open failed: {}",
+                            first_error, fallback_error
+                        )
+                    })
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                Err(first_error.to_string())
+            }
+        }
+    }
 }
 
 #[tauri::command]
@@ -43,27 +93,37 @@ pub async fn browser_capture_run_action(
     browser_family: Option<String>,
 ) -> Result<Value, String> {
     let normalized = action.trim().to_ascii_lowercase();
-    let result = call(
+    let mut result = call(
         app.clone(),
         state,
         "runAction",
         json!({ "action": action, "browserFamily": browser_family }),
     )
     .await?;
+    let mut open_errors: Vec<String> = Vec::new();
     if matches!(normalized.as_str(), "install" | "repair" | "update") {
         if let Some(path) = result
             .get("installDir")
             .and_then(Value::as_str)
             .filter(|path| !path.is_empty())
         {
-            let _ = tauri_plugin_opener::open_path(path, None::<&str>);
+            if let Err(error) = open_path_best_effort(path) {
+                open_errors.push(error);
+            }
         }
         if let Some(url) = result
             .get("managerUrl")
             .and_then(Value::as_str)
             .filter(|url| !url.is_empty())
         {
-            let _ = tauri_plugin_opener::open_url(url, None::<&str>);
+            if let Err(error) = open_url_best_effort(url) {
+                open_errors.push(error);
+            }
+        }
+    }
+    if !open_errors.is_empty() {
+        if let Some(map) = result.as_object_mut() {
+            map.insert("openErrors".to_string(), json!(open_errors));
         }
     }
     Ok(result)
@@ -104,7 +164,7 @@ pub async fn browser_capture_open_install_dir(
         .and_then(Value::as_str)
         .filter(|path| !path.is_empty())
     {
-        tauri_plugin_opener::open_path(path, None::<&str>).map_err(|e| e.to_string())?;
+        open_path_best_effort(path)?;
     }
     Ok(result)
 }
@@ -127,7 +187,7 @@ pub async fn browser_capture_open_guide(
         .and_then(Value::as_str)
         .filter(|path| !path.is_empty())
     {
-        tauri_plugin_opener::open_path(path, None::<&str>).map_err(|e| e.to_string())?;
+        open_path_best_effort(path)?;
     }
     Ok(result)
 }

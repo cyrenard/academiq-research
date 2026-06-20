@@ -319,6 +319,8 @@ const electronAPI = {
   pdfSyncAll: () => invokeCommand('pdf_sync_all'),
 
   openPDFDialog: () => invokeCommand('dialog_open_pdf'),
+  openWordDialog: () => invokeCommand('dialog_open_word'),
+  openBibliographyDialog: () => invokeCommand('dialog_open_bibliography'),
   wordToHtml: (filePath) => wordToHtmlViaMammoth(filePath),
   exportPDF: async (options) => {
     const payload = pickObject(options);

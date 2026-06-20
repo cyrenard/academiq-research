@@ -57,6 +57,7 @@ import {
   resolveAppendixIdFromButton
 } from '../../lib/appendix-engine';
 import { deleteAQEngineAppendix as deleteAQEngineAppendixCore } from '../../lib/aq-engine/appendix-engine-core';
+import { importWordFileByPath } from '../../lib/file-import';
 
 type TopToolbarProps = {
   selectedReferenceId?: string;
@@ -736,7 +737,25 @@ export function TopToolbar({ selectedReferenceId, onOpenAudit, onOpenFeatureModa
     }
   };
 
-  const importWord = () => {
+  const importWord = async () => {
+    const api = window.electronAPI as any;
+    if (typeof api?.openWordDialog === 'function') {
+      setStatusText('Word dosyası seçiliyor...');
+      try {
+        const result = await api.openWordDialog();
+        const files = Array.isArray(result?.files) ? result.files : [];
+        const first = files.find((file: any) => String(file?.path || '').trim());
+        if (!first) {
+          setStatusText('Word dosyası seçilmedi');
+          return;
+        }
+        await importWordFileByPath(String(first.path), setStatusText);
+        return;
+      } catch (error) {
+        console.error('[word-import-dialog]', error);
+        setStatusText('Word içe aktarma penceresi açılamadı');
+      }
+    }
     (document.getElementById('wordinp') as HTMLInputElement | null)?.click();
   };
 

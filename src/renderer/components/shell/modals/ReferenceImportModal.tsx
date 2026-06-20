@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import { Modal } from '../../ui/Modal';
 import { fetchDoiReference, fetchLegacyReference } from '../../../lib/reference-import';
 import { parseExternalReferenceText, runExternalReferenceFileImport } from '../../../lib/external-reference-import';
@@ -26,6 +26,7 @@ export function ReferenceImportModal({ open, onClose, onStatus }: ReferenceImpor
   const [textFormat, setTextFormat] = useState<'auto' | 'bibtex' | 'ris' | 'apa'>('auto');
   const [bulkText, setBulkText] = useState('');
   const [bulkStatus, setBulkStatus] = useState('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const fetchPmidReference = async (pmid: string) => {
     const pmidClean = pmid.trim().replace(/[^0-9]/g, '');
@@ -150,6 +151,66 @@ export function ReferenceImportModal({ open, onClose, onStatus }: ReferenceImpor
       onStatus(msg);
       setBulkStatus(msg);
     });
+    event.currentTarget.value = '';
+  };
+
+  const importBibliographyText = (text: string, sourceLabel: string) => {
+    const raw = text.trim();
+    if (!raw) return false;
+
+    const lower = sourceLabel.toLowerCase();
+    const format = lower.endsWith('.bib')
+      ? 'bibtex'
+      : lower.endsWith('.ris') || lower.endsWith('.enw')
+        ? 'ris'
+        : 'auto';
+    const entries = parseExternalReferenceText(raw, format);
+    if (!entries.length) return false;
+
+    window.dispatchEvent(new CustomEvent('aq:import-references', {
+      detail: {
+        entries,
+        sourceLabel,
+        includeInBibliography: true,
+        revealBibliography: true
+      }
+    }));
+    onStatus(`${entries.length} kaynak aktarÄ±ldÄ±`);
+    setBulkStatus(`${entries.length} kaynak baÅŸarÄ±yla kÃ¼tÃ¼phaneye eklendi.`);
+    return true;
+  };
+
+  const handleNativeFileImport = async () => {
+    const api = (window as any).electronAPI;
+    if (typeof api?.openBibliographyDialog !== 'function') {
+      fileInputRef.current?.click();
+      return;
+    }
+
+    try {
+      setBulkStatus('Dosya seÃ§iliyor...');
+      const result = await api.openBibliographyDialog();
+      const files = Array.isArray(result?.files) ? result.files : [];
+      if (!files.length) {
+        setBulkStatus('Dosya seÃ§ilmedi.');
+        return;
+      }
+
+      let imported = false;
+      for (const file of files) {
+        imported = importBibliographyText(
+          String(file?.text || ''),
+          String(file?.name || file?.path || 'references.bib')
+        ) || imported;
+      }
+      if (!imported) {
+        setBulkStatus('BibTeX/RIS kaynaÄŸÄ± bulunamadÄ±.');
+      }
+    } catch (err) {
+      console.error('[ReferenceImportModal] Native file import failed:', err);
+      setBulkStatus('Dosya seÃ§im penceresi aÃ§Ä±lamadÄ±.');
+      fileInputRef.current?.click();
+    }
   };
 
   return (
@@ -302,15 +363,20 @@ export function ReferenceImportModal({ open, onClose, onStatus }: ReferenceImpor
                 Metinden Aktar
               </button>
 
-              <label className="h-9 rounded-lg border border-aq-line bg-white px-4 text-xs font-semibold text-aq-ink flex items-center justify-center cursor-pointer hover:bg-aq-panel shadow-sm">
+              <button
+                type="button"
+                onClick={handleNativeFileImport}
+                className="h-9 rounded-lg border border-aq-line bg-white px-4 text-xs font-semibold text-aq-ink flex items-center justify-center cursor-pointer hover:bg-aq-panel shadow-sm"
+              >
                 Dosya Seç (.bib, .ris, .txt)
-                <input
-                  type="file"
-                  accept=".bib,.ris,.enw,.txt,.apa"
-                  hidden
-                  onChange={handleFileImport}
-                />
-              </label>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".bib,.ris,.enw,.txt,.apa"
+                hidden
+                onChange={handleFileImport}
+              />
             </div>
 
             {bulkStatus && (

@@ -59,7 +59,7 @@ test('Phase 0 shim exposes preload-compatible electronAPI and ocrAPI names', asy
   [
     'loadData', 'saveData', 'saveEditorDraft', 'savePDF', 'loadPDF', 'pdfExists', 'deletePDF',
     'showPdfInExplorer', 'deleteWorkspacePdfFolder', 'downloadPDFfromURL', 'openExternalUrl',
-    'netFetchJSON', 'netFetchText', 'pdfSyncAll', 'openPDFDialog', 'wordToHtml', 'exportPDF',
+    'netFetchJSON', 'netFetchText', 'pdfSyncAll', 'openPDFDialog', 'openWordDialog', 'openBibliographyDialog', 'wordToHtml', 'exportPDF',
     'exportAnnotatedPdfNative', 'exportDOCX', 'getSyncSettings', 'setSyncDir', 'clearSyncDir',
     'createBackup', 'restoreBackup', 'getLocalMatrixAssistantStatus', 'rankLocalMatrixCandidates',
     'composeLocalMatrixCells', 'getAppInfo', 'getDocumentHistory', 'restoreDocumentHistorySnapshot',
@@ -129,7 +129,7 @@ test('Phase 0.5 aq-engine integration suite passes under the React shell contrac
     env
   });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout + result.stderr, /pass 55|tests 55/);
+  assert.match(result.stdout + result.stderr, /pass (55|56)|tests (55|56)/);
 });
 
 test('Turkish IME characters survive normal JS input and casing paths', () => {

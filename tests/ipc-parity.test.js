@@ -74,6 +74,8 @@ const parityCases = [
   ['netFetchText', 'net_fetch_text', ['https://example.com', { timeoutMs: 2500, allowAnyHost: true }]],
   ['pdfSyncAll', 'pdf_sync_all', []],
   ['openPDFDialog', 'dialog_open_pdf', []],
+  ['openWordDialog', 'dialog_open_word', []],
+  ['openBibliographyDialog', 'dialog_open_bibliography', []],
   ['wordToHtml', 'word_to_html', ['C:/tmp/a.docx']],
   ['exportPDF', 'export_pdf', [{ layoutJson: '{"pages":[{"lines":[]}]}', defaultPath: 'a.pdf' }]],
   ['exportAnnotatedPdfNative', 'pdf_export_annotated', [{ pdfBase64: 'JVBERi0=' }], 'not_implemented_phase_5'],
@@ -226,3 +228,10 @@ test('Phase-deferred handlers return explicit controlled stub messages', () => {
   assert.match(ocrSource, /ocr_recognize/);
 });
 
+test('Linux browser capture setup can fall back to xdg-open for prepared files', () => {
+  const browserSource = read('src-tauri', 'src', 'commands', 'browser_capture.rs');
+  assert.match(browserSource, /fn open_path_best_effort/);
+  assert.match(browserSource, /fn open_url_best_effort/);
+  assert.match(browserSource, /Command::new\("xdg-open"\)/);
+  assert.match(browserSource, /openErrors/);
+});
