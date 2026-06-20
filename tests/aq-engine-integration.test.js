@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 
 const legacyHtmlPath = path.join(__dirname, '..', 'legacy', 'academiq-research.html');
 
@@ -140,6 +141,84 @@ test('AQ Engine leaves slash trigger ownership to citation runtime refresh', () 
   assert.doesNotMatch(source, /window\.editorTrigRange = \{ from:start, to:end \}/);
   assert.doesNotMatch(source, /openFromSlash\(query/);
   assert.doesNotMatch(source, /openTrig\(query/);
+});
+
+test('citation slash trigger leaves typing native when no reference result is selectable', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'citation-runtime.js'), 'utf8');
+  const makeElement = () => ({
+    style: {},
+    classList: { add(){}, remove(){} },
+    addEventListener(){},
+    removeEventListener(){},
+    querySelector(){ return null; },
+    contains(){ return false; },
+    appendChild(){},
+    getBoundingClientRect(){ return { left: 16, bottom: 24 }; },
+    innerHTML: '',
+    textContent: '',
+    value: '',
+    disabled: false,
+    readOnly: false,
+    tabIndex: 0,
+    scrollTop: 0,
+    clientHeight: 240
+  });
+  const elements = {
+    trig: makeElement(),
+    tgs: makeElement(),
+    tgl: makeElement(),
+    tgq: makeElement(),
+    tgsel: makeElement(),
+    escroll: makeElement(),
+    apaed: makeElement()
+  };
+  const document = {
+    getElementById(id){ return elements[id] || null; },
+    querySelector(){ return null; },
+    addEventListener(){},
+    removeEventListener(){}
+  };
+  const window = {
+    document,
+    console,
+    Date,
+    setTimeout,
+    clearTimeout,
+    innerHeight: 800,
+    innerWidth: 1200,
+    addEventListener(){},
+    removeEventListener(){},
+    getSelection(){ return null; },
+    cLib(){ return []; },
+    filterRefsForQuery(){ return []; }
+  };
+  window.window = window;
+  vm.runInNewContext(source, { window, document, console, Date, setTimeout, clearTimeout });
+  window.AQCitationRuntime.openFromSlash('', 'inline');
+
+  const enterEvent = {
+    key: 'Enter',
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    preventDefault(){ this.prevented = true; },
+    stopPropagation(){ this.stopped = true; },
+    stopImmediatePropagation(){ this.immediateStopped = true; }
+  };
+  assert.equal(window.AQCitationRuntime.handleKeydown(enterEvent), false);
+  assert.equal(enterEvent.prevented, undefined);
+
+  const escapeEvent = {
+    key: 'Escape',
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    preventDefault(){ this.prevented = true; },
+    stopPropagation(){ this.stopped = true; },
+    stopImmediatePropagation(){ this.immediateStopped = true; }
+  };
+  assert.equal(window.AQCitationRuntime.handleKeydown(escapeEvent), true);
+  assert.equal(escapeEvent.prevented, true);
 });
 
 test('AQ Engine adapters use canonical APA formatter for citation text', () => {

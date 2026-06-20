@@ -1188,6 +1188,10 @@
       return ref || null;
     },
 
+    hasSelectableResults: function(){
+      return Array.isArray(runtime.state.results) && runtime.state.results.length > 0;
+    },
+
     insertHTMLWithCitationGuard: function(html, preservedTop, options){
       options = options || {};
       if(!html) return false;
@@ -1611,6 +1615,16 @@
       if(event.ctrlKey || event.metaKey || event.altKey) return false;
       const key = event.key;
       const isSpace = key === ' ' || event.code === 'Space' || key === 'Spacebar' || event.keyCode === 32 || event.which === 32;
+      if(!runtime.hasSelectableResults()){
+        if(key === 'Escape'){
+          runtime.close(true);
+          event.preventDefault();
+          event.stopPropagation();
+          if(typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+          return true;
+        }
+        return false;
+      }
       if(key === 'ArrowDown'){
         runtime.state.keyboardMode = 'navigate';
         runtime.state.activeIndex = Math.min(runtime.state.activeIndex + 1, Math.max(0, runtime.state.results.length - 1));
