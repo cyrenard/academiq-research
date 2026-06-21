@@ -54,6 +54,31 @@ export function BrowserCaptureModal({ open, onClose, onStatus }: BrowserCaptureM
       .finally(() => setLoadingAction(''));
   };
 
+  const prepareSetupAndOpenFiles = () => {
+    const api = getElectronAPI();
+    if (typeof api.prepareBrowserCaptureSetup !== 'function') {
+      onStatus('Capture kurulumu hazirlanamadi: Browser Capture komutu bulunamadi');
+      return;
+    }
+    setLoadingAction('install');
+    api.prepareBrowserCaptureSetup(browserFamily)
+      .then((result: unknown) => {
+        setBrowserStatus(result);
+        return Promise.allSettled([
+          typeof api.openBrowserCaptureInstallDir === 'function' ? api.openBrowserCaptureInstallDir(browserFamily) : Promise.reject(new Error('Kurulum klasoru komutu yok')),
+          typeof api.openBrowserCaptureGuide === 'function' ? api.openBrowserCaptureGuide(browserFamily) : Promise.reject(new Error('Rehber komutu yok'))
+        ]).then((openResults) => ({ result, openResults }));
+      })
+      .then(({ result, openResults }: { result: unknown; openResults: PromiseSettledResult<unknown>[] }) => {
+        const record = result && typeof result === 'object' ? result as Record<string, unknown> : {};
+        const detail = [record.installDir, record.guidePath].map((item) => String(item || '')).filter(Boolean).join(' | ');
+        const failed = openResults.filter((item) => item.status === 'rejected').length;
+        onStatus(`${failed ? `Capture kurulumu hazirlandi; ${failed} dosya acilamadi` : 'Capture kurulumu hazirlandi'}${detail ? `: ${detail}` : ''}`);
+      })
+      .catch((error: unknown) => onStatus(`Capture kurulumu hazirlanamadi: ${describeError(error)}`))
+      .finally(() => setLoadingAction(''));
+  };
+
   const openInstallDir = () =>
     getElectronAPI().openBrowserCaptureInstallDir(browserFamily)
       .then((result: unknown) => {
@@ -127,7 +152,7 @@ export function BrowserCaptureModal({ open, onClose, onStatus }: BrowserCaptureM
             ))}
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={() => runAction('install', 'Capture kurulumu hazırlandı', 'Capture kurulumu hazırlanamadı')}>
+            <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={prepareSetupAndOpenFiles}>
               {loadingAction === 'install' ? 'Hazırlanıyor...' : 'Kurulumu hazırla'}
             </button>
             <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left" onClick={openInstallDir}>

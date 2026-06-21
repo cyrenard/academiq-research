@@ -4770,12 +4770,15 @@ function togglePDF(){
   }
   var willClose=p.classList.contains('open');
   p.classList.toggle('open');
+  if(typeof window.__aqSetPdfOpen==='function')window.__aqSetPdfOpen(p.classList.contains('open'));
   if(willClose&&pdfCompareMode)disablePdfCompareMode({restoreActiveRender:false});
 }
 function togglePdfFullscreen(){
   var p=document.getElementById('pdfpanel');
   if(!p)return;
   p.classList.toggle('fullscreen');
+  if(typeof window.__aqSetPdfOpen==='function')window.__aqSetPdfOpen(p.classList.contains('open'));
+  if(typeof window.__aqSetPdfFullscreen==='function')window.__aqSetPdfFullscreen(p.classList.contains('fullscreen'));
   var fullBtn=document.getElementById('pdffullbtn');
   if(fullBtn)fullBtn.innerHTML=p.classList.contains('fullscreen')?'&#x2716;':'&#x26F6;';
   var resizeHandle=document.getElementById('pdfresize');
@@ -4800,7 +4803,11 @@ try{
     pZFit:pZFit,
     goToPage:goToPage,
     togglePDF:togglePDF,
-    togglePdfFullscreen:togglePdfFullscreen
+    togglePdfFullscreen:togglePdfFullscreen,
+    __aqLegacyRerenderActivePdf:function(){
+      if(curRef&&curRef.pdfData){pdfScale=0;renderPDF(curRef.pdfData,activeTabId||null);return true;}
+      return false;
+    }
   });
 }catch(_e){}
 

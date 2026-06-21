@@ -88,6 +88,13 @@ export function AppShell({
     action();
   };
 
+  const startWindowDrag = (event: PointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('button, input, textarea, select, a, [role="button"], [data-no-window-drag]')) return;
+    window.electronAPI?.startWindowDrag?.().catch(() => undefined);
+  };
+
   const beginSidebarResize = (side: 'left' | 'right', event: PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     resizeCleanupRef.current?.();
@@ -162,13 +169,13 @@ export function AppShell({
 
   return (
     <div className="aq-soft-shell grid h-screen grid-rows-[38px_38px_1fr_22px] overflow-hidden bg-[#fbfaf7] text-aq-ink">
-      <header data-tauri-drag-region className="aq-titlebar flex items-center justify-between border-b border-aq-line bg-white pl-5 pr-2">
+      <header data-tauri-drag-region onPointerDown={startWindowDrag} className="aq-titlebar flex items-center justify-between border-b border-aq-line bg-white pl-5 pr-2">
         <div data-tauri-drag-region className="aq-titlebar-drag-zone flex h-full flex-1 items-center gap-2">
           <div data-tauri-drag-region className="flex h-6 w-6 items-center justify-center rounded-md bg-aq-navy text-[12px] font-semibold text-white">A</div>
           <div data-tauri-drag-region className="text-[16px] font-semibold leading-none">AcademiQ</div>
           <div data-tauri-drag-region className="text-[9px] font-semibold uppercase tracking-[0.34em] text-aq-muted">Research Studio</div>
         </div>
-        <div className="flex h-full items-center gap-2 text-xs text-aq-muted">
+        <div className="flex h-full items-center gap-2 text-xs text-aq-muted" data-no-window-drag>
           <div className="relative" onPointerDown={(event) => event.stopPropagation()}>
             <button
               type="button"

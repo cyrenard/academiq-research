@@ -14,4 +14,6 @@ test('Tauri shell keeps the app clickable while restoring a narrow drag zone', (
   assert.match(css, /\.aq-titlebar button,[\s\S]*?\.aq-window-control\s*\{[\s\S]*?-webkit-app-region:\s*no-drag;/);
   assert.match(shell, /aq-titlebar-drag-zone/);
   assert.match(shell, /data-tauri-drag-region/);
+  assert.match(shell, /startWindowDrag/);
+  assert.match(shell, /window\.electronAPI\?\.startWindowDrag/);
 });

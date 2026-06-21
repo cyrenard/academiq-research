@@ -221,6 +221,38 @@ export function FeatureModals({
       });
   };
 
+  const prepareCaptureSetup = () => {
+    const browserFamily = getCaptureBrowserFamily();
+    setLoadingAction('install');
+    setCaptureActionMessage('Capture kurulumu hazirlaniyor...');
+    window.electronAPI.updateBrowserCapturePrefs({ enabled: true, setupPromptSeen: true, browserFamily })
+      .then(() => window.electronAPI.prepareBrowserCaptureSetup(browserFamily))
+      .then((result: any) => {
+        setBrowserStatus(result);
+        return Promise.allSettled([
+          window.electronAPI.openBrowserCaptureInstallDir(browserFamily),
+          window.electronAPI.openBrowserCaptureGuide(browserFamily)
+        ]).then((openResults) => ({ result, openResults }));
+      })
+      .then(({ result, openResults }) => {
+        const installDir = result && typeof result === 'object' && 'installDir' in result ? String(result.installDir || '') : '';
+        const guidePath = result && typeof result === 'object' && 'guidePath' in result ? String(result.guidePath || '') : '';
+        const failed = openResults.filter((item) => item.status === 'rejected').length;
+        const detail = [installDir, guidePath].filter(Boolean).join(' | ');
+        const message = failed
+          ? `Capture kurulumu hazirlandi; ${failed} dosya acilamadi${detail ? `: ${detail}` : ''}`
+          : `Capture kurulumu hazirlandi${detail ? `: ${detail}` : ''}`;
+        setCaptureActionMessage(message);
+        onStatus(message);
+      })
+      .catch((error) => {
+        const finalMessage = `Capture kurulumu hazirlanamadi: ${error instanceof Error ? error.message : String(error || 'Bilinmeyen hata')}`;
+        setCaptureActionMessage(finalMessage);
+        onStatus(finalMessage);
+      })
+      .finally(() => setLoadingAction(''));
+  };
+
   const restoreSnapshot = async (snapshotId: string) => {
     if (!snapshotId) return;
     if (!(await confirmDialog('Bu belge sürümü geri yüklensin mi?'))) return;
@@ -508,7 +540,7 @@ export function FeatureModals({
                     </div>
                   ) : null}
                   <div className="mt-3 grid grid-cols-3 gap-2">
-                    <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureAction('install', 'Capture kurulumu hazırlandı', 'Capture kurulumu hazırlanamadı')}>{loadingAction === 'install' ? 'Hazırlanıyor...' : 'Kurulumu hazırla'}</button>
+                    <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={prepareCaptureSetup}>{loadingAction === 'install' ? 'Hazırlanıyor...' : 'Kurulumu hazırla'}</button>
                     <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureAction('repair', 'Capture kurulumu onarıldı', 'Capture onarılamadı')}>Onar</button>
                     <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureCommand(window.electronAPI.testBrowserCaptureConnection(), 'Capture test edildi', 'Capture test edilemedi')}>Test et</button>
                     <button type="button" className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => runCaptureCommand(window.electronAPI.openBrowserCaptureInstallDir(captureBrowserFamily), 'Kurulum klasörü açıldı', 'Kurulum klasörü açılamadı')}>Klasörü aç</button>
@@ -840,4 +872,3 @@ export function FeatureModals({
 }
 
 export type { FeatureModal };
-

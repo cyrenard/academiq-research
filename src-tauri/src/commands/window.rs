@@ -19,6 +19,12 @@ pub async fn window_toggle_maximize(window: WebviewWindow) -> Result<Value, Stri
 }
 
 #[tauri::command]
+pub async fn window_start_dragging(window: WebviewWindow) -> Result<Value, String> {
+    window.start_dragging().map_err(|e| e.to_string())?;
+    Ok(json!({ "ok": true }))
+}
+
+#[tauri::command]
 pub async fn window_close(window: WebviewWindow) -> Result<Value, String> {
     window.close().map_err(|e| e.to_string())?;
     Ok(json!({ "ok": true }))

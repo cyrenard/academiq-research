@@ -100,7 +100,6 @@ pub async fn dialog_open_bibliography(app: AppHandle) -> Result<Value, String> {
     let Some(files) = app
         .dialog()
         .file()
-        .add_filter("Bibliography files", &["bib", "ris", "enw", "txt", "apa"])
         .blocking_pick_files()
     else {
         return Ok(json!({ "ok": false }));

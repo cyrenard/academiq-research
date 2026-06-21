@@ -108,6 +108,7 @@ pub fn run() {
             commands::update::update_set_url,
             commands::window::window_close,
             commands::window::window_minimize,
+            commands::window::window_start_dragging,
             commands::window::window_toggle_maximize,
             commands::word::word_to_html,
             commands::word::read_file_text,

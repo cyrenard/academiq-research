@@ -57,6 +57,7 @@ declare global {
       setUpdateUrl: (url: string) => IpcResult<unknown>;
       restartApp: () => IpcResult<unknown>;
       minimizeWindow: () => IpcResult<unknown>;
+      startWindowDrag?: () => IpcResult<unknown>;
       toggleMaximizeWindow: () => IpcResult<unknown>;
       closeWindow: () => IpcResult<unknown>;
       db?: {

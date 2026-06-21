@@ -9,7 +9,7 @@ beforeEach(() => {
   originalElectronAPI = (window as any).electronAPI;
   (window as any).electronAPI = {
     getBrowserCaptureStatus: vi.fn(async () => ({ ok: true, lifecycleState: 'ready' })),
-    prepareBrowserCaptureSetup: vi.fn(async (_browserFamily?: string) => ({ ok: true })),
+    prepareBrowserCaptureSetup: vi.fn(async (_browserFamily?: string) => ({ ok: true, installDir: 'C:/capture', guidePath: 'C:/capture/README.md' })),
     runBrowserCaptureAction: vi.fn(async (_action: string, _browserFamily?: string) => ({ ok: true })),
     openBrowserCaptureInstallDir: vi.fn(async () => ({ ok: true })),
     openBrowserCaptureGuide: vi.fn(async () => ({ ok: true })),
@@ -55,24 +55,26 @@ describe('BrowserCaptureModal', () => {
     expect(screen.getByRole('button', { name: 'Capture aktif et' })).toBeInTheDocument();
   });
 
-  it('"Kurulumu hazırla" calls run action + reports success', async () => {
+  it('"Kurulumu hazırla" prepares setup and opens files', async () => {
     const onStatus = vi.fn();
     render(<BrowserCaptureModal open onClose={() => {}} onStatus={onStatus} />);
     await userEvent.click(screen.getByRole('button', { name: 'Kurulumu hazırla' }));
     await waitFor(() => {
-      expect((window as any).electronAPI.runBrowserCaptureAction).toHaveBeenCalledWith('install', 'chromium');
-      expect(onStatus).toHaveBeenCalledWith('Capture kurulumu hazırlandı');
+      expect((window as any).electronAPI.prepareBrowserCaptureSetup).toHaveBeenCalledWith('chromium');
+      expect((window as any).electronAPI.openBrowserCaptureInstallDir).toHaveBeenCalledWith('chromium');
+      expect((window as any).electronAPI.openBrowserCaptureGuide).toHaveBeenCalledWith('chromium');
+      expect(onStatus).toHaveBeenCalledWith(expect.stringContaining('Capture kurulumu hazirlandi'));
     });
   });
 
-  it('"Kurulumu hazırla" falls back to legacy prepareBrowserCaptureSetup', async () => {
+  it('"Kurulumu hazırla" does not require runBrowserCaptureAction', async () => {
     delete (window as any).electronAPI.runBrowserCaptureAction;
     const onStatus = vi.fn();
     render(<BrowserCaptureModal open onClose={() => {}} onStatus={onStatus} />);
     await userEvent.click(screen.getByRole('button', { name: 'Kurulumu hazırla' }));
     await waitFor(() => {
       expect((window as any).electronAPI.prepareBrowserCaptureSetup).toHaveBeenCalledWith('chromium');
-      expect(onStatus).toHaveBeenCalledWith('Capture kurulumu hazırlandı');
+      expect(onStatus).toHaveBeenCalledWith(expect.stringContaining('Capture kurulumu hazirlandi'));
     });
   });
 

@@ -107,6 +107,7 @@ const parityCases = [
   ['setUpdateUrl', 'update_set_url', ['https://api.github.com/repos/cyrenard/academiq-research/releases/latest']],
   ['restartApp', 'update_restart', []],
   ['minimizeWindow', 'window_minimize', []],
+  ['startWindowDrag', 'window_start_dragging', []],
   ['toggleMaximizeWindow', 'window_toggle_maximize', []],
   ['closeWindow', 'window_close', []]
 ];

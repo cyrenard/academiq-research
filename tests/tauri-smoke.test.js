@@ -68,7 +68,7 @@ test('Phase 0 shim exposes preload-compatible electronAPI and ocrAPI names', asy
     'openBrowserCaptureGuide', 'updateBrowserCapturePrefs', 'createBrowserCaptureWorkspace',
     'browserCaptureRendererReady', 'ackBrowserCapturePayload', 'onBrowserCaptureIncoming',
     'onBrowserCaptureWorkspaceCreated', 'onBrowserCaptureStateChanged', 'checkUpdate',
-    'downloadUpdate', 'setUpdateUrl', 'restartApp', 'minimizeWindow', 'toggleMaximizeWindow',
+    'downloadUpdate', 'setUpdateUrl', 'restartApp', 'minimizeWindow', 'startWindowDrag', 'toggleMaximizeWindow',
     'closeWindow'
   ].forEach((name) => assert.equal(typeof api[name], 'function', name));
   assert.equal(typeof ocr.recognize, 'function');
@@ -129,7 +129,7 @@ test('Phase 0.5 aq-engine integration suite passes under the React shell contrac
     env
   });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout + result.stderr, /pass (55|56)|tests (55|56)/);
+  assert.match(result.stdout + result.stderr, /pass (55|56|57)|tests (55|56|57)/);
 });
 
 test('Turkish IME characters survive normal JS input and casing paths', () => {

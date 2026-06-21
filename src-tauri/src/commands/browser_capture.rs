@@ -13,26 +13,31 @@ async fn call(
 }
 
 fn open_path_best_effort(path: &str) -> Result<(), String> {
-    match tauri_plugin_opener::open_path(path, None::<&str>) {
-        Ok(()) => Ok(()),
-        Err(first_error) => {
-            #[cfg(target_os = "linux")]
-            {
-                std::process::Command::new("xdg-open")
-                    .arg(path)
-                    .spawn()
-                    .map(|_| ())
-                    .map_err(|fallback_error| {
-                        format!(
-                            "open_path failed: {}; xdg-open failed: {}",
-                            first_error, fallback_error
-                        )
-                    })
+    #[cfg(target_os = "linux")]
+    {
+        let mut errors: Vec<String> = Vec::new();
+        for (program, args) in [
+            ("gio", vec!["open", path]),
+            ("xdg-open", vec![path]),
+        ] {
+            match std::process::Command::new(program).args(args).spawn() {
+                Ok(_) => return Ok(()),
+                Err(error) => errors.push(format!("{} failed: {}", program, error)),
             }
-            #[cfg(not(target_os = "linux"))]
-            {
-                Err(first_error.to_string())
-            }
+        }
+        return tauri_plugin_opener::open_path(path, None::<&str>).map_err(|error| {
+            format!(
+                "open_path failed: {}; {}",
+                error,
+                errors.join("; ")
+            )
+        });
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        match tauri_plugin_opener::open_path(path, None::<&str>) {
+            Ok(()) => Ok(()),
+            Err(first_error) => Err(first_error.to_string()),
         }
     }
 }

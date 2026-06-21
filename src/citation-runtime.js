@@ -1013,10 +1013,10 @@
       if(hint) hint.textContent = runtime.state.query ? '"' + runtime.state.query + '"' : 'tüm kaynaklar';
       if(inp){
         inp.value = runtime.state.query;
-        inp.readOnly = true;
-        inp.disabled = true;
-        inp.tabIndex = -1;
-        inp.style.pointerEvents = 'none';
+        inp.readOnly = false;
+        inp.disabled = false;
+        inp.tabIndex = 0;
+        inp.style.pointerEvents = 'auto';
       }
       if(!list) return;
       runtime.state.results = getResults(runtime.state.query);
@@ -1093,7 +1093,13 @@
       }
       runtime.renderList();
       syncLegacyState();
-      focusEditorWithoutScroll();
+      window.setTimeout(function(){
+        const input = getTriggerInput();
+        if(input && runtime.state.open){
+          try{ input.focus({ preventScroll:true }); }catch(_e){ input.focus(); }
+          try{ input.setSelectionRange(input.value.length, input.value.length); }catch(_e){}
+        }
+      },0);
       runtime.restoreScroll();
     },
 
@@ -1716,13 +1722,23 @@
       }
       const inp = getTriggerInput();
       if(inp){
-        inp.readOnly = true;
-        inp.disabled = true;
-        inp.tabIndex = -1;
-        ['keydown','keyup','input','mousedown','click'].forEach(function(type){
+        inp.readOnly = false;
+        inp.disabled = false;
+        inp.tabIndex = 0;
+        inp.addEventListener('keydown', function(e){
+          if(runtime.handleKeydown(e)) return;
+          e.stopPropagation();
+        }, true);
+        inp.addEventListener('input', function(e){
+          runtime.state.query = inp.value || '';
+          runtime.state.activeIndex = 0;
+          runtime.state.keyboardMode = 'query';
+          runtime.renderList();
+          e.stopPropagation();
+        });
+        ['keyup','mousedown','click'].forEach(function(type){
           inp.addEventListener(type, function(e){
             e.stopPropagation();
-            if(typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
           }, true);
         });
       }

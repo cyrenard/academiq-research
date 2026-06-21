@@ -163,6 +163,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
   const [pdfPageText, setPdfPageText] = useState('--');
   const [pdfZoomText, setPdfZoomText] = useState('--');
   const [pdfToolMode, setPdfToolMode] = useState('');
+  const [pdfIsOpen, setPdfIsOpen] = useState(false);
   const [pdfIsFullscreen, setPdfIsFullscreen] = useState(false);
 
   // Note: the legacy → React sync debounce timer is owned by
@@ -171,15 +172,27 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
   useEffect(() => {
     const win = window as any;
     const previousToggle = win.togglePdfFullscreen;
+    const refreshPdfAfterLayout = () => {
+      if (typeof win.__aqRefreshPdfFallback === 'function') {
+        win.__aqRefreshPdfFallback(90);
+        win.__aqRefreshPdfFallback(260);
+      }
+      if (typeof win.__aqLegacyRerenderActivePdf === 'function') {
+        window.setTimeout(() => win.__aqLegacyRerenderActivePdf(), 120);
+        window.setTimeout(() => win.__aqLegacyRerenderActivePdf(), 320);
+      }
+    };
     win.togglePdfFullscreen = () => {
       if (pdfFullscreenLockRef.current) return;
       const panel = document.getElementById('pdfpanel');
       if (!panel) return;
       pdfFullscreenLockRef.current = true;
+      setPdfIsOpen(panel.classList.contains('open'));
       const nextFullscreen = !panel.classList.contains('fullscreen');
       setPdfIsFullscreen(nextFullscreen);
       document.body.classList.toggle('aq-pdf-reader-fullscreen', nextFullscreen);
       document.getElementById('pdfresize')?.classList.toggle('aq-hidden', nextFullscreen);
+      refreshPdfAfterLayout();
       window.setTimeout(() => {
         pdfFullscreenLockRef.current = false;
       }, 180);
@@ -188,6 +201,19 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     return () => {
       win.togglePdfFullscreen = previousToggle;
     };
+  }, []);
+
+  useEffect(() => {
+    const panel = document.getElementById('pdfpanel');
+    if (!panel) return undefined;
+    const syncPdfPanelState = () => {
+      setPdfIsOpen(panel.classList.contains('open'));
+      setPdfIsFullscreen(panel.classList.contains('fullscreen'));
+    };
+    syncPdfPanelState();
+    const observer = new MutationObserver(syncPdfPanelState);
+    observer.observe(panel, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -568,10 +594,19 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       const togglePdfFullscreenSafe = () => {
         if (!panel || pdfFullscreenLockRef.current) return true;
         pdfFullscreenLockRef.current = true;
+        setPdfIsOpen(panel.classList.contains('open'));
         const nextFullscreen = !panel.classList.contains('fullscreen');
         setPdfIsFullscreen(nextFullscreen);
         document.body.classList.toggle('aq-pdf-reader-fullscreen', nextFullscreen);
         document.getElementById('pdfresize')?.classList.toggle('aq-hidden', nextFullscreen);
+        if (typeof win.__aqRefreshPdfFallback === 'function') {
+          win.__aqRefreshPdfFallback(90);
+          win.__aqRefreshPdfFallback(260);
+        }
+        if (typeof win.__aqLegacyRerenderActivePdf === 'function') {
+          window.setTimeout(() => win.__aqLegacyRerenderActivePdf(), 120);
+          window.setTimeout(() => win.__aqLegacyRerenderActivePdf(), 320);
+        }
         window.setTimeout(() => {
           pdfFullscreenLockRef.current = false;
         }, 180);
@@ -1166,6 +1201,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     (window as any).__aqSetPdfTitle = setPdfTitle;
     (window as any).__aqSetPdfPage = setPdfPageText;
     (window as any).__aqSetPdfZoom = setPdfZoomText;
+    (window as any).__aqSetPdfOpen = setPdfIsOpen;
     (window as any).__aqSetPdfFullscreen = setPdfIsFullscreen;
 
     const getFallbackSelection = (): FallbackSelection | null => {
@@ -2208,6 +2244,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       delete (window as any).__aqSetPdfTitle;
       delete (window as any).__aqSetPdfPage;
       delete (window as any).__aqSetPdfZoom;
+      delete (window as any).__aqSetPdfOpen;
       delete (window as any).__aqSetPdfFullscreen;
     };
   }, []);
@@ -2262,7 +2299,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         </div>
       ) : null}
 
-      <section id="pdfpanel" className={`aq-legacy-pdf-panel${pdfIsFullscreen ? ' fullscreen' : ''}`} data-tool-mode={pdfToolMode || undefined} aria-label="PDF viewer">
+      <section id="pdfpanel" className={['aq-legacy-pdf-panel', pdfIsOpen ? 'open' : '', pdfIsFullscreen ? 'fullscreen' : ''].filter(Boolean).join(' ')} data-tool-mode={pdfToolMode || undefined} aria-label="PDF viewer">
         <div id="pdfresize" className="aq-legacy-pdf-resize" title="Genislik ayarla" />
         <div id="pdftb" className="aq-legacy-pdf-toolbar">
           <div className="pdf-brand">
@@ -2706,4 +2743,3 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     </>
   );
 }
-

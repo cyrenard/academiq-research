@@ -380,6 +380,7 @@ const electronAPI = {
   setUpdateUrl: (url) => invokeCommand('update_set_url', { url: asURL(url) }),
   restartApp: () => invokeCommand('update_restart'),
   minimizeWindow: () => invokeCommand('window_minimize'),
+  startWindowDrag: () => invokeCommand('window_start_dragging'),
   toggleMaximizeWindow: () => invokeCommand('window_toggle_maximize'),
   closeWindow: () => invokeCommand('window_close')
 };
