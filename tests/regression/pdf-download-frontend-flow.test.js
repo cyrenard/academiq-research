@@ -9,8 +9,11 @@ test('OA PDF frontend flow invokes pdf:download and records last attempt', () =>
   const app = fs.readFileSync(path.join(rootDir, 'src', 'renderer', 'App.tsx'), 'utf8');
   assert.match(app, /localStorage\.setItem\('aq\.lastPdfDownloadAttempt'/);
   assert.match(app, /downloadPDFfromURL\?\.\(String\(ref\.pdfUrl\), referenceId/);
-  assert.match(app, /downloadPDFfromURL\?\.\(url, referenceId/);
+  assert.match(app, /for \(const candidateUrl of urls\)/);
+  assert.match(app, /downloadPDFfromURL\?\.\(candidateUrl, referenceId/);
+  assert.match(app, /for \(const url of urls\)/);
   assert.match(app, /downloadPDFfromURL\?\.\(url, reference\.id/);
+  assert.match(app, /resolveOpenAccessPdfUrls/);
   assert.match(app, /pdfAttached: true/);
   assert.match(app, /source: 'batch-oa'/);
   assert.match(app, /source: 'reference-action'/);

@@ -8,11 +8,15 @@ use std::{
     },
 };
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_shell::{
+    process::{CommandChild, CommandEvent},
+    ShellExt,
+};
 
 use crate::telemetry;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    process::{Child, Command},
+    process::{Child as TokioChild, Command as TokioCommand},
     sync::{mpsc, oneshot, Mutex},
     time::{timeout, Duration},
 };
@@ -29,7 +33,27 @@ pub struct CaptureSidecarState {
 pub struct CaptureSidecar {
     writer: mpsc::Sender<String>,
     pending: Arc<Mutex<HashMap<String, oneshot::Sender<Result<Value, String>>>>>,
-    child: Mutex<Child>,
+    child: Arc<Mutex<SidecarChild>>,
+}
+
+enum SidecarChild {
+    Plugin(Option<CommandChild>),
+    Tokio(TokioChild),
+}
+
+impl SidecarChild {
+    async fn kill(&mut self) {
+        match self {
+            SidecarChild::Plugin(child) => {
+                if let Some(child) = child.take() {
+                    let _ = child.kill();
+                }
+            }
+            SidecarChild::Tokio(child) => {
+                let _ = child.kill().await;
+            }
+        }
+    }
 }
 
 impl CaptureSidecarState {
@@ -86,7 +110,7 @@ impl CaptureSidecarState {
         if let Some(stale) = stale {
             // Best-effort kill: the child may already be dead, in which case
             // tokio returns Err and we ignore it.
-            let _ = stale.child.lock().await.kill().await;
+            stale.child.lock().await.kill().await;
         }
     }
 
@@ -97,24 +121,114 @@ impl CaptureSidecarState {
         };
         if let Some(sidecar) = sidecar {
             let _ = sidecar.call("shutdown", json!({})).await;
-            let _ = sidecar.child.lock().await.kill().await;
+            sidecar.child.lock().await.kill().await;
         }
     }
 }
 
 impl CaptureSidecar {
     pub async fn spawn(app: AppHandle) -> Result<Self, String> {
-        let command = sidecar_command()?;
         let app_data_dir = app
             .path()
             .app_data_dir()
             .map_err(|e| e.to_string())?
             .join("capture-sidecar");
+        let resource_dir = app.path().resource_dir().ok();
 
+        #[cfg(debug_assertions)]
+        if let Some(command) = dev_sidecar_command() {
+            return Self::spawn_tokio(app, command, app_data_dir).await;
+        }
+
+        match Self::spawn_tauri_sidecar(app.clone(), app_data_dir.clone(), resource_dir).await {
+            Ok(sidecar) => Ok(sidecar),
+            Err(sidecar_error) => {
+                #[cfg(debug_assertions)]
+                {
+                    if let Some(command) = dev_sidecar_command() {
+                        return Self::spawn_tokio(app, command, app_data_dir).await;
+                    }
+                }
+                Err(sidecar_error)
+            }
+        }
+    }
+
+    async fn spawn_tauri_sidecar(
+        app: AppHandle,
+        app_data_dir: PathBuf,
+        resource_dir: Option<PathBuf>,
+    ) -> Result<Self, String> {
+        let mut command = app
+            .shell()
+            .sidecar("binaries/capture-agent")
+            .map_err(|e| format!("capture_sidecar_not_found: bundled sidecar unavailable: {e}"))?
+            .env("AQ_CAPTURE_DATA_DIR", &app_data_dir);
+        if let Some(resource_dir) = resource_dir {
+            command = command.current_dir(resource_dir);
+        }
+        let (mut rx, child) = command
+            .spawn()
+            .map_err(|e| format!("capture_sidecar_spawn_failed: {e}"))?;
+        let child = Arc::new(Mutex::new(SidecarChild::Plugin(Some(child))));
+        let (writer, mut writer_rx) = mpsc::channel::<String>(64);
+        let writer_child = child.clone();
+        tokio::spawn(async move {
+            while let Some(line) = writer_rx.recv().await {
+                let mut guard = writer_child.lock().await;
+                let SidecarChild::Plugin(Some(child)) = &mut *guard else {
+                    break;
+                };
+                if child.write(line.as_bytes()).is_err() {
+                    break;
+                }
+                if child.write(b"\n").is_err() {
+                    break;
+                }
+            }
+        });
+
+        let pending: Arc<Mutex<HashMap<String, oneshot::Sender<Result<Value, String>>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        let pending_reader = pending.clone();
+        tokio::spawn(async move {
+            while let Some(event) = rx.recv().await {
+                match event {
+                    CommandEvent::Stdout(line) => {
+                        handle_sidecar_stdout_line(&app, &pending_reader, &line).await;
+                    }
+                    CommandEvent::Error(error) => {
+                        telemetry::record_event("sidecar_event_error", json!({ "error": error }));
+                    }
+                    CommandEvent::Terminated(payload) => {
+                        telemetry::record_event(
+                            "sidecar_terminated",
+                            json!({ "code": payload.code, "signal": payload.signal }),
+                        );
+                        break;
+                    }
+                    CommandEvent::Stderr(_) => {}
+                    _ => {}
+                }
+            }
+        });
+
+        Ok(Self {
+            writer,
+            pending,
+            child,
+        })
+    }
+
+    async fn spawn_tokio(
+        app: AppHandle,
+        command: SidecarCommand,
+        app_data_dir: PathBuf,
+    ) -> Result<Self, String> {
         let mut cmd = if command.is_binary {
-            Command::new(&command.program)
+            TokioCommand::new(&command.program)
         } else {
-            let mut cmd = Command::new("node");
+            let mut cmd = TokioCommand::new("node");
             cmd.arg(&command.program);
             cmd
         };
@@ -203,7 +317,7 @@ impl CaptureSidecar {
         Ok(Self {
             writer,
             pending,
-            child: Mutex::new(child),
+            child: Arc::new(Mutex::new(SidecarChild::Tokio(child))),
         })
     }
 
@@ -224,6 +338,47 @@ impl CaptureSidecar {
                 Err("capture_sidecar_timeout".into())
             }
         }
+    }
+}
+
+async fn handle_sidecar_stdout_line(
+    app: &AppHandle,
+    pending: &Arc<Mutex<HashMap<String, oneshot::Sender<Result<Value, String>>>>>,
+    line: &[u8],
+) {
+    let Ok(line) = std::str::from_utf8(line) else {
+        return;
+    };
+    let Ok(message) = serde_json::from_str::<Value>(line) else {
+        return;
+    };
+    if let Some(id) = message.get("id").and_then(Value::as_str) {
+        if let Some(tx) = pending.lock().await.remove(id) {
+            let result = if let Some(error) = message.get("error") {
+                Err(error
+                    .as_str()
+                    .unwrap_or("capture_sidecar_error")
+                    .to_string())
+            } else {
+                Ok(message.get("result").cloned().unwrap_or(Value::Null))
+            };
+            let _ = tx.send(result);
+        }
+        return;
+    }
+    if let Some(method) = message.get("method").and_then(Value::as_str) {
+        let params = message.get("params").cloned().unwrap_or_else(|| json!({}));
+        let event_name = match method {
+            "browserCapture:incoming" => "browserCapture:incoming",
+            "browserCapture:workspaceCreated" => "browserCapture:workspaceCreated",
+            "browserCapture:stateChanged" => "browserCapture:stateChanged",
+            _ => "browser_capture:event",
+        };
+        let _ = app.emit(event_name, params.clone());
+        let _ = app.emit(
+            "browser_capture:event",
+            json!({ "method": method, "params": params }),
+        );
     }
 }
 
@@ -266,7 +421,8 @@ fn sidecar_binary_name() -> &'static str {
     "capture-agent"
 }
 
-fn sidecar_command() -> Result<SidecarCommand, String> {
+#[cfg(debug_assertions)]
+fn dev_sidecar_command() -> Option<SidecarCommand> {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let dir = manifest
         .join("..")
@@ -274,9 +430,8 @@ fn sidecar_command() -> Result<SidecarCommand, String> {
         .join("capture-agent");
     let index = dir.join("index.js");
 
-    #[cfg(debug_assertions)]
     if index.exists() {
-        return Ok(SidecarCommand {
+        return Some(SidecarCommand {
             program: index,
             cwd: dir,
             is_binary: false,
@@ -285,26 +440,14 @@ fn sidecar_command() -> Result<SidecarCommand, String> {
 
     let binary = manifest.join("binaries").join(sidecar_binary_name());
     if binary.exists() {
-        return Ok(SidecarCommand {
+        return Some(SidecarCommand {
             program: binary,
             cwd: manifest.clone(),
             is_binary: true,
         });
     }
 
-    #[cfg(not(debug_assertions))]
-    if index.exists() {
-        return Ok(SidecarCommand {
-            program: index,
-            cwd: dir,
-            is_binary: false,
-        });
-    }
-    Err(format!(
-        "capture_sidecar_not_found: expected {} under {}",
-        sidecar_binary_name(),
-        manifest.join("binaries").display()
-    ))
+    None
 }
 
 #[cfg(test)]

@@ -57,7 +57,7 @@ import {
   yearFromCrossrefDate,
   mapCrossrefWorkToReference,
   fetchDoiReference,
-  resolveOpenAccessPdfUrl,
+  resolveOpenAccessPdfUrls,
   collectOpenAccessPdfCandidates,
   countDownloadedPdfCandidates
 } from './lib/reference-import';
@@ -1462,41 +1462,49 @@ export default function App() {
         setPdfProgress({ total: 1, attempted: 0, downloaded: 0, failed: 0, active: true });
         setActiveReferenceId(referenceId);
         const win = window as any;
-        let url = String(ref.pdfUrl || '').trim();
-        if (!url && ref.doi && typeof win.fetchOAUrls === 'function') {
+        const urls = Array.from(new Set([
+          String(ref.pdfUrl || '').trim(),
+          String(ref.url || '').trim()
+        ].filter(Boolean)));
+        if (ref.doi && !String(ref.pdfUrl || '').trim()) {
           flashStatus('OA PDF URL aranıyor...');
           try {
-            const urls = await win.fetchOAUrls(ref.doi);
-            if (Array.isArray(urls) && urls.length) {
-              url = String(urls[0] || '').trim();
-              if (url) {
-                const next = updateReferenceInActiveWorkspace(appStateRef.current, referenceId, { pdfUrl: url });
-                await persistState(next);
-              }
+            const resolvedUrls = typeof win.fetchOAUrls === 'function'
+              ? await win.fetchOAUrls(ref.doi)
+              : await resolveOpenAccessPdfUrls(String(ref.doi || ''));
+            if (Array.isArray(resolvedUrls)) {
+              resolvedUrls.map((item) => String(item || '').trim()).filter(Boolean).forEach((item) => {
+                if (!urls.includes(item)) urls.push(item);
+              });
             }
           } catch (_error) {}
         }
-        url = url || String(ref.url || '').trim();
-        if (!url) {
+        if (!urls.length) {
           setPdfProgress({ total: 1, attempted: 1, downloaded: 0, failed: 1, active: false });
           flashStatus('PDF URL bulunamadı');
           return;
         }
-        tracePdfDownloadAttempt({ source: 'reference-action', phase: 'start', url, referenceId, doi: ref.doi });
-        const result = await window.electronAPI?.downloadPDFfromURL?.(url, referenceId, {
-          ws: { id: workspace.id, name: workspace.name, title: ref.title },
-          title: ref.title,
-          expectedDoi: ref.doi,
-          expectedTitle: ref.title,
-          expectedAuthors: ref.authors,
-          expectedYear: ref.year,
-          requireDoiEvidence: Boolean(ref.doi),
-          allowUnverifiedPdf: true
-        }) as any;
-        tracePdfDownloadAttempt({ source: 'reference-action', phase: 'result', url, referenceId, doi: ref.doi, result });
+        let result: any = null;
+        let attemptedUrl = urls[0];
+        for (const candidateUrl of urls) {
+          attemptedUrl = candidateUrl;
+          tracePdfDownloadAttempt({ source: 'reference-action', phase: 'start', url: candidateUrl, referenceId, doi: ref.doi });
+          result = await window.electronAPI?.downloadPDFfromURL?.(candidateUrl, referenceId, {
+            ws: { id: workspace.id, name: workspace.name, title: ref.title },
+            title: ref.title,
+            expectedDoi: ref.doi,
+            expectedTitle: ref.title,
+            expectedAuthors: ref.authors,
+            expectedYear: ref.year,
+            requireDoiEvidence: Boolean(ref.doi),
+            allowUnverifiedPdf: true
+          }) as any;
+          tracePdfDownloadAttempt({ source: 'reference-action', phase: 'result', url: candidateUrl, referenceId, doi: ref.doi, result });
+          if (result?.ok) break;
+        }
         if (result?.ok) {
           const next = updateReferenceInActiveWorkspace(appStateRef.current, referenceId, {
-            pdfUrl: result.finalUrl || url,
+            pdfUrl: result.finalUrl || attemptedUrl,
             pdfAttached: true,
             pdfVerification: result.verification || null
           });
@@ -1691,27 +1699,35 @@ export default function App() {
 
     const processCandidate = async (candidate: (typeof candidates)[number]) => {
       const { reference } = candidate;
-      let url = String(reference.pdfUrl || '').trim();
-      if (!url) url = await resolveOpenAccessPdfUrl(String(reference.doi || ''));
-      if (!url) {
+      const urls = Array.from(new Set([
+        String(reference.pdfUrl || '').trim(),
+        ...(!String(reference.pdfUrl || '').trim() ? await resolveOpenAccessPdfUrls(String(reference.doi || '')) : []),
+        String(reference.url || '').trim()
+      ].filter(Boolean)));
+      if (!urls.length) {
         failed++;
         commitProgress(`OA PDF bulunamadı: ${done + failed}/${candidates.length}`);
         return;
       }
       try {
-        const attemptedUrl = url;
-        tracePdfDownloadAttempt({ source: 'batch-oa', phase: 'start', url, referenceId: reference.id, doi: reference.doi, workspaceId: candidate.workspaceId });
-        const result = await window.electronAPI?.downloadPDFfromURL?.(url, reference.id, {
-          ws: { id: candidate.workspaceId, name: candidate.workspaceName, title: reference.title },
-          title: reference.title,
-          expectedDoi: reference.doi,
-          expectedTitle: reference.title,
-          expectedAuthors: reference.authors,
-          expectedYear: reference.year,
-          requireDoiEvidence: Boolean(reference.doi),
-          allowUnverifiedPdf: true
-        }) as any;
-        tracePdfDownloadAttempt({ source: 'batch-oa', phase: 'result', url, referenceId: reference.id, doi: reference.doi, workspaceId: candidate.workspaceId, result });
+        let result: any = null;
+        let attemptedUrl = urls[0];
+        for (const url of urls) {
+          attemptedUrl = url;
+          tracePdfDownloadAttempt({ source: 'batch-oa', phase: 'start', url, referenceId: reference.id, doi: reference.doi, workspaceId: candidate.workspaceId });
+          result = await window.electronAPI?.downloadPDFfromURL?.(url, reference.id, {
+            ws: { id: candidate.workspaceId, name: candidate.workspaceName, title: reference.title },
+            title: reference.title,
+            expectedDoi: reference.doi,
+            expectedTitle: reference.title,
+            expectedAuthors: reference.authors,
+            expectedYear: reference.year,
+            requireDoiEvidence: Boolean(reference.doi),
+            allowUnverifiedPdf: true
+          }) as any;
+          tracePdfDownloadAttempt({ source: 'batch-oa', phase: 'result', url, referenceId: reference.id, doi: reference.doi, workspaceId: candidate.workspaceId, result });
+          if (result?.ok) break;
+        }
         if (result?.ok) {
           done++;
           nextState = patchReferenceInWorkspace(nextState, candidate.workspaceId, reference.id, {
@@ -1728,8 +1744,8 @@ export default function App() {
         }
       } catch (_error) {
         failed++;
-        tracePdfDownloadAttempt({ source: 'batch-oa', phase: 'error', url, referenceId: reference.id, doi: reference.doi, workspaceId: candidate.workspaceId, error: String(_error) });
-        nextState = patchReferenceInWorkspace(nextState, candidate.workspaceId, reference.id, { pdfUrl: url });
+        tracePdfDownloadAttempt({ source: 'batch-oa', phase: 'error', url: urls[0], referenceId: reference.id, doi: reference.doi, workspaceId: candidate.workspaceId, error: String(_error) });
+        nextState = patchReferenceInWorkspace(nextState, candidate.workspaceId, reference.id, { pdfUrl: urls[0] });
         commitProgress(`OA PDF indirilemedi: ${done + failed}/${candidates.length}`);
       }
     };

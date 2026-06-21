@@ -1,6 +1,6 @@
 [package]
 name = "academiq-research-tauri"
-version = "1.24.1-beta.4"
+version = "1.24.1-beta.5"
 description = "AcademiQ Research Tauri shell"
 authors = ["AcademiQ"]
 license = "MIT"
@@ -44,4 +44,3 @@ opt-level = "z"
 codegen-units = 1
 panic = "abort"
 strip = true
-

@@ -300,16 +300,16 @@ export async function fetchDoiReference(doi: string) {
   return ref;
 }
 
-export async function resolveOpenAccessPdfUrl(doi: string) {
+export async function resolveOpenAccessPdfUrls(doi: string) {
   const cleanDoi = normalizeDoiInput(doi);
-  if (!cleanDoi) return '';
+  if (!cleanDoi) return [];
   const win = legacyWin() as any;
   if (typeof win.fetchOAUrls === 'function') {
     try {
       const urls = await win.fetchOAUrls(cleanDoi);
       if (Array.isArray(urls)) {
-        const url = urls.map((item) => String(item || '').trim()).find(Boolean);
-        if (url) return url;
+        const legacyUrls = urls.map((item) => String(item || '').trim()).filter(Boolean);
+        if (legacyUrls.length) return Array.from(new Set(legacyUrls));
       }
     } catch (_error) {}
   }
@@ -349,7 +349,14 @@ export async function resolveOpenAccessPdfUrl(doi: string) {
     ]));
   }
   const unique = Array.from(new Set(candidates.map((item) => item.trim()).filter(Boolean)));
-  return unique.find((item) => /\.pdf($|[?#])|\/pdf(\/|$|[?#])|pdfdirect|epdf/i.test(item)) || unique[0] || '';
+  return [
+    ...unique.filter((item) => /\.pdf($|[?#])|\/pdf(\/|$|[?#])|pdfdirect|epdf/i.test(item)),
+    ...unique.filter((item) => !/\.pdf($|[?#])|\/pdf(\/|$|[?#])|pdfdirect|epdf/i.test(item))
+  ];
+}
+
+export async function resolveOpenAccessPdfUrl(doi: string) {
+  return (await resolveOpenAccessPdfUrls(doi))[0] || '';
 }
 
 export function collectOpenAccessPdfCandidates(state: AcademiqAppState) {

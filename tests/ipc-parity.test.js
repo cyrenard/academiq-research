@@ -236,3 +236,10 @@ test('Linux browser capture setup can fall back to xdg-open for prepared files',
   assert.match(browserSource, /Command::new\("xdg-open"\)/);
   assert.match(browserSource, /openErrors/);
 });
+
+test('capture sidecar resolves packaged externalBin instead of CI source paths', () => {
+  const bridgeSource = read('src-tauri', 'src', 'capture', 'bridge.rs');
+  assert.match(bridgeSource, /\.shell\(\)\s*\.sidecar\("binaries\/capture-agent"\)/);
+  assert.match(bridgeSource, /dev_sidecar_command/);
+  assert.doesNotMatch(bridgeSource, /capture_sidecar_not_found: expected/);
+});

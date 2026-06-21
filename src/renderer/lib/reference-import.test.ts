@@ -13,7 +13,8 @@ import {
   patchReferenceInWorkspace,
   yearFromCrossrefDate,
   mapCrossrefWorkToReference,
-  collectOpenAccessPdfCandidates
+  collectOpenAccessPdfCandidates,
+  resolveOpenAccessPdfUrls
 } from './reference-import';
 import type { AcademiqReference, AcademiqAppState } from './app-state';
 
@@ -424,5 +425,41 @@ describe('collectOpenAccessPdfCandidates', () => {
       } as any]
     });
     expect(collectOpenAccessPdfCandidates(state).length).toBe(0);
+  });
+});
+
+describe('resolveOpenAccessPdfUrls', () => {
+  it('orders direct PDF candidates before landing pages', async () => {
+    const originalElectronAPI = (window as any).electronAPI;
+    const originalFetchOAUrls = (window as any).fetchOAUrls;
+    delete (window as any).fetchOAUrls;
+    (window as any).electronAPI = {
+      netFetchJSON: vi.fn(async (url: string) => {
+        if (url.includes('openalex')) {
+          return {
+            ok: true,
+            data: {
+              open_access: { oa_url: 'https://publisher.example/article' },
+              locations: [{ pdf_url: 'https://repo.example/file.pdf', landing_page_url: 'https://repo.example/landing' }]
+            }
+          };
+        }
+        return {
+          ok: true,
+          data: {
+            best_oa_location: { url_for_pdf: 'https://mirror.example/download/pdf', url: 'https://mirror.example/page' },
+            oa_locations: []
+          }
+        };
+      })
+    };
+    try {
+      const urls = await resolveOpenAccessPdfUrls('10.1234/abc');
+      expect(urls[0]).toBe('https://repo.example/file.pdf');
+      expect(urls).toContain('https://publisher.example/article');
+    } finally {
+      (window as any).electronAPI = originalElectronAPI;
+      (window as any).fetchOAUrls = originalFetchOAUrls;
+    }
   });
 });
