@@ -97,11 +97,13 @@ pub async fn dialog_open_word(app: AppHandle) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn dialog_open_bibliography(app: AppHandle) -> Result<Value, String> {
-    let Some(files) = app
-        .dialog()
-        .file()
-        .blocking_pick_files()
-    else {
+    let dialog = app.dialog().file();
+    #[cfg(not(target_os = "linux"))]
+    let dialog = dialog
+        .add_filter("BibTeX / RIS", &["bib", "ris", "enw"])
+        .add_filter("Text", &["txt", "apa"]);
+
+    let Some(files) = dialog.blocking_pick_files() else {
         return Ok(json!({ "ok": false }));
     };
 

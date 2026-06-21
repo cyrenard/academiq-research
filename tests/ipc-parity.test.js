@@ -239,7 +239,15 @@ test('Linux browser capture setup can fall back to xdg-open for prepared files',
 
 test('capture sidecar resolves packaged externalBin instead of CI source paths', () => {
   const bridgeSource = read('src-tauri', 'src', 'capture', 'bridge.rs');
-  assert.match(bridgeSource, /\.shell\(\)\s*\.sidecar\("binaries\/capture-agent"\)/);
+  assert.match(bridgeSource, /\.shell\(\)\s*\.sidecar\("capture-agent"\)/);
+  assert.doesNotMatch(bridgeSource, /\.shell\(\)\s*\.sidecar\("binaries\/capture-agent"\)/);
   assert.match(bridgeSource, /dev_sidecar_command/);
   assert.doesNotMatch(bridgeSource, /capture_sidecar_not_found: expected/);
+});
+
+test('bibliography dialog avoids Linux native extension filters but validates selected files', () => {
+  const dialogSource = read('src-tauri', 'src', 'commands', 'dialog.rs');
+  assert.match(dialogSource, /#\[cfg\(not\(target_os = "linux"\)\)\]/);
+  assert.match(dialogSource, /add_filter\("BibTeX \/ RIS", &\["bib", "ris", "enw"\]\)/);
+  assert.match(dialogSource, /matches!\(ext\.as_str\(\), "bib" \| "ris" \| "enw" \| "txt" \| "apa"\)/);
 });

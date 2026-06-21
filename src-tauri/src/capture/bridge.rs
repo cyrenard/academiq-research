@@ -1,24 +1,24 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     path::PathBuf,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
 };
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_shell::{
-    process::{CommandChild, CommandEvent},
     ShellExt,
+    process::{CommandChild, CommandEvent},
 };
 
 use crate::telemetry;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::{Child as TokioChild, Command as TokioCommand},
-    sync::{mpsc, oneshot, Mutex},
-    time::{timeout, Duration},
+    sync::{Mutex, mpsc, oneshot},
+    time::{Duration, timeout},
 };
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -161,7 +161,7 @@ impl CaptureSidecar {
     ) -> Result<Self, String> {
         let mut command = app
             .shell()
-            .sidecar("binaries/capture-agent")
+            .sidecar("capture-agent")
             .map_err(|e| format!("capture_sidecar_not_found: bundled sidecar unavailable: {e}"))?
             .env("AQ_CAPTURE_DATA_DIR", &app_data_dir);
         if let Some(resource_dir) = resource_dir {
