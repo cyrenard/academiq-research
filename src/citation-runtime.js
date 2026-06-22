@@ -386,6 +386,9 @@
   }
 
   function focusEditorWithoutScroll(){
+    if(window.AQTipTapWordFocus && typeof window.AQTipTapWordFocus.isFindFocusActive === 'function' && window.AQTipTapWordFocus.isFindFocusActive(document)){
+      return;
+    }
     if(window.AQEditorCore && typeof window.AQEditorCore.focus === 'function'){
       try{ if(window.AQEditorCore.focus(false)) return; }catch(e){}
     }

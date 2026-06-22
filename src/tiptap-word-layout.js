@@ -8,7 +8,52 @@
   var APA_MARGIN_PX = 96; // 1 inch @ 96dpi
   var MIN_PAGE_GAP_PX = 24;
 
+  function isLikelyLinux(){
+    if(typeof navigator === 'undefined') return false;
+    var platform = String(navigator.platform || navigator.userAgent || '').toLowerCase();
+    return platform.indexOf('linux') >= 0 || platform.indexOf('x11') >= 0;
+  }
+
+  function isEditorMutationTarget(target){
+    if(!target || !target.closest) return false;
+    return !!target.closest('#aq-engine-host,#apaed,#aq-tiptap-content,.ProseMirror,[data-aq-editor-root="true"]');
+  }
+
+  function nudgePaint(node){
+    if(!node || !node.style) return;
+    var previousTransform = node.style.transform || '';
+    node.style.transform = previousTransform ? previousTransform + ' translateZ(0)' : 'translateZ(0)';
+    try{ void node.offsetHeight; }catch(_e){}
+    var restore = function(){ node.style.transform = previousTransform; };
+    if(typeof requestAnimationFrame === 'function') requestAnimationFrame(restore);
+    else setTimeout(restore, 0);
+  }
+
+  function scheduleDestructiveMutationRepaint(reason){
+    if(typeof window === 'undefined' || typeof document === 'undefined') return false;
+    if(!isLikelyLinux()) return false;
+    if(window.__aqDestructiveRepaintScheduled) return true;
+    window.__aqDestructiveRepaintScheduled = true;
+    var run = function(){
+      window.__aqDestructiveRepaintScheduled = false;
+      try{
+        if(typeof window.updatePageHeight === 'function') window.updatePageHeight();
+      }catch(_e){}
+      try{
+        if(window.editor && typeof window.editor._reflow === 'function') window.editor._reflow();
+      }catch(_e){}
+      ['aq-engine-host', 'apaed', 'escroll'].forEach(function(id){
+        nudgePaint(document.getElementById(id));
+      });
+      window.__aqLastDestructiveRepaintReason = reason || '';
+    };
+    var raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function(fn){ return setTimeout(fn, 0); };
+    raf(function(){ raf(run); });
+    return true;
+  }
+
   if(typeof window !== 'undefined' && typeof document !== 'undefined'){
+    var destructiveKeyPending = false;
     var recordTyping = function(e){
       var key = e && e.key;
       if(key === 'Enter' || key === 'Backspace' || key === 'Delete'){
@@ -16,10 +61,27 @@
       }else{
         window.__aqLastTypingTime = Date.now();
       }
+      if((key === 'Backspace' || key === 'Delete') && isEditorMutationTarget(e && e.target)){
+        destructiveKeyPending = true;
+        scheduleDestructiveMutationRepaint('key:' + key);
+      }
     };
-    document.addEventListener('input', function(){
+    document.addEventListener('input', function(e){
       if(window.__aqLastTypingTime !== 0){
         window.__aqLastTypingTime = Date.now();
+      }
+      var inputType = String((e && e.inputType) || '');
+      if(destructiveKeyPending || /^delete/.test(inputType)){
+        destructiveKeyPending = false;
+        if(isEditorMutationTarget(e && e.target)){
+          scheduleDestructiveMutationRepaint(inputType || 'input-delete');
+        }
+      }
+    }, true);
+    document.addEventListener('cut', function(e){
+      if(isEditorMutationTarget(e && e.target)){
+        destructiveKeyPending = true;
+        scheduleDestructiveMutationRepaint('cut');
       }
     }, true);
     document.addEventListener('keydown', recordTyping, true);
@@ -837,6 +899,7 @@
     resolvePageMetrics: resolvePageMetrics,
     applyPageGaps: applyPageGaps,
     renderPageSheets: renderPageSheets,
+    scheduleDestructiveMutationRepaint: scheduleDestructiveMutationRepaint,
     syncPageMetrics: syncPageMetrics,
     applyZoom: applyZoom,
     resolveZoomTargets: resolveZoomTargets,

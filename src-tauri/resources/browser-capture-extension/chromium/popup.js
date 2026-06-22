@@ -1,6 +1,8 @@
 (function(){
   var config = globalThis.AQ_CAPTURE_CONFIG || {};
-  var ext = (typeof browser !== 'undefined') ? browser : chrome;
+  var ext = (typeof browser !== 'undefined' && browser && browser.runtime)
+    ? browser
+    : ((typeof chrome !== 'undefined' && chrome && chrome.runtime) ? chrome : null);
   var state = {
     detection: null,
     targets: null,
@@ -17,8 +19,10 @@
 
   function $(id){ return document.getElementById(id); }
   function utils(){ return globalThis.AQBrowserCaptureUtils || null; }
+  function hasExtensionApi(){ return !!(ext && ext.runtime && ext.tabs); }
   function asArray(value){ return Array.isArray(value) ? value : []; }
   function callMaybePromise(invoke){
+    if(typeof invoke !== 'function') return null;
     try{
       var result = invoke();
       if(result && typeof result.then === 'function') return result;
@@ -26,6 +30,7 @@
     return null;
   }
   function queryTabs(queryInfo){
+    if(!ext || !ext.tabs) return Promise.reject(new Error('extension_tabs_api_unavailable'));
     var promise = callMaybePromise(function(){ return ext.tabs.query(queryInfo); });
     if(promise) return promise;
     return new Promise(function(resolve, reject){
@@ -39,6 +44,7 @@
     });
   }
   function sendTabMessage(tabId, payload){
+    if(!ext || !ext.tabs) return Promise.reject(new Error('extension_tabs_api_unavailable'));
     var promise = callMaybePromise(function(){ return ext.tabs.sendMessage(tabId, payload); });
     if(promise) return promise;
     return new Promise(function(resolve, reject){
@@ -52,6 +58,7 @@
     });
   }
   function createTab(url){
+    if(!ext || !ext.tabs) return Promise.reject(new Error('extension_tabs_api_unavailable'));
     var promise = callMaybePromise(function(){ return ext.tabs.create({ url: url }); });
     if(promise) return promise;
     return new Promise(function(resolve, reject){
@@ -65,6 +72,7 @@
     });
   }
   function runtimeSendMessage(message){
+    if(!ext || !ext.runtime) return Promise.reject(new Error('extension_runtime_api_unavailable'));
     var promise = callMaybePromise(function(){ return ext.runtime.sendMessage(message); });
     if(promise) return promise;
     return new Promise(function(resolve, reject){
@@ -78,6 +86,7 @@
     });
   }
   function storageGet(keys){
+    if(!ext || !ext.storage || !ext.storage.local) return Promise.resolve({});
     var promise = callMaybePromise(function(){ return ext.storage.local.get(keys); });
     if(promise) return promise;
     return new Promise(function(resolve){
@@ -87,6 +96,7 @@
     });
   }
   function storageSet(values){
+    if(!ext || !ext.storage || !ext.storage.local) return Promise.resolve();
     var promise = callMaybePromise(function(){ return ext.storage.local.set(values); });
     if(promise) return promise.catch(function(){});
     return new Promise(function(resolve){
@@ -1044,6 +1054,13 @@
         renderCitationSummaryFromForm();
       });
     });
+    if(!hasExtensionApi()){
+      ensureWorkspaceFallbackOption();
+      ensureComparisonFallbackOption();
+      setLookupStatus('Tarayici eklenti API erisimi yok.', 'error');
+      setStatus('Popup yuklendi fakat tarayici eklenti API erisimi yok. Uzantiyi normal popup olarak acmayi deneyin.', 'error');
+      return;
+    }
     try{
       await sendHello('popup');
       await loadTargets();

@@ -15,8 +15,20 @@
     });
   }
 
+  function isFindFocusActive(doc){
+    doc = doc || (typeof document !== 'undefined' ? document : null);
+    if(!doc) return false;
+    var active = doc.activeElement || null;
+    if(active && active.closest && active.closest('#toolbarFindInp,#toolbarReplaceFindInp,#toolbarReplaceInp,#findbar,#findReplaceQuickMenuModal')){
+      return true;
+    }
+    var until = typeof window !== 'undefined' ? Number(window.__aqFindFocusOwnerUntil || 0) : 0;
+    return !!(until && Date.now() < until);
+  }
+
   function focusEditorSurface(options){
     options = options || {};
+    if(isFindFocusActive(options.doc)) return false;
     var editor = options.editor || null;
     if(!editor) return false;
     var sc = typeof options.getScrollEl === 'function' ? options.getScrollEl() : null;
@@ -75,6 +87,7 @@
 
   return {
     focusEditorSurface: focusEditorSurface,
-    focusWithFallback: focusWithFallback
+    focusWithFallback: focusWithFallback,
+    isFindFocusActive: isFindFocusActive
   };
 });

@@ -49,6 +49,9 @@
   }
 
   function focusEditor(toEnd){
+    if(window.AQTipTapWordFocus && typeof window.AQTipTapWordFocus.isFindFocusActive === 'function' && window.AQTipTapWordFocus.isFindFocusActive(document)){
+      return false;
+    }
     if(window.AQEditorCore && typeof window.AQEditorCore.focus === 'function'){
       return !!window.AQEditorCore.focus(!!toEnd);
     }

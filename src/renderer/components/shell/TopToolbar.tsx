@@ -841,6 +841,7 @@ export function TopToolbar({ selectedReferenceId, onOpenAudit, onOpenFeatureModa
     const w = window as any;
     w.toggleFindBar = () => {
       const el = document.getElementById('toolbarFindInp') as HTMLInputElement | null;
+      w.__aqFindFocusOwnerUntil = Date.now() + 30000;
       if (el) { try { el.focus(); el.select(); } catch (_e) { /* noop */ } }
     };
     w.findNext = () => navigateFind(true);
@@ -858,6 +859,8 @@ export function TopToolbar({ selectedReferenceId, onOpenAudit, onOpenFeatureModa
   };
 
   const handleFindKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    (window as any).__aqFindFocusOwnerUntil = Date.now() + 30000;
+    event.stopPropagation();
     if (event.key === 'Enter') {
       event.preventDefault();
       navigateFind(!event.shiftKey);
@@ -865,6 +868,18 @@ export function TopToolbar({ selectedReferenceId, onOpenAudit, onOpenFeatureModa
       event.preventDefault();
       closeFind();
     }
+  };
+
+  const claimFindFocus = () => {
+    (window as any).__aqFindFocusOwnerUntil = Date.now() + 30000;
+  };
+
+  const releaseFindFocus = () => {
+    window.setTimeout(() => {
+      const active = document.activeElement as HTMLElement | null;
+      if (active?.closest?.('#toolbarFindInp,#toolbarReplaceFindInp,#toolbarReplaceInp,#findbar,#findReplaceQuickMenuModal')) return;
+      (window as any).__aqFindFocusOwnerUntil = 0;
+    }, 0);
   };
 
   const runReplace = (all = false) => {
@@ -987,6 +1002,16 @@ export function TopToolbar({ selectedReferenceId, onOpenAudit, onOpenFeatureModa
               type="text"
               placeholder="Bul..."
               title="Bul (Ctrl+F)"
+              onFocus={claimFindFocus}
+              onBlur={releaseFindFocus}
+              onMouseDown={(event) => {
+                claimFindFocus();
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                claimFindFocus();
+                event.stopPropagation();
+              }}
               onInput={(event) => handleFindInput((event.target as HTMLInputElement).value)}
               onKeyDown={handleFindKeyDown}
               className="h-[29px] w-full rounded-md border border-aq-line bg-white pl-8 pr-2 text-[12px] leading-none text-aq-ink outline-none focus:border-aq-navy"
@@ -1184,13 +1209,34 @@ export function TopToolbar({ selectedReferenceId, onOpenAudit, onOpenFeatureModa
             <div className="wr">
               <div className="wf">
                 <label>Bul</label>
-                <input className="minp" value={findQuery} onChange={(event) => handleFindInput(event.target.value)} autoFocus />
+                <input
+                  id="toolbarReplaceFindInp"
+                  className="minp"
+                  value={findQuery}
+                  onFocus={claimFindFocus}
+                  onBlur={releaseFindFocus}
+                  onMouseDown={(event) => { claimFindFocus(); event.stopPropagation(); }}
+                  onClick={(event) => { claimFindFocus(); event.stopPropagation(); }}
+                  onKeyDown={(event) => { claimFindFocus(); event.stopPropagation(); }}
+                  onChange={(event) => handleFindInput(event.target.value)}
+                  autoFocus
+                />
               </div>
             </div>
             <div className="wr">
               <div className="wf">
                 <label>Değiştir</label>
-                <input className="minp" value={replaceText} onChange={(event) => setReplaceText(event.target.value)} />
+                <input
+                  id="toolbarReplaceInp"
+                  className="minp"
+                  value={replaceText}
+                  onFocus={claimFindFocus}
+                  onBlur={releaseFindFocus}
+                  onMouseDown={(event) => { claimFindFocus(); event.stopPropagation(); }}
+                  onClick={(event) => { claimFindFocus(); event.stopPropagation(); }}
+                  onKeyDown={(event) => { claimFindFocus(); event.stopPropagation(); }}
+                  onChange={(event) => setReplaceText(event.target.value)}
+                />
               </div>
             </div>
             <div className="mb">

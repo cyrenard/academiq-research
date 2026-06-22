@@ -151,6 +151,9 @@
 
   function focus(toEnd){
     ensureReady();
+    if(window.AQTipTapWordFocus && typeof window.AQTipTapWordFocus.isFindFocusActive === 'function' && window.AQTipTapWordFocus.isFindFocusActive(document)){
+      return false;
+    }
     var editor = getEditor();
     if(editor && editor.chain){
       try{
