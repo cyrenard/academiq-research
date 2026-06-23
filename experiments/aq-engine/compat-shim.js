@@ -106,10 +106,21 @@
           if(run && typeof run.text === 'string') run.text = repairJoinedWordImportText(run.text);
         });
         repairRunBoundarySpacing(block.runs);
+        block.runs = compactAdjacentRuns(block.runs);
       }
       if(block && Array.isArray(block.rows)){
         block.rows.forEach(function(row){
-          (row.cells || []).forEach(function(cell){ repairBlockRuns(cell.blocks || []); });
+          (row.cells || []).forEach(function(cell){
+            if(!cell) return;
+            if(Array.isArray(cell.runs)){
+              cell.runs.forEach(function(run){
+                if(run && typeof run.text === 'string') run.text = repairJoinedWordImportText(run.text);
+              });
+              repairRunBoundarySpacing(cell.runs);
+              cell.runs = compactAdjacentRuns(cell.runs);
+            }
+            repairBlockRuns(cell.blocks || []);
+          });
         });
       }
     });
@@ -129,6 +140,38 @@
       if(starts.test(String(right.text || '').toLocaleLowerCase('tr-TR'))) right.text = ' ' + right.text;
     }
     return runs;
+  }
+
+  function compactAdjacentRuns(runs){
+    if(!Array.isArray(runs) || runs.length < 2) return runs;
+    var out = [];
+    for(var i = 0; i < runs.length; i++){
+      var cur = runs[i];
+      if(!cur) continue;
+      var text = String(cur.text || '');
+      if(!text && runs.length > 1) continue;
+      var prev = out[out.length - 1];
+      if(prev && runsHaveSameFormat(prev, cur)){
+        prev.text = String(prev.text || '') + text;
+      } else {
+        out.push(Object.assign({}, cur, { text: text }));
+      }
+    }
+    return out.length ? out : [{ text: '' }];
+  }
+
+  function runsHaveSameFormat(a, b){
+    if(!a || !b) return false;
+    var keys = [
+      'bold','italic','underline','strike','color','backgroundColor',
+      'baselineShift','fontScale','font','citation','refId','commentId',
+      'trackInsert','trackDelete','footnote','link'
+    ];
+    for(var i = 0; i < keys.length; i++){
+      var key = keys[i];
+      if(JSON.stringify(a[key] || null) !== JSON.stringify(b[key] || null)) return false;
+    }
+    return true;
   }
 
   function normalizeHeadingLevel(level){

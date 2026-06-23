@@ -35,3 +35,27 @@ test('AQ Engine interactive edits coalesce layout work onto animation frames', (
   assert.match(source, /if\(_interactiveReflowTimer\) return;/);
   assert.match(source, /onChanged:\s*function\(\)\{\s*scheduleInteractiveReflow\(\);\s*\}/);
 });
+
+test('AQ Engine compacts Word-imported adjacent runs before editing', () => {
+  const doc = AQEngineDocument.create([{
+    type: 'paragraph',
+    runs: [
+      { text: 'Ana' },
+      { text: 'liz' },
+      { text: ' ', italic: true },
+      { text: 'bitti', italic: true }
+    ]
+  }]);
+
+  const runs = doc.get().blocks[0].runs;
+  assert.equal(runs.length, 2);
+  assert.deepEqual(runs.map((run) => run.text), ['Analiz', ' bitti']);
+});
+
+test('AQ Engine compat compacts imported Word runs at the HTML boundary', () => {
+  const source = fs.readFileSync(path.join(root, 'experiments', 'aq-engine', 'compat-shim.js'), 'utf8');
+
+  assert.match(source, /function compactAdjacentRuns\(runs\)/);
+  assert.match(source, /block\.runs = compactAdjacentRuns\(block\.runs\);/);
+  assert.match(source, /cell\.runs = compactAdjacentRuns\(cell\.runs\);/);
+});
