@@ -104,3 +104,11 @@ test('AQ Engine capture input disables native autocorrect rewrites at source', (
   assert.match(source, /assistBridge\.setAttribute\('autocorrect',\s+'off'\)/);
   assert.doesNotMatch(source, /ta\.setAttribute\('autocorrect',\s+'on'\)/);
 });
+
+test('AQ Engine table cell editor participates in backspace guard', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'compat-shim.js'), 'utf8');
+  assert.match(source, /ta\.className = 'aq-engine-table-cell-editor'/);
+  assert.match(source, /ta\.setAttribute\('data-aq-table-cell', 'true'\)/);
+  assert.match(source, /ta\.setAttribute\('autocorrect', 'off'\)/);
+  assert.match(source, /ta\.setAttribute\('spellcheck', 'false'\)/);
+});

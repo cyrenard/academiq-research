@@ -77,7 +77,7 @@ mod tests {
     fn phase3_pdf_render_page_returns_png() {
         let Some(dir) = fixture_dir() else { return };
         let app_dir = temp_app_dir("render");
-        let png = render::render_page_png(&app_dir, &dir.join("sample.pdf"), 1, 150).unwrap();
+        let png = render::render_page_png(&app_dir, None, &dir.join("sample.pdf"), 1, 150).unwrap();
         assert!(png.len() > 1024);
         assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
     }
@@ -132,10 +132,10 @@ mod tests {
         annotations::apply_annotations(&pdf, &annotations).unwrap();
         assert!(annotate_start.elapsed().as_secs_f32() < 2.0);
 
-        let warm_png = render::render_page_png(&app_dir, &pdf, 1, 150).unwrap();
+        let warm_png = render::render_page_png(&app_dir, None, &pdf, 1, 150).unwrap();
         assert_eq!(&warm_png[..8], b"\x89PNG\r\n\x1a\n");
         let render_start = Instant::now();
-        let png = render::render_page_png(&app_dir, &pdf, 2, 150).unwrap();
+        let png = render::render_page_png(&app_dir, None, &pdf, 2, 150).unwrap();
         assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
         let render_limit_ms = if cfg!(debug_assertions) { 2_000 } else { 500 };
         assert!(render_start.elapsed().as_millis() < render_limit_ms);

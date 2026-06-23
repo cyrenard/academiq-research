@@ -872,9 +872,10 @@ pub async fn pdf_render_page(
     dpi: u32,
 ) -> Result<Value, String> {
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let resource_dir = app.path().resource_dir().ok();
     let path = pdf_path(&app, &ref_id, ws).await?;
     task::spawn_blocking(move || {
-        let bytes = render::render_page_png(&app_dir, &path, page, dpi)?;
+        let bytes = render::render_page_png(&app_dir, resource_dir.as_deref(), &path, page, dpi)?;
         Ok(json!({ "ok": true, "data": bytes, "mime": "image/png" }))
     })
     .await

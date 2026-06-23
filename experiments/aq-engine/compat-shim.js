@@ -987,6 +987,14 @@
       var ta = document.createElement('textarea');
       activeEditor_textarea = ta;
       ta.value = cell.textContent || '';
+      ta.className = 'aq-engine-table-cell-editor';
+      ta.setAttribute('data-aq-table-cell', 'true');
+      ta.setAttribute('spellcheck', 'false');
+      ta.setAttribute('autocorrect', 'off');
+      ta.setAttribute('autocomplete', 'off');
+      ta.setAttribute('autocapitalize', 'off');
+      ta.setAttribute('data-gramm', 'false');
+      ta.setAttribute('data-gramm_editor', 'false');
       ta.style.cssText = 'position:absolute;background:#fff;border:none;outline:none;resize:none;padding:4px;box-sizing:border-box;font:' + getComputedStyle(cell).font + ';color:#000;z-index:55;overflow:hidden;';
       ta.style.left   = (cellRect.left   - pageRect.left) + 'px';
       ta.style.top    = (cellRect.top    - pageRect.top ) + 'px';

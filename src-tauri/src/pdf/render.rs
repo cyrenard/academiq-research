@@ -7,11 +7,12 @@ use super::pdfium_init;
 
 pub fn render_page_png(
     app_data_dir: &Path,
+    resource_dir: Option<&Path>,
     pdf_path: &Path,
     page: u32,
     dpi: u32,
 ) -> Result<Vec<u8>, String> {
-    let pdfium = pdfium_init::load_pdfium(app_data_dir)?;
+    let pdfium = pdfium_init::load_pdfium(app_data_dir, resource_dir)?;
     let document = pdfium
         .load_pdf_from_file(pdf_path, None)
         .map_err(|e| e.to_string())?;
