@@ -48,13 +48,13 @@
     // ── Hidden capture textarea ────────────────────────────────────────────
     var ta = document.createElement('textarea');
     ta.className = 'aq-input-capture';
-    ta.setAttribute('autocapitalize', 'sentences');
-    ta.setAttribute('autocomplete',   'on');
-    ta.setAttribute('autocorrect',    'on');
-    ta.setAttribute('spellcheck',     'true');
+    ta.setAttribute('autocapitalize', 'off');
+    ta.setAttribute('autocomplete',   'off');
+    ta.setAttribute('autocorrect',    'off');
+    ta.setAttribute('spellcheck',     'false');
     ta.setAttribute('aria-label',     'AcademiQ editor input');
-    ta.setAttribute('data-gramm',     'true');
-    ta.setAttribute('data-gramm_editor', 'true');
+    ta.setAttribute('data-gramm',     'false');
+    ta.setAttribute('data-gramm_editor', 'false');
     ta.style.cssText = [
       'position:fixed',
       'top:0', 'left:0',
@@ -495,11 +495,12 @@
     // ── Event wiring ───────────────────────────────────────────────────────
     function markWritingAssistReady(){
       if(!ta) return;
-      ta.setAttribute('spellcheck', 'true');
-      ta.setAttribute('autocorrect', 'on');
-      ta.setAttribute('autocomplete', 'on');
-      ta.setAttribute('data-gramm', 'true');
-      ta.setAttribute('data-gramm_editor', 'true');
+      ta.setAttribute('spellcheck', 'false');
+      ta.setAttribute('autocorrect', 'off');
+      ta.setAttribute('autocomplete', 'off');
+      ta.setAttribute('autocapitalize', 'off');
+      ta.setAttribute('data-gramm', 'false');
+      ta.setAttribute('data-gramm_editor', 'false');
       ta.removeAttribute('aria-hidden');
       ta.setAttribute('aria-label', 'AcademiQ editor input');
     }
@@ -891,10 +892,12 @@
       assistBridge = document.createElement('div');
       assistBridge.className = 'aq-writing-assist-bridge';
       assistBridge.setAttribute('contenteditable', 'true');
-      assistBridge.setAttribute('spellcheck', 'true');
-      assistBridge.setAttribute('autocapitalize', 'sentences');
-      assistBridge.setAttribute('data-gramm', 'true');
-      assistBridge.setAttribute('data-gramm_editor', 'true');
+      assistBridge.setAttribute('spellcheck', 'false');
+      assistBridge.setAttribute('autocapitalize', 'off');
+      assistBridge.setAttribute('autocorrect', 'off');
+      assistBridge.setAttribute('autocomplete', 'off');
+      assistBridge.setAttribute('data-gramm', 'false');
+      assistBridge.setAttribute('data-gramm_editor', 'false');
       assistBridge.setAttribute('aria-label', 'AcademiQ writing assist bridge');
       assistBridge.style.cssText = [
         'position:absolute',

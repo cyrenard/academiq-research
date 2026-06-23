@@ -63,7 +63,6 @@
       }
       if((key === 'Backspace' || key === 'Delete') && isEditorMutationTarget(e && e.target)){
         destructiveKeyPending = true;
-        scheduleDestructiveMutationRepaint('key:' + key);
       }
     };
     document.addEventListener('input', function(e){
@@ -73,15 +72,11 @@
       var inputType = String((e && e.inputType) || '');
       if(destructiveKeyPending || /^delete/.test(inputType)){
         destructiveKeyPending = false;
-        if(isEditorMutationTarget(e && e.target)){
-          scheduleDestructiveMutationRepaint(inputType || 'input-delete');
-        }
       }
     }, true);
     document.addEventListener('cut', function(e){
       if(isEditorMutationTarget(e && e.target)){
         destructiveKeyPending = true;
-        scheduleDestructiveMutationRepaint('cut');
       }
     }, true);
     document.addEventListener('keydown', recordTyping, true);

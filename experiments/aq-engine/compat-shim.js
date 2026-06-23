@@ -1246,7 +1246,7 @@
           var activeRange = selection && typeof selection.getRange === 'function' ? selection.getRange() : null;
           activePageIndex = pageIndexForOffset(layout, activeRange ? activeRange.focus : 0);
         } catch(_pageErr){}
-        renderLayout(layout, _setupDone ? pageRangeAround(layout, activePageIndex) : visiblePageRange(layout));
+        renderLayout(layout, visiblePageRange(layout));
 
         // Empty-document placeholder. Shown when the doc has a single empty
         // paragraph block — fades on the first keystroke. Pure visual hint.

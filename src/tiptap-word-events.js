@@ -49,9 +49,12 @@
       root && root.nodeType === 1 ? root : null
     ].filter(Boolean);
     targets.forEach(function(node){
-      node.setAttribute('spellcheck','true');
-      node.setAttribute('data-gramm','true');
-      node.setAttribute('data-gramm_editor','true');
+      node.setAttribute('spellcheck','false');
+      node.setAttribute('autocorrect','off');
+      node.setAttribute('autocomplete','off');
+      node.setAttribute('autocapitalize','off');
+      node.setAttribute('data-gramm','false');
+      node.setAttribute('data-gramm_editor','false');
       if(node.id === 'apaed' || (node.classList && node.classList.contains('ProseMirror'))){
         node.setAttribute('role','textbox');
         node.setAttribute('aria-multiline','true');
@@ -61,15 +64,38 @@
       ? document.querySelectorAll('.aq-input-capture')
       : [];
     Array.prototype.forEach.call(captures, function(node){
-      node.setAttribute('spellcheck','true');
-      node.setAttribute('autocorrect','on');
-      node.setAttribute('autocomplete','on');
-      node.setAttribute('data-gramm','true');
-      node.setAttribute('data-gramm_editor','true');
+      node.setAttribute('spellcheck','false');
+      node.setAttribute('autocorrect','off');
+      node.setAttribute('autocomplete','off');
+      node.setAttribute('autocapitalize','off');
+      node.setAttribute('data-gramm','false');
+      node.setAttribute('data-gramm_editor','false');
       node.removeAttribute('aria-hidden');
       node.setAttribute('aria-label','AcademiQ editor input');
     });
     return !!targets.length;
+  }
+
+  function isTableEditTarget(target){
+    if(!target) return false;
+    target = target.nodeType === 3 ? target.parentElement : target;
+    return !!(target && target.closest && target.closest('td,th,.aq-engine-table-cell,[data-aq-table-cell="true"]'));
+  }
+
+  function bindTableBackspaceGuard(){
+    if(typeof document === 'undefined' || window.__aqTableBackspaceGuardV1) return;
+    window.__aqTableBackspaceGuardV1 = true;
+    document.addEventListener('keydown', function(e){
+      if(!e || (e.key !== 'Backspace' && e.key !== 'Delete')) return;
+      if(!isTableEditTarget(e.target)) return;
+      e.stopPropagation();
+    }, true);
+    document.addEventListener('beforeinput', function(e){
+      var inputType = String((e && e.inputType) || '');
+      if(!/^delete/.test(inputType)) return;
+      if(!isTableEditTarget(e.target)) return;
+      e.stopPropagation();
+    }, true);
   }
 
   function bindSelectionChange(){
@@ -714,6 +740,7 @@
     bindClickAnywhereTyping();
     bindContextMenu();
     bindNativeEditShortcuts();
+    bindTableBackspaceGuard();
     bindReferenceSync();
     watchSurface();
     return true;
@@ -723,6 +750,7 @@
     init:init,
     watchSurface:watchSurface,
     applySurfaceAttributes:applySurfaceAttributes,
+    bindTableBackspaceGuard:bindTableBackspaceGuard,
     buildContextMenuModel:buildContextMenuModel,
     fetchGrammarSuggestions:fetchGrammarSuggestions
   };

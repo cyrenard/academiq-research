@@ -9,15 +9,17 @@ function read(...parts) {
   return fs.readFileSync(path.join(rootDir, ...parts), 'utf8');
 }
 
-test('Linux destructive editor deletes schedule a targeted repaint without touching normal typing', () => {
+test('destructive editor deletes rely on viewport reflow instead of global repaint hacks', () => {
   const layout = read('src', 'tiptap-word-layout.js');
+  const compat = read('experiments', 'aq-engine', 'compat-shim.js');
   assert.match(layout, /function scheduleDestructiveMutationRepaint\(reason\)/);
   assert.match(layout, /isLikelyLinux\(\)/);
   assert.match(layout, /key === 'Backspace' \|\| key === 'Delete'/);
   assert.match(layout, /document\.addEventListener\('cut'/);
-  assert.match(layout, /window\.updatePageHeight\(\)/);
-  assert.match(layout, /window\.editor && typeof window\.editor\._reflow === 'function'/);
-  assert.match(layout, /translateZ\(0\)/);
+  assert.doesNotMatch(layout, /scheduleDestructiveMutationRepaint\('key:'/);
+  assert.doesNotMatch(layout, /scheduleDestructiveMutationRepaint\(inputType \|\| 'input-delete'\)/);
+  assert.doesNotMatch(layout, /scheduleDestructiveMutationRepaint\('cut'\)/);
+  assert.match(compat, /renderLayout\(layout, visiblePageRange\(layout\)\)/);
 });
 
 test('find inputs own focus so editor focus restoration cannot steal Ctrl+F typing', () => {

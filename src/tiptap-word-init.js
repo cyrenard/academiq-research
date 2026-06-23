@@ -27,7 +27,10 @@
       target.innerHTML = String(html);
     }
     target.setAttribute('contenteditable', 'true');
-    target.setAttribute('spellcheck', 'true');
+    target.setAttribute('spellcheck', 'false');
+    target.setAttribute('autocorrect', 'off');
+    target.setAttribute('autocomplete', 'off');
+    target.setAttribute('autocapitalize', 'off');
     target.classList.add('ProseMirror');
     window.editor = null;
     return null;

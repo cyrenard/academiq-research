@@ -647,7 +647,7 @@ export default function App() {
   // somewhere else (e.g. a future workspace import). The controller is
   // idempotent: setSpellcheckEnabled(true) when it's already true is a
   // no-op.
-  const persistedSpellEnabled = appState.spellcheck?.enabled === true;
+  const persistedSpellEnabled = false;
   useEffect(() => {
     if (loading) return;
     (async () => {

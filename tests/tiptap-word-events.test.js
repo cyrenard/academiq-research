@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const events = require('../src/tiptap-word-events.js');
 
@@ -47,7 +49,7 @@ test('buildContextMenuModel shows no-suggestion hint when grammar check is empty
   assert.equal(model[0].disabled, true);
 });
 
-test('applySurfaceAttributes sets writing-assist attributes', () => {
+test('applySurfaceAttributes disables native writing-assist rewrites', () => {
   const attrs = {};
   const node = {
     nodeType: 1,
@@ -61,10 +63,44 @@ test('applySurfaceAttributes sets writing-assist attributes', () => {
   try{
     const ok = events.applySurfaceAttributes(node);
     assert.equal(ok, true);
-    assert.equal(attrs.spellcheck, 'true');
-    assert.equal(attrs['data-gramm'], 'true');
-    assert.equal(attrs['data-gramm_editor'], 'true');
+    assert.equal(attrs.spellcheck, 'false');
+    assert.equal(attrs.autocorrect, 'off');
+    assert.equal(attrs.autocomplete, 'off');
+    assert.equal(attrs.autocapitalize, 'off');
+    assert.equal(attrs['data-gramm'], 'false');
+    assert.equal(attrs['data-gramm_editor'], 'false');
   } finally {
     delete global.document;
   }
+});
+
+test('table backspace guard is exported and installed once', () => {
+  const listeners = [];
+  global.window = {};
+  global.document = {
+    addEventListener: function(type, handler, capture){
+      listeners.push({ type, handler, capture });
+    }
+  };
+  try{
+    assert.equal(typeof events.bindTableBackspaceGuard, 'function');
+    events.bindTableBackspaceGuard();
+    events.bindTableBackspaceGuard();
+    assert.equal(global.window.__aqTableBackspaceGuardV1, true);
+    assert.equal(listeners.length, 2);
+    assert.deepEqual(listeners.map((item) => item.type), ['keydown', 'beforeinput']);
+    assert.ok(listeners.every((item) => item.capture === true));
+  } finally {
+    delete global.window;
+    delete global.document;
+  }
+});
+
+test('AQ Engine capture input disables native autocorrect rewrites at source', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'input.js'), 'utf8');
+  assert.match(source, /ta\.setAttribute\('autocorrect',\s+'off'\)/);
+  assert.match(source, /ta\.setAttribute\('spellcheck',\s+'false'\)/);
+  assert.match(source, /ta\.setAttribute\('data-gramm',\s+'false'\)/);
+  assert.match(source, /assistBridge\.setAttribute\('autocorrect',\s+'off'\)/);
+  assert.doesNotMatch(source, /ta\.setAttribute\('autocorrect',\s+'on'\)/);
 });
