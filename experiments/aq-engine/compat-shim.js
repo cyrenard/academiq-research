@@ -1153,6 +1153,7 @@
     var _refSyncTimer = 0;
     var _lastLayout = null;
     var _scrollRenderTimer = 0;
+    var _interactiveReflowTimer = 0;
 
     function scheduleTypingRefSync(){
       if(typeof window === 'undefined' || typeof window.scheduleRefSectionSync !== 'function') return;
@@ -1215,6 +1216,21 @@
           if(input && input.syncCapturePosition) input.syncCapturePosition();
         }, 80);
       } catch(_e){}
+    }
+
+    function scheduleInteractiveReflow(){
+      if(_destroyed) return;
+      if(_interactiveReflowTimer) return;
+      var raf = (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function')
+        ? window.requestAnimationFrame.bind(window)
+        : function(fn){ return window.setTimeout(fn, 16); };
+      _interactiveReflowTimer = raf(function(){
+        _interactiveReflowTimer = 0;
+        if(_destroyed) return;
+        reflow();
+        onUpdate({ editor: editorObj });
+        scheduleTypingRefSync();
+      });
     }
 
     var engineOpts = {
@@ -1317,9 +1333,7 @@
             doc:          docModel,
             selectionRef: function(){ return selection; },
             onChanged:    function(){
-              reflow();
-              onUpdate({ editor: editorObj });
-              scheduleTypingRefSync();
+              scheduleInteractiveReflow();
             }
           });
           if(input && typeof input.attach === 'function') input.attach();
@@ -1611,8 +1625,13 @@
         _destroyed = true; this.isDestroyed = true;
         try { if(_refSyncTimer) window.clearTimeout(_refSyncTimer); } catch(_e){}
         try { if(_scrollRenderTimer) window.clearTimeout(_scrollRenderTimer); } catch(_e){}
+        try {
+          if(_interactiveReflowTimer && typeof window.cancelAnimationFrame === 'function') window.cancelAnimationFrame(_interactiveReflowTimer);
+          else if(_interactiveReflowTimer) window.clearTimeout(_interactiveReflowTimer);
+        } catch(_e){}
         _refSyncTimer = 0;
         _scrollRenderTimer = 0;
+        _interactiveReflowTimer = 0;
         try {
           if(_boundScrollHost && _boundScrollHost.removeEventListener) _boundScrollHost.removeEventListener('scroll', scheduleViewportRender);
           _boundScrollHost = null;

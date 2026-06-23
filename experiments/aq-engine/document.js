@@ -461,6 +461,37 @@
     return d;
   }
 
+  function deleteRangeInPlace(doc, from, to){
+    if(from >= to) return true;
+    var locA = locate(doc, from);
+    var locB = locate(doc, to);
+    if(locA.blockIdx !== locB.blockIdx) return false;
+    var b = doc.blocks[locA.blockIdx];
+    if(!b || b.type === 'table' || b.type === 'image' || b.rule) return false;
+    var runs = b.runs || [];
+    var newRuns = [];
+    var cursor = 0;
+    for(var i = 0; i < runs.length; i++){
+      var rt = String(runs[i].text || '');
+      var rStart = cursor, rEnd = cursor + rt.length;
+      if(rEnd <= locA.intra || rStart >= locB.intra){
+        newRuns.push(runs[i]);
+      }else{
+        var keepBefore = (locA.intra > rStart) ? rt.slice(0, locA.intra - rStart) : '';
+        var keepAfter  = (locB.intra < rEnd)   ? rt.slice(locB.intra - rStart)    : '';
+        var combined = keepBefore + keepAfter;
+        if(combined.length){
+          var nr = cloneRun(runs[i]);
+          nr.text = combined;
+          newRuns.push(nr);
+        }
+      }
+      cursor = rEnd;
+    }
+    b.runs = newRuns.length ? newRuns : [{ text: '' }];
+    return true;
+  }
+
   function sliceRunsLeft(runs, intra){
     var out = [];
     var cursor = 0;
@@ -929,18 +960,28 @@
       return (b.runs || []).map(function(r){ return String(r.text || ''); }).join('');
     }).join('\n');
   }
+  function blockText(block){
+    return (block && block.runs || []).map(function(r){ return String(r.text || ''); }).join('');
+  }
+  function blockStartOffset(doc, blockIdx){
+    var off = 0;
+    for(var i = 0; i < blockIdx; i++) off += blockText(doc.blocks[i]).length + 1;
+    return off;
+  }
   function findWordBoundary(doc, off, direction){
-    var t = getPlainText(doc);
-    var n = t.length;
+    var n = flatLength(doc);
     var i = Math.max(0, Math.min(n, off));
+    var loc = locate(doc, i);
+    var text = blockText(doc.blocks[loc.blockIdx]);
+    var local = Math.max(0, Math.min(text.length, loc.intra));
     if(direction < 0){
-      while(i > 0 && /\s/.test(t.charAt(i - 1))) i--;
-      while(i > 0 && /[^\s]/.test(t.charAt(i - 1))) i--;
+      while(local > 0 && /\s/.test(text.charAt(local - 1))) local--;
+      while(local > 0 && /[^\s]/.test(text.charAt(local - 1))) local--;
     }else{
-      while(i < n && /\s/.test(t.charAt(i))) i++;
-      while(i < n && /[^\s]/.test(t.charAt(i))) i++;
+      while(local < text.length && /\s/.test(text.charAt(local))) local++;
+      while(local < text.length && /[^\s]/.test(text.charAt(local))) local++;
     }
-    return i;
+    return blockStartOffset(doc, loc.blockIdx) + local;
   }
 
   // Public factory
@@ -954,6 +995,7 @@
     var future  = [];
     var typingTimer = 0;
     var typingDirty = false;
+    var pendingHistoryKind = '';
 
     function commit(next){
       flushTypingHistory();
@@ -962,6 +1004,13 @@
       history.push(cloneDoc(cleaned));
       if(history.length > 200) history.shift();
       future.length = 0;
+    }
+    function scheduleHistoryFlush(kind){
+      typingDirty = true;
+      pendingHistoryKind = kind || 'edit';
+      future.length = 0;
+      if(typingTimer) clearTimeout(typingTimer);
+      typingTimer = setTimeout(flushTypingHistory, pendingHistoryKind === 'delete' ? 1200 : 900);
     }
     function flushTypingHistory(){
       if(typingTimer) clearTimeout(typingTimer);
@@ -973,13 +1022,16 @@
       if(history.length > 200) history.shift();
       future.length = 0;
       typingDirty = false;
+      pendingHistoryKind = '';
     }
     function commitTypingInsert(off, text){
       insertTextInPlace(doc, off, text);
-      typingDirty = true;
-      future.length = 0;
-      if(typingTimer) clearTimeout(typingTimer);
-      typingTimer = setTimeout(flushTypingHistory, 900);
+      scheduleHistoryFlush('insert');
+    }
+    function commitTypingDelete(from, to){
+      if(typingDirty && pendingHistoryKind !== 'delete') flushTypingHistory();
+      if(!deleteRangeInPlace(doc, from, to)) doc = deleteRange(doc, from, to);
+      scheduleHistoryFlush('delete');
     }
     return {
       get: function(){ return doc; },
@@ -996,7 +1048,7 @@
         }
       },
       insertBlocks: function(off, blocks){ commit(insertBlocks(doc, off, blocks)); },
-      deleteRange: function(from, to){ commit(deleteRange(doc, from, to)); },
+      deleteRange: function(from, to){ commitTypingDelete(from, to); },
       splitBlock: function(off){ commit(splitBlock(doc, off)); },
       mergeWithPrevious: function(blockIdx){
         var r = mergeWithPrevious(doc, blockIdx);

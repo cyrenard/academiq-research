@@ -105,9 +105,7 @@ function AQEngineEditorComponent({ docId, editorRef, initialState, onEditorChang
     const debouncedScheduleNotify = debounce(() => {
       if (isComposing) return;
       scheduleRecheck();
-      scheduleCitationAudit();
-      notifyFromEditor();
-    }, 80);
+    }, 250);
 
     const scheduleNotify = () => {
       if (isComposing) return;
@@ -125,6 +123,7 @@ function AQEngineEditorComponent({ docId, editorRef, initialState, onEditorChang
 
     const handleBlur = () => {
       editorRef.current?.flush?.();
+      notifyFromEditor();
     };
 
     editorRef.current = createEditor({
@@ -135,7 +134,6 @@ function AQEngineEditorComponent({ docId, editorRef, initialState, onEditorChang
         lastHTML = state.html;
         if (!isComposing) {
           scheduleRecheck();
-          scheduleCitationAudit();
         }
         saveDraft(state);
       }
@@ -153,15 +151,11 @@ function AQEngineEditorComponent({ docId, editorRef, initialState, onEditorChang
     container.addEventListener('compositionend', handleCompositionEnd, true);
     container.addEventListener('blur', handleBlur, true);
 
-    const observer = new MutationObserver(scheduleNotify);
-    observer.observe(container, { childList: true, subtree: true, characterData: true });
-
     return () => {
       eventNames.forEach((eventName) => container.removeEventListener(eventName, scheduleNotify, true));
       container.removeEventListener('compositionstart', handleCompositionStart, true);
       container.removeEventListener('compositionend', handleCompositionEnd, true);
       container.removeEventListener('blur', handleBlur, true);
-      observer.disconnect();
       editorRef.current?.destroy?.();
       editorRef.current = null;
     };

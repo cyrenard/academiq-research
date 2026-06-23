@@ -14,11 +14,12 @@ test('AQ Engine editor update events are bridged into React autosave', () => {
   assert.match(adapter, /activeDetachUpdate\?\.\(\)/);
 });
 
-test('React editor host has DOM-level dirty fallback for AQ Engine input', () => {
+test('React editor host keeps lightweight DOM dirty fallback for AQ Engine input', () => {
   const host = fs.readFileSync(path.join(root, 'src/renderer/components/editor/AQEngineEditor.tsx'), 'utf8');
   assert.match(host, /beforeinput/);
   assert.match(host, /compositionend/);
-  assert.match(host, /new MutationObserver/);
+  assert.doesNotMatch(host, /new MutationObserver/);
   assert.match(host, /editorRef\.current\?\.getHTML/);
   assert.match(host, /onEditorChangeRef\.current/);
+  assert.doesNotMatch(host, /scheduleCitationAudit\(\);\s*\n\s*notifyFromEditor/);
 });
