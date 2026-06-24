@@ -104,9 +104,42 @@
     return '<w:p>' + pPr + runs + '</w:p>';
   }
 
+  function normalizeCellParagraphs(cell){
+    if(!cell) return [{ type: 'paragraph', text: '' }];
+    if(Array.isArray(cell.blocks) && cell.blocks.length) return cell.blocks;
+    if(Array.isArray(cell.runs) && cell.runs.length) return [{ type: 'paragraph', runs: cell.runs }];
+    if(cell.text != null) return [{ type: 'paragraph', text: String(cell.text) }];
+    return [{ type: 'paragraph', text: '' }];
+  }
+
+  function buildTableCell(cell){
+    var body = normalizeCellParagraphs(cell).map(function(block){
+      return buildParagraph(block || { type: 'paragraph', text: '' });
+    }).join('');
+    return '<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr>' + (body || buildParagraph({ type: 'paragraph', text: '' })) + '</w:tc>';
+  }
+
+  function buildTable(block){
+    var rows = Array.isArray(block && block.rows) ? block.rows : [];
+    var body = rows.map(function(row){
+      var cells = Array.isArray(row && row.cells) ? row.cells : [];
+      return '<w:tr>' + cells.map(buildTableCell).join('') + '</w:tr>';
+    }).join('');
+    if(!body) body = '<w:tr>' + buildTableCell({ text: '' }) + '</w:tr>';
+    return '<w:tbl>'
+      + '<w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders>'
+      + '<w:top w:val="single" w:sz="8" w:space="0" w:color="000000"/>'
+      + '<w:bottom w:val="single" w:sz="8" w:space="0" w:color="000000"/>'
+      + '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="000000"/>'
+      + '</w:tblBorders></w:tblPr>'
+      + body
+      + '</w:tbl>';
+  }
+
   function buildDocumentXml(blocks){
     var body = (blocks || []).map(function(b){
       if(!b || typeof b !== 'object') return '';
+      if(b.type === 'table') return buildTable(b);
       return buildParagraph(b);
     }).join('');
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -259,8 +292,32 @@
       Array.prototype.forEach.call(el.childNodes || [], function(child){ collectRuns(child, next, out); });
     }
 
+    function cellToModel(cellEl){
+      var runs = [];
+      collectRuns(cellEl, {}, runs);
+      return { runs: runs.length ? runs : [{ text: '' }] };
+    }
+
+    function tableToBlock(tableEl){
+      var rows = [];
+      Array.prototype.forEach.call(tableEl.querySelectorAll('tr'), function(rowEl){
+        var cells = [];
+        Array.prototype.forEach.call(rowEl.querySelectorAll('td,th'), function(cellEl){
+          cells.push(cellToModel(cellEl));
+        });
+        if(cells.length) rows.push({ cells: cells });
+      });
+      return rows.length ? { type: 'table', rows: rows } : null;
+    }
+
     function addBlock(el){
       var tag = String(el.tagName || '').toLowerCase();
+      if(tag !== 'table' && el.closest && el.closest('table')) return;
+      if(tag === 'table'){
+        var table = tableToBlock(el);
+        if(table) blocks.push(table);
+        return;
+      }
       var runs = [];
       collectRuns(el, {}, runs);
       if(!runs.length) return;
@@ -275,7 +332,7 @@
       });
     }
 
-    var selectors = 'h1,h2,h3,h4,h5,p,li,blockquote,td,th';
+    var selectors = 'h1,h2,h3,h4,h5,p,li,blockquote,table';
     var nodes = doc.body.querySelectorAll(selectors);
     if(nodes.length) {
       Array.prototype.forEach.call(nodes, addBlock);
@@ -379,6 +436,7 @@
     escapeXml: escapeXml,
     buildRun: buildRun,
     buildParagraph: buildParagraph,
+    buildTable: buildTable,
     buildDocumentXml: buildDocumentXml,
     htmlToBlocks: htmlToBlocks,
     buildDocxBytesFromBlocks: buildDocxBytesFromBlocks,

@@ -1,6 +1,6 @@
 [package]
 name = "academiq-research-tauri"
-version = "1.24.1-beta.11"
+version = "1.24.1-beta.12"
 description = "AcademiQ Research Tauri shell"
 authors = ["AcademiQ"]
 license = "MIT"
