@@ -56,6 +56,24 @@ jobs:
         if: runner.os != 'Windows'
         run: cp icon.png src-tauri/icons/icon.png
 
+      - name: Install platform PDFium runtime
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            archive="pdfium-linux-x64.tgz"
+            library="libpdfium.so"
+          else
+            archive="pdfium-mac-arm64.tgz"
+            library="libpdfium.dylib"
+          fi
+          curl -L --retry 3 -o "/tmp/$archive" \
+            "https://github.com/bblanchon/pdfium-binaries/releases/latest/download/$archive"
+          mkdir -p /tmp/academiq-pdfium
+          tar -xzf "/tmp/$archive" -C /tmp/academiq-pdfium
+          cp "$(find /tmp/academiq-pdfium -name "$library" -print -quit)" \
+            "src-tauri/binaries/$library"
+
       - name: TypeScript typecheck
         run: npm run typecheck
 
