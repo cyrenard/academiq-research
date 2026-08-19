@@ -57,6 +57,9 @@
 
   function targetInsideEditor(target){
     if(!target) return false;
+    try{
+      if(target.closest && target.closest('#aq-engine-host,.aq-engine-stage,.aq-input-capture')) return true;
+    }catch(e){}
     var host = getEditorHost();
     if(!host || !host.contains) return false;
     try{
@@ -494,6 +497,56 @@
       }catch(e){}
     }
     return true;
+  }
+
+  function bindCitationPopupDom(){
+    const box = getTriggerBox();
+    if(box && !box.__aqCitationRuntimeBound){
+      box.__aqCitationRuntimeBound = true;
+      if(!runtime.state.open){
+        box.style.display = 'none';
+        box.style.visibility = 'hidden';
+        box.style.pointerEvents = 'none';
+      }
+      box.addEventListener('pointerdown', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        if(typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+      }, true);
+      box.addEventListener('mousedown', function(e){ e.stopPropagation(); }, true);
+      box.addEventListener('click', function(e){ e.stopPropagation(); }, true);
+    }
+    const inp = getTriggerInput();
+    if(inp && !inp.__aqCitationRuntimeBound){
+      inp.__aqCitationRuntimeBound = true;
+      inp.readOnly = false;
+      inp.disabled = false;
+      inp.tabIndex = 0;
+      inp.addEventListener('keydown', function(e){
+        if(runtime.handleKeydown(e)) return;
+        e.stopPropagation();
+      }, true);
+      inp.addEventListener('input', function(e){
+        runtime.state.query = inp.value || '';
+        runtime.state.activeIndex = 0;
+        runtime.state.keyboardMode = 'query';
+        runtime.renderList();
+        e.stopPropagation();
+      });
+      ['keyup','mousedown','click'].forEach(function(type){
+        inp.addEventListener(type, function(e){ e.stopPropagation(); }, true);
+      });
+    }
+    const sc = getScrollEl();
+    if(sc && !sc.__aqCitationRuntimeBound){
+      sc.__aqCitationRuntimeBound = true;
+      sc.addEventListener('wheel', function(){ runtime.cancelScrollGuard(); }, { passive:true });
+      sc.addEventListener('touchmove', function(){ runtime.cancelScrollGuard(); }, { passive:true });
+      sc.addEventListener('scroll', function(){
+        runtime.cancelScrollGuard();
+        if(runtime.state.open) runtime.repositionPopup();
+      }, { passive:true });
+    }
   }
 
   function textFromHTML(html){
@@ -1111,6 +1164,9 @@
       if(!trigger || window.__aqCitationTransactionActive || Date.now() < (window.__aqCitationInputBlockedUntil || 0) || Date.now() < (runtime.state.suppressTriggerUntil || 0)){
         return false;
       }
+      // ui-event-bindings can initialize before React mounts the popup DOM.
+      // Re-running init is cheap and makes the WebView2 path ready on demand.
+      runtime.init();
       var from = Number(trigger.from);
       var to = Number(trigger.to);
       if(!Number.isFinite(from) || !Number.isFinite(to) || from < 0 || to < from) return false;
@@ -1678,6 +1734,7 @@
     init: function(){
       if(runtime.state.initialized){
         window.__aqCitationRuntimeV1 = true;
+        bindCitationPopupDom();
         return;
       }
       runtime.state.initialized = true;
@@ -1726,54 +1783,7 @@
       window.insCiteNote = function(id){ return runtime.insertNoteCitation(id); };
       syncLegacyState();
 
-      const box = getTriggerBox();
-      if(box){
-        box.style.display = 'none';
-        box.style.visibility = 'hidden';
-        box.style.pointerEvents = 'none';
-        box.addEventListener('pointerdown', function(e){
-          e.preventDefault();
-          e.stopPropagation();
-          if(typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
-        }, true);
-        box.addEventListener('mousedown', function(e){ e.stopPropagation(); }, true);
-        box.addEventListener('click', function(e){ e.stopPropagation(); }, true);
-      }
-      const inp = getTriggerInput();
-      if(inp){
-        inp.readOnly = false;
-        inp.disabled = false;
-        inp.tabIndex = 0;
-        inp.addEventListener('keydown', function(e){
-          if(runtime.handleKeydown(e)) return;
-          e.stopPropagation();
-        }, true);
-        inp.addEventListener('input', function(e){
-          runtime.state.query = inp.value || '';
-          runtime.state.activeIndex = 0;
-          runtime.state.keyboardMode = 'query';
-          runtime.renderList();
-          e.stopPropagation();
-        });
-        ['keyup','mousedown','click'].forEach(function(type){
-          inp.addEventListener(type, function(e){
-            e.stopPropagation();
-          }, true);
-        });
-      }
-      const sc = getScrollEl();
-      if(sc){
-        sc.addEventListener('wheel', function(){
-          runtime.cancelScrollGuard();
-        }, { passive:true });
-        sc.addEventListener('touchmove', function(){
-          runtime.cancelScrollGuard();
-        }, { passive:true });
-        sc.addEventListener('scroll', function(){
-          runtime.cancelScrollGuard();
-          if(runtime.state.open) runtime.repositionPopup();
-        }, { passive:true });
-      }
+      bindCitationPopupDom();
       window.addEventListener('resize', function(){
         if(runtime.state.open) runtime.repositionPopup();
       });

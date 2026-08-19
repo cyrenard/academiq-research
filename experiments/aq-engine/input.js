@@ -325,6 +325,16 @@
       if(manualBibliographyEdit) markManualBibliographyEditSoon();
       getSel().setRange(newOff, newOff);
 
+      // WebView2 may run selection/reflow callbacks before a zero-delay timer.
+      // Open slash citations from the authoritative post-insert offset now;
+      // keep the scheduled pass below as a compatibility/fallback refresh.
+      try{
+        var immediateTrigger = detectCitationTrigger(
+          typeof doc.getPlainText === 'function' ? doc.getPlainText() : '',
+          newOff
+        );
+        if(immediateTrigger) refreshTrigNow(immediateTrigger);
+      }catch(_triggerErr){}
       scheduleTrigRefresh();
     }
 
@@ -379,6 +389,28 @@
       return String(payload || '').length > 1;
     }
 
+    function refreshTrigNow(explicitTrigger){
+      if(isCitationTransactionBlocked()) return false;
+      var range = r();
+      var plainText = typeof doc.getPlainText === 'function' ? doc.getPlainText() : '';
+      var trigger = explicitTrigger || detectCitationTrigger(
+        plainText,
+        range && typeof range.from === 'number' ? range.from : plainText.length
+      );
+      if(trigger && window.AQCitationRuntime && typeof window.AQCitationRuntime.openFromEditorTrigger === 'function'){
+        if(typeof window.AQCitationRuntime.init === 'function'){
+          try{ window.AQCitationRuntime.init(); }catch(_initErr){}
+        }
+        return window.AQCitationRuntime.openFromEditorTrigger(trigger) !== false;
+      }
+      if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
+        window.AQCitationRuntime.refreshFromEditor();
+      } else if(typeof window.checkTrig === 'function'){
+        window.checkTrig();
+      }
+      return false;
+    }
+
     function scheduleTrigRefresh(){
       if(isCitationTransactionBlocked()) return;
       if(trigRefreshTimer) clearTimeout(trigRefreshTimer);
@@ -386,18 +418,7 @@
         trigRefreshTimer = 0;
         if(isCitationTransactionBlocked()) return;
         try {
-          var range = r();
-          var plainText = typeof doc.getPlainText === 'function' ? doc.getPlainText() : '';
-          var trigger = detectCitationTrigger(plainText, range && typeof range.from === 'number' ? range.from : plainText.length);
-          if(trigger && window.AQCitationRuntime && typeof window.AQCitationRuntime.openFromEditorTrigger === 'function'){
-            window.AQCitationRuntime.openFromEditorTrigger(trigger);
-            return;
-          }
-          if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
-            window.AQCitationRuntime.refreshFromEditor();
-          } else if(typeof window.checkTrig === 'function'){
-            window.checkTrig();
-          }
+          refreshTrigNow();
         } catch(_e){}
       }, 0);
     }

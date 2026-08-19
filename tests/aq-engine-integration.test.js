@@ -101,7 +101,9 @@ test('AQ Engine typed input always clears citation marks from new text', () => {
   assert.match(source, /typeof e\.data === 'string'/);
   assert.match(source, /text = text\.slice\(-1\)/);
   assert.match(source, /openFromEditorTrigger\(trigger\)/);
-  assert.match(source, /detectCitationTrigger\(plainText/);
+  assert.match(source, /detectCitationTrigger\(\s*plainText/);
+  assert.match(source, /if\(immediateTrigger\) refreshTrigNow\(immediateTrigger\)/);
+  assert.match(source, /getSel\(\)\.setRange\(newOff, newOff\)[\s\S]*refreshTrigNow\(immediateTrigger\)/);
 });
 
 test('AQ Engine detects /r and /t immediately from authoritative document offsets', () => {
@@ -303,6 +305,52 @@ test('citation textual slash trigger leaves search input editable', () => {
   assert.equal(elements.tgs.disabled, false);
   assert.equal(elements.tgs.readOnly, false);
   assert.equal(elements.tgs.tabIndex, 0);
+});
+
+test('citation runtime rebinds popup DOM mounted after early initialization', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'citation-runtime.js'), 'utf8');
+  const elements = {};
+  const listeners = [];
+  const makeElement = () => ({
+    style: {},
+    classList: { add(){}, remove(){}, contains(){ return false; } },
+    addEventListener(type){ listeners.push(type); },
+    contains(){ return false; },
+    focus(){},
+    setSelectionRange(){},
+    getBoundingClientRect(){ return { left: 16, bottom: 24 }; },
+    value: '', disabled: false, readOnly: false, tabIndex: -1, scrollTop: 0
+  });
+  const document = {
+    getElementById(id){ return elements[id] || null; },
+    querySelector(){ return null; },
+    addEventListener(){},
+    removeEventListener(){}
+  };
+  const window = {
+    document, console, Date, setTimeout, clearTimeout,
+    innerHeight: 800, innerWidth: 1200,
+    addEventListener(){}, removeEventListener(){}, getSelection(){ return null; },
+    cLib(){ return []; }, filterRefsForQuery(){ return []; }
+  };
+  window.window = window;
+  vm.runInNewContext(source, { window, document, console, Date, setTimeout, clearTimeout });
+  window.AQCitationRuntime.init();
+  elements.trig = makeElement();
+  elements.tgs = makeElement();
+  elements.tgl = makeElement();
+  elements.tgq = makeElement();
+  elements.tgsel = makeElement();
+  elements.escroll = makeElement();
+  window.AQCitationRuntime.init();
+  assert.equal(elements.tgs.tabIndex, 0);
+  assert.equal(elements.tgs.__aqCitationRuntimeBound, true);
+  assert.ok(listeners.includes('input'));
+});
+
+test('citation runtime treats the AQ Engine capture as an editor target', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'citation-runtime.js'), 'utf8');
+  assert.match(source, /#aq-engine-host,\.aq-engine-stage,\.aq-input-capture/);
 });
 
 test('AQ Engine adapters use canonical APA formatter for citation text', () => {
