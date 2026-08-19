@@ -52,6 +52,10 @@ jobs:
         if: runner.os != 'Windows'
         run: node scripts/build-sidecar.js
 
+      - name: Prepare platform Tauri icon
+        if: runner.os != 'Windows'
+        run: cp icon.png src-tauri/icons/icon.png
+
       - name: TypeScript typecheck
         run: npm run typecheck
 
@@ -119,6 +123,9 @@ jobs:
 
       - name: Build macOS capture sidecar
         run: node scripts/build-sidecar.js
+
+      - name: Prepare macOS Tauri icon
+        run: cp icon.png src-tauri/icons/icon.png
 
       - name: Vite build
         run: npm run build:renderer
