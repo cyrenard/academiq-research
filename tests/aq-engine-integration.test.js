@@ -771,7 +771,9 @@ test('AQ Engine bibliography entries keep APA 7 hanging indent and double spacin
 
 test('React AQ Engine adapter binds slash citations to bibliography sync', () => {
   const adapter = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'lib', 'editor-adapter.ts'), 'utf8');
-  const host = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'components', 'shell', 'LegacyCompatibilityHost.tsx'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'App.tsx'), 'utf8');
+  const host = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'components', 'shell', 'CitationTriggerHost.tsx'), 'utf8');
+  const legacyHost = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'components', 'shell', 'LegacyCompatibilityHost.tsx'), 'utf8');
   const reactHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   assert.match(adapter, /function installReferenceBridge/);
   assert.match(adapter, /win\.updateRefSection = \(forceAuto\?: boolean\) =>/);
@@ -787,6 +789,9 @@ test('React AQ Engine adapter binds slash citations to bibliography sync', () =>
   assert.match(host, /id="trig"/);
   assert.match(host, /id="tgs"/);
   assert.match(host, /id="tgl"/);
+  assert.match(host, /data-aq-eager-citation-host/);
+  assert.match(app, /<CitationTriggerHost \/>[\s\S]*<Suspense fallback=\{null\}>/);
+  assert.doesNotMatch(legacyHost, /id="trig"/, 'lazy compatibility host must not own the slash citation popup');
   assert.ok(reactHtml.includes('<script src="/src/citation-runtime.js"></script>'), 'React shell must load the legacy citation runtime');
   assert.ok(reactHtml.includes('<script src="/src/literature-matrix-view.js"></script>'), 'React shell must load the literature matrix view runtime');
   assert.ok(reactHtml.includes('<script src="/src/legacy-runtime.js"></script>'), 'React shell must load legacy runtime for callLegacy bridges');
