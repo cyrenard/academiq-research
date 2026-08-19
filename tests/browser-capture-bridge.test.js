@@ -8,12 +8,16 @@ const test = require('node:test');
 
 const rootDir = path.join(__dirname, '..');
 const sidecarEntry = path.join(rootDir, 'src-sidecar', 'capture-agent', 'index.js');
-const sidecarBinary = path.join(
-  rootDir,
-  'src-tauri',
-  'binaries',
-  'capture-agent-x86_64-pc-windows-msvc.exe'
-);
+const sidecarBinaryNames = {
+  'win32-x64': 'capture-agent-x86_64-pc-windows-msvc.exe',
+  'linux-x64': 'capture-agent-x86_64-unknown-linux-gnu',
+  'darwin-x64': 'capture-agent-x86_64-apple-darwin',
+  'darwin-arm64': 'capture-agent-aarch64-apple-darwin'
+};
+const sidecarBinaryName = sidecarBinaryNames[`${process.platform}-${process.arch}`];
+const sidecarBinary = sidecarBinaryName
+  ? path.join(rootDir, 'src-tauri', 'binaries', sidecarBinaryName)
+  : '';
 
 function startSidecar(mode = 'node', env = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'academiq-capture-sidecar-'));
