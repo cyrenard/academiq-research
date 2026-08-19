@@ -872,6 +872,7 @@
     publicApi: {
       init: function(){ runtime.init(); },
       openFromSlash: function(query, mode){ runtime.openFromSlash(query, mode); },
+      openFromEditorTrigger: function(trigger){ return runtime.openFromEditorTrigger(trigger); },
       close: function(skipFocus){ runtime.close(skipFocus); },
       refreshFromEditor: function(){ runtime.refreshFromEditor(); },
       handleKeydown: function(event){ return runtime.handleKeydown(event); },
@@ -1104,6 +1105,21 @@
         }
       },0);
       runtime.restoreScroll();
+    },
+
+    openFromEditorTrigger: function(trigger){
+      if(!trigger || window.__aqCitationTransactionActive || Date.now() < (window.__aqCitationInputBlockedUntil || 0) || Date.now() < (runtime.state.suppressTriggerUntil || 0)){
+        return false;
+      }
+      var from = Number(trigger.from);
+      var to = Number(trigger.to);
+      if(!Number.isFinite(from) || !Number.isFinite(to) || from < 0 || to < from) return false;
+      var textual = trigger.mode === 'textual' || trigger.triggerMode === 't';
+      var mode = textual ? 'textual' : 'inline';
+      window.editorTrigRange = { from: from, to: to, mode: textual ? 't' : 'r' };
+      window.__aqCitationTriggerMode = mode;
+      runtime.openFromSlash(String(trigger.query || ''), mode);
+      return !!runtime.state.open;
     },
 
     repositionPopup: function(){

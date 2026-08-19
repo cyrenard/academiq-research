@@ -100,8 +100,20 @@ test('AQ Engine typed input always clears citation marks from new text', () => {
   assert.match(source, /at = citationBounds\.to/);
   assert.match(source, /typeof e\.data === 'string'/);
   assert.match(source, /text = text\.slice\(-1\)/);
-  assert.doesNotMatch(source, /openFromSlash\(query/);
-  assert.doesNotMatch(source, /window\.editorTrigRange = \{ from: newOff/);
+  assert.match(source, /openFromEditorTrigger\(trigger\)/);
+  assert.match(source, /detectCitationTrigger\(plainText/);
+});
+
+test('AQ Engine detects /r and /t immediately from authoritative document offsets', () => {
+  const input = require(path.join(__dirname, '..', 'experiments', 'aq-engine', 'input.js'));
+
+  assert.deepEqual(input.detectCitationTrigger('/r', 2), {
+    query: '', mode: 'inline', triggerMode: 'r', from: 0, to: 2
+  });
+  assert.deepEqual(input.detectCitationTrigger('Metin /t Bandura', 16), {
+    query: 'Bandura', mode: 'textual', triggerMode: 't', from: 6, to: 16
+  });
+  assert.equal(input.detectCitationTrigger('Normal metin', 12), null);
 });
 
 test('AQ Engine suppresses captured autocomplete payloads immediately after citation insert', () => {
@@ -135,7 +147,7 @@ test('AQ Engine post-citation suppression never swallows single typed characters
   assert.match(source, /isCitationTransactionBlocked\(\) && !isSinglePrintableKey\(e\)/);
 });
 
-test('AQ Engine leaves slash trigger ownership to citation runtime refresh', () => {
+test('Tiptap fallback leaves slash trigger ownership to citation runtime refresh', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'tiptap-word-editor.js'), 'utf8');
   assert.match(source, /AQCitationRuntime\.refreshFromEditor/);
   assert.doesNotMatch(source, /window\.editorTrigRange = \{ from:start, to:end \}/);
@@ -280,8 +292,14 @@ test('citation textual slash trigger leaves search input editable', () => {
   };
   window.window = window;
   vm.runInNewContext(source, { window, document, console, Date, setTimeout: window.setTimeout, clearTimeout });
-  window.AQCitationRuntime.openFromSlash('', 'textual');
+  assert.equal(window.AQCitationRuntime.openFromEditorTrigger({
+    query: 'Bandura', mode: 'textual', triggerMode: 't', from: 6, to: 16
+  }), true);
   assert.equal(window.__aqCitationTriggerMode, 'textual');
+  assert.equal(window.editorTrigRange.from, 6);
+  assert.equal(window.editorTrigRange.to, 16);
+  assert.equal(window.editorTrigRange.mode, 't');
+  assert.equal(elements.tgs.value, 'Bandura');
   assert.equal(elements.tgs.disabled, false);
   assert.equal(elements.tgs.readOnly, false);
   assert.equal(elements.tgs.tabIndex, 0);

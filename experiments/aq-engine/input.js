@@ -17,6 +17,21 @@
   root.AQEngineInput = factory();
 })(typeof window !== 'undefined' ? window : globalThis, function(){
 
+  function detectCitationTrigger(text, caret){
+    var source = String(text || '');
+    var pos = Math.max(0, Math.min(source.length, Number.isFinite(Number(caret)) ? Number(caret) : source.length));
+    var before = source.slice(Math.max(0, pos - 128), pos);
+    var match = before.match(/\/([rt])(?:\s*([^\n\r]*))?$/i);
+    if(!match) return null;
+    return {
+      query: String(match[2] || '').trim(),
+      mode: String(match[1] || 'r').toLowerCase() === 't' ? 'textual' : 'inline',
+      triggerMode: String(match[1] || 'r').toLowerCase(),
+      from: Math.max(0, pos - match[0].length),
+      to: pos
+    };
+  }
+
   function blockTextLength(b){
     var n = 0;
     var runs = (b && b.runs) || [];
@@ -371,13 +386,20 @@
         trigRefreshTimer = 0;
         if(isCitationTransactionBlocked()) return;
         try {
+          var range = r();
+          var plainText = typeof doc.getPlainText === 'function' ? doc.getPlainText() : '';
+          var trigger = detectCitationTrigger(plainText, range && typeof range.from === 'number' ? range.from : plainText.length);
+          if(trigger && window.AQCitationRuntime && typeof window.AQCitationRuntime.openFromEditorTrigger === 'function'){
+            window.AQCitationRuntime.openFromEditorTrigger(trigger);
+            return;
+          }
           if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
             window.AQCitationRuntime.refreshFromEditor();
           } else if(typeof window.checkTrig === 'function'){
             window.checkTrig();
           }
         } catch(_e){}
-      }, 350);
+      }, 0);
     }
 
     function doSplitBlock(){
@@ -1100,5 +1122,5 @@
     };
   }
 
-  return { create: createInput };
+  return { create: createInput, detectCitationTrigger: detectCitationTrigger };
 });
