@@ -909,6 +909,7 @@
       lastRefreshFrom: null,
       lastRefreshTo: null,
       lastRefreshMode: 'r',
+      slashTriggerPinnedUntil: 0,
       lastInsertSignature: '',
       lastInsertAt: 0,
       suppressTriggerUntil: 0,
@@ -1164,6 +1165,14 @@
       if(!trigger || window.__aqCitationTransactionActive || Date.now() < (window.__aqCitationInputBlockedUntil || 0) || Date.now() < (runtime.state.suppressTriggerUntil || 0)){
         return false;
       }
+      var retryCount = Math.max(0, parseInt(trigger.__aqRetryCount, 10) || 0);
+      if(!getTriggerBox()){
+        if(retryCount < 40){
+          var retryTrigger = Object.assign({}, trigger, { __aqRetryCount: retryCount + 1 });
+          setTimeout(function(){ runtime.openFromEditorTrigger(retryTrigger); }, 50);
+        }
+        return false;
+      }
       // ui-event-bindings can initialize before React mounts the popup DOM.
       // Re-running init is cheap and makes the WebView2 path ready on demand.
       runtime.init();
@@ -1174,6 +1183,7 @@
       var mode = textual ? 'textual' : 'inline';
       window.editorTrigRange = { from: from, to: to, mode: textual ? 't' : 'r' };
       window.__aqCitationTriggerMode = mode;
+      runtime.state.slashTriggerPinnedUntil = Date.now() + 800;
       runtime.openFromSlash(String(trigger.query || ''), mode);
       return !!runtime.state.open;
     },
@@ -1223,6 +1233,11 @@
       }
       const found = currentQuery();
       if(!found){
+        // WebView2 can deliver the global input/selection refresh before the
+        // AQ Engine's compatibility selection has caught up. Do not let that
+        // stale pass immediately close a picker opened from authoritative
+        // document offsets.
+        if(runtime.state.open && Date.now() < (runtime.state.slashTriggerPinnedUntil || 0)) return;
         if(runtime.state.open) runtime.close(true, { preserveSelection:true });
         return;
       }

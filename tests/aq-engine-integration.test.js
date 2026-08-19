@@ -351,6 +351,9 @@ test('citation runtime rebinds popup DOM mounted after early initialization', ()
 test('citation runtime treats the AQ Engine capture as an editor target', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'citation-runtime.js'), 'utf8');
   assert.match(source, /#aq-engine-host,\.aq-engine-stage,\.aq-input-capture/);
+  assert.match(source, /retryCount < 40/);
+  assert.match(source, /slashTriggerPinnedUntil = Date\.now\(\) \+ 800/);
+  assert.match(source, /Date\.now\(\) < \(runtime\.state\.slashTriggerPinnedUntil \|\| 0\)/);
 });
 
 test('AQ Engine adapters use canonical APA formatter for citation text', () => {
