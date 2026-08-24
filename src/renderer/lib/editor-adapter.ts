@@ -129,6 +129,13 @@ let activeMount: HTMLElement | null = null;
 let activeNotify: (() => void) | null = null;
 let activeDetachUpdate: (() => void) | null = null;
 
+function isWindowsRuntime() {
+  if (typeof navigator === 'undefined') return false;
+  const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+  const platform = String(nav.userAgentData?.platform || nav.platform || nav.userAgent || '').toLowerCase();
+  return platform.includes('windows') || platform.startsWith('win32') || platform.startsWith('win64');
+}
+
 function normalizeHTML(value: unknown) {
   const html = String(value || '').trim();
   return html || '<p></p>';
@@ -175,13 +182,23 @@ function readPersistedDoc(docId: string, raw: unknown) {
 }
 
 function buildEditorSurface(mount: HTMLElement) {
+  const writingAssistEnabled = isWindowsRuntime();
+  const shellAttrs = writingAssistEnabled
+    ? 'spellcheck="true" data-gramm="true" data-gramm_editor="true"'
+    : 'spellcheck="false" autocorrect="off" autocomplete="off" autocapitalize="off" data-gramm="false" data-gramm_editor="false"';
+  const pageAttrs = writingAssistEnabled
+    ? 'spellcheck="true"'
+    : 'spellcheck="false" autocorrect="off" autocomplete="off" autocapitalize="off"';
+  const editorAttrs = writingAssistEnabled
+    ? 'spellcheck="true" data-gramm="true" data-gramm_editor="true"'
+    : 'spellcheck="false" autocorrect="off" autocomplete="off" autocapitalize="off" data-gramm="false" data-gramm_editor="false"';
   mount.innerHTML = [
-    '<div id="legacy-editor-shell" class="h-full w-full" spellcheck="false" autocorrect="off" autocomplete="off" autocapitalize="off" data-gramm="false" data-gramm_editor="false">',
+    `<div id="legacy-editor-shell" class="h-full w-full" ${shellAttrs}>`,
     '<div id="escroll" class="aq-editor-scroll">',
     '<div id="coverpage" class="aq-legacy-page" style="display:none"><div id="coverbody"></div></div>',
     '<div id="tocpage" class="aq-legacy-page" style="display:none"><div id="tocbody"></div></div>',
     '<div id="abstractpage" class="aq-legacy-page" style="display:none"><div id="abstractbody"></div></div>',
-    '<div id="apapage" class="aq-legacy-page" spellcheck="false" autocorrect="off" autocomplete="off" autocapitalize="off"><div id="apaed" spellcheck="false" autocorrect="off" autocomplete="off" autocapitalize="off" data-gramm="false" data-gramm_editor="false"></div></div>',
+    `<div id="apapage" class="aq-legacy-page" ${pageAttrs}><div id="apaed" ${editorAttrs}></div></div>`,
     '<div id="bibpage"></div><div id="appendixpage" class="aq-legacy-page" style="display:none"><div id="appendixbody"></div></div>',
     '</div>',
     '<div id="reflist" hidden></div><div id="bibbody" hidden></div>',
@@ -190,6 +207,7 @@ function buildEditorSurface(mount: HTMLElement) {
 }
 
 function markWritingAssistSurface(root: ParentNode | null = document) {
+  const writingAssistEnabled = isWindowsRuntime();
   const targets = [
     document.body,
     document.getElementById('legacy-editor-shell'),
@@ -203,12 +221,12 @@ function markWritingAssistSurface(root: ParentNode | null = document) {
   ].filter((node): node is HTMLElement => node instanceof HTMLElement);
 
   targets.forEach((node) => {
-    node.setAttribute('spellcheck', 'false');
-    node.setAttribute('autocorrect', 'off');
-    node.setAttribute('autocomplete', 'off');
-    node.setAttribute('autocapitalize', 'off');
-    node.setAttribute('data-gramm', 'false');
-    node.setAttribute('data-gramm_editor', 'false');
+    node.setAttribute('spellcheck', writingAssistEnabled ? 'true' : 'false');
+    node.setAttribute('autocorrect', writingAssistEnabled ? 'on' : 'off');
+    node.setAttribute('autocomplete', writingAssistEnabled ? 'on' : 'off');
+    node.setAttribute('autocapitalize', writingAssistEnabled ? 'sentences' : 'off');
+    node.setAttribute('data-gramm', writingAssistEnabled ? 'true' : 'false');
+    node.setAttribute('data-gramm_editor', writingAssistEnabled ? 'true' : 'false');
     if (node.id === 'apaed' || node.classList.contains('ProseMirror')) {
       node.setAttribute('role', 'textbox');
       node.setAttribute('aria-multiline', 'true');
@@ -216,12 +234,12 @@ function markWritingAssistSurface(root: ParentNode | null = document) {
   });
 
   document.querySelectorAll<HTMLElement>('.aq-input-capture').forEach((node) => {
-    node.setAttribute('spellcheck', 'false');
-    node.setAttribute('autocorrect', 'off');
-    node.setAttribute('autocomplete', 'off');
-    node.setAttribute('autocapitalize', 'off');
-    node.setAttribute('data-gramm', 'false');
-    node.setAttribute('data-gramm_editor', 'false');
+    node.setAttribute('spellcheck', writingAssistEnabled ? 'true' : 'false');
+    node.setAttribute('autocorrect', writingAssistEnabled ? 'on' : 'off');
+    node.setAttribute('autocomplete', writingAssistEnabled ? 'on' : 'off');
+    node.setAttribute('autocapitalize', writingAssistEnabled ? 'sentences' : 'off');
+    node.setAttribute('data-gramm', writingAssistEnabled ? 'true' : 'false');
+    node.setAttribute('data-gramm_editor', writingAssistEnabled ? 'true' : 'false');
     node.removeAttribute('aria-hidden');
     node.setAttribute('aria-label', 'AcademiQ editor input');
   });

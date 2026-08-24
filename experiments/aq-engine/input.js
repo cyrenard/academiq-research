@@ -17,6 +17,16 @@
   root.AQEngineInput = factory();
 })(typeof window !== 'undefined' ? window : globalThis, function(){
 
+  function isWindowsRuntime(){
+    var nav = typeof navigator !== 'undefined'
+      ? navigator
+      : (typeof window !== 'undefined' ? window.navigator : null);
+    if(!nav) return false;
+    var uaPlatform = nav.userAgentData && nav.userAgentData.platform;
+    var platform = String(uaPlatform || nav.platform || nav.userAgent || '').toLowerCase();
+    return platform.indexOf('windows') >= 0 || platform.indexOf('win32') === 0 || platform.indexOf('win64') === 0;
+  }
+
   function blockTextLength(b){
     var n = 0;
     var runs = (b && b.runs) || [];
@@ -31,6 +41,7 @@
     // (legacy) or a getter (preferred). We always read latest via getSel().
     var getSel = opts.selectionRef || function(){ return opts.selection; };
     var onChanged = opts.onChanged || function(){};
+    var windowsInputMode = isWindowsRuntime();
 
     if(!container || !doc || !getSel()) throw new Error('AQEngineInput: container, doc, selection(Ref) required');
 
@@ -48,13 +59,13 @@
     // ── Hidden capture textarea ────────────────────────────────────────────
     var ta = document.createElement('textarea');
     ta.className = 'aq-input-capture';
-    ta.setAttribute('autocapitalize', 'sentences');
-    ta.setAttribute('autocomplete',   'on');
-    ta.setAttribute('autocorrect',    'on');
-    ta.setAttribute('spellcheck',     'true');
+    ta.setAttribute('autocapitalize', windowsInputMode ? 'sentences' : 'off');
+    ta.setAttribute('autocomplete',   windowsInputMode ? 'on' : 'off');
+    ta.setAttribute('autocorrect',    windowsInputMode ? 'on' : 'off');
+    ta.setAttribute('spellcheck',     windowsInputMode ? 'true' : 'false');
     ta.setAttribute('aria-label',     'AcademiQ editor input');
-    ta.setAttribute('data-gramm',     'true');
-    ta.setAttribute('data-gramm_editor', 'true');
+    ta.setAttribute('data-gramm',     windowsInputMode ? 'true' : 'false');
+    ta.setAttribute('data-gramm_editor', windowsInputMode ? 'true' : 'false');
     ta.style.cssText = [
       'position:fixed',
       'top:0', 'left:0',
@@ -495,11 +506,12 @@
     // ── Event wiring ───────────────────────────────────────────────────────
     function markWritingAssistReady(){
       if(!ta) return;
-      ta.setAttribute('spellcheck', 'true');
-      ta.setAttribute('autocorrect', 'on');
-      ta.setAttribute('autocomplete', 'on');
-      ta.setAttribute('data-gramm', 'true');
-      ta.setAttribute('data-gramm_editor', 'true');
+      ta.setAttribute('spellcheck', windowsInputMode ? 'true' : 'false');
+      ta.setAttribute('autocorrect', windowsInputMode ? 'on' : 'off');
+      ta.setAttribute('autocomplete', windowsInputMode ? 'on' : 'off');
+      ta.setAttribute('autocapitalize', windowsInputMode ? 'sentences' : 'off');
+      ta.setAttribute('data-gramm', windowsInputMode ? 'true' : 'false');
+      ta.setAttribute('data-gramm_editor', windowsInputMode ? 'true' : 'false');
       ta.removeAttribute('aria-hidden');
       ta.setAttribute('aria-label', 'AcademiQ editor input');
     }
@@ -891,10 +903,12 @@
       assistBridge = document.createElement('div');
       assistBridge.className = 'aq-writing-assist-bridge';
       assistBridge.setAttribute('contenteditable', 'true');
-      assistBridge.setAttribute('spellcheck', 'true');
-      assistBridge.setAttribute('autocapitalize', 'sentences');
-      assistBridge.setAttribute('data-gramm', 'true');
-      assistBridge.setAttribute('data-gramm_editor', 'true');
+      assistBridge.setAttribute('spellcheck', windowsInputMode ? 'true' : 'false');
+      assistBridge.setAttribute('autocapitalize', windowsInputMode ? 'sentences' : 'off');
+      assistBridge.setAttribute('autocorrect', windowsInputMode ? 'on' : 'off');
+      assistBridge.setAttribute('autocomplete', windowsInputMode ? 'on' : 'off');
+      assistBridge.setAttribute('data-gramm', windowsInputMode ? 'true' : 'false');
+      assistBridge.setAttribute('data-gramm_editor', windowsInputMode ? 'true' : 'false');
       assistBridge.setAttribute('aria-label', 'AcademiQ writing assist bridge');
       assistBridge.style.cssText = [
         'position:absolute',

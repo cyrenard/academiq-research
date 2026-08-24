@@ -647,7 +647,11 @@ export default function App() {
   // somewhere else (e.g. a future workspace import). The controller is
   // idempotent: setSpellcheckEnabled(true) when it's already true is a
   // no-op.
-  const persistedSpellEnabled = false;
+  const runtimePlatform = typeof navigator === 'undefined'
+    ? ''
+    : String((navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform || navigator.platform || navigator.userAgent || '').toLowerCase();
+  const persistedSpellEnabled = (runtimePlatform.includes('windows') || runtimePlatform.startsWith('win32') || runtimePlatform.startsWith('win64'))
+    && appState.spellcheck?.enabled === true;
   useEffect(() => {
     if (loading) return;
     (async () => {

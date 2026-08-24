@@ -176,12 +176,14 @@ test('beta 9 citation slash trigger keeps keyboard ownership in the editor', () 
   };
   const document = {
     getElementById(id){ return elements[id] || null; },
+    createElement(){ return makeElement(); },
     querySelector(){ return null; },
     addEventListener(){},
     removeEventListener(){}
   };
   const window = {
     document,
+    navigator: { platform: 'Win32', userAgent: 'Windows NT 10.0' },
     console,
     Date,
     setTimeout,
@@ -266,6 +268,7 @@ test('beta 9 textual slash trigger keeps focus in the editor', () => {
   };
   const window = {
     document,
+    navigator: { platform: 'Win32', userAgent: 'Windows NT 10.0' },
     console,
     Date,
     setTimeout(fn){ fn(); },
@@ -285,6 +288,83 @@ test('beta 9 textual slash trigger keeps focus in the editor', () => {
   assert.equal(elements.tgs.disabled, true);
   assert.equal(elements.tgs.readOnly, true);
   assert.equal(elements.tgs.tabIndex, -1);
+});
+
+test('Linux citation slash trigger gives keyboard ownership to the popup search input', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'citation-runtime.js'), 'utf8');
+  const makeElement = () => ({
+    style: {},
+    listeners: {},
+    classList: { add(){}, remove(){}, contains(){ return false; } },
+    dataset: {},
+    addEventListener(type, handler){ this.listeners[type] = handler; },
+    removeEventListener(){},
+    querySelector(){ return null; },
+    contains(){ return false; },
+    appendChild(){},
+    focus(){ this.focused = true; },
+    setSelectionRange(start, end){ this.selectionStart = start; this.selectionEnd = end; },
+    getBoundingClientRect(){ return { left: 16, bottom: 24 }; },
+    innerHTML: '',
+    textContent: '',
+    value: '',
+    disabled: true,
+    readOnly: true,
+    tabIndex: -1,
+    scrollTop: 0,
+    clientHeight: 240
+  });
+  const elements = {
+    trig: makeElement(),
+    tgs: makeElement(),
+    tgl: makeElement(),
+    tgq: makeElement(),
+    tgsel: makeElement(),
+    escroll: makeElement(),
+    apaed: makeElement()
+  };
+  const document = {
+    getElementById(id){ return elements[id] || null; },
+    createElement(){ return makeElement(); },
+    querySelector(){ return null; },
+    addEventListener(){},
+    removeEventListener(){}
+  };
+  let lastQuery = null;
+  const window = {
+    document,
+    navigator: { platform: 'Linux x86_64', userAgent: 'Linux' },
+    console,
+    Date,
+    setTimeout(fn){ fn(); },
+    clearTimeout,
+    innerHeight: 800,
+    innerWidth: 1200,
+    addEventListener(){},
+    removeEventListener(){},
+    getSelection(){ return null; },
+    cLib(){ return [{ id: 'doe', title: 'Doe' }]; },
+    filterRefsForQuery(refs, query){ lastQuery = query; return refs; }
+  };
+  window.window = window;
+  vm.runInNewContext(source, { window, document, console, Date, setTimeout: window.setTimeout, clearTimeout });
+  window.AQCitationRuntime.init();
+  window.AQCitationRuntime.openFromSlash('', 'inline');
+
+  assert.equal(elements.tgs.disabled, false);
+  assert.equal(elements.tgs.readOnly, false);
+  assert.equal(elements.tgs.tabIndex, 0);
+  assert.equal(elements.tgs.focused, true);
+
+  elements.tgs.value = 'doe';
+  elements.tgs.listeners.input({ stopPropagation(){} });
+  assert.equal(lastQuery, 'doe');
+
+  window.AQCitationRuntime.close(true);
+  window.AQCitationRuntime.openFromSlash('', 'textual');
+  assert.equal(window.__aqCitationTriggerMode, 'textual');
+  assert.equal(elements.tgs.disabled, false);
+  assert.equal(elements.tgs.focused, true);
 });
 
 test('AQ Engine adapters use canonical APA formatter for citation text', () => {
