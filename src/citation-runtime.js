@@ -386,9 +386,6 @@
   }
 
   function focusEditorWithoutScroll(){
-    if(window.AQTipTapWordFocus && typeof window.AQTipTapWordFocus.isFindFocusActive === 'function' && window.AQTipTapWordFocus.isFindFocusActive(document)){
-      return;
-    }
     if(window.AQEditorCore && typeof window.AQEditorCore.focus === 'function'){
       try{ if(window.AQEditorCore.focus(false)) return; }catch(e){}
     }
@@ -1016,10 +1013,10 @@
       if(hint) hint.textContent = runtime.state.query ? '"' + runtime.state.query + '"' : 'tüm kaynaklar';
       if(inp){
         inp.value = runtime.state.query;
-        inp.readOnly = false;
-        inp.disabled = false;
-        inp.tabIndex = 0;
-        inp.style.pointerEvents = 'auto';
+        inp.readOnly = true;
+        inp.disabled = true;
+        inp.tabIndex = -1;
+        inp.style.pointerEvents = 'none';
       }
       if(!list) return;
       runtime.state.results = getResults(runtime.state.query);
@@ -1096,13 +1093,7 @@
       }
       runtime.renderList();
       syncLegacyState();
-      window.setTimeout(function(){
-        const input = getTriggerInput();
-        if(input && runtime.state.open){
-          try{ input.focus({ preventScroll:true }); }catch(_e){ input.focus(); }
-          try{ input.setSelectionRange(input.value.length, input.value.length); }catch(_e){}
-        }
-      },0);
+      focusEditorWithoutScroll();
       runtime.restoreScroll();
     },
 
@@ -1195,10 +1186,6 @@
     getActiveRef: function(){
       const ref = runtime.state.results[runtime.state.activeIndex];
       return ref || null;
-    },
-
-    hasSelectableResults: function(){
-      return Array.isArray(runtime.state.results) && runtime.state.results.length > 0;
     },
 
     insertHTMLWithCitationGuard: function(html, preservedTop, options){
@@ -1624,16 +1611,6 @@
       if(event.ctrlKey || event.metaKey || event.altKey) return false;
       const key = event.key;
       const isSpace = key === ' ' || event.code === 'Space' || key === 'Spacebar' || event.keyCode === 32 || event.which === 32;
-      if(!runtime.hasSelectableResults()){
-        if(key === 'Escape'){
-          runtime.close(true);
-          event.preventDefault();
-          event.stopPropagation();
-          if(typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
-          return true;
-        }
-        return false;
-      }
       if(key === 'ArrowDown'){
         runtime.state.keyboardMode = 'navigate';
         runtime.state.activeIndex = Math.min(runtime.state.activeIndex + 1, Math.max(0, runtime.state.results.length - 1));
@@ -1725,23 +1702,13 @@
       }
       const inp = getTriggerInput();
       if(inp){
-        inp.readOnly = false;
-        inp.disabled = false;
-        inp.tabIndex = 0;
-        inp.addEventListener('keydown', function(e){
-          if(runtime.handleKeydown(e)) return;
-          e.stopPropagation();
-        }, true);
-        inp.addEventListener('input', function(e){
-          runtime.state.query = inp.value || '';
-          runtime.state.activeIndex = 0;
-          runtime.state.keyboardMode = 'query';
-          runtime.renderList();
-          e.stopPropagation();
-        });
-        ['keyup','mousedown','click'].forEach(function(type){
+        inp.readOnly = true;
+        inp.disabled = true;
+        inp.tabIndex = -1;
+        ['keydown','keyup','input','mousedown','click'].forEach(function(type){
           inp.addEventListener(type, function(e){
             e.stopPropagation();
+            if(typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
           }, true);
         });
       }

@@ -143,7 +143,7 @@ test('AQ Engine leaves slash trigger ownership to citation runtime refresh', () 
   assert.doesNotMatch(source, /openTrig\(query/);
 });
 
-test('citation slash trigger leaves typing native when no reference result is selectable', () => {
+test('beta 9 citation slash trigger keeps keyboard ownership in the editor', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'citation-runtime.js'), 'utf8');
   const makeElement = () => ({
     style: {},
@@ -197,9 +197,9 @@ test('citation slash trigger leaves typing native when no reference result is se
   window.window = window;
   vm.runInNewContext(source, { window, document, console, Date, setTimeout, clearTimeout });
   window.AQCitationRuntime.openFromSlash('', 'inline');
-  assert.equal(elements.tgs.disabled, false);
-  assert.equal(elements.tgs.readOnly, false);
-  assert.equal(elements.tgs.tabIndex, 0);
+  assert.equal(elements.tgs.disabled, true);
+  assert.equal(elements.tgs.readOnly, true);
+  assert.equal(elements.tgs.tabIndex, -1);
 
   const enterEvent = {
     key: 'Enter',
@@ -210,8 +210,8 @@ test('citation slash trigger leaves typing native when no reference result is se
     stopPropagation(){ this.stopped = true; },
     stopImmediatePropagation(){ this.immediateStopped = true; }
   };
-  assert.equal(window.AQCitationRuntime.handleKeydown(enterEvent), false);
-  assert.equal(enterEvent.prevented, undefined);
+  assert.equal(window.AQCitationRuntime.handleKeydown(enterEvent), true);
+  assert.equal(enterEvent.prevented, true);
 
   const escapeEvent = {
     key: 'Escape',
@@ -226,7 +226,7 @@ test('citation slash trigger leaves typing native when no reference result is se
   assert.equal(escapeEvent.prevented, true);
 });
 
-test('citation textual slash trigger leaves search input editable', () => {
+test('beta 9 textual slash trigger keeps focus in the editor', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'citation-runtime.js'), 'utf8');
   const makeElement = () => ({
     style: {},
@@ -282,9 +282,9 @@ test('citation textual slash trigger leaves search input editable', () => {
   vm.runInNewContext(source, { window, document, console, Date, setTimeout: window.setTimeout, clearTimeout });
   window.AQCitationRuntime.openFromSlash('', 'textual');
   assert.equal(window.__aqCitationTriggerMode, 'textual');
-  assert.equal(elements.tgs.disabled, false);
-  assert.equal(elements.tgs.readOnly, false);
-  assert.equal(elements.tgs.tabIndex, 0);
+  assert.equal(elements.tgs.disabled, true);
+  assert.equal(elements.tgs.readOnly, true);
+  assert.equal(elements.tgs.tabIndex, -1);
 });
 
 test('AQ Engine adapters use canonical APA formatter for citation text', () => {
