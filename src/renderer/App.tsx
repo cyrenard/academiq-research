@@ -398,7 +398,7 @@ export default function App() {
 
   const saveDataChecked = useCallback(async (nextState: AcademiqAppState, source = 'save') => {
     const payload = JSON.stringify(nextState);
-    const result = await window.electronAPI?.saveData?.(payload) as { ok?: boolean; error?: string } | undefined;
+    const result = await window.electronAPI?.saveData?.(payload, source) as { ok?: boolean; error?: string } | undefined;
     if (!result || result.ok !== true) {
       const error = result?.error || `${source}_failed`;
       try {
@@ -436,12 +436,12 @@ export default function App() {
     return () => window.removeEventListener('aq:word-import-committed', onWordImportCommitted as EventListener);
   }, [saveDataChecked]);
 
-  const scheduleFullAutosave = useCallback((nextState: AcademiqAppState, delay = 900) => {
+  const scheduleFullAutosave = useCallback((nextState: AcademiqAppState, delay = 900, source = 'editor-autosave') => {
     if ((window as any).__aqBackupRestoreInProgress) return;
     if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = window.setTimeout(() => {
       autosaveTimerRef.current = null;
-      autosaveInFlightRef.current = saveDataChecked(appStateRef.current, 'editor-autosave')
+      autosaveInFlightRef.current = saveDataChecked(appStateRef.current, source)
         .then(() => {
           flashStatus('otomatik kaydedildi');
         })
@@ -451,6 +451,20 @@ export default function App() {
     }, delay);
     appStateRef.current = nextState;
   }, [saveDataChecked]);
+
+  useEffect(() => {
+    const win = window as any;
+    win.__aqReactPersistLegacyState = (legacyState: unknown) => {
+      if (typeof win.__aqReactSyncFromLegacy === 'function') {
+        win.__aqReactSyncFromLegacy(legacyState);
+      }
+      scheduleFullAutosave(appStateRef.current, 0, 'legacy-autosave');
+      return true;
+    };
+    return () => {
+      delete win.__aqReactPersistLegacyState;
+    };
+  }, [scheduleFullAutosave]);
 
   const persistState = useCallback(async (nextState: AcademiqAppState, draft = false) => {
     if ((window as any).__aqBackupRestoreInProgress) return;

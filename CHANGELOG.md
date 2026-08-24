@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.24.1-beta.19 - 2026-08-25
+
+Release-candidate reliability pass following Windows live testing.
+
+- Prevents the React and legacy editor runtimes from racing during startup and
+  replacing hydrated content with a temporary blank document.
+- Preserves documents, workspaces, references, notes, and notebooks across all
+  partial editor-save sources while keeping explicit delete operations intact.
+- Recovers a clearly truncated generic-autosave state from the richest recent
+  automatic backup once, without applying recovery to explicit user saves.
+- Keeps the Windows `/r` and `/t` citation picker behavior from beta.18 and the
+  Linux/WebKit focus path covered by the platform regression suite.
+- Repairs Turkish status text, visual Turkish heading recognition, and
+  all-uppercase English bibliography navigation.
+- Removes stale current-build dependencies on the archived Electron-era HTML
+  shell from the Electron fallback and release-quality gates.
+
 ## 1.24.0-beta.9 - 2026-05-26
 
 Performance + reliability pass on top of beta.8.

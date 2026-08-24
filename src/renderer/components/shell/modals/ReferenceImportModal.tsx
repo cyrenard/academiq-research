@@ -175,8 +175,8 @@ export function ReferenceImportModal({ open, onClose, onStatus }: ReferenceImpor
         revealBibliography: true
       }
     }));
-    onStatus(`${entries.length} kaynak aktarÄ±ldÄ±`);
-    setBulkStatus(`${entries.length} kaynak baÅŸarÄ±yla kÃ¼tÃ¼phaneye eklendi.`);
+    onStatus(`${entries.length} kaynak aktarıldı`);
+    setBulkStatus(`${entries.length} kaynak başarıyla kütüphaneye eklendi.`);
     return true;
   };
 
@@ -188,11 +188,11 @@ export function ReferenceImportModal({ open, onClose, onStatus }: ReferenceImpor
     }
 
     try {
-      setBulkStatus('Dosya seÃ§iliyor...');
+      setBulkStatus('Dosya seçiliyor...');
       const result = await api.openBibliographyDialog();
       const files = Array.isArray(result?.files) ? result.files : [];
       if (!files.length) {
-        setBulkStatus('Dosya seÃ§ilmedi.');
+        setBulkStatus('Dosya seçilmedi.');
         return;
       }
 
@@ -204,11 +204,11 @@ export function ReferenceImportModal({ open, onClose, onStatus }: ReferenceImpor
         ) || imported;
       }
       if (!imported) {
-        setBulkStatus('BibTeX/RIS kaynaÄŸÄ± bulunamadÄ±.');
+        setBulkStatus('BibTeX/RIS kaynağı bulunamadı.');
       }
     } catch (err) {
       console.error('[ReferenceImportModal] Native file import failed:', err);
-      setBulkStatus('Dosya seÃ§im penceresi aÃ§Ä±lamadÄ±.');
+      setBulkStatus('Dosya seçim penceresi açılamadı.');
       fileInputRef.current?.click();
     }
   };

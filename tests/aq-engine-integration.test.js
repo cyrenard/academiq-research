@@ -973,7 +973,7 @@ test('Legacy Word import persists imported document through saveData', () => {
   assert.match(source, /flushCurrentDocFromEditor\(\)/);
   assert.match(source, /saveEditorDraftNow\(\)/);
   assert.match(source, /syncSave\(\)/);
-  assert.match(source, /electronAPI\.saveData\(__aqBuildPersistedStateJSON\(\)\)/);
+  assert.match(source, /electronAPI\.saveData\(__aqBuildPersistedStateJSON\(\),'word-import-commit'\)/);
   assert.match(source, /scheduleImportedWordPersist\(\)/);
 });
 

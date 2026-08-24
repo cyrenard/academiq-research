@@ -442,9 +442,11 @@ async function syncLoad(){
     rawHTML=rawHTML.replace(/<hr[^>]*class="pg-spacer"[^>]*\/?>/gi,'');
     rawHTML=rawHTML.replace(/<div[^>]*class="pg-spacer"[^>]*>[\s\S]*?<\/div>/gi,'');
   }
-  applyCurrentEditorHTML(rawHTML,{normalize:false,layout:true,syncChrome:false,refreshTrigger:false});
-  syncAuxiliaryPages();
-  if(repairedArtifacts){
+  if(!window.__aqReactShellActive){
+    applyCurrentEditorHTML(rawHTML,{normalize:false,layout:true,syncChrome:false,refreshTrigger:false});
+    syncAuxiliaryPages();
+  }
+  if(repairedArtifacts&&!window.__aqReactShellActive){
     syncDirty=true;
     setTimeout(function(){
       if(suppressDocSave||__aqDocSwitching)return;
@@ -1871,7 +1873,7 @@ async function batchFetchCitations(){
     refreshBusyControls();
   }
 }
-function setDst(m,c){var e=document.getElementById('dst');e.textContent=m;e.className=c;}
+function setDst(m,c){var e=document.getElementById('dst');if(!e)return;e.textContent=m;e.className=c;}
 function classifyPdfDownloadFailureLocal(input){
   var text=typeof input==='string'?input:((input&&typeof input.error==='string')?input.error:'');
   var m=String(text||'').match(/\bHTTP\s+(\d{3})\b/i);
@@ -3420,7 +3422,7 @@ function updatePdfReaderStatus(){
         progress:pdfTotal?Math.round((pdfPg/pdfTotal)*100):0
       };
   if(false&&!(window.AQPdfViewerState&&typeof window.AQPdfViewerState.buildReaderStats==='function')&&ocrLabel&&stats&&stats.activityLabel){
-    stats.activityLabel+=' Â· '+ocrLabel;
+    stats.activityLabel+=' · '+ocrLabel;
   }
   var meta=document.getElementById('pdfreadmeta');
   var activity=document.getElementById('pdfreadstats');
@@ -7384,7 +7386,7 @@ function importWordFile(e){
     try{syncSave();}catch(_e6){}
     try{
       if(window.electronAPI&&typeof window.electronAPI.saveData==='function'&&typeof __aqBuildPersistedStateJSON==='function'){
-        window.electronAPI.saveData(__aqBuildPersistedStateJSON()).catch(function(err){console.warn('[word-import] saveData failed',err);});
+        window.electronAPI.saveData(__aqBuildPersistedStateJSON(),'word-import-commit').catch(function(err){console.warn('[word-import] saveData failed',err);});
       }
     }catch(_e7){}
   }
@@ -11128,8 +11130,10 @@ syncLoad().then(function(){
   enhanceMenus();
   enhanceToolbar();
   normalizeToolbarMenuButtonLabels();
-  // Initialize TipTap editor after content is loaded
-  if(window.AQEditorLifecycle && typeof window.AQEditorLifecycle.bootstrap === 'function'){
+  // The React shell owns editor creation and hydration. Bootstrapping the
+  // legacy editor here creates a second startup writer that can overwrite a
+  // hydrated document with the temporary blank surface.
+  if(!window.__aqReactShellActive&&window.AQEditorLifecycle && typeof window.AQEditorLifecycle.bootstrap === 'function'){
     window.AQEditorLifecycle.bootstrap({
       initFn:initTipTapEditor,
       delay:60,
@@ -11141,7 +11145,7 @@ syncLoad().then(function(){
         if(typeof __aqSetEditorDoc==='function') __aqSetEditorDoc(html,false);
       }
     });
-  }else{
+  }else if(!window.__aqReactShellActive){
     if(window.AQEditorLifecycle && typeof window.AQEditorLifecycle.initTipTap === 'function') window.AQEditorLifecycle.initTipTap();
     else initTipTapEditor();
   }
@@ -13137,6 +13141,16 @@ async function saveEditorDraftNow(){
   }
 }
 async function syncSave(){
+  if(window.__aqReactShellActive){
+    try{
+      if(typeof window.__aqReactPersistLegacyState==='function'){
+        window.__aqReactPersistLegacyState(S||{});
+      }else if(typeof window.__aqReactSyncFromLegacy==='function'){
+        window.__aqReactSyncFromLegacy(S||{});
+      }
+    }catch(e){logStability('syncSave.reactBridge',e);}
+    return {ok:true,routed:'react-autosave'};
+  }
   if(__aqDocSwitching){
     syncDirty=true;
     setAutosaveDirty();
@@ -13151,7 +13165,7 @@ async function syncSave(){
     var json=__aqBuildPersistedStateJSON();
     if(typeof window.electronAPI!=='undefined'){
       try{
-        var saveResult=await window.electronAPI.saveData(json);
+        var saveResult=await window.electronAPI.saveData(json,'legacy-autosave');
         if(!saveResult||saveResult.ok===false)throw new Error((saveResult&&saveResult.error)||'Kaydetme basarisiz');
       }catch(e){
         logStability('syncSave.electron',e);

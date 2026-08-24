@@ -22,14 +22,14 @@ describe('normalizeHeadingText', () => {
     expect(normalizeHeadingText('Bibliography')).toBe('bibliography');
   });
 
-  it('strips combining diacritics (ö → o, ğ → g) but keeps dotless ı', () => {
+  it('strips combining diacritics and normalizes dotless ı for locale-independent matching', () => {
     const result = normalizeHeadingText('Ölü Bağlantı');
     // ö-ğ are accented forms decomposable via NFD; ı is its own letter (U+0131)
     expect(result).not.toMatch(/[öğ]/);
     expect(result).toContain('o');
     expect(result).toContain('g');
-    // ı survives because it doesn't decompose under NFD
-    expect(result).toContain('ı');
+    expect(result).not.toContain('ı');
+    expect(result).toContain('i');
   });
 
   it('returns empty for empty/whitespace', () => {
@@ -108,15 +108,12 @@ describe('findBibliographyBlockIndex', () => {
     expect(findBibliographyBlockIndex()).toBe(0);
   });
 
-  // KNOWN-LIMITATION: Turkish locale lowercases capital I to ı (dotless),
-  // so an ALL-CAPS English "BIBLIOGRAPHY" heading currently does NOT match.
-  // Documented here so the test suite reflects the actual current behavior.
-  it('KNOWN-LIMITATION: all-caps English heading misses (Turkish locale I→ı)', () => {
+  it('detects all-caps English bibliography headings', () => {
     (window as any).editor = {
       _aqEngine: true,
       _docModel: { get: () => ({ blocks: [{ runs: [{ text: 'BIBLIOGRAPHY' }] }] }) }
     };
-    expect(findBibliographyBlockIndex()).toBe(-1);
+    expect(findBibliographyBlockIndex()).toBe(0);
   });
 
   it('returns -1 when no matching block', () => {

@@ -182,7 +182,7 @@ async function persistImportedWordDocument(onStatus?: StatusFn) {
       : JSON.stringify(appStore.getState());
     if (typeof window.electronAPI?.saveEditorDraft === 'function') await window.electronAPI.saveEditorDraft(json);
     if (typeof window.electronAPI?.saveData === 'function') {
-      const result = await window.electronAPI.saveData(json) as { ok?: boolean; error?: string } | undefined;
+      const result = await window.electronAPI.saveData(json, 'word-import-commit') as { ok?: boolean; error?: string } | undefined;
       if (!result || result.ok === false) throw new Error(result?.error || 'Kaydetme başarısız');
     } else if (typeof w.syncSave === 'function') {
       await w.syncSave();

@@ -146,7 +146,7 @@ export function FeatureModals({
     });
     appStore.setState({ localMatrixAssistant: next });
     const win = window as any;
-    window.electronAPI.saveData(JSON.stringify(appStore.getState()))
+    window.electronAPI.saveData(JSON.stringify(appStore.getState()), 'matrix-settings')
       .then(() => {
         onStatus(next.enabled ? 'Yerel Matrix yardımcısı açıldı' : 'Yerel Matrix yardımcısı kapatıldı');
         if (next.enabled && win.AQLiteratureMatrix && typeof win.AQLiteratureMatrix.rerunLocalAssistantAutoFill === 'function') {

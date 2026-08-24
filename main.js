@@ -1161,9 +1161,7 @@ function createWindow() {
   // Packaged builds archive stale overrides from userData but also load the
   // bundled file to keep the runtime deterministic across updates.
   const bundledRendererHtml = path.join(__dirname, 'dist', 'renderer', 'index.html');
-  const bundledHtml = fs.existsSync(bundledRendererHtml)
-    ? bundledRendererHtml
-    : path.join(__dirname, 'academiq-research.html');
+  const bundledHtml = bundledRendererHtml;
   if (app.isPackaged) {
     try { archiveLegacyRuntimeOverrides(storage.appDir); } catch (_e) {}
     try { archiveUnexpectedAppRuntimeFiles(storage.appDir); } catch (_e) {}

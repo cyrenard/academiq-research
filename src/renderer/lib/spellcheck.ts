@@ -712,7 +712,7 @@ function normalizeNativeIssues(issues: any, maxSuggestions: number): SpellMatch[
       offset: Number(issue?.offset) || 0,
       length: Number(issue?.length) || word.length,
       text: word,
-      message: 'OlasÄ± yazÄ±m hatasÄ±',
+      message: 'Olası yazım hatası',
       replacements: suggestions.slice(0, cap).map((value: unknown) => ({ value: String(value) })),
       ruleId: 'SPELLBOOK_TR',
       category: 'TYPOS'

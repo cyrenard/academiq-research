@@ -128,6 +128,7 @@ let activeEditor: any = null;
 let activeMount: HTMLElement | null = null;
 let activeNotify: (() => void) | null = null;
 let activeDetachUpdate: (() => void) | null = null;
+let activeHydrating = false;
 
 function isWindowsRuntime() {
   if (typeof navigator === 'undefined') return false;
@@ -295,12 +296,13 @@ function installLegacySaveBridge(win: LegacyWindow, docId: string, onChange?: Cr
   const legacySave = typeof win.save === 'function' ? win.save.bind(win) : null;
   let saveTimer: number | null = null;
   const notify = () => {
-    if (!onChange) return;
+    if (activeHydrating || !onChange) return;
     onChange({ docId, html: getEditorHTML(win), snapshot: exportEditorSnapshot(win) });
   };
   const runSave = () => {
     saveTimer = null;
-    if (legacySave) legacySave();
+    if (activeHydrating) return;
+    if (legacySave && !(win as any).__aqReactShellActive) legacySave();
     if (typeof win.__aqReactSyncFromLegacy === 'function') win.__aqReactSyncFromLegacy(win.S || {});
     notify();
   };
@@ -311,6 +313,7 @@ function installLegacySaveBridge(win: LegacyWindow, docId: string, onChange?: Cr
   win.autoUpdateTOC = win.autoUpdateTOC || (() => {});
   win.checkTrig = win.checkTrig || (() => {});
   win.save = () => {
+    if (activeHydrating) return;
     const editor = activeEditor || win.editor;
     if (editor && editor._aqEngine) {
       if (saveTimer != null) window.clearTimeout(saveTimer);
@@ -340,6 +343,7 @@ function attachEditorUpdateBridge(editor: any) {
 }
 
 function getEditorHTML(win: LegacyWindow) {
+  if (activeEditor && typeof activeEditor.getHTML === 'function') return normalizeHTML(activeEditor.getHTML());
   const core = win.AQEditorCore;
   if (core && typeof core.getContent === 'function') return normalizeHTML(core.getContent());
   const editor = activeEditor || win.editor;
@@ -651,6 +655,7 @@ function destroyLegacyEditor(win: LegacyWindow) {
   }
   activeEditor = null;
   activeNotify = null;
+  activeHydrating = false;
   win.editor = null;
   if (activeMount) activeMount.innerHTML = '';
   activeMount = null;
@@ -703,14 +708,19 @@ export function createAcademiqEditor(options: CreateAcademiqEditorOptions): Acad
 
   const host = document.getElementById('apaed');
   if (host) host.innerHTML = '<p></p>';
-  activeEditor = win.AQTipTapWordInit && typeof win.AQTipTapWordInit.init === 'function'
-    ? win.AQTipTapWordInit.init()
-    : null;
+  activeHydrating = true;
+  try {
+    activeEditor = win.AQTipTapWordInit && typeof win.AQTipTapWordInit.init === 'function'
+      ? win.AQTipTapWordInit.init()
+      : null;
+    markWritingAssistSurface(options.mount);
+    window.setTimeout(() => markWritingAssistSurface(options.mount), 0);
+    win.editor = activeEditor;
+    hydrateInitialDocument(win, options.docId, options.initialState);
+  } finally {
+    activeHydrating = false;
+  }
   attachEditorUpdateBridge(activeEditor);
-  markWritingAssistSurface(options.mount);
-  window.setTimeout(() => markWritingAssistSurface(options.mount), 0);
-  win.editor = activeEditor;
-  hydrateInitialDocument(win, options.docId, options.initialState);
   installReferenceBridge(win);
   if (win.AQCitationRuntime && typeof win.AQCitationRuntime.init === 'function') {
     try { win.AQCitationRuntime.init(); } catch (_error) {}

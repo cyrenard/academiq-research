@@ -18,10 +18,16 @@ function json(...parts) {
 
 test('npm build now targets Tauri while Electron build remains available', () => {
   const pkg = json('package.json');
+  const electronBuild = read('scripts', 'build-win.js');
+  const main = read('main.js');
   assert.equal(pkg.scripts.build, 'node scripts/build-tauri.js');
   assert.equal(pkg.scripts['build:electron'], 'node scripts/build-win.js');
   assert.equal(pkg.scripts['gate:tauri-bundle'], 'node scripts/tauri-bundle-gate.js');
   assert.equal(pkg.scripts['release:baseline'], 'npm run build && npm run gate:release');
+  assert.ok(pkg.build.files.includes('dist/renderer/**/*'));
+  assert.ok(!pkg.build.files.includes('academiq-research.html'));
+  assert.doesNotMatch(electronBuild, /inline-src|restore-src/);
+  assert.match(main, /const bundledHtml = bundledRendererHtml/);
 });
 
 test('release versions stay synchronized for the Fedora beta build', () => {
@@ -30,7 +36,7 @@ test('release versions stay synchronized for the Fedora beta build', () => {
   const conf = json('src-tauri', 'tauri.conf.json');
   const cargoToml = read('src-tauri', 'Cargo.toml');
 
-  assert.equal(pkg.version, '1.24.1-beta.18');
+  assert.equal(pkg.version, '1.24.1-beta.19');
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[''].version, pkg.version);
   assert.equal(conf.version, pkg.version);
