@@ -14,6 +14,7 @@ type OutlineEntry = {
 const NEW_SECTION_TITLE = 'Yeni Bölüm';
 
 function getEditor(): any {
+  if (typeof window === 'undefined') return null;
   return (window as any).editor || null;
 }
 
@@ -23,6 +24,7 @@ function getOutlineApi(): any {
 }
 
 function getEditorRoot(): HTMLElement | null {
+  if (typeof document === 'undefined') return null;
   return document.getElementById('apaed');
 }
 
@@ -58,12 +60,14 @@ function restoreRange(editor: any, from: number, to = from) {
 }
 
 function cssEscape(value: string): string {
+  if (typeof window === 'undefined') return value.replace(/([ !"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, '\\$1');
   const api = (window as any).CSS;
   if (api && typeof api.escape === 'function') return api.escape(value);
   return value.replace(/([ !"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, '\\$1');
 }
 
 function scrollNodeIntoView(node: Element) {
+  if (typeof window === 'undefined') return false;
   if (typeof (node as HTMLElement).scrollIntoView !== 'function') return false;
   (node as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
   node.classList?.add?.('aq-outline-target-flash');
@@ -76,6 +80,7 @@ function scrollNodeIntoView(node: Element) {
 }
 
 function scrollAQBlockIntoView(editor: any, entry: OutlineEntry): boolean {
+  if (typeof document === 'undefined') return false;
   if (typeof entry.blockIndex !== 'number') return false;
   const stage = editor?._stageEl || document.querySelector('.aq-engine-stage, .aq-engine-root');
   if (!stage || typeof stage.querySelector !== 'function') return false;
@@ -95,6 +100,7 @@ function scrollAQBlockIntoView(editor: any, entry: OutlineEntry): boolean {
 }
 
 function scrollEntryIntoView(entry: OutlineEntry) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
   const api = getOutlineApi();
   const editor = getEditor();
   const root = getEditorRoot();
@@ -105,6 +111,7 @@ function scrollEntryIntoView(entry: OutlineEntry) {
 }
 
 function collectH1Entries(): OutlineEntry[] {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return [];
   const api = getOutlineApi();
   if (!api || typeof api.collectEntries !== 'function') return [];
   const root = getEditorRoot();
