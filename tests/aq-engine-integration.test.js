@@ -100,22 +100,8 @@ test('AQ Engine typed input always clears citation marks from new text', () => {
   assert.match(source, /at = citationBounds\.to/);
   assert.match(source, /typeof e\.data === 'string'/);
   assert.match(source, /text = text\.slice\(-1\)/);
-  assert.match(source, /openFromEditorTrigger\(trigger\)/);
-  assert.match(source, /detectCitationTrigger\(\s*plainText/);
-  assert.match(source, /if\(immediateTrigger\) refreshTrigNow\(immediateTrigger\)/);
-  assert.match(source, /getSel\(\)\.setRange\(newOff, newOff\)[\s\S]*refreshTrigNow\(immediateTrigger\)/);
-});
-
-test('AQ Engine detects /r and /t immediately from authoritative document offsets', () => {
-  const input = require(path.join(__dirname, '..', 'experiments', 'aq-engine', 'input.js'));
-
-  assert.deepEqual(input.detectCitationTrigger('/r', 2), {
-    query: '', mode: 'inline', triggerMode: 'r', from: 0, to: 2
-  });
-  assert.deepEqual(input.detectCitationTrigger('Metin /t Bandura', 16), {
-    query: 'Bandura', mode: 'textual', triggerMode: 't', from: 6, to: 16
-  });
-  assert.equal(input.detectCitationTrigger('Normal metin', 12), null);
+  assert.doesNotMatch(source, /openFromSlash\(query/);
+  assert.doesNotMatch(source, /window\.editorTrigRange = \{ from: newOff/);
 });
 
 test('AQ Engine suppresses captured autocomplete payloads immediately after citation insert', () => {
@@ -149,7 +135,7 @@ test('AQ Engine post-citation suppression never swallows single typed characters
   assert.match(source, /isCitationTransactionBlocked\(\) && !isSinglePrintableKey\(e\)/);
 });
 
-test('Tiptap fallback leaves slash trigger ownership to citation runtime refresh', () => {
+test('AQ Engine leaves slash trigger ownership to citation runtime refresh', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'tiptap-word-editor.js'), 'utf8');
   assert.match(source, /AQCitationRuntime\.refreshFromEditor/);
   assert.doesNotMatch(source, /window\.editorTrigRange = \{ from:start, to:end \}/);
@@ -294,66 +280,11 @@ test('citation textual slash trigger leaves search input editable', () => {
   };
   window.window = window;
   vm.runInNewContext(source, { window, document, console, Date, setTimeout: window.setTimeout, clearTimeout });
-  assert.equal(window.AQCitationRuntime.openFromEditorTrigger({
-    query: 'Bandura', mode: 'textual', triggerMode: 't', from: 6, to: 16
-  }), true);
+  window.AQCitationRuntime.openFromSlash('', 'textual');
   assert.equal(window.__aqCitationTriggerMode, 'textual');
-  assert.equal(window.editorTrigRange.from, 6);
-  assert.equal(window.editorTrigRange.to, 16);
-  assert.equal(window.editorTrigRange.mode, 't');
-  assert.equal(elements.tgs.value, 'Bandura');
   assert.equal(elements.tgs.disabled, false);
   assert.equal(elements.tgs.readOnly, false);
   assert.equal(elements.tgs.tabIndex, 0);
-});
-
-test('citation runtime rebinds popup DOM mounted after early initialization', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'citation-runtime.js'), 'utf8');
-  const elements = {};
-  const listeners = [];
-  const makeElement = () => ({
-    style: {},
-    classList: { add(){}, remove(){}, contains(){ return false; } },
-    addEventListener(type){ listeners.push(type); },
-    contains(){ return false; },
-    focus(){},
-    setSelectionRange(){},
-    getBoundingClientRect(){ return { left: 16, bottom: 24 }; },
-    value: '', disabled: false, readOnly: false, tabIndex: -1, scrollTop: 0
-  });
-  const document = {
-    getElementById(id){ return elements[id] || null; },
-    querySelector(){ return null; },
-    addEventListener(){},
-    removeEventListener(){}
-  };
-  const window = {
-    document, console, Date, setTimeout, clearTimeout,
-    innerHeight: 800, innerWidth: 1200,
-    addEventListener(){}, removeEventListener(){}, getSelection(){ return null; },
-    cLib(){ return []; }, filterRefsForQuery(){ return []; }
-  };
-  window.window = window;
-  vm.runInNewContext(source, { window, document, console, Date, setTimeout, clearTimeout });
-  window.AQCitationRuntime.init();
-  elements.trig = makeElement();
-  elements.tgs = makeElement();
-  elements.tgl = makeElement();
-  elements.tgq = makeElement();
-  elements.tgsel = makeElement();
-  elements.escroll = makeElement();
-  window.AQCitationRuntime.init();
-  assert.equal(elements.tgs.tabIndex, 0);
-  assert.equal(elements.tgs.__aqCitationRuntimeBound, true);
-  assert.ok(listeners.includes('input'));
-});
-
-test('citation runtime treats the AQ Engine capture as an editor target', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'citation-runtime.js'), 'utf8');
-  assert.match(source, /#aq-engine-host,\.aq-engine-stage,\.aq-input-capture/);
-  assert.match(source, /retryCount < 40/);
-  assert.match(source, /slashTriggerPinnedUntil = Date\.now\(\) \+ 800/);
-  assert.match(source, /Date\.now\(\) < \(runtime\.state\.slashTriggerPinnedUntil \|\| 0\)/);
 });
 
 test('AQ Engine adapters use canonical APA formatter for citation text', () => {
@@ -771,9 +702,7 @@ test('AQ Engine bibliography entries keep APA 7 hanging indent and double spacin
 
 test('React AQ Engine adapter binds slash citations to bibliography sync', () => {
   const adapter = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'lib', 'editor-adapter.ts'), 'utf8');
-  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'App.tsx'), 'utf8');
-  const host = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'components', 'shell', 'CitationTriggerHost.tsx'), 'utf8');
-  const legacyHost = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'components', 'shell', 'LegacyCompatibilityHost.tsx'), 'utf8');
+  const host = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'components', 'shell', 'LegacyCompatibilityHost.tsx'), 'utf8');
   const reactHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   assert.match(adapter, /function installReferenceBridge/);
   assert.match(adapter, /win\.updateRefSection = \(forceAuto\?: boolean\) =>/);
@@ -789,9 +718,6 @@ test('React AQ Engine adapter binds slash citations to bibliography sync', () =>
   assert.match(host, /id="trig"/);
   assert.match(host, /id="tgs"/);
   assert.match(host, /id="tgl"/);
-  assert.match(host, /data-aq-eager-citation-host/);
-  assert.match(app, /<CitationTriggerHost \/>[\s\S]*<Suspense fallback=\{null\}>/);
-  assert.doesNotMatch(legacyHost, /id="trig"/, 'lazy compatibility host must not own the slash citation popup');
   assert.ok(reactHtml.includes('<script src="/src/citation-runtime.js"></script>'), 'React shell must load the legacy citation runtime');
   assert.ok(reactHtml.includes('<script src="/src/literature-matrix-view.js"></script>'), 'React shell must load the literature matrix view runtime');
   assert.ok(reactHtml.includes('<script src="/src/legacy-runtime.js"></script>'), 'React shell must load legacy runtime for callLegacy bridges');

@@ -17,21 +17,6 @@
   root.AQEngineInput = factory();
 })(typeof window !== 'undefined' ? window : globalThis, function(){
 
-  function detectCitationTrigger(text, caret){
-    var source = String(text || '');
-    var pos = Math.max(0, Math.min(source.length, Number.isFinite(Number(caret)) ? Number(caret) : source.length));
-    var before = source.slice(Math.max(0, pos - 128), pos);
-    var match = before.match(/\/([rt])(?:\s*([^\n\r]*))?$/i);
-    if(!match) return null;
-    return {
-      query: String(match[2] || '').trim(),
-      mode: String(match[1] || 'r').toLowerCase() === 't' ? 'textual' : 'inline',
-      triggerMode: String(match[1] || 'r').toLowerCase(),
-      from: Math.max(0, pos - match[0].length),
-      to: pos
-    };
-  }
-
   function blockTextLength(b){
     var n = 0;
     var runs = (b && b.runs) || [];
@@ -325,16 +310,6 @@
       if(manualBibliographyEdit) markManualBibliographyEditSoon();
       getSel().setRange(newOff, newOff);
 
-      // WebView2 may run selection/reflow callbacks before a zero-delay timer.
-      // Open slash citations from the authoritative post-insert offset now;
-      // keep the scheduled pass below as a compatibility/fallback refresh.
-      try{
-        var immediateTrigger = detectCitationTrigger(
-          typeof doc.getPlainText === 'function' ? doc.getPlainText() : '',
-          newOff
-        );
-        if(immediateTrigger) refreshTrigNow(immediateTrigger);
-      }catch(_triggerErr){}
       scheduleTrigRefresh();
     }
 
@@ -389,28 +364,6 @@
       return String(payload || '').length > 1;
     }
 
-    function refreshTrigNow(explicitTrigger){
-      if(isCitationTransactionBlocked()) return false;
-      var range = r();
-      var plainText = typeof doc.getPlainText === 'function' ? doc.getPlainText() : '';
-      var trigger = explicitTrigger || detectCitationTrigger(
-        plainText,
-        range && typeof range.from === 'number' ? range.from : plainText.length
-      );
-      if(trigger && window.AQCitationRuntime && typeof window.AQCitationRuntime.openFromEditorTrigger === 'function'){
-        if(typeof window.AQCitationRuntime.init === 'function'){
-          try{ window.AQCitationRuntime.init(); }catch(_initErr){}
-        }
-        return window.AQCitationRuntime.openFromEditorTrigger(trigger) !== false;
-      }
-      if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
-        window.AQCitationRuntime.refreshFromEditor();
-      } else if(typeof window.checkTrig === 'function'){
-        window.checkTrig();
-      }
-      return false;
-    }
-
     function scheduleTrigRefresh(){
       if(isCitationTransactionBlocked()) return;
       if(trigRefreshTimer) clearTimeout(trigRefreshTimer);
@@ -418,9 +371,13 @@
         trigRefreshTimer = 0;
         if(isCitationTransactionBlocked()) return;
         try {
-          refreshTrigNow();
+          if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
+            window.AQCitationRuntime.refreshFromEditor();
+          } else if(typeof window.checkTrig === 'function'){
+            window.checkTrig();
+          }
         } catch(_e){}
-      }, 0);
+      }, 350);
     }
 
     function doSplitBlock(){
@@ -1143,5 +1100,5 @@
     };
   }
 
-  return { create: createInput, detectCitationTrigger: detectCitationTrigger };
+  return { create: createInput };
 });
