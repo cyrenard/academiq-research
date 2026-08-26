@@ -2,9 +2,11 @@
 'use strict';
 
 const fs = require('fs');
+const crypto = require('crypto');
 const os = require('os');
 const path = require('path');
 const { execFile } = require('child_process');
+const sidecarPackage = require('./package.json');
 const {
   createBrowserCaptureBridge,
   DEFAULT_CAPTURE_PORT,
@@ -99,7 +101,7 @@ function saveState(patch) {
 }
 
 function createToken() {
-  return 'aq_' + Math.random().toString(36).slice(2) + now().toString(36);
+  return 'aq_' + crypto.randomBytes(24).toString('base64url');
 }
 
 function getSettings() {
@@ -307,6 +309,8 @@ function buildStatus(extra) {
     installDir: settings.installDir || '',
     guidePath: settings.guidePath || '',
     browserCaptureProtocolVersion: BROWSER_CAPTURE_PROTOCOL_VERSION,
+    agentVersion: String(sidecarPackage.version || ''),
+    protocolVersion: BROWSER_CAPTURE_PROTOCOL_VERSION,
     bridgeConnected: !!bridge,
     bridgeReady: !!bridge,
     agentRunning: true,

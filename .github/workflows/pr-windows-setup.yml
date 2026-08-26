@@ -37,6 +37,13 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Install capture sidecar dependencies
+        run: npm ci --no-audit --no-fund
+        working-directory: src-sidecar/capture-agent
+
+      - name: Build Windows capture sidecar from this commit
+        run: node scripts/build-sidecar.js
+
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0.0" --locked
 

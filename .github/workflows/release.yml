@@ -13,9 +13,9 @@ permissions:
   contents: write
 
 jobs:
-  build-windows:
-    name: Build Windows installer
-    runs-on: windows-latest
+  validate:
+    name: Validate release source
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,7 +23,57 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '24.x'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Linux test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libayatana-appindicator3-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install capture sidecar dependencies
+        run: npm ci --no-audit --no-fund
+        working-directory: src-sidecar/capture-agent
+
+      - name: Build Linux capture sidecar from this commit
+        run: node scripts/build-sidecar.js
+
+      - name: Fetch Linux PDFium runtime
+        run: |
+          curl -L --retry 3 -o /tmp/pdfium-linux-x64.tgz https://github.com/bblanchon/pdfium-binaries/releases/latest/download/pdfium-linux-x64.tgz
+          mkdir -p /tmp/academiq-pdfium
+          tar -xzf /tmp/pdfium-linux-x64.tgz -C /tmp/academiq-pdfium
+          cp "$(find /tmp/academiq-pdfium -name libpdfium.so -print -quit)" src-tauri/binaries/libpdfium.so
+
+      - name: Typecheck and tests
+        run: |
+          npm run typecheck
+          npm test
+          npm run test:renderer
+
+  build-windows:
+    name: Build Windows installer
+    runs-on: windows-latest
+    needs: validate
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
           cache: 'npm'
 
       - name: Setup Rust
@@ -37,20 +87,47 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Install capture sidecar dependencies
+        run: npm ci --no-audit --no-fund
+        working-directory: src-sidecar/capture-agent
+
+      - name: Build Windows capture sidecar from this commit
+        run: node scripts/build-sidecar.js
+
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0.0" --locked
+
+      - name: Import Windows code-signing certificate
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_BASE64) -or
+              [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)) {
+            throw "Windows code-signing secrets are required for tag releases."
+          }
+          $pfxPath = Join-Path $env:RUNNER_TEMP "academiq-release-signing.pfx"
+          [IO.File]::WriteAllBytes(
+            $pfxPath,
+            [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64)
+          )
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $certificate = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          if (-not $certificate.Thumbprint) { throw "Windows certificate import failed." }
+          "SIGNING_CERT_THUMBPRINT=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Build Tauri bundle (NSIS installer)
         run: npm run build
         env:
-          ACADEMIQ_SKIP_SIGN: "1"
+          ACADEMIQ_REQUIRE_UPDATER_SIGNATURE: "1"
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Validate Windows bundle
         run: node scripts/tauri-bundle-gate.js
         env:
-          ACADEMIQ_SKIP_SIGN: "1"
+          ACADEMIQ_REQUIRE_UPDATER_SIGNATURE: "1"
 
       - name: Prepare Windows release files
         shell: pwsh
@@ -72,6 +149,7 @@ jobs:
   build-linux:
     name: Build Fedora beta Linux bundles
     runs-on: ubuntu-22.04
+    needs: validate
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -79,7 +157,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '24.x'
           cache: 'npm'
 
       - name: Setup Rust
@@ -139,12 +217,16 @@ jobs:
         run: npm run build
         env:
           ACADEMIQ_SKIP_SIGN: "1"
+          ACADEMIQ_REQUIRE_UPDATER_SIGNATURE: "1"
           ACADEMIQ_TAURI_BUNDLES: rpm,appimage
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Validate Linux bundle
         run: node scripts/tauri-bundle-gate.js
         env:
           ACADEMIQ_SKIP_SIGN: "1"
+          ACADEMIQ_REQUIRE_UPDATER_SIGNATURE: "1"
           ACADEMIQ_TAURI_BUNDLES: rpm,appimage
 
       - name: Prepare Linux release files
@@ -159,7 +241,9 @@ jobs:
           if-no-files-found: error
           path: |
             dist/tauri/*.rpm
+            dist/tauri/*.rpm.sig
             dist/tauri/*.AppImage
+            dist/tauri/*.AppImage.sig
             dist/tauri/latest-linux.json
             dist/tauri/SHA256SUMS-linux.txt
 

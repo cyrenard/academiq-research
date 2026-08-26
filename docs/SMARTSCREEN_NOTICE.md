@@ -1,6 +1,8 @@
 # SmartScreen Notice
 
-AcademiQ Research uses a self-signed Authenticode certificate for the Tauri installer during the migration period.
+Local development builds can use a self-signed Authenticode certificate during
+the migration period. Tag releases require an imported Windows code-signing
+certificate and fail before publishing when the certificate secrets are absent.
 
 ## What Users Will See
 

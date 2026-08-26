@@ -35,11 +35,16 @@ test('release versions stay synchronized for the Fedora beta build', () => {
   const lock = json('package-lock.json');
   const conf = json('src-tauri', 'tauri.conf.json');
   const cargoToml = read('src-tauri', 'Cargo.toml');
+  const sidecarPkg = json('src-sidecar', 'capture-agent', 'package.json');
+  const sidecarLock = json('src-sidecar', 'capture-agent', 'package-lock.json');
 
   assert.equal(pkg.version, '1.24.1-beta.19');
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[''].version, pkg.version);
   assert.equal(conf.version, pkg.version);
+  assert.equal(sidecarPkg.version, pkg.version);
+  assert.equal(sidecarLock.version, pkg.version);
+  assert.equal(sidecarLock.packages[''].version, pkg.version);
   assert.match(cargoToml, new RegExp(`^version = "${pkg.version.replace(/\./g, '\\.')}"$`, 'm'));
 });
 
@@ -49,6 +54,8 @@ test('NSIS bundle metadata keeps Electron parity where Tauri supports it', () =>
   assert.equal(conf.productName, 'AcademiQ Research');
   assert.deepEqual(conf.bundle.targets, ['nsis']);
   assert.equal(conf.bundle.publisher, 'AcademiQ');
+  assert.equal(conf.bundle.createUpdaterArtifacts, true);
+  assert.ok(conf.bundle.externalBin.includes('binaries/capture-agent'));
   assert.equal(conf.bundle.copyright, 'Copyright (c) 2024 AcademiQ');
   assert.equal(conf.bundle.windows.nsis.installMode, 'currentUser');
   assert.deepEqual(conf.bundle.windows.nsis.languages, ['Turkish', 'English']);
@@ -93,6 +100,9 @@ test('Tauri build pipeline emits signed installer artifacts and updater manifest
   assert.match(build, /sign-installer\.ps1/);
   assert.match(build, /SHA256SUMS\.txt/);
   assert.match(build, /latest\.json/);
+  assert.match(build, /configPatch\.bundle\.createUpdaterArtifacts = false/);
+  assert.match(build, /configPatch\.bundle\.windows = \{ signCommand: windowsSignCommand\(\) \}/);
+  assert.match(build, /ACADEMIQ_REQUIRE_UPDATER_SIGNATURE/);
   assert.match(build, /AcademiQ-Setup-\$\{pkg\.version\}\.exe/);
   assert.match(build, /linux-x86_64/);
   assert.match(build, /appimage/);
@@ -105,6 +115,8 @@ test('Tauri build pipeline emits signed installer artifacts and updater manifest
   assert.match(gate, /ACADEMIQ_SKIP_SIGN/);
   assert.match(gate, /linux-x86_64/);
   assert.match(gate, /latest\.json/);
+  assert.match(gate, /SHA256SUMS\.txt does not match/);
+  assert.match(gate, /Signed release requires a non-empty updater signature/);
   assert.match(gate, /dist['"], 'THIRD_PARTY_NOTICES\.md'/);
   assert.match(releaseGate, /tauri-bundle-gate\.js/);
   assert.match(mainRs, /windows_subsystem = "windows"/);
@@ -134,6 +146,10 @@ test('bundle gate validates Windows and Fedora beta platform expectations', () =
   assert.equal(bundleGate.expectedPdfiumResource('linux'), 'binaries/libpdfium.so');
   assert.equal(bundleGate.shouldVerifySignature('win32', { ACADEMIQ_SKIP_SIGN: '1' }), false);
   assert.equal(bundleGate.shouldVerifySignature('win32', {}), true);
+  assert.equal(bundleGate.shouldRequireUpdaterSignature({ ACADEMIQ_REQUIRE_UPDATER_SIGNATURE: '1' }), true);
+  assert.equal(bundleGate.shouldRequireUpdaterSignature({}), false);
+  assert.equal(bundleGate.sidecarBinaryName('win32'), 'capture-agent-x86_64-pc-windows-msvc.exe');
+  assert.equal(bundleGate.sidecarBinaryName('linux'), 'capture-agent-x86_64-unknown-linux-gnu');
   assert.equal(bundleGate.installerPattern('linux').test('AcademiQ-Research-1.24.1-beta.1.x86_64.rpm'), true);
 });
 
@@ -146,6 +162,9 @@ test('build helper emits platform-specific updater manifests', () => {
   assert.ok(linuxManifest.platforms['linux-x86_64']);
   assert.match(linuxManifest.platforms['linux-x86_64'].url, /linux-x86_64/);
   assert.equal(buildTauri.bundleProfile('linux').installerPattern.test('AcademiQ.AppImage'), true);
+  assert.match(buildTauri.selectPrimaryInstaller(['x.rpm', 'x.AppImage'], 'linux'), /AppImage$/);
+  assert.equal(buildTauri.hasUpdaterSigningKey({ TAURI_SIGNING_PRIVATE_KEY: 'secret' }), true);
+  assert.equal(buildTauri.hasUpdaterSigningKey({}, ''), false);
 });
 
 test('GitHub release workflow publishes Windows and Fedora beta artifacts together', () => {
@@ -157,7 +176,27 @@ test('GitHub release workflow publishes Windows and Fedora beta artifacts togeth
   assert.match(workflow, /ACADEMIQ_TAURI_BUNDLES: rpm,appimage/);
   assert.match(workflow, /libpdfium\.so/);
   assert.match(workflow, /capture-agent-x86_64-unknown-linux-gnu/);
+  assert.match(workflow, /Build Windows capture sidecar from this commit/);
+  assert.match(workflow, /WINDOWS_CERTIFICATE_BASE64/);
+  assert.match(workflow, /SIGNING_CERT_THUMBPRINT/);
+  assert.match(workflow, /ACADEMIQ_REQUIRE_UPDATER_SIGNATURE: "1"/);
+  assert.match(workflow, /TAURI_SIGNING_PRIVATE_KEY:/);
+  assert.match(workflow, /Validate release source/);
   assert.match(workflow, /\*\.rpm/);
+  assert.match(workflow, /\*\.AppImage\.sig/);
   assert.match(workflow, /\*\.AppImage/);
   assert.match(workflow, /contains\(github\.ref_name, 'beta'\)/);
+});
+
+test('CI and PR setup rebuild the platform capture sidecar instead of trusting a stale binary', () => {
+  const ci = read('.github', 'workflows', 'ci.yml');
+  const prSetup = read('.github', 'workflows', 'pr-windows-setup.yml');
+  const sidecarBuild = read('scripts', 'build-sidecar.js');
+
+  assert.match(ci, /os: \[ubuntu-latest, windows-latest\]/);
+  assert.match(ci, /Build platform capture sidecar/);
+  assert.match(ci, /branches: \[main, master, experiment\/\*\*, agent\/\*\*\]/);
+  assert.match(prSetup, /Build Windows capture sidecar from this commit/);
+  assert.match(sidecarBuild, /node_modules/);
+  assert.doesNotMatch(sidecarBuild, /spawnSync\('npx'/);
 });

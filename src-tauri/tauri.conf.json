@@ -26,6 +26,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["nsis"],
     "publisher": "AcademiQ",
     "copyright": "Copyright (c) 2024 AcademiQ",

@@ -1,4 +1,5 @@
 const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.join(__dirname, '..');
@@ -28,8 +29,18 @@ if (!target) {
   process.exit(1);
 }
 
-const result = spawnSync('npx', [
-  'pkg',
+const pkgExecutable = path.join(
+  sidecar,
+  'node_modules',
+  '.bin',
+  process.platform === 'win32' ? 'pkg.cmd' : 'pkg'
+);
+if (!fs.existsSync(pkgExecutable)) {
+  console.error('pkg is not installed; run npm ci in src-sidecar/capture-agent first');
+  process.exit(1);
+}
+
+const result = spawnSync(pkgExecutable, [
   'index.js',
   '--targets',
   target.pkg,
@@ -41,4 +52,7 @@ const result = spawnSync('npx', [
   shell: process.platform === 'win32'
 });
 
+if (result.error) {
+  console.error(result.error.message || String(result.error));
+}
 process.exit(result.status == null ? 1 : result.status);

@@ -12,6 +12,7 @@ Thumbs.db
 .tmp_asar/
 .claude/
 .npm-cache/
+.pkg-cache/
 current-screen.png
 .tmp_restore/
 backups/

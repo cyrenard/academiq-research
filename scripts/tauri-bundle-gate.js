@@ -1,4 +1,5 @@
 const fs = require('fs');
+const crypto = require('crypto');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
@@ -40,6 +41,21 @@ function shouldVerifySignature(platform = process.platform, env = process.env) {
   return platform === 'win32' && env.ACADEMIQ_SKIP_SIGN !== '1';
 }
 
+function shouldRequireUpdaterSignature(env = process.env) {
+  return env.ACADEMIQ_REQUIRE_UPDATER_SIGNATURE === '1';
+}
+
+function sidecarBinaryName(platform = process.platform) {
+  if (platform === 'win32') return 'capture-agent-x86_64-pc-windows-msvc.exe';
+  if (platform === 'linux') return 'capture-agent-x86_64-unknown-linux-gnu';
+  if (platform === 'darwin') {
+    return process.arch === 'arm64'
+      ? 'capture-agent-aarch64-apple-darwin'
+      : 'capture-agent-x86_64-apple-darwin';
+  }
+  return '';
+}
+
 function verifyTauriConfig(
   platform = process.platform,
   configJson = null,
@@ -60,7 +76,64 @@ function verifyTauriConfig(
   if (!resources.includes(expected)) {
     fail(`tauri.conf.json must bundle ${expected}`);
   }
+  if (conf.bundle.createUpdaterArtifacts !== true) {
+    fail('tauri.conf.json must enable bundle.createUpdaterArtifacts for signed releases');
+  }
+  if (!Array.isArray(conf.bundle.externalBin) || !conf.bundle.externalBin.includes('binaries/capture-agent')) {
+    fail('tauri.conf.json must bundle the capture-agent sidecar');
+  }
+  const updater = conf.plugins && conf.plugins.updater;
+  let decodedPublicKey = '';
+  try {
+    decodedPublicKey = Buffer.from(String(updater && updater.pubkey || ''), 'base64').toString('utf8');
+  } catch (_error) {}
+  if (!/minisign public key/i.test(decodedPublicKey) || !Array.isArray(updater.endpoints)
+      || !updater.endpoints.every((endpoint) => /^https:\/\//i.test(String(endpoint)))) {
+    fail('Tauri updater must have a valid embedded minisign public key and HTTPS endpoints');
+  }
   return true;
+}
+
+function sha256(filePath) {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+function verifyChecksums(installers) {
+  const checksumPath = path.join(distDir, 'SHA256SUMS.txt');
+  if (!fs.existsSync(checksumPath)) fail('dist/tauri/SHA256SUMS.txt is missing');
+  const entries = new Map(
+    fs.readFileSync(checksumPath, 'utf8')
+      .split(/\r?\n/)
+      .map((line) => /^(\w{64})\s{2}(.+)$/.exec(line.trim()))
+      .filter(Boolean)
+      .map((match) => [match[2], match[1].toLowerCase()])
+  );
+  for (const installer of installers) {
+    const name = path.basename(installer);
+    if (entries.get(name) !== sha256(installer)) {
+      fail(`SHA256SUMS.txt does not match ${name}`);
+    }
+  }
+}
+
+function verifyUpdaterManifest(latest, installers, platform, env) {
+  const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
+  const entry = latest.platforms && latest.platforms[platformKey(platform)];
+  if (latest.version !== pkg.version || !entry) {
+    fail('latest.json version/platform does not match this build');
+  }
+  if (!/^https:\/\//i.test(String(entry.url || ''))) {
+    fail('latest.json updater URL must use HTTPS');
+  }
+  const artifactName = decodeURIComponent(String(entry.url).split('/').pop() || '');
+  const installer = installers.find((file) => path.basename(file) === artifactName);
+  if (!installer) fail('latest.json URL does not point at a bundled installer');
+  if (shouldRequireUpdaterSignature(env)) {
+    const signature = String(entry.signature || '').trim();
+    if (signature.length < 40 || !fs.existsSync(`${installer}.sig`)) {
+      fail('Signed release requires a non-empty updater signature and matching .sig artifact');
+    }
+  }
 }
 
 function findSignTool() {
@@ -92,7 +165,13 @@ function verifySignature(installerPath) {
 }
 
 function main(platform = process.platform, env = process.env) {
-  verifyTauriConfig(platform);
+  const conf = JSON.parse(fs.readFileSync(path.join(rootDir, 'src-tauri', 'tauri.conf.json'), 'utf8'));
+  verifyTauriConfig(platform, conf);
+  const sidecarName = sidecarBinaryName(platform);
+  const sidecarPath = path.join(rootDir, 'src-tauri', 'binaries', sidecarName);
+  if (!sidecarName || !fs.existsSync(sidecarPath) || fs.statSync(sidecarPath).size < 1024 * 1024) {
+    fail(`Packaged capture sidecar is missing or unexpectedly small: ${sidecarName}`);
+  }
   if (!fs.existsSync(distDir)) fail('dist/tauri does not exist; run npm run build first');
   const noticesPath = path.join(rootDir, 'dist', 'THIRD_PARTY_NOTICES.md');
   if (!fs.existsSync(noticesPath)) fail('dist/THIRD_PARTY_NOTICES.md is missing');
@@ -105,9 +184,8 @@ function main(platform = process.platform, env = process.env) {
   const latestPath = path.join(distDir, 'latest.json');
   if (!fs.existsSync(latestPath)) fail('dist/tauri/latest.json is missing');
   const latest = JSON.parse(fs.readFileSync(latestPath, 'utf8'));
-  if (!latest.version || !latest.platforms || !latest.platforms[platformKey(platform)]) {
-    fail('latest.json does not match the Tauri updater manifest shape');
-  }
+  verifyUpdaterManifest(latest, installers, platform, env);
+  verifyChecksums(installers);
 
   for (const installer of installers) {
     const sizeMb = fs.statSync(installer).size / (1024 * 1024);
@@ -134,6 +212,10 @@ module.exports = {
   installerPattern,
   parseBundleTargets,
   platformKey,
+  shouldRequireUpdaterSignature,
   shouldVerifySignature,
+  sidecarBinaryName,
+  verifyChecksums,
+  verifyUpdaterManifest,
   verifyTauriConfig
 };

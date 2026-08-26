@@ -46,6 +46,8 @@ const edits = [
   ['src-tauri/Cargo.toml',       new RegExp(`(^version\\s*=\\s*")${curRe}(")`, 'm'),        `$1${next}$2`],
   // Cargo.lock: only the academiq-research-tauri package entry.
   ['src-tauri/Cargo.lock',       new RegExp(`(name = "academiq-research-tauri"\\r?\\nversion = ")${curRe}(")`), `$1${next}$2`],
+  ['src-sidecar/capture-agent/package.json', new RegExp(`("version":\\s*")${curRe}(")`), `$1${next}$2`],
+  ['src-sidecar/capture-agent/package-lock.json', new RegExp(`("version":\\s*")${curRe}(")`, 'g'), `$1${next}$2`],
   ['tests/release-pipeline.test.js', new RegExp(`(assert\\.equal\\(pkg\\.version,\\s*')${curRe}('\\))`), `$1${next}$2`]
 ];
 
