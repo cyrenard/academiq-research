@@ -1,8 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { JSDOM } = require('jsdom');
 
 const docx = require('../src/docx-export.js');
+const wordIo = require('../src/tiptap-word-io.js');
 
 function withDocument(fn) {
   const prevDocument = global.document;
@@ -50,6 +53,19 @@ test('buildParagraph emits run properties for bold/italic/super', () => {
   assert.match(xml, /<w:i\/>/);
   assert.match(xml, /<w:u w:val="single"\/>/);
   assert.match(xml, /<w:vertAlign w:val="superscript"\/>/);
+});
+
+test('buildParagraph preserves explicit line breaks and safe hyperlinks', () => {
+  const xml = docx.buildParagraph({
+    type: 'paragraph',
+    runs: [
+      { text: 'Birinci\nIkinci' },
+      { text: ' OpenAI', href: 'https://openai.com/research' }
+    ]
+  });
+
+  assert.match(xml, /Birinci<\/w:t><\/w:r><w:r><w:br\/><\/w:r><w:r><w:t[^>]*>Ikinci/);
+  assert.match(xml, /<w:fldSimple w:instr="HYPERLINK &quot;https:\/\/openai\.com\/research&quot;">/);
 });
 
 test('buildParagraph can emit APA-like font and double spacing metadata', () => {
@@ -132,6 +148,19 @@ test('buildDocumentXml preserves table blocks as w:tbl', () => {
   assert.match(xml, /Cell 2<\/w:t>/);
 });
 
+test('buildDocumentXml emits real page breaks and Word numbering properties', () => {
+  const xml = docx.buildDocumentXml([
+    { type: 'paragraph', text: 'Once' },
+    { type: 'pageBreak' },
+    { type: 'paragraph', text: 'Bir', numId: 1, listLevel: 0 },
+    { type: 'paragraph', text: 'Madde', numId: 2, listLevel: 1 }
+  ]);
+
+  assert.match(xml, /<w:br w:type="page"\/>/);
+  assert.match(xml, /<w:numPr><w:ilvl w:val="0"\/><w:numId w:val="1"\/><\/w:numPr>/);
+  assert.match(xml, /<w:numPr><w:ilvl w:val="1"\/><w:numId w:val="2"\/><\/w:numPr>/);
+});
+
 test('htmlToBlocks keeps HTML tables as table blocks', () => {
   const blocks = withDocument(() => docx.htmlToBlocks('<p>Intro</p><table><tr><th>Kod</th><th>Kategori</th></tr><tr><td>A1</td><td>Tema</td></tr></table>'));
 
@@ -143,6 +172,26 @@ test('htmlToBlocks keeps HTML tables as table blocks', () => {
   assert.equal(blocks[1].rows[0].cells[0].runs[0].text, 'Kod');
 });
 
+test('htmlToBlocks preserves inline spacing, APA sections, lists, block quotes and page breaks', () => {
+  const blocks = withDocument(() => docx.htmlToBlocks(
+    '<p><strong>Kalın</strong> <em>metin</em></p>'
+    + '<p class="aq-page-break"><br></p>'
+    + '<ol><li>Bir</li><li>İki</li></ol>'
+    + '<blockquote>Uzun alıntı</blockquote>'
+    + '<h1 class="bib-title aq-export-page-break-before">Kaynakça</h1>'
+    + '<p class="refe">Yazar, A. (2026). Başlık.</p>'
+  ));
+
+  assert.equal(blocks[0].runs.map((run) => run.text).join(''), 'Kalın metin');
+  assert.equal(blocks[1].type, 'pageBreak');
+  assert.equal(blocks[2].numId, 1);
+  assert.equal(blocks[3].numId, 1);
+  assert.equal(blocks[4].style, 'BlockQuote');
+  assert.equal(blocks[5].pageBreakBefore, true);
+  assert.equal(blocks[6].style, 'ReferenceEntry');
+  assert.equal(blocks[6].hanging, 720);
+});
+
 test('buildDocxBytesFromBlocks creates a valid OOXML zip package', () => {
   const bytes = docx.buildDocxBytesFromBlocks([{ type:'paragraph', text:'Merhaba DOCX' }]);
   assert.ok(bytes instanceof Uint8Array);
@@ -151,6 +200,9 @@ test('buildDocxBytesFromBlocks creates a valid OOXML zip package', () => {
   const text = Buffer.from(bytes).toString('latin1');
   assert.match(text, /\[Content_Types\]\.xml/);
   assert.match(text, /word\/document\.xml/);
+  assert.match(text, /word\/numbering\.xml/);
+  assert.match(text, /ReferenceEntry/);
+  assert.match(text, /w:line="480"/);
 });
 
 test('buildDocxBytesFromHTML stores table markup as OOXML table XML', () => {
@@ -162,4 +214,22 @@ test('buildDocxBytesFromHTML stores table markup as OOXML table XML', () => {
   assert.match(text, /<w:tc>/);
   assert.match(text, /Kod<\/w:t>/);
   assert.match(text, /Tema<\/w:t>/);
+});
+
+test('Word-import smoke fixture survives the HTML to DOCX semantic pipeline', () => {
+  const input = fs.readFileSync(
+    path.join(__dirname, 'fixtures', 'word-import', 'mixed-word-smoke.html'),
+    'utf8'
+  );
+  const normalized = wordIo.normalizeWordHtml(input);
+  const bytes = withDocument(() => docx.buildDocxBytesFromHTML(normalized));
+  const packageText = Buffer.from(bytes).toString('utf8');
+
+  assert.match(packageText, /Giris/);
+  assert.match(packageText, /Birinci oge/);
+  assert.match(packageText, /<w:numPr>/);
+  assert.match(packageText, /<w:br w:type="page"\/>/);
+  assert.match(packageText, /<w:tbl>/);
+  assert.match(packageText, /ReferenceEntry/);
+  assert.match(packageText, /Doe, J\./);
 });

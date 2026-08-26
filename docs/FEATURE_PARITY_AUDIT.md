@@ -31,7 +31,7 @@ Legend: 🟢 parity observed, 🟡 parity likely but needs soak/manual coverage,
 | `net:fetch-text` | `main.js:1939` | 🟢 `src-tauri/src/commands/net.rs:65`; reqwest singleton parity. |
 | `export:pdf` | `main.js:1965` | 🟡 `src-tauri/src/commands/export.rs:10`; Rust printpdf export passed Phase 5 gates, continue visual diff soak. |
 | `pdf:exportAnnotated` | `main.js:2017` | 🟢 `src-tauri/src/commands/export.rs`; native highlight/note coordinates are written into a copied PDF. Pages containing drawing layers explicitly use the complete browser-render fallback to avoid loss. |
-| `export:docx` | `main.js:2043` | 🟢 Browser-generated DOCX bytes are saved by the native command; native bridge and artifact validation coverage are present. |
+| `export:docx` | `main.js:2043` | 🟢 Cross-platform OOXML package preserves APA double spacing/headings/reference hanging indents, page breaks, lists, tables, block quotes, safe links, and inline formatting; native command saves the validated bytes. |
 | `sync:getSettings` | `main.js:2066` | 🟢 `src-tauri/src/commands/sync.rs:28`; settings JSON parity. |
 | `sync:setSyncDir` | `main.js:2070` | 🟢 `src-tauri/src/commands/sync.rs:37`; settings JSON parity. |
 | `sync:clearSyncDir` | `main.js:2083` | 🟢 `src-tauri/src/commands/sync.rs:51`; settings JSON parity. |
