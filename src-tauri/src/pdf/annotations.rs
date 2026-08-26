@@ -1,6 +1,6 @@
 use lopdf::{dictionary, Dictionary, Document, Object, StringFormat};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::{collections::BTreeMap, path::Path};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,6 +21,31 @@ pub fn apply_annotations(path: &Path, annotations: &[PdfAnnotation]) -> Result<(
     }
     doc.save(path).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+pub fn apply_annotations_to_bytes(
+    bytes: &[u8],
+    annotations: &[PdfAnnotation],
+) -> Result<Vec<u8>, String> {
+    let mut doc = Document::load_mem(bytes).map_err(|e| e.to_string())?;
+    for annotation in annotations {
+        add_annotation(&mut doc, annotation)?;
+    }
+    let mut out = Vec::new();
+    doc.save_to(&mut out).map_err(|e| e.to_string())?;
+    Ok(out)
+}
+
+pub fn page_bounds_from_bytes(bytes: &[u8]) -> Result<BTreeMap<u32, [f32; 4]>, String> {
+    let doc = Document::load_mem(bytes).map_err(|e| e.to_string())?;
+    let mut out = BTreeMap::new();
+    for (page, page_id) in doc.get_pages() {
+        out.insert(
+            page,
+            inherited_page_bounds(&doc, page_id).unwrap_or([0.0, 0.0, 612.0, 792.0]),
+        );
+    }
+    Ok(out)
 }
 
 pub fn read_annotations(path: &Path) -> Result<Vec<PdfAnnotation>, String> {
@@ -110,6 +135,35 @@ fn add_annotation(doc: &mut Document, annotation: &PdfAnnotation) -> Result<(), 
         }
     }
     Ok(())
+}
+
+fn inherited_page_bounds(doc: &Document, mut object_id: lopdf::ObjectId) -> Option<[f32; 4]> {
+    for _ in 0..32 {
+        let dict = doc.get_object(object_id).ok()?.as_dict().ok()?;
+        for key in [b"CropBox".as_slice(), b"MediaBox".as_slice()] {
+            if let Ok(value) = dict.get(key) {
+                let resolved = match value {
+                    Object::Reference(id) => doc.get_object(*id).ok()?,
+                    other => other,
+                };
+                if let Ok(values) = resolved.as_array() {
+                    if values.len() >= 4 {
+                        let bounds = [
+                            values[0].as_float().ok()?,
+                            values[1].as_float().ok()?,
+                            values[2].as_float().ok()?,
+                            values[3].as_float().ok()?,
+                        ];
+                        if bounds[2] > bounds[0] && bounds[3] > bounds[1] {
+                            return Some(bounds);
+                        }
+                    }
+                }
+            }
+        }
+        object_id = dict.get(b"Parent").ok()?.as_reference().ok()?;
+    }
+    None
 }
 
 fn rect_object(rect: [f32; 4]) -> Object {

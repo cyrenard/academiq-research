@@ -1,8 +1,8 @@
-# Feature Parity Audit - Phase 8.2
+# Feature Parity Audit - Phase 8.2 through beta.19
 
-Audit date: 2026-05-18
+Audit date: 2026-08-26
 
-Scope: Electron 1.23.0 legacy surface vs Tauri 1.24.0-beta.2. This is a static parity audit for the beta.2 hotfix train. It records regressions and follow-up risk; it does not open Phase 9 or approve cutover.
+Scope: Electron 1.24.0 behavior vs Tauri 1.24.1-beta.19 plus the final stabilization branch. The original beta.2 findings are retained as history; the status update at the end is the current source of truth.
 
 Legend: 🟢 parity observed, 🟡 parity likely but needs soak/manual coverage, 🔴 known regression or beta.2 hotfix item.
 
@@ -13,7 +13,7 @@ Legend: 🟢 parity observed, 🟡 parity likely but needs soak/manual coverage,
 | `window:minimize` | `main.js:1483` | 🟢 `src-tauri/src/commands/window.rs:5`; direct window command parity. |
 | `window:toggleMaximize` | `main.js:1488` | 🟢 `src-tauri/src/commands/window.rs:11`; direct window command parity. |
 | `window:close` | `main.js:1496` | 🟢 `src-tauri/src/commands/window.rs:22`; direct window command parity. |
-| `data:load` | `main.js:1502`, app dir `main.js:86` | 🔴 beta.1 looked at Roaming identifier path; beta.2 hotfix reads `%LOCALAPPDATA%/AcademiQ` and migrates real legacy schema. |
+| `data:load` | `main.js:1502`, app dir `main.js:86` | 🟢 Legacy path migration is covered; renderer hydration now blocks every save until a successful load and exposes recovery instead of opening a blank writable state. |
 | `data:save` | `main.js:1513` | 🟢 SQLite-backed save keeps renderer blob contract. |
 | `data:saveDraft` | `main.js:1530` | 🟢 SQLite-backed draft save keeps renderer blob contract. |
 | `pdf:save` | `main.js:1557` | 🟢 `src-tauri/src/commands/pdf.rs:99`; filesystem storage parity. |
@@ -30,8 +30,8 @@ Legend: 🟢 parity observed, 🟡 parity likely but needs soak/manual coverage,
 | `net:fetch-json` | `main.js:1899` | 🟢 `src-tauri/src/commands/net.rs:45`; reqwest singleton, timeout, ETag/rate-limit polish from Phase 4. |
 | `net:fetch-text` | `main.js:1939` | 🟢 `src-tauri/src/commands/net.rs:65`; reqwest singleton parity. |
 | `export:pdf` | `main.js:1965` | 🟡 `src-tauri/src/commands/export.rs:10`; Rust printpdf export passed Phase 5 gates, continue visual diff soak. |
-| `pdf:exportAnnotated` | `main.js:2017` | 🟡 `src-tauri/src/commands/export.rs:21`; annotation support exists through Rust PDF path; old export shape needs soak. |
-| `export:docx` | `main.js:2043` | 🟡 `src-tauri/src/commands/export.rs:16`; DOCX remains JS/browser path by design. |
+| `pdf:exportAnnotated` | `main.js:2017` | 🟢 `src-tauri/src/commands/export.rs`; native highlight/note coordinates are written into a copied PDF. Pages containing drawing layers explicitly use the complete browser-render fallback to avoid loss. |
+| `export:docx` | `main.js:2043` | 🟢 Browser-generated DOCX bytes are saved by the native command; native bridge and artifact validation coverage are present. |
 | `sync:getSettings` | `main.js:2066` | 🟢 `src-tauri/src/commands/sync.rs:28`; settings JSON parity. |
 | `sync:setSyncDir` | `main.js:2070` | 🟢 `src-tauri/src/commands/sync.rs:37`; settings JSON parity. |
 | `sync:clearSyncDir` | `main.js:2083` | 🟢 `src-tauri/src/commands/sync.rs:51`; settings JSON parity. |
@@ -70,9 +70,9 @@ Legend: 🟢 parity observed, 🟡 parity likely but needs soak/manual coverage,
 | Plain citation linking context menu | `src/plain-citation-linking.js:843`, `:941` | 🟡 Loaded in shared page, but citation click/open behavior needs soak in React shell. |
 | Global click routing for legacy modals | `src/legacy-runtime.js:2920`, `:7495`, `:10272`, `:11310` | 🟡 `LegacyCompatibilityHost.tsx:415` and `:2009-2011` bridge many clicks; modal-specific smoke recommended. |
 | PDF panel click/change routing | `src/legacy-runtime.js:6247`, PDF list handlers near `:12844-12946` | 🟢 `LegacyCompatibilityHost.tsx:828-829`, `:2014-2018`; Phase 3/5 PDF smoke passed, keep soak coverage. |
-| Keyboard shortcuts | `src/legacy-runtime.js:5114`, `:5129`, `:6066`, `:6177`, `:10988` | 🟡 `LegacyCompatibilityHost.tsx:951` and `:2017`; Ctrl+S/Z/Shift+Z/B/I/U should stay on beta checklist. |
-| Drag/drop document or PDF | Legacy file input/upload handlers `src/legacy-runtime.js:2254`, `:5370`; no direct `drop` handler found in static search | 🟡 No obvious React shell `drop` handler in current audit; manual drag/drop test required. |
-| Paste handlers | Formatting/paste cleanup section noted in `src/legacy-runtime.js:30`; no direct `paste` match in sampled files | 🟡 Clipboard image/HTML/URL paste should be manually verified; audit did not find a React-specific paste replacement. |
+| Keyboard shortcuts | `src/legacy-runtime.js:5114`, `:5129`, `:6066`, `:6177`, `:10988` | 🟢 `keyboard-router.ts` owns exact modifier matching, IME exclusion, and propagation; semantic editor commands prevent React/legacy double execution. Windows/Linux regression samples cover citation triggers and focus. |
+| Drag/drop document or PDF | Legacy file inputs plus React host | 🟢 `drop-router.ts` and `editor-command-router.ts` route browser and Tauri path drops through one contract for PDF, Word, BibTeX/RIS, Zotero, and images. |
+| Paste handlers | Editor and host paste bridges | 🟢 Pasted images use the same semantic command router; editor HTML/text cleanup remains owned by the editor engine. |
 | Track changes controls | `src/legacy-runtime.js:7144-7171` | 🟡 Legacy events still loaded; React toolbar visibility/entry point needs manual check. |
 | Document history/outline/caption click flows | `src/legacy-runtime.js:14202-14280` | 🟡 Commands are ported, but React shell affordances should be included in soak script. |
 | Native `window.confirm` calls | `src/legacy-runtime.js` and React shell calls | 🔴 beta.1 ACL denial; beta.2 adds defensive dialog permissions and confirm shim, covered by `tests/regression/confirm-acl-bug.test.js`. |
@@ -97,7 +97,7 @@ Legend: 🟢 parity observed, 🟡 parity likely but needs soak/manual coverage,
 4. Exercise live updater endpoints before stable cutover.
 5. Run a large real-library `pdf:syncAll` and backup/restore recovery test before stable cutover.
 
-## Status Update 2026-05-18
+## Status Update 2026-08-26
 
 Closed in beta.2 hotfix:
 
@@ -117,11 +117,18 @@ Closed in beta.2 hotfix:
 
 Deferred with blocker notes:
 
-- [ ] B7 drop router for all file types.
-- [ ] B8 central keyboard router replacing all competing listeners.
-- [ ] C1 label manager modal.
-- [ ] C2 combined linter/history side panel React port.
-- [ ] C4 React PDF viewer controls.
-- [ ] C5 broad export validation suite.
-- [ ] C6 local matrix assistant mock-server behavior suite.
-- [ ] C7 broad IPC behavior sample suite.
+- [x] B7 drop router for all file types, including Tauri path-drop and pasted images.
+- [x] B8 central keyboard and semantic editor command routers; `/r` and `/t` share one refresh command across AQ Engine, React, and legacy fallbacks.
+- [x] C1 label manager modal with create, rename, color, usage count, collision protection, and cross-workspace assignment updates.
+- [ ] C2 unified linter/history side-panel ownership. React history and React quality-review surfaces exist; merging them into one app-owned panel remains part of the `LegacyCompatibilityHost` retirement, not a missing user action.
+- [x] C4 React PDF viewer controls extracted into `PdfViewerPanel` while retaining the stable pdf.js DOM/runtime contract.
+- [x] C5 export validation covers browser-rendered PDF, native PDF save, DOCX bytes, and annotated PDF native/fallback behavior.
+- [x] C6 local matrix assistant mock-server behavior suite (`tests/regression/local-matrix-ipc-suite.test.js`).
+- [x] C7 broad IPC behavior sample suite (`tests/tauri-ipc-sample.test.js` and `tests/ipc-parity.test.js`).
+
+Additional stabilization completed after beta.19:
+
+- Renderer persistence has a hydration barrier and serialized save coordinator; a load failure cannot be overwritten by a blank startup state.
+- `citation.refresh` is a single semantic command shared by `/r`, `/t`, AQ Engine, and compatibility fallbacks.
+- PDF controls and duplicate/metadata quality surfaces were extracted from the monolithic compatibility host without changing their public DOM IDs.
+- Annotated PDF export no longer reports a Phase 5 stub. Native highlight/note export is active, and drawing pages deliberately fall back to the lossless browser-render path.

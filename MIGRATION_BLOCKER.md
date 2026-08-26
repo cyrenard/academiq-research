@@ -141,3 +141,16 @@ These items were intentionally kept out of the beta.2 hotfix implementation beca
 - C7 IPC behavior sample suite: category sampling is feasible, but all write-paths need isolated temp app-data contracts. Estimated extra time: 1-2 days.
 
 Recommendation: do not block beta.2 on these. Keep them as post-beta stabilization tasks before stable cutover if soak testing shows user-facing impact.
+
+## Deferred parity follow-up — 2026-08-26
+
+The beta.2 estimates above are historical. Current status on the final stabilization branch:
+
+- B7 is complete: browser files, Tauri paths, and pasted images use the shared drop/input command route.
+- B8 is complete: exact-modifier/IME-safe keyboard ownership and semantic editor commands prevent duplicate legacy execution.
+- C1 is complete: the React label manager supports name/color changes and updates assignments across all workspaces.
+- C4 is complete: PDF controls are an isolated React component while pdf.js remains the imperative rendering engine.
+- C5-C7 are complete with export, local matrix mock-server, and broad IPC sample coverage.
+- C2 is partially complete: history and quality review are React-rendered and tested, but a single app-owned tabbed side panel will be finished as part of the `LegacyCompatibilityHost` retirement.
+
+This leaves C2 consolidation and live Windows/Linux soak as the only parity follow-ups from the original list.
