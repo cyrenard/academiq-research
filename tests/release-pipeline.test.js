@@ -38,7 +38,7 @@ test('release versions stay synchronized for the Fedora beta build', () => {
   const sidecarPkg = json('src-sidecar', 'capture-agent', 'package.json');
   const sidecarLock = json('src-sidecar', 'capture-agent', 'package-lock.json');
 
-  assert.equal(pkg.version, '1.24.1-beta.19');
+  assert.equal(pkg.version, '1.24.1-beta.20');
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[''].version, pkg.version);
   assert.equal(conf.version, pkg.version);

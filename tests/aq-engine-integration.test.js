@@ -4,6 +4,15 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
+function captureGlobal(name) {
+  return Object.getOwnPropertyDescriptor(globalThis, name);
+}
+
+function restoreGlobal(name, descriptor) {
+  if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+  else delete globalThis[name];
+}
+
 const legacyHtmlPath = path.join(__dirname, '..', 'legacy', 'academiq-research.html');
 
 test('AQ Engine render centers pages inside the stage', () => {
@@ -141,6 +150,159 @@ test('AQ Engine leaves slash trigger ownership to citation runtime refresh', () 
   assert.doesNotMatch(source, /window\.editorTrigRange = \{ from:start, to:end \}/);
   assert.doesNotMatch(source, /openFromSlash\(query/);
   assert.doesNotMatch(source, /openTrig\(query/);
+});
+
+test('AQ Engine typed /r refreshes the citation runtime even when the React router is mounted', async () => {
+  const { JSDOM } = require('jsdom');
+  const dom = new JSDOM('<!doctype html><html><head></head><body><div id="stage"></div></body></html>');
+  const previousWindow = captureGlobal('window');
+  const previousDocument = captureGlobal('document');
+  const previousNavigator = captureGlobal('navigator');
+  const previousInputEvent = captureGlobal('InputEvent');
+
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: dom.window });
+  Object.defineProperty(globalThis, 'document', { configurable: true, value: dom.window.document });
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: { platform: 'Win32', userAgent: 'Windows NT 10.0' }
+  });
+  Object.defineProperty(globalThis, 'InputEvent', { configurable: true, value: dom.window.InputEvent });
+
+  let input;
+  try {
+    const AQEngineDocument = require(path.join(__dirname, '..', 'experiments', 'aq-engine', 'document.js'));
+    const AQEngineInput = require(path.join(__dirname, '..', 'experiments', 'aq-engine', 'input.js'));
+    const doc = AQEngineDocument.create([{ type: 'paragraph', runs: [{ text: '' }] }]);
+    let range = { from: 0, to: 0, anchor: 0, focus: 0 };
+    const selection = {
+      getRange(){ return { ...range }; },
+      setRange(anchor, focus){
+        range = {
+          from: Math.min(anchor, focus),
+          to: Math.max(anchor, focus),
+          anchor,
+          focus
+        };
+      }
+    };
+    let runtimeRefreshes = 0;
+    let routerRefreshes = 0;
+    dom.window.AQCitationRuntime = { refreshFromEditor(){ runtimeRefreshes += 1; } };
+    dom.window.__aqDispatchEditorCommand = () => {
+      routerRefreshes += 1;
+      return true;
+    };
+
+    input = AQEngineInput.create({
+      container: dom.window.document.getElementById('stage'),
+      doc,
+      selection,
+      onChanged(){}
+    });
+    const capture = dom.window.document.querySelector('textarea[aria-label="AcademiQ editor input"]');
+    capture.dispatchEvent(new dom.window.InputEvent('input', { data: '/', inputType: 'insertText', bubbles: true }));
+    capture.dispatchEvent(new dom.window.InputEvent('input', { data: 'r', inputType: 'insertText', bubbles: true }));
+
+    await new Promise((resolve) => setTimeout(resolve, 420));
+    assert.equal(doc.get().blocks[0].runs.map((run) => run.text).join(''), '/r');
+    assert.equal(runtimeRefreshes, 1);
+    assert.equal(routerRefreshes, 0);
+  } finally {
+    if (input) input.destroy();
+    dom.window.close();
+    restoreGlobal('InputEvent', previousInputEvent);
+    restoreGlobal('navigator', previousNavigator);
+    restoreGlobal('document', previousDocument);
+    restoreGlobal('window', previousWindow);
+  }
+});
+
+test('citation runtime opens the real popup for both /r and /t editor queries', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'citation-runtime.js'), 'utf8');
+  const makeElement = () => {
+    const classes = new Set();
+    return {
+      style: {},
+      dataset: {},
+      classList: {
+        add(name){ classes.add(name); },
+        remove(name){ classes.delete(name); },
+        contains(name){ return classes.has(name); }
+      },
+      addEventListener(){},
+      removeEventListener(){},
+      querySelector(){ return null; },
+      contains(){ return false; },
+      appendChild(){},
+      focus(){},
+      setSelectionRange(){},
+      getBoundingClientRect(){ return { left: 16, bottom: 24 }; },
+      innerHTML: '',
+      textContent: '',
+      value: '',
+      disabled: false,
+      readOnly: false,
+      tabIndex: 0,
+      scrollTop: 0,
+      clientHeight: 240
+    };
+  };
+  const elements = {
+    trig: makeElement(),
+    tgs: makeElement(),
+    tgl: makeElement(),
+    tgq: makeElement(),
+    tgsel: makeElement(),
+    escroll: makeElement(),
+    apaed: makeElement()
+  };
+  let editorText = '/r';
+  const editor = {
+    _aqEngine: true,
+    state: {
+      selection: { from: 2 },
+      doc: { textBetween(from, to){ return editorText.slice(from, to); } }
+    }
+  };
+  const document = {
+    getElementById(id){ return elements[id] || null; },
+    createElement(){ return makeElement(); },
+    querySelector(){ return null; },
+    addEventListener(){},
+    removeEventListener(){}
+  };
+  const window = {
+    document,
+    navigator: { platform: 'Win32', userAgent: 'Windows NT 10.0' },
+    console,
+    Date,
+    setTimeout,
+    clearTimeout,
+    innerHeight: 800,
+    innerWidth: 1200,
+    addEventListener(){},
+    removeEventListener(){},
+    getSelection(){ return null; },
+    cLib(){ return []; },
+    filterRefsForQuery(){ return []; },
+    AQEditorCore: { getEditor(){ return editor; } }
+  };
+  window.window = window;
+  vm.runInNewContext(source, { window, document, console, Date, setTimeout, clearTimeout });
+
+  window.AQCitationRuntime.refreshFromEditor();
+  assert.equal(elements.trig.classList.contains('show'), true);
+  assert.equal(elements.trig.style.display, 'block');
+  assert.equal(window.editorTrigRange.mode, 'r');
+  assert.equal(window.__aqCitationTriggerMode, 'inline');
+
+  window.AQCitationRuntime.close(true);
+  editorText = '/t';
+  window.AQCitationRuntime.refreshFromEditor();
+  assert.equal(elements.trig.classList.contains('show'), true);
+  assert.equal(elements.trig.style.display, 'block');
+  assert.equal(window.editorTrigRange.mode, 't');
+  assert.equal(window.__aqCitationTriggerMode, 'textual');
 });
 
 test('beta 9 citation slash trigger keeps keyboard ownership in the editor', () => {

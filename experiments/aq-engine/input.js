@@ -382,12 +382,16 @@
         trigRefreshTimer = 0;
         if(isCitationTransactionBlocked()) return;
         try {
-          if(typeof window.__aqDispatchEditorCommand === 'function' && window.__aqDispatchEditorCommand('citation.refresh', { source:'aq-engine-input' }) !== false){
-            return;
-          } else if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
+          // Typed slash commands are latency-sensitive and must not depend on
+          // the React command router being mounted. Keep the beta 9 ownership
+          // path: AQ Engine updates the document, then refreshes the citation
+          // runtime directly from that same editor state.
+          if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
             window.AQCitationRuntime.refreshFromEditor();
           } else if(typeof window.checkTrig === 'function'){
             window.checkTrig();
+          } else if(typeof window.__aqDispatchEditorCommand === 'function'){
+            window.__aqDispatchEditorCommand('citation.refresh', { source:'aq-engine-input-fallback' });
           }
         } catch(_e){}
       }, 350);

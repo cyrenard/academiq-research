@@ -1816,12 +1816,12 @@
         var target = event.target && event.target.nodeType === 3 ? event.target.parentNode : event.target;
         if(!targetInsideEditor(target)) return;
         setTimeout(function(){
-          if(typeof window.__aqDispatchEditorCommand === 'function' && window.__aqDispatchEditorCommand('citation.refresh', { source:'citation-keyup' }) !== false){
-            return;
-          }else if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
+          if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
             try{ window.AQCitationRuntime.refreshFromEditor(); }catch(_e){}
           }else if(typeof window.checkTrig === 'function'){
             try{ window.checkTrig(); }catch(_e){}
+          }else if(typeof window.__aqDispatchEditorCommand === 'function'){
+            try{ window.__aqDispatchEditorCommand('citation.refresh', { source:'citation-keyup-fallback' }); }catch(_e){}
           }
         }, 0);
       }, true);
@@ -1829,12 +1829,12 @@
         var target = event && event.target && event.target.nodeType === 3 ? event.target.parentNode : (event ? event.target : null);
         if(!targetInsideEditor(target)) return;
         setTimeout(function(){
-          if(typeof window.__aqDispatchEditorCommand === 'function' && window.__aqDispatchEditorCommand('citation.refresh', { source:'citation-input' }) !== false){
-            return;
-          }else if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
+          if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
             try{ window.AQCitationRuntime.refreshFromEditor(); }catch(_e){}
           }else if(typeof window.checkTrig === 'function'){
             try{ window.checkTrig(); }catch(_e){}
+          }else if(typeof window.__aqDispatchEditorCommand === 'function'){
+            try{ window.__aqDispatchEditorCommand('citation.refresh', { source:'citation-input-fallback' }); }catch(_e){}
           }
         }, 0);
       }, true);

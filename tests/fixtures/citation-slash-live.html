@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AcademiQ citation slash live check</title>
+    <style>
+      body { margin: 0; padding: 32px; font: 16px system-ui, sans-serif; background: #f5f1e8; color: #231f1a; }
+      #apaed { min-height: 220px; padding: 28px; border: 1px solid #b9ae9b; border-radius: 8px; background: white; }
+      #stage { min-height: 150px; outline: none; }
+      #stage::before { content: "Editöre odaklanın ve /r veya /t yazın"; color: #777; }
+      #trig { position: fixed; z-index: 20; width: 390px; padding: 12px; border: 1px solid #9c8d76; border-radius: 8px; background: white; box-shadow: 0 12px 36px #0003; }
+      #trig:not(.show) { display: none; }
+      #tgs { width: 100%; box-sizing: border-box; margin: 8px 0; }
+      .tgi { padding: 8px; border-top: 1px solid #eee; }
+      #status { margin-top: 16px; font-family: ui-monospace, monospace; }
+    </style>
+    <script src="/experiments/aq-engine/document.js"></script>
+    <script src="/experiments/aq-engine/input.js"></script>
+  </head>
+  <body>
+    <main>
+      <h1>Citation slash live check</h1>
+      <div id="apaed"><div id="stage" tabindex="0"></div></div>
+      <div id="trig" role="dialog" aria-label="Kaynak seçimi">
+        <strong>Kaynak Seç</strong>
+        <div id="tgq"></div>
+        <input id="tgs" aria-label="Kaynak ara" />
+        <span id="tgsel"></span>
+        <div id="tgl"></div>
+      </div>
+      <div id="escroll"></div>
+      <output id="status">ready</output>
+    </main>
+    <script>
+      (function(){
+        var stage = document.getElementById('stage');
+        var status = document.getElementById('status');
+        var doc = window.AQEngineDocument.create([{ type:'paragraph', runs:[{ text:'' }] }]);
+        var range = { from:0, to:0, anchor:0, focus:0 };
+        var selection = {
+          getRange: function(){ return Object.assign({}, range); },
+          setRange: function(anchor, focus){
+            range = {
+              from: Math.min(anchor, focus),
+              to: Math.max(anchor, focus),
+              anchor: anchor,
+              focus: focus
+            };
+          }
+        };
+        function plainText(){
+          return doc.get().blocks.map(function(block){
+            return (block.runs || []).map(function(run){ return String(run.text || ''); }).join('');
+          }).join('\n');
+        }
+        var editor = {
+          _aqEngine: true,
+          get state(){
+            var text = plainText();
+            return {
+              selection: { from:range.from, to:range.to },
+              doc: { textBetween:function(from, to){ return text.slice(from, to); } }
+            };
+          }
+        };
+        window.editor = editor;
+        window.AQEditorCore = {
+          getEditor: function(){ return editor; },
+          focus: function(){ input.focus(); return true; },
+          getScrollSurface: function(){ return document.getElementById('escroll'); }
+        };
+        window.AQTipTapWordSurface = { getHost:function(){ return document.getElementById('apaed'); } };
+        window.cLib = function(){
+          return [{ id:'fixture-ref', title:'Gerçek Popup Doğrulama Kaynağı', authors:['AcademiQ'], year:'2026' }];
+        };
+        window.filterRefsForQuery = function(refs, query){
+          var needle = String(query || '').toLocaleLowerCase('tr');
+          return refs.filter(function(ref){ return !needle || String(ref.title || '').toLocaleLowerCase('tr').includes(needle); });
+        };
+        window.getInlineCitationText = function(ref){ return '(' + ref.authors[0] + ', ' + ref.year + ')'; };
+        var input = window.AQEngineInput.create({
+          container: stage,
+          doc: doc,
+          selection: selection,
+          onChanged: function(){ status.value = plainText(); status.textContent = plainText(); }
+        });
+        stage.addEventListener('click', function(){ input.focus(); });
+        window.__citationLiveFixture = { doc:doc, input:input, selection:selection };
+      })();
+    </script>
+    <script src="/src/citation-runtime.js"></script>
+    <script>
+      window.AQCitationRuntime.init();
+      window.__citationLiveFixture.input.focus();
+    </script>
+  </body>
+</html>
