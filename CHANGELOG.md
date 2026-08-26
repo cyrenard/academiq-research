@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.24.1-beta.20 - 2026-08-26
+
+Windows citation slash-trigger correction after packaged-app live testing.
+
+- Restores the beta.9 direct AQ Engine-to-citation-runtime ownership path for
+  typed `/r` and `/t` commands; React command routing is fallback-only.
+- Adds a real AQ Engine input test that types `/r` while the React router is
+  mounted and asserts that the citation runtime receives the refresh.
+- Adds popup behavior coverage for both inline (`/r`) and textual (`/t`) modes,
+  plus a browser fixture used to verify that the visible picker opens.
+- Retains beta.19 startup recovery, serialized autosave, Windows input, and
+  Linux/WebKit focus behavior.
+
 ## 1.24.1-beta.19 - 2026-08-25
 
 Release-candidate reliability pass following Windows live testing.
@@ -170,3 +183,4 @@ Observed migration targets from the phase gates:
 - Lower memory pressure from removing Electron from the primary runtime.
 - Smaller installer footprint from the Tauri bundle path.
 - Faster spell checking through the Rust spell path.
+
