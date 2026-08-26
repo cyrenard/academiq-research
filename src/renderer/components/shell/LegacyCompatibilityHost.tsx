@@ -3,7 +3,6 @@ import type { AcademiqReference } from '../../lib/app-state';
 import {
   openQualitySurface,
   renderDuplicateReviewFallback,
-  handleDuplicateReviewClick,
   runDuplicateAction,
   runMetadataHealthAction
 } from '../../lib/quality-surface';
@@ -61,26 +60,17 @@ import {
 import { mergeRefFields, normalizeRefRecord } from '../../lib/reference-format';
 import { useKeyboardShortcut, keyboardRouter } from '../../lib/keyboard-router';
 import { appStore, ensureNotebooks, addNote, selectCurrentWorkspace, selectWorkspaceLibrary, selectNotes } from '../../lib/app-store';
+import { PdfViewerPanel } from './PdfViewerPanel';
+import {
+  QualityReviewSurfaces,
+  type MetadataHealthRow,
+  type MetadataHealthSummary
+} from './QualityReviewSurfaces';
 
 type LegacyCompatibilityHostProps = {
   onStatus: (message: string) => void;
   onImportReferences: (references: AcademiqReference[], sourceLabel: string, options?: { includeInBibliography?: boolean; revealBibliography?: boolean }) => void;
 };
-
-type MetadataHealthRow = {
-  ref: any;
-  report: any;
-};
-
-type MetadataHealthSummary = {
-  total: number;
-  complete: number;
-  incomplete: number;
-  suspicious: number;
-  issueText: string;
-};
-
-
 
 function readLegacyInputValue(id: string, fallback = '') {
   return String((document.getElementById(id) as HTMLInputElement | null)?.value || fallback);
@@ -2322,109 +2312,14 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         </div>
       ) : null}
 
-      <section id="pdfpanel" className={['aq-legacy-pdf-panel', pdfIsOpen ? 'open' : '', pdfIsFullscreen ? 'fullscreen' : ''].filter(Boolean).join(' ')} data-tool-mode={pdfToolMode || undefined} aria-label="PDF viewer">
-        <div id="pdfresize" className="aq-legacy-pdf-resize" title="Genislik ayarla" />
-        <div id="pdftb" className="aq-legacy-pdf-toolbar">
-          <div className="pdf-brand">
-            <span className="pdf-kicker">PDF Reader</span>
-            <span id="pdftitle" className="aq-legacy-pdf-title">{pdfTitle}</span>
-          </div>
-          <div className="pdf-toolbar-group compact" aria-label="Sayfa gezinme">
-            <button className="ppb" id="pdfPrevBtn" type="button" title="Önceki sayfa" aria-label="Önceki sayfa" onClick={() => (window as any).pPrev?.()}>◀</button>
-            <span id="pdfpg" role="button" tabIndex={0} title="Sayfaya git" aria-label="Sayfa numarasına git" onClick={() => (window as any).goToPage?.()}>{pdfPageText}</span>
-            <button className="ppb" id="pdfNextBtn" type="button" title="Sonraki sayfa" aria-label="Sonraki sayfa" onClick={() => (window as any).pNext?.()}>▶</button>
-          </div>
-          <div className="pdf-toolbar-group compact" aria-label="Yakınlaştırma">
-            <button className="ppb" id="pdfZoomOutBtn" type="button" title="Uzaklaştır" aria-label="Uzaklaştır" onClick={() => (window as any).pZO?.()}>-</button>
-            <span id="pdfzoom" role="button" tabIndex={0} title="Genişliğe sığdır" aria-label="Genişliğe sığdır" onClick={() => (window as any).pZFit?.()}>{pdfZoomText}</span>
-            <button className="ppb" id="pdfZoomInBtn" type="button" title="Yakınlaştır" aria-label="Yakınlaştır" onClick={() => (window as any).pZI?.()}>+</button>
-          </div>
-          <div className="pdf-toolbar-spacer" />
-          <div className="pdf-toolbar-window" aria-label="Pencere">
-            <button
-              className="ppb"
-              id="pdffullbtn"
-              type="button"
-              title={pdfIsFullscreen ? "Küçült" : "Tam ekran"}
-              aria-label={pdfIsFullscreen ? "PDF okuyucuyu küçült" : "Tam ekran aç/kapat"}
-              onClick={() => (window as any).togglePdfFullscreen?.()}
-            >
-              {pdfIsFullscreen ? '✖' : '⛶'}
-            </button>
-            <button className="ppb pdf-close-btn" id="pdfclosebtn" type="button" title="Kapat" aria-label="PDF okuyucuyu kapat" onClick={() => (window as any).togglePDF?.()}>×</button>
-          </div>
-        </div>
-        <div id="pdftabs" className="aq-legacy-pdf-tabs" />
-        <div id="pdfsearchbar" className="aq-legacy-pdf-search">
-          <input id="pdfsearchinp" placeholder="PDF içinde ara..." onKeyDown={(event) => {
-            if (event.key === 'Enter') (window as any).pdfSearchNext?.();
-            if (event.key === 'Escape') (window as any).togglePdfSearch?.();
-          }} />
-          <span id="pdfsearchcount">--</span>
-          <button id="pdfSearchPrevBtn" type="button" onClick={() => (window as any).pdfSearchPrev?.()}>Önceki</button>
-          <button id="pdfSearchNextBtn" type="button" onClick={() => (window as any).pdfSearchNext?.()}>Sonraki</button>
-          <button id="pdfSearchCloseBtn" type="button" onClick={() => (window as any).togglePdfSearch?.()}>Kapat</button>
-        </div>
-        <div id="hlbar" className="aq-legacy-pdf-tools">
-          <div className="pdf-tools-group" aria-label="Görünüm">
-            <button className="ppb" id="pdfSearchToggleBtn" type="button" title="PDF içinde ara" onClick={() => (window as any).togglePdfSearch?.()}>🔍</button>
-            <button className="ppb" id="pdfThumbsToggleBtn" type="button" title="Küçük resimler" onClick={() => (window as any).toggleThumbs?.()}>☷</button>
-            <button className="ppb" id="pdfOutlineToggleBtn" type="button" title="İçerik tablosu" onClick={() => (window as any).toggleOutline?.()}>≡</button>
-            <button className="ppb" id="pdfAnnotsToggleBtn" type="button" title="Notlar ve highlightlar" onClick={() => (window as any).togglePdfAnnotations?.()}>✍</button>
-            <button className="ppb pdf-pill" id="pdfRelatedToggleBtn" type="button" title="Benzer makaleler" onClick={() => (window as any).togglePdfRelated?.()}>🔗 Benzer</button>
-          </div>
-          <div className="pdf-tools-divider" />
-          <div className="pdf-tools-group" aria-label="Highlight">
-            {['#fef08a', '#86efac', '#93c5fd', '#fca5a5'].map((color, index) => (
-              <button
-                key={color}
-                type="button"
-                className={`hlc${index === 0 ? ' on' : ''}`}
-                data-c={color}
-                style={{ background: color }}
-                title="Highlight rengi"
-                onClick={(event) => (window as any).setHLC?.(event.currentTarget)}
-              />
-            ))}
-          </div>
-          <div className="pdf-tools-divider" />
-          <div className="pdf-tools-group" aria-label="Not ve kalem">
-            <button className={`ppb${pdfToolMode === 'annot' ? ' on' : ''}`} id="annotbtn" type="button" title="Metin notu ekle" onClick={() => (window as any).toggleAnnotMode?.()}>✎</button>
-            <button className={`ppb${pdfToolMode === 'draw' ? ' on' : ''}`} id="drawbtn" type="button" title="Serbest çizim" onClick={() => (window as any).toggleDrawMode?.()}>✏</button>
-            <input id="pdfDrawColor" className="pdf-draw-color" type="color" defaultValue="#c9453e" title="Çizim rengi" onChange={(event) => (window as any).setPdfDrawColor?.(event.target.value)} />
-            <button className={`ppb${pdfToolMode === 'region' ? ' on' : ''}`} id="pdfRegionBtn" type="button" title="PDF bölgesi seç" onClick={() => (window as any).togglePdfRegionCaptureMode?.()}>▢</button>
-            <select id="pdfDrawWidth" className="pdf-draw-width" title="Çizim kalınlığı" defaultValue="2.5" onChange={(event) => (window as any).setPdfDrawWidth?.(event.target.value)}>
-              <option value="1.5">İnce</option>
-              <option value="2.5">Orta</option>
-              <option value="4">Kalın</option>
-              <option value="7">Marker</option>
-            </select>
-            <button className="ppb" id="pdfDrawClearBtn" type="button" title="Bu sayfadaki çizimi temizle" onClick={() => (window as any).clearPdfDrawingPage?.()}>🗑</button>
-          </div>
-          <div className="pdf-tools-spacer" />
-          <button className="ppb" id="pdfUploadBtn" type="button" title="PDF yükle" onClick={() => document.getElementById('lfinp')?.click()}>+</button>
-        </div>
-        <div id="pdfreaderbar" className="aq-legacy-pdf-status">
-          <div className="pdf-reader-line">
-            <span id="pdfreadmeta">PDF bekleniyor</span>
-            <span id="pdfreadstats">0 vurgu · 0 not</span>
-            <span id="pdfReaderStatus" />
-          </div>
-          <span id="pdfprogress"><i id="pdfprogressbar" /></span>
-        </div>
-        <div id="pdfbody" className="aq-legacy-pdf-body">
-          <aside id="pdfthumbs" className="aq-legacy-pdf-side" style={{ display: 'none' }} />
-          <aside id="pdfoutline" className="aq-legacy-pdf-side" style={{ display: 'none' }} />
-          <aside id="pdfannots" className="aq-legacy-pdf-annots" style={{ display: 'none' }} />
-          <aside id="pdfrelated" className="aq-legacy-pdf-side" style={{ display: 'none' }} />
-          <div id="pdfscroll" className="aq-legacy-pdf-scroll">
-            <div id="pdfempty" className="aq-legacy-pdf-empty">
-              <div>PDF yükle veya kütüphaneden seç</div>
-              <button id="pdfEmptyUploadBtn" type="button" onClick={() => document.getElementById('lfinp')?.click()}>PDF Yükle</button>
-            </div>
-          </div>
-        </div>
-      </section>
+      <PdfViewerPanel
+        title={pdfTitle}
+        pageText={pdfPageText}
+        zoomText={pdfZoomText}
+        toolMode={pdfToolMode}
+        open={pdfIsOpen}
+        fullscreen={pdfIsFullscreen}
+      />
 
       <div id="hltip" role="menu">
         <button className="htb htb-primary" id="hlToNoteBtn" type="button" onClick={() => call('doHL', true)}>Nota kaydet</button>
@@ -2632,122 +2527,18 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         </div>
       </div>
 
-      <div className="modal-bg" id="dupModal" onMouseDown={(event) => {
-        if (event.target === event.currentTarget) hideLegacyModal('dupModal');
-      }}>
-        <div className="modal aq-legacy-modal-lg">
-          <div className="mt">Duplicate Review</div>
-          <div id="dupSummary" />
-          <div className="mb">
-            <button className="mbtn p" id="dupMergeAllBtn" type="button" onClick={() => {
-              const win = window as any;
-              if (typeof win.__mergeAllDuplicateGroups === 'function') win.__mergeAllDuplicateGroups();
-              window.setTimeout(renderDuplicateReviewFallback, 0);
-            }}>Tümünü Birleştir</button>
-            <button className="mbtn s" id="dupDismissAllBtn" type="button" onClick={() => {
-              const win = window as any;
-              if (typeof win.__dismissAllDuplicateGroups === 'function') win.__dismissAllDuplicateGroups();
-              window.setTimeout(renderDuplicateReviewFallback, 0);
-            }}>Tümünü Yoksay</button>
-          </div>
-          <div id="dupGroups" onClick={handleDuplicateReviewClick} />
-          <div className="mb"><button className="mbtn s" id="dupCloseBtn" type="button" onClick={() => hideLegacyModal('dupModal')}>Kapat</button></div>
-        </div>
-      </div>
-
-      <div className="modal-bg" id="metaHealthModal" onMouseDown={(event) => {
-        if (event.target === event.currentTarget) hideLegacyModal('metaHealthModal');
-      }}>
-        <div className="modal aq-legacy-modal-lg">
-          <div className="mt">Metadata Health</div>
-          <div id="metaHealthSummary">
-            Toplam {metadataSummary.total} · Tam {metadataSummary.complete} · Eksik {metadataSummary.incomplete} · Şüpheli {metadataSummary.suspicious}
-            {metadataSummary.issueText ? ` · ${metadataSummary.issueText}` : ''}
-          </div>
-          <div className="mh-sortbar" id="metaHealthSortBar">
-            {[
-              ['all', metadataSummary.total],
-              ['incomplete', metadataSummary.incomplete],
-              ['suspicious', metadataSummary.suspicious],
-              ['complete', metadataSummary.complete]
-            ].map(([sort, count]) => (
-              <button
-                key={String(sort)}
-                type="button"
-                className={`mh-sortbtn ${metadataFilter === sort ? 'on' : ''}`}
-                data-mh-sort={String(sort)}
-                onClick={() => setMetadataFilter(String(sort))}
-              >
-                {String(sort)}<span className="mh-sortcount">{String(count)}</span>
-              </button>
-            ))}
-          </div>
-          <div id="metaHealthList">
-            {visibleMetadataRows.length ? visibleMetadataRows.map((row, index) => {
-              const ref = row.ref || {};
-              const report = row.report || { status: 'complete', issues: [] };
-              const status = String(report.status || 'complete');
-              const busy = metadataLookupBusyId && metadataLookupBusyId === String(ref.id || ref.title || 'ref');
-              const statusLabel = status === 'complete' ? 'Tam' : (status === 'incomplete' ? 'Eksik' : 'Şüpheli');
-              const authors = (Array.isArray(ref.authors) ? ref.authors : []).slice(0, 2).join('; ');
-              const issues = Array.isArray(report.issues) ? report.issues : [];
-              return (
-                <div className="mh-card" data-ref-id={ref.id || ''} key={`${ref.id || 'ref'}-${index}`}>
-                  <div className="mh-card-head">
-                    <span className={`mh-status mh-${status}`}>{statusLabel}</span>
-                    <span className="mh-title">{ref.title || 'Başlıksız'}</span>
-                  </div>
-                  <div className="mh-meta">{authors || 'Yazar yok'} · {ref.year || 'yıl yok'} · {ref.journal || 'dergi yok'}</div>
-                  <div className="mh-issues">
-                    {issues.length ? issues.map((issue: any, issueIndex: number) => (
-                      <span className="mh-issue" key={issueIndex}>{issue.message || issue.code}</span>
-                    )) : <span className="mh-issue">Sorun yok</span>}
-                  </div>
-                  <div className="mb">
-                    <button className="mbtn s" type="button" onClick={() => handleMetadataAction('edit', ref)}>Manuel Düzenle</button>
-                    <button className="mbtn s" type="button" onClick={() => handleMetadataAction('refetch', ref)}>DOI Yeniden Çek</button>
-                    <button className="mbtn p" type="button" onClick={() => handleMetadataAction('normalize', ref)}>Normalize Et</button>
-                  </div>
-                </div>
-              );
-            }) : <div className="aq-empty-note">Kaynak bulunamadı.</div>}
-          </div>
-          {metadataLookupCandidate ? (
-            <div className="mh-card mh-candidate-card">
-              <div className="mh-card-head">
-                <span className="mh-status mh-complete">{Math.round(metadataLookupCandidate.score * 100)}%</span>
-                <span className="mh-title">Metadata eşleşmesi bulundu</span>
-              </div>
-              <div className="mh-meta">
-                {metadataLookupCandidate.source} · {metadataLookupCandidate.evidence.join(' · ') || 'web araması'}
-              </div>
-              <div className="mh-compare-grid">
-                <div>
-                  <div className="mh-compare-label">Mevcut</div>
-                  <b>{metadataLookupCandidate.ref.title || 'Başlıksız'}</b>
-                  <span>{(Array.isArray(metadataLookupCandidate.ref.authors) ? metadataLookupCandidate.ref.authors : []).slice(0, 3).join('; ') || 'Yazar yok'}</span>
-                  <span>{metadataLookupCandidate.ref.year || 'Yıl yok'} · {metadataLookupCandidate.ref.doi || 'DOI yok'}</span>
-                </div>
-                <div>
-                  <div className="mh-compare-label">Bulunan</div>
-                  <b>{metadataLookupCandidate.fetched.title || 'Başlıksız'}</b>
-                  <span>{(Array.isArray(metadataLookupCandidate.fetched.authors) ? metadataLookupCandidate.fetched.authors : []).slice(0, 3).join('; ') || 'Yazar yok'}</span>
-                  <span>{metadataLookupCandidate.fetched.year || 'Yıl yok'} · {metadataLookupCandidate.fetched.doi || 'DOI yok'}</span>
-                </div>
-              </div>
-              <div className="mb">
-                <button className="mbtn p" type="button" disabled={Boolean(metadataLookupBusyId)} onClick={() => { void applyMetadataCandidate('merge'); }}>{metadataLookupBusyId ? 'İşleniyor...' : 'Birleştir'}</button>
-                <button className="mbtn s" type="button" disabled={Boolean(metadataLookupBusyId) || !metadataLookupCandidate.fetched.doi} onClick={() => { void applyMetadataCandidate('doi-only'); }}>Sadece DOI Ekle</button>
-                <button className="mbtn s" type="button" onClick={() => setMetadataLookupCandidate(null)}>Yoksay</button>
-              </div>
-            </div>
-          ) : null}
-          <div className="mb">
-            <button className="mbtn s" id="metaHealthRefreshBtn" type="button" onClick={() => openReactMetadataHealth()}>Yenile</button>
-            <button className="mbtn s" id="metaHealthCloseBtn" type="button" onClick={() => hideLegacyModal('metaHealthModal')}>Kapat</button>
-          </div>
-        </div>
-      </div>
+      <QualityReviewSurfaces
+        rows={visibleMetadataRows}
+        summary={metadataSummary}
+        filter={metadataFilter}
+        candidate={metadataLookupCandidate}
+        busyId={metadataLookupBusyId}
+        onFilterChange={setMetadataFilter}
+        onMetadataAction={(action, ref) => { void handleMetadataAction(action, ref); }}
+        onApplyCandidate={(mode) => { void applyMetadataCandidate(mode); }}
+        onDismissCandidate={() => setMetadataLookupCandidate(null)}
+        onRefreshMetadata={openReactMetadataHealth}
+      />
 
       <div id="matrixView">
         <div id="matrixToolbar">

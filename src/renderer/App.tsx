@@ -77,23 +77,23 @@ import {
   suspendAppStateWrites
 } from './lib/save-coordinator';
 import { editorCommandRouter } from './lib/editor-command-router';
+import {
+  addManagedReferenceLabel,
+  deleteManagedReferenceLabel,
+  REFERENCE_LABEL_COLORS,
+  referenceHasManagedLabel,
+  updateManagedReferenceLabel,
+  type ReferenceLabel
+} from './lib/reference-label-state';
 
 const CommandPalette = lazy(() => import('./components/shell/CommandPalette').then((module) => ({ default: module.CommandPalette })));
 const FeatureModals = lazy(() => import('./components/shell/FeatureModals').then((module) => ({ default: module.FeatureModals })));
 const CollectionManagerModal = lazy(() => import('./components/shell/CollectionManagerModal').then((module) => ({ default: module.CollectionManagerModal })));
+const LabelManagerModal = lazy(() => import('./components/shell/LabelManagerModal').then((module) => ({ default: module.LabelManagerModal })));
 const WorkspaceNameModal = lazy(() => import('./components/shell/WorkspaceNameModal').then((module) => ({ default: module.WorkspaceNameModal })));
 const LegacyCompatibilityHost = lazy(() => import('./components/shell/LegacyCompatibilityHost').then((module) => ({ default: module.LegacyCompatibilityHost })));
 
 type LegacyReferenceFetcher = (value: string, callback: (error: unknown, reference?: AcademiqReference) => void) => void;
-
-const DEFAULT_REFERENCE_LABELS = [
-  { name: 'Okudum', color: '#4caf50' },
-  { name: 'Önemli', color: '#f44336' },
-  { name: 'Metodoloji', color: '#2196f3' },
-  { name: 'Teori', color: '#9c27b0' },
-  { name: 'Sonra Oku', color: '#ff9800' },
-  { name: 'Tezde Kullan', color: '#e91e63' }
-];
 
 function labelName(label: unknown) {
   return typeof label === 'string' ? label : String((label as { name?: unknown })?.name || '');
@@ -171,6 +171,7 @@ export default function App() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [activeCollectionId, setActiveCollectionId] = useState('all');
   const [collectionManagerOpen, setCollectionManagerOpen] = useState(false);
+  const [labelManagerOpen, setLabelManagerOpen] = useState(false);
   const [workspaceNameModal, setWorkspaceNameModal] = useState<{ mode: 'create' | 'rename'; workspaceId?: string } | null>(null);
   const [commandOpen, setCommandOpen] = useState(false);
   const [featureModal, setFeatureModal] = useState<FeatureModal>(null);
@@ -1610,40 +1611,40 @@ export default function App() {
       .catch(() => flashStatus('Etiket kaydedilemedi'));
   };
 
-  const handleCreateLabel = (name: string) => {
+  const handleCreateLabel = (name: string, color?: string) => {
     const label = name.trim();
     if (!label) return;
     const customLabels = Array.isArray(appStateRef.current.customLabels) ? appStateRef.current.customLabels : [];
-    if (referenceLabels.some((item) => item.name.toLowerCase() === label.toLowerCase())) {
+    if (referenceHasManagedLabel(appStateRef.current, label)) {
       flashStatus('Etiket zaten var');
       return;
     }
-    const colors = ['#4caf50', '#f44336', '#2196f3', '#9c27b0', '#ff9800', '#e91e63', '#00bcd4', '#795548'];
-    const next = {
-      ...appStateRef.current,
-      customLabels: [...customLabels, { name: label, color: colors[customLabels.length % colors.length] }]
-    };
+    const next = addManagedReferenceLabel(appStateRef.current, {
+      name: label,
+      color: color || REFERENCE_LABEL_COLORS[customLabels.length % REFERENCE_LABEL_COLORS.length]
+    });
     persistState(next)
       .then(() => flashStatus('Etiket oluşturuldu'))
       .catch(() => flashStatus('Etiket kaydedilemedi'));
+  };
+
+  const handleUpdateLabel = (currentName: string, label: ReferenceLabel) => {
+    if (referenceHasManagedLabel(appStateRef.current, label.name, currentName)) {
+      flashStatus('Etiket adı zaten kullanılıyor');
+      return;
+    }
+    const next = updateManagedReferenceLabel(appStateRef.current, currentName, label);
+    if (next === appStateRef.current) return;
+    persistState(next)
+      .then(() => flashStatus('Etiket güncellendi'))
+      .catch(() => flashStatus('Etiket güncellenemedi'));
   };
 
   const handleDeleteLabel = async (name: string, options?: { skipConfirm?: boolean }) => {
     const label = name.trim();
     if (!label) return;
     if (!options?.skipConfirm && !(await confirmDialog(`${label} etiketi silinsin mi?`))) return;
-    const customLabels = Array.isArray(appStateRef.current.customLabels) ? appStateRef.current.customLabels : [];
-    const next = {
-      ...appStateRef.current,
-      customLabels: customLabels.filter((item) => labelName(item) !== label),
-      wss: appStateRef.current.wss.map((workspace) => ({
-        ...workspace,
-        lib: (workspace.lib || []).map((ref) => ({
-          ...ref,
-          labels: Array.isArray(ref.labels) ? ref.labels.filter((item) => labelName(item) !== label) : []
-        }))
-      }))
-    };
+    const next = deleteManagedReferenceLabel(appStateRef.current, label);
     persistState(next)
       .then(() => flashStatus('Etiket silindi'))
       .catch(() => flashStatus('Etiket silinemedi'));
@@ -2212,6 +2213,7 @@ export default function App() {
             onSelectCollection={setActiveCollectionId}
             onSearch={handleReferenceSearch}
             onOpenCollections={() => setCollectionManagerOpen(true)}
+            onOpenLabels={() => setLabelManagerOpen(true)}
             onToggleFilters={() => setFiltersOpen((value) => !value)}
             onEditReference={(refId) => {
               setActiveReferenceId(refId);
@@ -2293,6 +2295,17 @@ export default function App() {
               setActiveCollectionId(collectionId);
               setCollectionManagerOpen(false);
             }}
+          />
+        ) : null}
+        {labelManagerOpen ? (
+          <LabelManagerModal
+            open={labelManagerOpen}
+            labels={referenceLabels}
+            references={appState.wss.flatMap((workspace) => workspace.lib || [])}
+            onClose={() => setLabelManagerOpen(false)}
+            onCreate={handleCreateLabel}
+            onUpdate={handleUpdateLabel}
+            onDelete={handleDeleteLabel}
           />
         ) : null}
         {workspaceNameModal ? (
