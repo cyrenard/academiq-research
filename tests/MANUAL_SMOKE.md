@@ -225,8 +225,9 @@ Data layer migration: PASS.
 
 - `rusqlite` was selected over `sqlx` for Phase 2 because the plan preferred the smaller MSVC surface; async isolation is handled with `tokio::task::spawn_blocking`.
 - `src-tauri/migrations/0001_init.sql` creates `schema_version`, documents/revisions/tabs/library/citation/annotation/highlight tables, `kv`, FTS5 table, FTS triggers, and required indexes.
-- `electronAPI.loadData()` still returns the same renderer blob shape from `kv.state_blob`; SQL tables are a projection for search/history.
+- `electronAPI.loadData()` still returns the same renderer blob shape from `kv.state_blob` in the reversible `blob-shadow` phase. The response now includes `projectionParity`, comparing documents, tabs, and library items against their SQL projection.
 - `electronAPI.saveData()` and `saveEditorDraft()` write transactionally through SQLite.
+- `electronAPI.db.projectionStatus()` exposes the same parity report for release smoke diagnostics. A projection mismatch never replaces or blocks loading the fallback blob.
 - Legacy `academiq-data.json` migration always copies `academiq-data.json.bak.<timestamp>` before SQLite writes. The original JSON is not deleted by default.
 
 Manual Tauri dev smoke:

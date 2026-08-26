@@ -54,6 +54,17 @@ test('SQLite projection update avoids deleting documents during every save', () 
   assert.match(source, /ON CONFLICT\(id\) DO UPDATE SET/);
 });
 
+test('SQLite cutover remains a reversible shadow read with parity diagnostics', () => {
+  const migration = fs.readFileSync(path.join(rootDir, 'src-tauri', 'src', 'db', 'migrate.rs'), 'utf8');
+  const command = fs.readFileSync(path.join(rootDir, 'src-tauri', 'src', 'commands', 'data.rs'), 'utf8');
+  assert.match(migration, /const STORAGE_READ_MODE_KEY: &str = "storage_read_mode"/);
+  assert.match(migration, /fn projection_parity_report/);
+  assert.match(migration, /"blob-shadow"/);
+  assert.match(migration, /projection_mismatch_ids/);
+  assert.match(command, /projectionParity/);
+  assert.match(command, /db_projection_status/);
+});
+
 test('startup recovery runs before automatic backup rotation', () => {
   const source = fs.readFileSync(path.join(rootDir, 'src-tauri', 'src', 'lib.rs'), 'utf8');
   const recovery = source.indexOf('db::migrate::load_state(&dir)');

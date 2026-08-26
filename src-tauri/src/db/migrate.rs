@@ -1,6 +1,6 @@
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io::Read;
@@ -27,6 +27,8 @@ const LEGACY_ALT_FILE: &str = "data.json";
 const LEGACY_ELECTRON_DIR: &str = "AcademiQ";
 const STATE_BLOB_KEY: &str = "state_blob";
 const DRAFT_BLOB_KEY: &str = "editor_draft_blob";
+const STORAGE_READ_MODE_KEY: &str = "storage_read_mode";
+const PROJECTION_PARITY_KEY: &str = "projection_parity_json";
 const MAX_DATA_JSON_BYTES: usize = 50 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
@@ -467,13 +469,16 @@ pub fn save_state(app_data_dir: &Path, raw: &str, source: &str) -> Result<Value,
         );
         e.to_string()
     })?;
-    if let Err(e) = save_state_blob_tx(&tx, &guarded_raw, source) {
-        telemetry::record_event(
-            "state_save_failed",
-            json!({ "stage": "write_blob", "error": &e, "source": source }),
-        );
-        return Err(e);
-    }
+    let projection_parity = match save_state_blob_tx(&tx, &guarded_raw, source) {
+        Ok(report) => report,
+        Err(e) => {
+            telemetry::record_event(
+                "state_save_failed",
+                json!({ "stage": "write_blob", "error": &e, "source": source }),
+            );
+            return Err(e);
+        }
+    };
     tx.commit().map_err(|e| {
         telemetry::record_event(
             "state_save_failed",
@@ -481,7 +486,13 @@ pub fn save_state(app_data_dir: &Path, raw: &str, source: &str) -> Result<Value,
         );
         e.to_string()
     })?;
-    Ok(json!({ "ok": true, "savedAt": now_millis(), "storage": "sqlite" }))
+    Ok(json!({
+        "ok": true,
+        "savedAt": now_millis(),
+        "storage": "sqlite",
+        "readMode": "blob-shadow",
+        "projectionParity": projection_parity
+    }))
 }
 
 fn preserve_reference_libraries_on_save(
@@ -1346,7 +1357,7 @@ fn save_state_blob_tx(
     tx: &rusqlite::Transaction<'_>,
     raw: &str,
     source: &str,
-) -> Result<(), String> {
+) -> Result<Value, String> {
     let parsed = parse_json(raw)?;
     tx.execute(
         "INSERT OR REPLACE INTO kv(key, value) VALUES (?1, ?2)",
@@ -1363,7 +1374,23 @@ fn save_state_blob_tx(
         params!["state_source", source],
     )
     .map_err(|e| e.to_string())?;
-    rebuild_projection(tx, &parsed, true)
+    rebuild_projection(tx, &parsed, true)?;
+    let report = projection_parity_report(tx, &parsed)?;
+    upsert_kv_tx(tx, PROJECTION_PARITY_KEY, &stable_json(&report)?)?;
+    upsert_kv_tx(
+        tx,
+        "projection_parity_status",
+        report
+            .get("status")
+            .and_then(Value::as_str)
+            .unwrap_or("mismatch"),
+    )?;
+    tx.execute(
+        "INSERT OR IGNORE INTO kv(key, value) VALUES (?1, ?2)",
+        params![STORAGE_READ_MODE_KEY, "blob-shadow"],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(report)
 }
 
 fn rebuild_projection(
@@ -1597,6 +1624,195 @@ fn insert_library_items(tx: &rusqlite::Transaction<'_>, state: &Value) -> Result
         }
     }
     Ok(())
+}
+
+fn projection_mismatch_ids(
+    expected: &BTreeMap<String, Value>,
+    actual: &BTreeMap<String, Value>,
+) -> Vec<String> {
+    expected
+        .keys()
+        .chain(actual.keys())
+        .cloned()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .filter(|id| expected.get(id) != actual.get(id))
+        .take(25)
+        .collect()
+}
+
+fn projection_parity_report(conn: &Connection, state: &Value) -> Result<Value, String> {
+    let expected_docs_list = state
+        .get("docs")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let expected_docs = expected_docs_list
+        .iter()
+        .enumerate()
+        .map(|(idx, doc)| {
+            let id = doc
+                .get("id")
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("doc-{}", idx + 1));
+            (id, doc.clone())
+        })
+        .collect::<BTreeMap<_, _>>();
+    let mut actual_docs = BTreeMap::new();
+    {
+        let mut stmt = conn
+            .prepare("SELECT id, body_json FROM documents ORDER BY id")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (id, raw) = row.map_err(|e| e.to_string())?;
+            actual_docs.insert(id, parse_json(&raw)?);
+        }
+    }
+
+    let cur_doc = state.get("curDoc").and_then(Value::as_str).unwrap_or("");
+    let expected_tabs = expected_docs_list
+        .iter()
+        .enumerate()
+        .map(|(idx, doc)| {
+            let id = doc
+                .get("id")
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("doc-{}", idx + 1));
+            json!({ "docId": id, "position": idx, "active": id == cur_doc })
+        })
+        .collect::<Vec<_>>();
+    let mut actual_tabs = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare("SELECT doc_id, position, active FROM tabs ORDER BY position, id")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(json!({
+                    "docId": row.get::<_, String>(0)?,
+                    "position": row.get::<_, i64>(1)?,
+                    "active": row.get::<_, i64>(2)? != 0
+                }))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            actual_tabs.push(row.map_err(|e| e.to_string())?);
+        }
+    }
+
+    let mut expected_library_count = 0usize;
+    let mut expected_library = BTreeMap::new();
+    for workspace in state
+        .get("wss")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+    {
+        let ws_id = workspace.get("id").and_then(Value::as_str).unwrap_or("");
+        for (idx, item) in workspace
+            .get("lib")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .enumerate()
+        {
+            expected_library_count += 1;
+            let id = item
+                .get("id")
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("{ws_id}:ref-{}", idx + 1));
+            let mut normalized = item;
+            if let Some(obj) = normalized.as_object_mut() {
+                obj.entry("wsId".to_string())
+                    .or_insert_with(|| Value::String(ws_id.to_string()));
+            }
+            expected_library.insert(id, normalized);
+        }
+    }
+    let mut actual_library = BTreeMap::new();
+    {
+        let mut stmt = conn
+            .prepare("SELECT id, metadata_json FROM library_items ORDER BY id")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (id, raw) = row.map_err(|e| e.to_string())?;
+            actual_library.insert(id, parse_json(&raw)?);
+        }
+    }
+
+    let docs_match =
+        expected_docs_list.len() == actual_docs.len() && expected_docs == actual_docs;
+    let tabs_match = expected_tabs == actual_tabs;
+    let library_match = expected_library_count == actual_library.len()
+        && expected_library.len() == expected_library_count
+        && expected_library == actual_library;
+    let verified = docs_match && tabs_match && library_match;
+    Ok(json!({
+        "status": if verified { "verified" } else { "mismatch" },
+        "checkedAt": now_millis(),
+        "documents": {
+            "expected": expected_docs_list.len(),
+            "actual": actual_docs.len(),
+            "matching": docs_match,
+            "mismatchIds": projection_mismatch_ids(&expected_docs, &actual_docs)
+        },
+        "tabs": {
+            "expected": expected_tabs.len(),
+            "actual": actual_tabs.len(),
+            "matching": tabs_match
+        },
+        "libraryItems": {
+            "expected": expected_library_count,
+            "actual": actual_library.len(),
+            "matching": library_match,
+            "mismatchIds": projection_mismatch_ids(&expected_library, &actual_library)
+        }
+    }))
+}
+
+pub fn projection_status(app_data_dir: &Path, raw: Option<&str>) -> Result<Value, String> {
+    let db_paths = init_or_migrate(app_data_dir)?;
+    let conn = open_conn(&db_paths.db_path).map_err(|e| e.to_string())?;
+    let read_mode = conn
+        .query_row(
+            "SELECT value FROM kv WHERE key = ?1",
+            params![STORAGE_READ_MODE_KEY],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+        .unwrap_or_else(|| "blob-shadow".to_string());
+    let parity = match raw.filter(|value| !value.trim().is_empty()) {
+        Some(value) => projection_parity_report(&conn, &parse_json(value)?)?,
+        None => conn
+            .query_row(
+                "SELECT value FROM kv WHERE key = ?1",
+                params![PROJECTION_PARITY_KEY],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?
+            .and_then(|value| parse_json(&value).ok())
+            .unwrap_or_else(|| json!({ "status": "not-initialized" })),
+    };
+    Ok(json!({ "readMode": read_mode, "projectionParity": parity }))
 }
 
 fn backup_legacy_json(path: &Path) -> Result<PathBuf, String> {
@@ -1863,10 +2079,61 @@ mod tests {
     fn large_fixture_roundtrips_semantically() {
         let dir = temp_dir("large");
         let state = large_state(1200);
-        save_state(&dir, &state, "large-test").unwrap();
+        let saved = save_state(&dir, &state, "large-test").unwrap();
+        assert_eq!(
+            saved
+                .get("projectionParity")
+                .and_then(|report| report.get("status"))
+                .and_then(Value::as_str),
+            Some("verified")
+        );
         let loaded = load_state(&dir).unwrap().unwrap();
         assert_eq!(parse_json(&loaded).unwrap(), parse_json(&state).unwrap());
         assert_eq!(library_search(&dir, "akademik").unwrap().len(), 50);
+    }
+
+    #[test]
+    fn projection_shadow_read_reports_verified_roundtrip() {
+        let dir = temp_dir("projection-parity");
+        let state = sample_state();
+        save_state(&dir, &state, "projection-test").unwrap();
+        let status = projection_status(&dir, Some(&state)).unwrap();
+        assert_eq!(
+            status.get("readMode").and_then(Value::as_str),
+            Some("blob-shadow")
+        );
+        assert_eq!(
+            status
+                .get("projectionParity")
+                .and_then(|report| report.get("status"))
+                .and_then(Value::as_str),
+            Some("verified")
+        );
+    }
+
+    #[test]
+    fn projection_shadow_read_detects_table_drift_without_replacing_blob() {
+        let dir = temp_dir("projection-drift");
+        let state = sample_state();
+        save_state(&dir, &state, "projection-test").unwrap();
+        let conn = open_conn(dir.join(DB_FILE)).unwrap();
+        conn.execute(
+            "UPDATE library_items SET metadata_json = '{\"id\":\"ref1\",\"title\":\"drift\"}' WHERE id = 'ref1'",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+
+        let loaded = load_state(&dir).unwrap().unwrap();
+        assert_eq!(parse_json(&loaded).unwrap(), parse_json(&state).unwrap());
+        let status = projection_status(&dir, Some(&loaded)).unwrap();
+        assert_eq!(
+            status
+                .get("projectionParity")
+                .and_then(|report| report.get("status"))
+                .and_then(Value::as_str),
+            Some("mismatch")
+        );
     }
 
     #[test]

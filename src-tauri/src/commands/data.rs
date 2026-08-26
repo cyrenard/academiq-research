@@ -15,9 +15,37 @@ pub async fn data_load(app: AppHandle) -> Result<Value, String> {
     let dir = data_dir(&app).await?;
     task::spawn_blocking(move || match migrate::load_state(&dir) {
         Ok(data) => {
-            Ok(json!({ "ok": true, "data": data.unwrap_or_default(), "storage": "sqlite" }))
+            let status = migrate::projection_status(&dir, data.as_deref()).unwrap_or_else(|error| {
+                json!({
+                    "readMode": "blob-shadow",
+                    "projectionParity": { "status": "diagnostic-error", "error": error }
+                })
+            });
+            Ok(json!({
+                "ok": true,
+                "data": data.unwrap_or_default(),
+                "storage": "sqlite",
+                "readMode": status.get("readMode").cloned().unwrap_or(Value::Null),
+                "projectionParity": status.get("projectionParity").cloned().unwrap_or(Value::Null)
+            }))
         }
         Err(error) => Ok(json!({ "ok": false, "error": error })),
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn db_projection_status(app: AppHandle) -> Result<Value, String> {
+    let dir = data_dir(&app).await?;
+    task::spawn_blocking(move || {
+        let data = migrate::load_state(&dir)?;
+        let status = migrate::projection_status(&dir, data.as_deref())?;
+        Ok(json!({
+            "ok": true,
+            "readMode": status.get("readMode").cloned().unwrap_or(Value::Null),
+            "projectionParity": status.get("projectionParity").cloned().unwrap_or(Value::Null)
+        }))
     })
     .await
     .map_err(|e| e.to_string())?

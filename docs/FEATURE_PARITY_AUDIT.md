@@ -14,7 +14,7 @@ Legend: 🟢 parity observed, 🟡 parity likely but needs soak/manual coverage,
 | `window:toggleMaximize` | `main.js:1488` | 🟢 `src-tauri/src/commands/window.rs:11`; direct window command parity. |
 | `window:close` | `main.js:1496` | 🟢 `src-tauri/src/commands/window.rs:22`; direct window command parity. |
 | `data:load` | `main.js:1502`, app dir `main.js:86` | 🟢 Legacy path migration is covered; renderer hydration now blocks every save until a successful load and exposes recovery instead of opening a blank writable state. |
-| `data:save` | `main.js:1513` | 🟢 SQLite-backed save keeps renderer blob contract. |
+| `data:save` | `main.js:1513` | 🟢 Transactional blob + SQL dual-write; document/tab/library projection parity is checked on every save. |
 | `data:saveDraft` | `main.js:1530` | 🟢 SQLite-backed draft save keeps renderer blob contract. |
 | `pdf:save` | `main.js:1557` | 🟢 `src-tauri/src/commands/pdf.rs:99`; filesystem storage parity. |
 | `pdf:load` | `main.js:1566` | 🟢 `src-tauri/src/commands/pdf.rs:116`; filesystem storage parity. |
