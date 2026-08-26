@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.24.1-beta.22 - 2026-08-27
+
+Windows and Linux citation popup visibility correction confirmed with live
+keyboard input in a real browser renderer.
+
+- Clears the stale `aq-hidden` class left by asynchronous startup hydration
+  before opening the `/r` or `/t` citation picker. That utility used
+  `display: none !important`, so earlier fixes detected the command while the
+  popup remained visually hidden.
+- Makes the explicit `show` state authoritative in CSS and keeps close/open
+  transitions synchronized with the shared transient-visibility utility.
+- Recognizes AQ Engine capture, Windows writing-assist, and legacy editable
+  surfaces in the eager keyboard fallback on both Windows and Linux.
+- Adds a live regression fixture that begins with the real startup-hidden
+  state and verifies visible `/r` and `/t` results after actual key input.
+- Retains beta.21 autosave recovery, serialized persistence, and eager popup
+  ownership changes.
+
 ## 1.24.1-beta.21 - 2026-08-27
 
 Packaged Windows citation popup correction based on the last live-tested

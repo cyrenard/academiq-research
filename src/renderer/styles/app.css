@@ -1598,7 +1598,11 @@ body.aq-matrix-fullscreen .aq-legacy-pdf-panel.open {
 }
 
 #trig.show {
-  display: block;
+  /* `resetTransientChrome` can leave `.aq-hidden` on this eagerly-mounted
+   * host after asynchronous hydration. The open state is authoritative. */
+  display: block !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
 }
 
 .tgh,

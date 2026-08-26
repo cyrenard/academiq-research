@@ -23,17 +23,6 @@ type CitationEditor = {
   state?: { selection?: { from?: number; to?: number } };
 };
 
-function isWindowsRuntime() {
-  const runtimeNavigator = navigator as Navigator & { userAgentData?: { platform?: string } };
-  const platform = String(
-    runtimeNavigator.userAgentData?.platform
-      || runtimeNavigator.platform
-      || runtimeNavigator.userAgent
-      || '',
-  ).toLocaleLowerCase('en');
-  return platform.includes('windows') || platform.startsWith('win32') || platform.startsWith('win64');
-}
-
 export function isWindowsCitationSlashSequence(
   slashAt: number,
   key: string,
@@ -46,7 +35,15 @@ export function isWindowsCitationSlashSequence(
 
 function isEditorKeyboardTarget(target: EventTarget | null) {
   return target instanceof Element
-    && Boolean(target.closest('.aq-input-capture,#aq-engine-host,.aq-engine-stage,[data-aq-engine-editor]'));
+    && Boolean(target.closest([
+      '.aq-input-capture',
+      '.aq-writing-assist-bridge',
+      '#aq-engine-host',
+      '.aq-engine-stage',
+      '[data-aq-engine-editor]',
+      '#apaed',
+      '.ProseMirror',
+    ].join(',')));
 }
 
 function openCitationFromWindowsKeys(triggerMode: 'r' | 't') {
@@ -69,6 +66,7 @@ function openCitationFromWindowsKeys(triggerMode: 'r' | 't') {
   window.requestAnimationFrame(() => {
     const box = document.getElementById('trig');
     if (!box) return;
+    box.classList.remove('aq-hidden');
     box.classList.add('show');
     box.style.display = 'block';
     box.style.visibility = 'visible';
@@ -90,7 +88,6 @@ export function CitationTriggerHost() {
     const win = window as CitationRuntimeWindow;
     win.AQCitationRuntime?.init?.();
 
-    if (!isWindowsRuntime()) return undefined;
     let slashAt = 0;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || !isEditorKeyboardTarget(event.target)) return;

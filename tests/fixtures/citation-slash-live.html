@@ -9,6 +9,7 @@
       #apaed { min-height: 220px; padding: 28px; border: 1px solid #b9ae9b; border-radius: 8px; background: white; }
       #stage { min-height: 150px; outline: none; }
       #stage::before { content: "Editöre odaklanın ve /r veya /t yazın"; color: #777; }
+      .aq-hidden { display: none !important; }
       #trig { position: fixed; z-index: 20; width: 390px; padding: 12px; border: 1px solid #9c8d76; border-radius: 8px; background: white; box-shadow: 0 12px 36px #0003; }
       #trig:not(.show) { display: none; }
       #tgs { width: 100%; box-sizing: border-box; margin: 8px 0; }
@@ -22,7 +23,7 @@
     <main>
       <h1>Citation slash live check</h1>
       <div id="apaed"><div id="stage" tabindex="0"></div></div>
-      <div id="trig" role="dialog" aria-label="Kaynak seçimi">
+      <div id="trig" class="aq-hidden" role="dialog" aria-label="Kaynak seçimi">
         <strong>Kaynak Seç</strong>
         <div id="tgq"></div>
         <input id="tgs" aria-label="Kaynak ara" />

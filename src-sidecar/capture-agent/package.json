@@ -1,6 +1,6 @@
 {
   "name": "@academiq/capture-agent-sidecar",
-  "version": "1.24.1-beta.21",
+  "version": "1.24.1-beta.22",
   "private": true,
   "bin": "index.js",
   "scripts": {

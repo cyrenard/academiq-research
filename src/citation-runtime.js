@@ -68,7 +68,7 @@
   function targetInsideEditor(target){
     if(!target) return false;
     try{
-      if(target.closest && target.closest('#aq-engine-host,.aq-engine-stage,.aq-input-capture,[data-aq-engine-editor]')) return true;
+      if(target.closest && target.closest('#aq-engine-host,.aq-engine-stage,.aq-input-capture,.aq-writing-assist-bridge,[data-aq-engine-editor],#apaed,.ProseMirror')) return true;
     }catch(e){}
     var host = getEditorHost();
     if(!host || !host.contains) return false;
@@ -1161,6 +1161,10 @@
       const box = getTriggerBox();
       let rect = getAnchorRect();
       if(box){
+        // resetTransientChrome may finish after React mounts and leave the
+        // popup behind the universal `display:none !important` utility.
+        // Opening a citation must clear that stale transient state first.
+        box.classList.remove('aq-hidden');
         box.style.display = 'block';
         box.style.visibility = 'visible';
         box.style.pointerEvents = 'auto';
@@ -1239,6 +1243,7 @@
       const box = getTriggerBox();
       if(box){
         box.classList.remove('show');
+        box.classList.add('aq-hidden');
         box.style.display = 'none';
         box.style.visibility = 'hidden';
         box.style.pointerEvents = 'none';

@@ -227,8 +227,8 @@ test('AQ Engine typed /r opens from authoritative offsets before the delayed ref
 
 test('citation runtime opens the real popup for both /r and /t editor queries', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'citation-runtime.js'), 'utf8');
-  const makeElement = () => {
-    const classes = new Set();
+  const makeElement = (initialClasses) => {
+    const classes = new Set(initialClasses || []);
     return {
       style: {},
       dataset: {},
@@ -256,7 +256,7 @@ test('citation runtime opens the real popup for both /r and /t editor queries', 
     };
   };
   const elements = {
-    trig: makeElement(),
+    trig: makeElement(['aq-hidden']),
     tgs: makeElement(),
     tgl: makeElement(),
     tgq: makeElement(),
@@ -300,14 +300,17 @@ test('citation runtime opens the real popup for both /r and /t editor queries', 
 
   window.AQCitationRuntime.refreshFromEditor();
   assert.equal(elements.trig.classList.contains('show'), true);
+  assert.equal(elements.trig.classList.contains('aq-hidden'), false);
   assert.equal(elements.trig.style.display, 'block');
   assert.equal(window.editorTrigRange.mode, 'r');
   assert.equal(window.__aqCitationTriggerMode, 'inline');
 
   window.AQCitationRuntime.close(true);
+  assert.equal(elements.trig.classList.contains('aq-hidden'), true);
   editorText = '/t';
   window.AQCitationRuntime.refreshFromEditor();
   assert.equal(elements.trig.classList.contains('show'), true);
+  assert.equal(elements.trig.classList.contains('aq-hidden'), false);
   assert.equal(elements.trig.style.display, 'block');
   assert.equal(window.editorTrigRange.mode, 't');
   assert.equal(window.__aqCitationTriggerMode, 'textual');

@@ -42,6 +42,7 @@ describe('CitationTriggerHost Windows slash fallback', () => {
     ['t', 'textual'],
   ] as const)('opens /%s directly from the AQ Engine capture key events', (key, mode) => {
     render(<CitationTriggerHost />);
+    document.getElementById('trig')?.classList.add('aq-hidden');
     const capture = document.createElement('textarea');
     capture.className = 'aq-input-capture';
     document.body.appendChild(capture);
@@ -59,7 +60,25 @@ describe('CitationTriggerHost Windows slash fallback', () => {
       to: 14,
     });
     expect(document.getElementById('trig')).toHaveClass('show');
+    expect(document.getElementById('trig')).not.toHaveClass('aq-hidden');
     expect(document.getElementById('trig')).toHaveStyle({ display: 'block', visibility: 'visible' });
+  });
+
+  it('recognizes the Windows writing-assist bridge as an editor input target', () => {
+    render(<CitationTriggerHost />);
+    const bridge = document.createElement('div');
+    bridge.className = 'aq-writing-assist-bridge';
+    bridge.contentEditable = 'true';
+    document.body.appendChild(bridge);
+
+    fireEvent.keyDown(bridge, { key: '/' });
+    fireEvent.keyDown(bridge, { key: 't' });
+    vi.runOnlyPendingTimers();
+
+    expect(openFromEditorTrigger).toHaveBeenCalledWith(expect.objectContaining({
+      mode: 'textual',
+      triggerMode: 't',
+    }));
   });
 
   it('ignores slash sequences typed outside the editor', () => {
