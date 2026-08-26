@@ -2,11 +2,11 @@
 
 Honest register of known technical debt after the 1.24.0 Tauri/Rust cutover.
 Each item: what it is, why it exists, current state, and the concrete next step.
-Kept in-repo so the debt is visible and not silently re-discovered. Updated 2026-06-05.
+Kept in-repo so the debt is visible and not silently re-discovered. Updated 2026-08-26.
 
 ---
 
-## 1. legacy-runtime.js monolith (13.5k lines) — 🟠 in progress
+## 1. legacy-runtime.js monolith (13.3k lines) — 🟠 in progress
 
 The vanilla-JS renderer monolith. The strangler migration to React/appStore is
 partial: the React side is clean, but this file still carries a large dead tail.
@@ -21,6 +21,12 @@ partial: the React side is clean, but this file still carries a large dead tail.
   the dynamically-created `#reflist`; real work, do not remove.
 - `showSidebarRefMenu` — writes to `#ctxmenu`, which React renders in
   `LegacyCompatibilityHost.tsx`; a live hybrid, do not remove.
+
+**2026-08 stabilization slice:** `LegacyCompatibilityHost` no longer reads or
+persists `window.S` directly. Label management, PDF viewer JSX, and quality
+review JSX are isolated React components. PDF highlight/note/drawing fallback,
+quality metadata repair, duplicate merge, and PDF-to-matrix mutations now update
+appStore immutably and use the serialized canonical save bridge.
 
 **Next step:** audit the remaining `~240` `if(!x)return;` early-return render fns
 the same way (DOM target exists? React-owned? delegate?). Stub the dead bodies,
@@ -39,7 +45,10 @@ legacy `S` object and forgets to call the sync leaves React showing stale state.
 **Why it exists:** unavoidable seam during a live strangler migration; legacy
 runtime still owns some mutation paths (matrix, PDF runtime, persistence).
 
-**Current state:** works, but it's the #1 source of latent "stale UI" bugs.
+**Current state:** legacy AQ Engine/pdf.js code can still originate mutations, but
+React-owned import, quality-review, label, PDF fallback annotation, and matrix
+selection paths are canonical appStore writes. This materially narrows the stale
+UI surface; the seam remains the #1 architectural risk until the legacy core is retired.
 
 **Proxy auto-sync was evaluated and rejected** — it is not safe in this architecture:
 1. `publishStateToLegacyWindow` reassigns `win.S = {...}` (a fresh object) on every
@@ -53,10 +62,10 @@ A deep, reassign-surviving Proxy would be both slow and fragile.
 **Actual fix (the only durable one): retire `S`.** As each legacy mutation domain is
 ported to appStore (the legacy-runtime modularization track, item 1), its direct `S`
 mutation + manual sync call disappears. The dual-state risk shrinks monotonically as
-the monolith shrinks; it cannot be patched away in isolation. Current sync is already
-called at the 6 main mutation seams (save chain, matrix, refsidebar, file-import) via
-`__aqReactSyncFromLegacy`; the residual risk is only *newly added* legacy mutation
-paths forgetting the call — mitigated by there being fewer and fewer such paths.
+the monolith shrinks; it cannot be patched away in isolation. Current sync remains
+for legacy-originated editor and file-input mutations. New React features must use
+appStore plus `persistCanonicalState()` and must not add another `window.S`
+read-modify-save path.
 
 ---
 
@@ -123,7 +132,7 @@ version-sync test in lockstep.
 
 ---
 
-## 8. Doc/reality drift — ✅ verified (2026-06-05)
+## 8. Doc/reality drift — ✅ re-verified (2026-08-26)
 
 Audited migrate-plan's phase "DONE" claims against `src-tauri/src`. **They hold:**
 - Phase 2 SQLite+FTS5 → `db/migrate.rs`, `db/mod.rs`
@@ -133,6 +142,8 @@ Audited migrate-plan's phase "DONE" claims against `src-tauri/src`. **They hold:
 - Phase 6 browser-capture sidecar → `capture/{bridge,mod}.rs`, `commands/browser_capture.rs`
 - Phase 7 updater → `commands/update.rs`
 
-The **only** real drift was phase 7's "release pipeline DONE" claim — no GitHub
-release workflow actually existed. Fixed in this cleanup (`.github/workflows/release.yml`).
-No other doc/reality gaps found.
+The follow-up audit found one additional drift: `pdf_export_annotated` was still a
+Phase 5 stub while the parity table claimed native support. The command now writes
+highlight/note annotations to a copied PDF and explicitly sends drawing-layer pages
+through the lossless browser-render fallback. IPC and export regression tests reject
+the old stub contract.

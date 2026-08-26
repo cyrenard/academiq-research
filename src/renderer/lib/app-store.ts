@@ -70,6 +70,27 @@ export function selectReferenceById(state: AcademiqAppState, id: string, workspa
   return selectWorkspaceLibrary(state, workspaceId).find((ref) => ref && String(ref.id) === refId) || null;
 }
 
+export function updateReferenceInWorkspace(
+  state: AcademiqAppState,
+  referenceId: string,
+  update: (reference: any) => any,
+  workspaceId = state.cur
+): AcademiqAppState {
+  const id = String(referenceId || '');
+  if (!id) return state;
+  let changed = false;
+  const wss = (state.wss || []).map((workspace) => {
+    if (workspace.id !== workspaceId) return workspace;
+    const lib = (workspace.lib || []).map((reference: any) => {
+      if (String(reference?.id || '') !== id) return reference;
+      changed = true;
+      return update(reference);
+    });
+    return changed ? { ...workspace, lib } : workspace;
+  });
+  return changed ? { ...state, wss } : state;
+}
+
 export function selectNotes(state: AcademiqAppState): any[] {
   return Array.isArray(state.notes) ? state.notes : [];
 }
@@ -118,4 +139,3 @@ export function addNote(state: AcademiqAppState, note: AcademiqNote): Partial<Ac
     notes: [note, ...notes]
   };
 }
-

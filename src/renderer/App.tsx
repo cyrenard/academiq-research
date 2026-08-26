@@ -295,6 +295,18 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const win = window as LegacyWindow;
+    win.__aqOpenReactReferenceEditor = (referenceId: string) => {
+      const id = String(referenceId || '');
+      if (!getActiveWorkspace(appStateRef.current).lib.some((reference) => reference.id === id)) return false;
+      setActiveReferenceId(id);
+      setFeatureModal('referenceEdit');
+      return true;
+    };
+    return () => { delete win.__aqOpenReactReferenceEditor; };
+  }, []);
+
+  useEffect(() => {
     const intercept = () => {
       const win = window as any;
       if (win.AQFootnotes) {

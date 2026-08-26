@@ -50,6 +50,7 @@ declare global {
     __aqReactSyncFromLegacy?: (state: LegacyState | unknown) => void;
     __aqReactQueueSave?: (state: unknown, source?: string) => Promise<unknown>;
     __aqReactQueueDraftSave?: (state: unknown) => Promise<unknown>;
+    __aqOpenReactReferenceEditor?: (referenceId: string) => boolean;
     __aqDispatchEditorCommand?: (command: string, payload?: Record<string, unknown>) => unknown;
     __aqSetEditorDoc?: (html: string, focusAtEnd?: boolean) => void;
 

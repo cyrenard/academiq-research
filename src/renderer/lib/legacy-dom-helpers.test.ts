@@ -7,7 +7,8 @@ import {
   currentWorkspace,
   syncReactFromLegacy,
   scheduleReactSyncFromLegacy,
-  saveLegacyState
+  saveLegacyState,
+  persistCanonicalState
 } from './legacy-dom-helpers';
 import { appStore } from './app-store';
 
@@ -19,6 +20,7 @@ afterEach(() => {
   document.body.innerHTML = '';
   delete (window as any).S;
   delete (window as any).__aqReactSyncFromLegacy;
+  delete (window as any).__aqReactQueueSave;
   delete (window as any).save;
   delete (window as any).rLib;
   delete (window as any).rRefs;
@@ -201,5 +203,19 @@ describe('saveLegacyState', () => {
     expect(sync).toHaveBeenCalled();
     // at least the early debounced one + the 450ms one → could be 1 or 2
     expect(sync.mock.calls.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('persistCanonicalState', () => {
+  it('saves the appStore snapshot without syncing from window.S', async () => {
+    appStore.setState({ cur: 'canonical', wss: [{ id: 'canonical', name: 'Canonical', lib: [] }] });
+    const queueSave = vi.fn(async () => ({ ok: true }));
+    const legacySync = vi.fn();
+    (window as any).__aqReactQueueSave = queueSave;
+    (window as any).__aqReactSyncFromLegacy = legacySync;
+    (window as any).S = { cur: 'stale', wss: [] };
+    await expect(persistCanonicalState('quality-test')).resolves.toBe(true);
+    expect(queueSave).toHaveBeenCalledWith(expect.objectContaining({ cur: 'canonical' }), 'quality-test');
+    expect(legacySync).not.toHaveBeenCalled();
   });
 });

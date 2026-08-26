@@ -4,7 +4,9 @@ import {
   openQualitySurface,
   renderDuplicateReviewFallback,
   runDuplicateAction,
-  runMetadataHealthAction
+  runMetadataHealthAction,
+  cloneQualityReference,
+  commitQualityReference
 } from '../../lib/quality-surface';
 import {
   insertImageFile,
@@ -27,8 +29,7 @@ import {
   currentWorkspaceRefs,
   currentWorkspace,
   syncReactFromLegacy,
-  scheduleReactSyncFromLegacy,
-  saveLegacyState
+  persistCanonicalState
 } from '../../lib/legacy-dom-helpers';
 import {
   type MetadataLookupCandidate,
@@ -59,7 +60,15 @@ import {
 } from '../../lib/metadata-lookup';
 import { mergeRefFields, normalizeRefRecord } from '../../lib/reference-format';
 import { useKeyboardShortcut, keyboardRouter } from '../../lib/keyboard-router';
-import { appStore, ensureNotebooks, addNote, selectCurrentWorkspace, selectWorkspaceLibrary, selectNotes } from '../../lib/app-store';
+import {
+  appStore,
+  ensureNotebooks,
+  addNote,
+  selectCurrentWorkspace,
+  selectWorkspaceLibrary,
+  selectNotes,
+  updateReferenceInWorkspace
+} from '../../lib/app-store';
 import { PdfViewerPanel } from './PdfViewerPanel';
 import {
   QualityReviewSurfaces,
@@ -348,6 +357,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     const candidate = metadataLookupCandidate;
     if (!candidate?.ref || !candidate.fetched) return;
     const busyId = String(candidate.ref.id || candidate.ref.title || 'ref');
+    const nextRef = cloneQualityReference(candidate.ref);
     try {
       let fetched = { ...candidate.fetched };
       if (mode === 'merge' && fetched.doi) {
@@ -357,27 +367,27 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       if (mode === 'doi-only') {
         const doi = normalizeDoiForMetadata(fetched.doi);
         if (doi) {
-          candidate.ref.doi = doi;
-          if (!candidate.ref.url) candidate.ref.url = `https://doi.org/${doi}`;
+          nextRef.doi = doi;
+          if (!nextRef.url) nextRef.url = `https://doi.org/${doi}`;
         }
       } else {
         try {
-          mergeRefFields(candidate.ref, fetched);
+          mergeRefFields(nextRef, fetched);
         } catch (_error) {
-          if (typeof win.mergeRefFields === 'function') win.mergeRefFields(candidate.ref, fetched);
+          if (typeof win.mergeRefFields === 'function') win.mergeRefFields(nextRef, fetched);
         }
       }
-      const changedFields = mode === 'doi-only' ? [] : applyFetchedMetadataToRef(candidate.ref, fetched);
+      const changedFields = mode === 'doi-only' ? [] : applyFetchedMetadataToRef(nextRef, fetched);
       try {
-        normalizeRefRecord(candidate.ref);
+        normalizeRefRecord(nextRef);
       } catch (_error) {
-        if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(candidate.ref);
+        if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(nextRef);
       }
-      saveLegacyState();
+      commitQualityReference(nextRef, 'quality-metadata-candidate');
       refreshMetadataHealth();
       setMetadataLookupCandidate(null);
       const report = typeof win.AQMetadataHealth?.analyzeReference === 'function'
-        ? win.AQMetadataHealth.analyzeReference(candidate.ref)
+        ? win.AQMetadataHealth.analyzeReference(nextRef)
         : null;
       const remaining = Array.isArray(report?.issues) ? report.issues.length : 0;
       onStatus(mode === 'doi-only'
@@ -400,7 +410,8 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     try {
       if (action === 'edit') {
         hideLegacyModal('metaHealthModal');
-        if (typeof win.editRefMetadata === 'function') win.editRefMetadata(ref);
+        if (typeof win.__aqOpenReactReferenceEditor === 'function') win.__aqOpenReactReferenceEditor(String(ref.id || ''));
+        else if (typeof win.editRefMetadata === 'function') win.editRefMetadata(ref);
         else if (typeof win.openReferenceEditor === 'function') win.openReferenceEditor(ref);
         window.setTimeout(refreshMetadataHealth, 350);
         return;
@@ -418,24 +429,25 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
               onStatus('DOI metadata alınamadı');
               return;
             }
+            const nextRef = cloneQualityReference(ref);
             try {
-              mergeRefFields(ref, fetched);
+              mergeRefFields(nextRef, fetched);
             } catch (_error) {
-              if (typeof win.mergeRefFields === 'function') win.mergeRefFields(ref, fetched);
+              if (typeof win.mergeRefFields === 'function') win.mergeRefFields(nextRef, fetched);
               else Object.entries(fetched).forEach(([key, value]) => {
-                if (key !== 'id' && value != null && value !== '' && (!ref[key] || key === 'doi' || key === 'url' || key === 'pdfUrl')) ref[key] = value;
+                if (key !== 'id' && value != null && value !== '' && (!nextRef[key] || key === 'doi' || key === 'url' || key === 'pdfUrl')) nextRef[key] = value;
               });
             }
-            const changedFields = applyFetchedMetadataToRef(ref, fetched);
+            const changedFields = applyFetchedMetadataToRef(nextRef, fetched);
             try {
-              normalizeRefRecord(ref);
+              normalizeRefRecord(nextRef);
             } catch (_error) {
-              if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(ref);
+              if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(nextRef);
             }
-            saveLegacyState();
+            commitQualityReference(nextRef, 'quality-metadata-refetch');
             refreshMetadataHealth();
             const report = typeof win.AQMetadataHealth?.analyzeReference === 'function'
-              ? win.AQMetadataHealth.analyzeReference(ref)
+              ? win.AQMetadataHealth.analyzeReference(nextRef)
               : null;
             const remaining = Array.isArray(report?.issues) ? report.issues.length : 0;
             onStatus(`Metadata güncellendi${changedFields.length ? `: ${changedFields.join(', ')}` : ''}${remaining ? ` · ${remaining} sorun kaldı` : ''}`);
@@ -455,16 +467,17 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         return;
       }
       if (action === 'normalize') {
+        const nextRef = cloneQualityReference(ref);
         if (typeof win.AQMetadataHealth?.applyConservativeRepairs === 'function') {
-          const result = win.AQMetadataHealth.applyConservativeRepairs(ref);
-          if (result?.ref) Object.keys(result.ref).forEach((key) => { ref[key] = result.ref[key]; });
+          const result = win.AQMetadataHealth.applyConservativeRepairs(nextRef);
+          if (result?.ref) Object.keys(result.ref).forEach((key) => { nextRef[key] = result.ref[key]; });
         }
         try {
-          normalizeRefRecord(ref);
+          normalizeRefRecord(nextRef);
         } catch (_error) {
-          if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(ref);
+          if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(nextRef);
         }
-        saveLegacyState();
+        commitQualityReference(nextRef, 'quality-metadata-normalize');
         refreshMetadataHealth();
         onStatus('Kayıt normalize edildi');
       }
@@ -913,9 +926,6 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
             return (doiA && doiA === doiB) || String(ref?.title || '').trim().toLowerCase() === String(reference?.title || '').trim().toLowerCase();
           });
           if (!exists) {
-            if (!Array.isArray(ws.lib)) ws.lib = [];
-            ws.lib.unshift(reference);
-            saveLegacyState();
             onImportReferences([reference], 'Web related');
             onStatus('Web sonucu workspace kütüphanesine eklendi');
           } else {
@@ -1278,16 +1288,15 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       win.hlData = normalized.slice();
       const ref = win.__aqCurrentPdfReference || null;
       if (ref) {
-        ref._hlData = normalized.slice();
-        try {
-          const workspace = selectCurrentWorkspace(appStore.getState());
-          const linkedRef = Array.isArray(workspace?.lib)
-            ? workspace.lib.find((item: any) => item && item.id === ref.id)
-            : null;
-          if (linkedRef && linkedRef !== ref) linkedRef._hlData = normalized.slice();
-        } catch (_error) {}
+        win.__aqCurrentPdfReference = { ...ref, _hlData: normalized.slice() };
+        const state = appStore.getState();
+        const next = updateReferenceInWorkspace(state, String(ref.id || ''), (linkedRef) => ({
+          ...linkedRef,
+          _hlData: normalized.slice()
+        }));
+        if (next !== state) appStore.setState(next);
       }
-      saveLegacyState();
+      void persistCanonicalState('pdf-highlight-update');
       return normalized;
     };
 
@@ -1528,7 +1537,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       appStore.setState((s) => addNote(s, note));
       try { if (typeof win.rNotes === 'function') win.rNotes(); } catch (_error) {}
       try { if (typeof win.swR === 'function') win.swR('notes', document.querySelectorAll('.rtab')[0]); } catch (_error) {}
-      saveLegacyState();
+      void persistCanonicalState('pdf-highlight-note');
       onStatus('Highlight notlara eklendi');
       return note;
     };
@@ -1553,11 +1562,15 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         onStatus('Matrise göndermek için önce PDF metni seçin');
         return false;
       }
-      if (!ref?.id || !win.S?.cur || !matrixApi?.ensureRowForReference) {
+      const currentState = appStore.getState();
+      if (!ref?.id || !currentState.cur || !matrixApi?.ensureRowForReference) {
         onStatus('Matrise aktarım için seçili kaynak gerekli');
         return false;
       }
-      const ensured = matrixApi.ensureRowForReference(win.S, win.S.cur, ref, {
+      const matrixState = typeof structuredClone === 'function'
+        ? structuredClone(currentState)
+        : JSON.parse(JSON.stringify(currentState));
+      const ensured = matrixApi.ensureRowForReference(matrixState, matrixState.cur, ref, {
         uid: () => `mxr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
       });
       const row = ensured?.row;
@@ -1574,13 +1587,13 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         updatedAt: Date.now()
       };
       if (typeof matrixApi.appendTextToCell === 'function') {
-        matrixApi.appendTextToCell(win.S, win.S.cur, row.id, column, selectedText, {
+        matrixApi.appendTextToCell(matrixState, matrixState.cur, row.id, column, selectedText, {
           source,
           status: 'user_confirmed',
           mode: 'append'
         });
       } else if (typeof matrixApi.appendNoteToCell === 'function') {
-        matrixApi.appendNoteToCell(win.S, win.S.cur, row.id, column, '', selectedText, {
+        matrixApi.appendNoteToCell(matrixState, matrixState.cur, row.id, column, '', selectedText, {
           sourcePage: source.page,
           sourceSnippet: source.snippet,
           extractionType: source.extractionType,
@@ -1592,12 +1605,10 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         onStatus('Matrix hücre güncelleme API bulunamadı');
         return false;
       }
+      appStore.setState(matrixState);
+      void persistCanonicalState('pdf-selection-matrix');
       try { win.AQLiteratureMatrix?.render?.(); } catch (_error) {}
       try { win.openLiteratureMatrix?.(); } catch (_error) {}
-      if (typeof win.__aqReactSyncFromLegacy === 'function') {
-        try { win.__aqReactSyncFromLegacy(win.S || {}); } catch (_error) {}
-      }
-      saveLegacyState();
       onStatus(`Seçili metin ${label} hücresine gönderildi`);
       return true;
     };
@@ -1629,16 +1640,15 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       const annots = collectFallbackAnnots();
       const ref = win.__aqCurrentPdfReference || null;
       if (ref) {
-        ref._annots = annots;
-        try {
-          const workspace = selectCurrentWorkspace(appStore.getState());
-          const linkedRef = Array.isArray(workspace?.lib)
-            ? workspace.lib.find((item: any) => item && item.id === ref.id)
-            : null;
-          if (linkedRef && linkedRef !== ref) linkedRef._annots = annots.slice();
-        } catch (_error) {}
+        win.__aqCurrentPdfReference = { ...ref, _annots: annots.slice() };
+        const state = appStore.getState();
+        const next = updateReferenceInWorkspace(state, String(ref.id || ''), (linkedRef) => ({
+          ...linkedRef,
+          _annots: annots.slice()
+        }));
+        if (next !== state) appStore.setState(next);
       }
-      saveLegacyState();
+      void persistCanonicalState('pdf-annotation-update');
       updateFallbackStats();
       renderFallbackAnnotationPanel();
       return annots;
@@ -2108,9 +2118,18 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         const ref = win.__aqCurrentPdfReference || null;
         const page = String(drawSession.wrap.dataset.page || '1');
         if (ref) {
-          if (!ref._drawings) ref._drawings = {};
-          ref._drawings[page] = drawSession.canvas.toDataURL('image/png');
-          saveLegacyState();
+          const drawingDataUrl = drawSession.canvas.toDataURL('image/png');
+          win.__aqCurrentPdfReference = {
+            ...ref,
+            _drawings: { ...(ref._drawings || {}), [page]: drawingDataUrl }
+          };
+          const state = appStore.getState();
+          const next = updateReferenceInWorkspace(state, String(ref.id || ''), (linkedRef) => ({
+            ...linkedRef,
+            _drawings: { ...(linkedRef._drawings || {}), [page]: drawingDataUrl }
+          }));
+          if (next !== state) appStore.setState(next);
+          void persistCanonicalState('pdf-drawing-update');
         }
         drawSession = null;
         event.preventDefault();
