@@ -3,6 +3,7 @@ import { EditorContext } from './components/editor/EditorContext';
 import { EditorHost } from './components/editor/EditorHost';
 import type { AcademiqEditorApi, AcademiqEditorState } from './lib/editor-adapter';
 import { AppShell } from './components/shell/AppShell';
+import { CitationTriggerHost } from './components/shell/CitationTriggerHost';
 import { RefSidebar } from './components/shell/RefSidebar';
 import { NoteSidebar, type NoteSidebarTab } from './components/shell/NoteSidebar';
 import { StatusBar } from './components/shell/StatusBar';
@@ -2268,6 +2269,7 @@ export default function App() {
           />
         )}
       />
+      <CitationTriggerHost />
       <Suspense fallback={null}>
         {commandOpen ? <CommandPalette open={commandOpen} commands={commands} onClose={() => setCommandOpen(false)} /> : null}
         {featureModal ? (

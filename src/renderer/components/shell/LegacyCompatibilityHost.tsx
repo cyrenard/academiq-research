@@ -2370,17 +2370,6 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         <button type="button" data-pdf-context-action="close">Kapat</button>
       </div>
 
-      <div id="trig">
-        <div className="tgh"><span className="tgtag">Kaynak Seç</span><span id="tgq" /><span id="tgsel" /></div>
-        <div className="tgmodes">
-          <button className="tgm on" id="citationInlineModeBtn" type="button" onClick={(event) => call('setCM', 'inline', event.currentTarget)}>(Yazar, Yıl)</button>
-          <button className="tgm" id="citationFootnoteModeBtn" type="button" onClick={(event) => call('setCM', 'footnote', event.currentTarget)}>Dipnot*</button>
-        </div>
-        <input id="tgs" type="text" placeholder="Yazar, başlık, yıl..." />
-        <div id="tgl" />
-        <div className="tghint">Oklarla gez, Enter metne ekle, Esc kapat</div>
-      </div>
-
       <div id="ctxmenu" />
       <div id="folderCtxmenu" />
       <div id="mn-layer" />

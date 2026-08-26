@@ -67,6 +67,9 @@
 
   function targetInsideEditor(target){
     if(!target) return false;
+    try{
+      if(target.closest && target.closest('#aq-engine-host,.aq-engine-stage,.aq-input-capture,[data-aq-engine-editor]')) return true;
+    }catch(e){}
     var host = getEditorHost();
     if(!host || !host.contains) return false;
     try{
@@ -506,6 +509,69 @@
     return true;
   }
 
+  function bindCitationPopupDom(){
+    const box = getTriggerBox();
+    if(box && !box.__aqCitationRuntimeBound){
+      box.__aqCitationRuntimeBound = true;
+      if(!runtime.state.open){
+        box.style.display = 'none';
+        box.style.visibility = 'hidden';
+        box.style.pointerEvents = 'none';
+      }
+      box.addEventListener('pointerdown', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        if(typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+      }, true);
+      box.addEventListener('mousedown', function(e){ e.stopPropagation(); }, true);
+      box.addEventListener('click', function(e){ e.stopPropagation(); }, true);
+    }
+    const inp = getTriggerInput();
+    if(inp){
+      const editorOwnsKeyboard = isWindowsRuntime();
+      inp.readOnly = editorOwnsKeyboard;
+      inp.disabled = editorOwnsKeyboard;
+      inp.tabIndex = editorOwnsKeyboard ? -1 : 0;
+      inp.style.pointerEvents = editorOwnsKeyboard ? 'none' : 'auto';
+      if(!inp.__aqCitationRuntimeBound){
+        inp.__aqCitationRuntimeBound = true;
+        if(editorOwnsKeyboard){
+          ['keydown','keyup','input','mousedown','click'].forEach(function(type){
+            inp.addEventListener(type, function(e){
+              e.stopPropagation();
+              if(typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+            }, true);
+          });
+        }else{
+          inp.addEventListener('keydown', function(e){
+            if(runtime.handleKeydown(e)) return;
+            e.stopPropagation();
+          }, true);
+          inp.addEventListener('input', function(e){
+            runtime.state.query = inp.value || '';
+            runtime.state.activeIndex = 0;
+            runtime.state.keyboardMode = 'query';
+            runtime.renderList();
+            e.stopPropagation();
+          });
+          ['keyup','mousedown','click'].forEach(function(type){
+            inp.addEventListener(type, function(e){ e.stopPropagation(); }, true);
+          });
+        }
+      }
+    }
+    const sc = getScrollEl();
+    if(sc && !sc.__aqCitationRuntimeBound){
+      sc.__aqCitationRuntimeBound = true;
+      sc.addEventListener('wheel', function(){ runtime.cancelScrollGuard(); }, { passive:true });
+      sc.addEventListener('touchmove', function(){ runtime.cancelScrollGuard(); }, { passive:true });
+      sc.addEventListener('scroll', function(){
+        runtime.cancelScrollGuard();
+        if(runtime.state.open) runtime.repositionPopup();
+      }, { passive:true });
+    }
+  }
+
   function textFromHTML(html){
     var value = String(html || '');
     if(typeof document !== 'undefined'){
@@ -866,6 +932,7 @@
       lastRefreshFrom: null,
       lastRefreshTo: null,
       lastRefreshMode: 'r',
+      slashTriggerPinnedUntil: 0,
       lastInsertSignature: '',
       lastInsertAt: 0,
       suppressTriggerUntil: 0,
@@ -882,6 +949,7 @@
     publicApi: {
       init: function(){ runtime.init(); },
       openFromSlash: function(query, mode){ runtime.openFromSlash(query, mode); },
+      openFromEditorTrigger: function(trigger){ return runtime.openFromEditorTrigger(trigger); },
       close: function(skipFocus){ runtime.close(skipFocus); },
       refreshFromEditor: function(){ runtime.refreshFromEditor(); },
       handleKeydown: function(event){ return runtime.handleKeydown(event); },
@@ -1121,6 +1189,31 @@
       runtime.restoreScroll();
     },
 
+    openFromEditorTrigger: function(trigger){
+      if(!trigger || window.__aqCitationTransactionActive || Date.now() < (window.__aqCitationInputBlockedUntil || 0) || Date.now() < (runtime.state.suppressTriggerUntil || 0)){
+        return false;
+      }
+      var retryCount = Math.max(0, parseInt(trigger.__aqRetryCount, 10) || 0);
+      runtime.init();
+      if(!getTriggerBox()){
+        if(retryCount < 40){
+          var retryTrigger = Object.assign({}, trigger, { __aqRetryCount: retryCount + 1 });
+          setTimeout(function(){ runtime.openFromEditorTrigger(retryTrigger); }, 50);
+        }
+        return false;
+      }
+      var from = Number(trigger.from);
+      var to = Number(trigger.to);
+      if(!Number.isFinite(from) || !Number.isFinite(to) || from < 0 || to < from) return false;
+      var textual = trigger.mode === 'textual' || trigger.triggerMode === 't';
+      var mode = textual ? 'textual' : 'inline';
+      window.editorTrigRange = { from: from, to: to, mode: textual ? 't' : 'r' };
+      window.__aqCitationTriggerMode = mode;
+      runtime.state.slashTriggerPinnedUntil = Date.now() + 800;
+      runtime.openFromSlash(String(trigger.query || ''), mode);
+      return !!runtime.state.open;
+    },
+
     repositionPopup: function(){
       if(!runtime.state.open) return;
       const box = getTriggerBox();
@@ -1166,6 +1259,7 @@
       }
       const found = currentQuery();
       if(!found){
+        if(runtime.state.open && Date.now() < (runtime.state.slashTriggerPinnedUntil || 0)) return;
         if(runtime.state.open) runtime.close(true, { preserveSelection:true });
         return;
       }
@@ -1677,6 +1771,7 @@
     init: function(){
       if(runtime.state.initialized){
         window.__aqCitationRuntimeV1 = true;
+        bindCitationPopupDom();
         return;
       }
       runtime.state.initialized = true;
@@ -1725,64 +1820,7 @@
       window.insCiteNote = function(id){ return runtime.insertNoteCitation(id); };
       syncLegacyState();
 
-      const box = getTriggerBox();
-      if(box){
-        box.style.display = 'none';
-        box.style.visibility = 'hidden';
-        box.style.pointerEvents = 'none';
-        box.addEventListener('pointerdown', function(e){
-          e.preventDefault();
-          e.stopPropagation();
-          if(typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
-        }, true);
-        box.addEventListener('mousedown', function(e){ e.stopPropagation(); }, true);
-        box.addEventListener('click', function(e){ e.stopPropagation(); }, true);
-      }
-      const inp = getTriggerInput();
-      if(inp){
-        const editorOwnsKeyboard = isWindowsRuntime();
-        inp.readOnly = editorOwnsKeyboard;
-        inp.disabled = editorOwnsKeyboard;
-        inp.tabIndex = editorOwnsKeyboard ? -1 : 0;
-        if(editorOwnsKeyboard){
-          ['keydown','keyup','input','mousedown','click'].forEach(function(type){
-            inp.addEventListener(type, function(e){
-              e.stopPropagation();
-              if(typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
-            }, true);
-          });
-        }else{
-          inp.addEventListener('keydown', function(e){
-            if(runtime.handleKeydown(e)) return;
-            e.stopPropagation();
-          }, true);
-          inp.addEventListener('input', function(e){
-            runtime.state.query = inp.value || '';
-            runtime.state.activeIndex = 0;
-            runtime.state.keyboardMode = 'query';
-            runtime.renderList();
-            e.stopPropagation();
-          });
-          ['keyup','mousedown','click'].forEach(function(type){
-            inp.addEventListener(type, function(e){
-              e.stopPropagation();
-            }, true);
-          });
-        }
-      }
-      const sc = getScrollEl();
-      if(sc){
-        sc.addEventListener('wheel', function(){
-          runtime.cancelScrollGuard();
-        }, { passive:true });
-        sc.addEventListener('touchmove', function(){
-          runtime.cancelScrollGuard();
-        }, { passive:true });
-        sc.addEventListener('scroll', function(){
-          runtime.cancelScrollGuard();
-          if(runtime.state.open) runtime.repositionPopup();
-        }, { passive:true });
-      }
+      bindCitationPopupDom();
       window.addEventListener('resize', function(){
         if(runtime.state.open) runtime.repositionPopup();
       });

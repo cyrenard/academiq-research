@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.24.1-beta.21 - 2026-08-27
+
+Packaged Windows citation popup correction based on the last live-tested
+working ownership model.
+
+- Restores the eager citation popup host from beta.15 so `/r` and `/t` do not
+  depend on the lazy compatibility tree mounting in WebView2.
+- Opens slash citations immediately from AQ Engine's authoritative document
+  and caret offsets, while retaining the delayed refresh as a fallback.
+- Rebinds the citation runtime when popup DOM mounts after early startup and
+  pins explicitly opened triggers against stale selection refreshes.
+- Keeps the extra global key fallback Windows-only; Linux retains its editable
+  popup-input and focus behavior.
+- Retains beta.20 autosave serialization, startup recovery, and storage fixes.
+
 ## 1.24.1-beta.20 - 2026-08-26
 
 Windows citation slash-trigger correction after packaged-app live testing.
@@ -183,4 +198,3 @@ Observed migration targets from the phase gates:
 - Lower memory pressure from removing Electron from the primary runtime.
 - Smaller installer footprint from the Tauri bundle path.
 - Faster spell checking through the Rust spell path.
-
