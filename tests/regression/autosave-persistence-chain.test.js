@@ -7,15 +7,20 @@ const rootDir = path.join(__dirname, '..', '..');
 
 test('React editor changes promote draft updates into full saveData autosave', () => {
   const source = fs.readFileSync(path.join(rootDir, 'src', 'renderer', 'App.tsx'), 'utf8');
+  const coordinator = fs.readFileSync(path.join(rootDir, 'src', 'renderer', 'lib', 'save-coordinator.ts'), 'utf8');
   assert.match(source, /const saveDataChecked = useCallback\(async/);
-  assert.match(source, /saveData\?\.\(payload, source\)/);
-  assert.match(source, /result\.ok !== true/);
-  assert.match(source, /localStorage\.setItem\('aq\.lastSaveError'/);
+  assert.match(source, /queueAppStateSave\(nextState, source\)/);
+  assert.match(coordinator, /save_before_hydration/);
+  assert.match(coordinator, /this\.tail\.then/);
+  assert.match(coordinator, /result\.ok !== true/);
+  assert.match(coordinator, /recordSaveResult\('aq\.lastSaveError'/);
   assert.match(source, /const scheduleFullAutosave = useCallback/);
   assert.match(source, /saveDataChecked\(appStateRef\.current, source\)/);
   assert.match(source, /scheduleFullAutosave\(nextState\)/);
   assert.match(source, /__aqReactPersistLegacyState/);
   assert.match(source, /scheduleFullAutosave\(appStateRef\.current, 0, 'legacy-autosave'\)/);
+  assert.match(source, /markAppStateHydrated\(\)/);
+  assert.match(source, /if \(!result \|\| result\.ok !== true\)/);
 });
 
 test('React shell is the only owner of startup editor hydration', () => {

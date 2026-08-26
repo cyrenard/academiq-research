@@ -69,6 +69,13 @@ import {
 } from './lib/note-insert';
 import { publishStateToLegacyWindow } from './lib/legacy-state-bridge';
 import { appStore, useAppStore } from './lib/app-store';
+import {
+  flushAppStateWrites,
+  markAppStateHydrated,
+  queueEditorDraftSave,
+  queueAppStateSave,
+  suspendAppStateWrites
+} from './lib/save-coordinator';
 
 const CommandPalette = lazy(() => import('./components/shell/CommandPalette').then((module) => ({ default: module.CommandPalette })));
 const FeatureModals = lazy(() => import('./components/shell/FeatureModals').then((module) => ({ default: module.FeatureModals })));
@@ -158,6 +165,7 @@ export default function App() {
   const [refSidebarOpen, setRefSidebarOpen] = useState(true);
   const [statusMessage, setStatusMessage] = useState('kaydedildi');
   const [loadMeta, setLoadMeta] = useState<Record<string, unknown> | null>(null);
+  const [loadError, setLoadError] = useState('');
   const [pdfProgress, setPdfProgress] = useState<{ total: number; attempted: number; downloaded: number; failed: number; active: boolean } | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [activeCollectionId, setActiveCollectionId] = useState('all');
@@ -397,28 +405,17 @@ export default function App() {
   };
 
   const saveDataChecked = useCallback(async (nextState: AcademiqAppState, source = 'save') => {
-    const payload = JSON.stringify(nextState);
-    const result = await window.electronAPI?.saveData?.(payload, source) as { ok?: boolean; error?: string } | undefined;
-    if (!result || result.ok !== true) {
-      const error = result?.error || `${source}_failed`;
-      try {
-        localStorage.setItem('aq.lastSaveError', JSON.stringify({
-          at: new Date().toISOString(),
-          source,
-          error,
-          bytes: payload.length
-        }));
-      } catch (_error) {}
-      throw new Error(error);
-    }
-    try {
-      localStorage.setItem('aq.lastSaveOk', JSON.stringify({
-        at: new Date().toISOString(),
-        source,
-        bytes: payload.length
-      }));
-    } catch (_error) {}
-    return result;
+    return queueAppStateSave(nextState, source);
+  }, []);
+
+  useEffect(() => {
+    const win = window as any;
+    win.__aqReactQueueSave = (state: unknown, source = 'legacy-save') => queueAppStateSave(state, source);
+    win.__aqReactQueueDraftSave = (state: unknown) => queueEditorDraftSave(state);
+    return () => {
+      delete win.__aqReactQueueSave;
+      delete win.__aqReactQueueDraftSave;
+    };
   }, []);
 
   useEffect(() => {
@@ -475,7 +472,7 @@ export default function App() {
       autosaveTimerRef.current = null;
     }
     const payload = JSON.stringify(nextState);
-    if (draft) await window.electronAPI?.saveEditorDraft?.(payload);
+    if (draft) await queueEditorDraftSave(payload);
     await saveDataChecked(nextState, draft ? 'draft-promote' : 'persistState');
   }, [saveDataChecked]);
 
@@ -488,7 +485,7 @@ export default function App() {
     await new Promise<void>((resolve) => {
       const run = async () => {
         try {
-          await window.electronAPI?.saveEditorDraft?.(JSON.stringify(nextState));
+          await queueEditorDraftSave(nextState);
         } finally {
           resolve();
         }
@@ -502,16 +499,22 @@ export default function App() {
   }, [scheduleFullAutosave]);
 
   const reloadStateFromDisk = useCallback(async (focus?: { workspaceId?: string; refId?: string }) => {
+    await flushAppStateWrites();
     const result = await window.electronAPI?.loadData?.();
+    if (!result || result.ok !== true) {
+      throw new Error(result?.error || 'data_load_failed');
+    }
     const hydrated = normalizeReferenceState(
-      result?.ok && result.data ? hydrateAppState(JSON.parse(String(result.data))) : createBlankState()
+      result.data ? hydrateAppState(JSON.parse(String(result.data))) : createBlankState()
     );
     const next = focus?.workspaceId && hydrated.wss.some((workspace) => workspace.id === focus.workspaceId)
       ? switchWorkspace(hydrated, focus.workspaceId)
       : hydrated;
     setLoadMeta(result && typeof result === 'object' ? result as Record<string, unknown> : null);
+    setLoadError('');
     setAppState(next);
     appStateRef.current = next;
+    markAppStateHydrated();
     const workspace = getActiveWorkspace(next);
     setActiveReferenceId((current) => (
       focus?.refId && workspace.lib.some((ref) => ref.id === focus.refId)
@@ -582,6 +585,7 @@ export default function App() {
 
   useEffect(() => {
     let alive = true;
+    suspendAppStateWrites();
     reloadStateFromDisk()
       .then(() => {
         if (!alive) return;
@@ -592,6 +596,7 @@ export default function App() {
         const fallback = createBlankState();
         setAppState(fallback);
         appStateRef.current = fallback;
+        setLoadError('Kayıtlı veriler yüklenemedi. Veri güvenliği için düzenleme ve otomatik kayıt durduruldu.');
         setLoading(false);
         flashStatus('Veri yüklenemedi');
       });
@@ -622,7 +627,7 @@ export default function App() {
         const next = { ...current, spellcheck: { ...(current?.spellcheck || {}), enabled: s.enabled } };
         appStateRef.current = next;
         setAppState(next);
-        window.electronAPI?.saveData?.(JSON.stringify(next)).catch(() => {});
+        queueAppStateSave(next, 'spellcheck-settings').catch(() => {});
       });
       // Wait up to 30s for the legacy editor to mount, then subscribe
       // to its 'update' event so each keystroke nudges the spell pass.
@@ -2143,6 +2148,16 @@ export default function App() {
         toolbar={<TopToolbar selectedReferenceId={activeReferenceId} onOpenFeatureModal={setFeatureModal} />}
         editor={loading ? (
           <div className="flex h-full items-center justify-center text-sm text-aq-muted">Yükleniyor...</div>
+        ) : loadError ? (
+          <div className="flex h-full items-center justify-center p-8">
+            <div className="max-w-lg rounded-lg border border-red-300 bg-red-50 p-6 text-center text-red-950 dark:border-red-900 dark:bg-red-950/30 dark:text-red-100">
+              <h2 className="mb-2 text-base font-semibold">Veri yükleme durduruldu</h2>
+              <p className="mb-4 text-sm">{loadError}</p>
+              <button className="rounded bg-red-700 px-4 py-2 text-sm font-medium text-white" onClick={() => setFeatureModal('recovery')}>
+                Backup ve kurtarma seçeneklerini aç
+              </button>
+            </div>
+          </div>
         ) : (
           <EditorHost
             docId={activeDocument.id}
@@ -2219,12 +2234,10 @@ export default function App() {
             onDeleteReference={handleDeleteReference}
             onRestoreState={() => {
               setLoading(true);
-              window.electronAPI.loadData().then((result) => {
-                const hydrated = result?.ok && result.data ? hydrateAppState(JSON.parse(String(result.data))) : appStateRef.current;
-                setAppState(hydrated);
-                appStateRef.current = hydrated;
-                setLoading(false);
-              });
+              suspendAppStateWrites();
+              reloadStateFromDisk()
+                .catch(() => setLoadError('Backup geri yüklendi ancak veri yeniden açılamadı.'))
+                .finally(() => setLoading(false));
             }}
           />
         ) : null}

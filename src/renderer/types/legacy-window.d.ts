@@ -48,6 +48,8 @@ declare global {
 
     // --- Cross-layer sync hook ---------------------------------------------
     __aqReactSyncFromLegacy?: (state: LegacyState | unknown) => void;
+    __aqReactQueueSave?: (state: unknown, source?: string) => Promise<unknown>;
+    __aqReactQueueDraftSave?: (state: unknown) => Promise<unknown>;
     __aqSetEditorDoc?: (html: string, focusAtEnd?: boolean) => void;
 
     // --- Save / lifecycle ---------------------------------------------------

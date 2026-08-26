@@ -7385,8 +7385,14 @@ function importWordFile(e){
     try{saveEditorDraftNow();}catch(_e5){}
     try{syncSave();}catch(_e6){}
     try{
-      if(window.electronAPI&&typeof window.electronAPI.saveData==='function'&&typeof __aqBuildPersistedStateJSON==='function'){
-        window.electronAPI.saveData(__aqBuildPersistedStateJSON(),'word-import-commit').catch(function(err){console.warn('[word-import] saveData failed',err);});
+      if(typeof __aqBuildPersistedStateJSON==='function'){
+        var importedStateJSON=__aqBuildPersistedStateJSON();
+        var importedSave=typeof window.__aqReactQueueSave==='function'
+          ? window.__aqReactQueueSave(importedStateJSON,'word-import-commit')
+          : (window.electronAPI&&typeof window.electronAPI.saveData==='function'
+            ? window.electronAPI.saveData(importedStateJSON,'word-import-commit')
+            : null);
+        if(importedSave&&typeof importedSave.catch==='function')importedSave.catch(function(err){console.warn('[word-import] saveData failed',err);});
       }
     }catch(_e7){}
   }
@@ -13122,14 +13128,16 @@ function scheduleEditorDraftSave(){
 }
 async function saveEditorDraftNow(){
   if(suppressDocSave||__aqDocSwitching)return;
-  if(typeof window.electronAPI==='undefined'||typeof window.electronAPI.saveEditorDraft!=='function')return;
+  if(typeof window.__aqReactQueueDraftSave!=='function'&&(typeof window.electronAPI==='undefined'||typeof window.electronAPI.saveEditorDraft!=='function'))return;
   if(editorDraftInFlight){
     editorDraftQueued=true;
     return;
   }
   editorDraftInFlight=true;
   try{
-    await window.electronAPI.saveEditorDraft(__aqBuildPersistedStateJSON());
+    var draftJSON=__aqBuildPersistedStateJSON();
+    if(typeof window.__aqReactQueueDraftSave==='function')await window.__aqReactQueueDraftSave(draftJSON);
+    else await window.electronAPI.saveEditorDraft(draftJSON);
   }catch(e){
     logStability('saveEditorDraftNow',e);
   }finally{
