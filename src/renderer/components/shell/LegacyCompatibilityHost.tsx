@@ -14,6 +14,7 @@ import {
   importBibliographyFile
 } from '../../lib/file-import';
 import { handleDroppedFiles, handleTauriDroppedPaths } from '../../lib/drop-router';
+import { editorCommandRouter } from '../../lib/editor-command-router';
 import {
   runExternalReferenceTextImport,
   runExternalReferenceBibliographyTextImport,
@@ -219,6 +220,16 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
   useEffect(() => {
     let unlistenDragDrop: (() => void) | null = null;
     let cancelled = false;
+    const removePathDrop = editorCommandRouter.register('files.drop.paths', (payload) => {
+      const paths = Array.isArray(payload?.paths) ? payload.paths.map(String) : [];
+      if (!paths.length) return false;
+      return handleTauriDroppedPaths(paths, onStatus);
+    }, 100);
+    const removeFileDrop = editorCommandRouter.register('files.drop', (payload) => {
+      const files = Array.isArray(payload?.files) ? payload.files.filter((file): file is File => file instanceof File) : [];
+      if (!files.length) return false;
+      return handleDroppedFiles(files, onStatus);
+    }, 100);
     const isTauri = typeof window !== 'undefined' && (window as any).__TAURI__;
     if (isTauri) {
       const listen = (window as any).__TAURI__.event.listen;
@@ -226,7 +237,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         listen('tauri://drag-drop', (event: any) => {
           const paths = event?.payload?.paths;
           if (Array.isArray(paths)) {
-            void handleTauriDroppedPaths(paths, onStatus);
+            void editorCommandRouter.dispatch('files.drop.paths', { paths, source: 'tauri' });
           }
         }).then((unsub: any) => {
           if (cancelled) {
@@ -265,7 +276,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       dragDepthRef.current = 0;
       setDropActive(false);
       const files = Array.from(event.dataTransfer?.files || []);
-      void handleDroppedFiles(files, onStatus);
+      void editorCommandRouter.dispatch('files.drop', { files, source: 'webview' });
     };
     window.addEventListener('dragenter', onDragEnter, true);
     window.addEventListener('dragover', onDragOver, true);
@@ -273,6 +284,8 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     window.addEventListener('drop', onDrop, true);
     return () => {
       cancelled = true;
+      removePathDrop();
+      removeFileDrop();
       if (unlistenDragDrop) unlistenDragDrop();
       window.removeEventListener('dragenter', onDragEnter, true);
       window.removeEventListener('dragover', onDragOver, true);
@@ -282,6 +295,14 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
   }, [onStatus]);
 
   useEffect(() => {
+    const removePasteImages = editorCommandRouter.register('files.paste.images', (payload) => {
+      const files = Array.isArray(payload?.files) ? payload.files.filter((file): file is File => file instanceof File) : [];
+      if (!files.length) return false;
+      files.forEach((file) => {
+        void insertImageFileObject(file, onStatus);
+      });
+      return true;
+    }, 100);
     const isEditorPasteTarget = (target: EventTarget | null) => {
       const el = target as HTMLElement | null;
       return !!el?.closest?.('[data-aq-engine-editor], #apaed, .ProseMirror, [contenteditable="true"]');
@@ -292,12 +313,13 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       const images = files.filter((file) => String(file.type || '').toLowerCase().startsWith('image/'));
       if (!images.length) return;
       event.preventDefault();
-      images.forEach((file) => {
-        void insertImageFileObject(file, onStatus);
-      });
+      void editorCommandRouter.dispatch('files.paste.images', { files: images, source: 'clipboard' });
     };
     document.addEventListener('paste', onPaste, true);
-    return () => document.removeEventListener('paste', onPaste, true);
+    return () => {
+      removePasteImages();
+      document.removeEventListener('paste', onPaste, true);
+    };
   }, [onStatus]);
 
   const refreshMetadataHealth = () => {
@@ -1061,9 +1083,10 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       { key: 'Home' },
       { key: 'End' },
       { key: '+' },
+      { key: '+', shiftKey: true },
       { key: '=' },
       { key: '-' },
-      { key: '_' },
+      { key: '_', shiftKey: true },
       { key: '0', ctrlKey: true },
       { key: 'f', ctrlKey: true }
     ],

@@ -382,7 +382,9 @@
         trigRefreshTimer = 0;
         if(isCitationTransactionBlocked()) return;
         try {
-          if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
+          if(typeof window.__aqDispatchEditorCommand === 'function' && window.__aqDispatchEditorCommand('citation.refresh', { source:'aq-engine-input' }) !== false){
+            return;
+          } else if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
             window.AQCitationRuntime.refreshFromEditor();
           } else if(typeof window.checkTrig === 'function'){
             window.checkTrig();

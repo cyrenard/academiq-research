@@ -76,6 +76,7 @@ import {
   queueAppStateSave,
   suspendAppStateWrites
 } from './lib/save-coordinator';
+import { editorCommandRouter } from './lib/editor-command-router';
 
 const CommandPalette = lazy(() => import('./components/shell/CommandPalette').then((module) => ({ default: module.CommandPalette })));
 const FeatureModals = lazy(() => import('./components/shell/FeatureModals').then((module) => ({ default: module.FeatureModals })));
@@ -419,6 +420,37 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const win = window as any;
+    const removeRefresh = editorCommandRouter.register('citation.refresh', () => {
+      const runtime = win.AQCitationRuntime;
+      if (runtime && typeof runtime.refreshFromEditor === 'function') {
+        runtime.refreshFromEditor();
+        return true;
+      }
+      if (typeof win.checkTrig === 'function') {
+        win.checkTrig();
+        return true;
+      }
+      return false;
+    }, 100);
+    const removeOpen = editorCommandRouter.register('citation.open', (payload) => {
+      const runtime = win.AQCitationRuntime;
+      if (!runtime || typeof runtime.openFromSlash !== 'function') return false;
+      const mode = payload?.mode === 'textual' ? 'textual' : 'inline';
+      runtime.openFromSlash(String(payload?.query || ''), mode);
+      return true;
+    }, 100);
+    win.__aqDispatchEditorCommand = (command: string, payload?: Record<string, unknown>) => (
+      editorCommandRouter.dispatch(command, payload)
+    );
+    return () => {
+      removeRefresh();
+      removeOpen();
+      delete win.__aqDispatchEditorCommand;
+    };
+  }, []);
+
+  useEffect(() => {
     const onWordImportCommitted = (event: Event) => {
       const html = String((event as CustomEvent<{ html?: string }>).detail?.html || '');
       if (!html.trim()) return;
@@ -755,14 +787,17 @@ export default function App() {
     'global-shortcut-help',
     [
       { key: 'F1' },
-      { key: '/', ctrlKey: true }
+      { key: '/', ctrlKey: true },
+      { key: '/', ctrlKey: true, shiftKey: true }
     ],
     (event) => {
       const shell = (window as any).AQLeanUIShell;
       if (shell && typeof shell.openShortcutHelp === 'function') {
         event.preventDefault();
         shell.openShortcutHelp();
+        return true;
       }
+      return false;
     },
     []
   );

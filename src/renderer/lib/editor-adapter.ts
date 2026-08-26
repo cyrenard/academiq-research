@@ -69,6 +69,7 @@ type LegacyWindow = Window & {
     insertSelection?: (refId?: string) => boolean;
     syncReferenceSection?: () => boolean;
   };
+  __aqDispatchEditorCommand?: (command: string, payload?: Record<string, unknown>) => unknown;
   AQCitationStyles?: {
     normalizeStyleId?: (style: string) => string;
     visibleCitationText?: (refs: any[], options?: Record<string, unknown>) => string;
@@ -744,6 +745,9 @@ export function createAcademiqEditor(options: CreateAcademiqEditorOptions): Acad
       }
       if (refId && typeof win.insertCitation === 'function') {
         win.insertCitation(refId);
+        return;
+      }
+      if (typeof win.__aqDispatchEditorCommand === 'function' && win.__aqDispatchEditorCommand('citation.open', { mode: 'inline', query: '', source: 'editor-api' }) !== false) {
         return;
       }
       if (win.AQCitationRuntime && typeof win.AQCitationRuntime.openFromSlash === 'function') {
