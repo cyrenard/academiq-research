@@ -20,6 +20,6 @@ test('Tauri DOCX export command writes base64 DOCX payload through save dialog',
   assert.match(command, /&\["docx"\]/);
   assert.match(command, /add_filter\(filter_name, extensions\)/);
   assert.match(command, /general_purpose::STANDARD/);
-  assert.match(command, /fs::write\(&path, &bytes\)/);
+  assert.match(command, /fs::write\(&path, bytes\)/);
   assert.doesNotMatch(command, /stub\("export:docx"\)/);
 });

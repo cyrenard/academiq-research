@@ -47,8 +47,8 @@
     var highlightCount = Math.max(0, parseInt(input.highlightCount, 10) || 0);
     var annotationCount = Math.max(0, parseInt(input.annotationCount, 10) || 0);
     var ocrLabel = String(input.ocrLabel || '').trim();
-    var activityLabel = highlightCount + ' highlight Â· ' + annotationCount + ' not';
-    if(ocrLabel) activityLabel += ' Â· ' + ocrLabel;
+    var activityLabel = highlightCount + ' highlight · ' + annotationCount + ' not';
+    if(ocrLabel) activityLabel += ' · ' + ocrLabel;
     return {
       page: page,
       total: total,

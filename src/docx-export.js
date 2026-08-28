@@ -1,7 +1,6 @@
-// Minimal DOCX (OOXML) export baseline. Converts a flat list of block
-// descriptors into a valid `word/document.xml` payload. Packaging into a
-// .docx zip is deliberately out of scope here — the main process pairs this
-// with either Word COM (preferred on Windows) or a zip library.
+// Native DOCX (OOXML) export. Converts the shared editor HTML/block contract
+// into a self-contained .docx package without requiring Word or platform-
+// specific automation.
 //
 // Block descriptor shape:
 //   { type: 'paragraph'|'heading', level?: 1..5, style?: string,
@@ -47,8 +46,17 @@
   function buildRun(run){
     if(!run || !run.text) return '';
     var rPr = buildRunProps(run);
-    var text = '<w:t xml:space="preserve">' + escapeXml(run.text) + '</w:t>';
-    return '<w:r>' + rPr + text + '</w:r>';
+    var pieces = String(run.text).split(/\r?\n/);
+    var body = pieces.map(function(piece, index){
+      var text = piece ? '<w:t xml:space="preserve">' + escapeXml(piece) + '</w:t>' : '';
+      var value = text ? '<w:r>' + rPr + text + '</w:r>' : '';
+      if(index < pieces.length - 1) value += '<w:r><w:br/></w:r>';
+      return value;
+    }).join('');
+    if(run.href && /^(https?:|mailto:)/i.test(String(run.href))){
+      return '<w:fldSimple w:instr="' + escapeXml('HYPERLINK "' + String(run.href) + '"') + '">' + body + '</w:fldSimple>';
+    }
+    return body;
   }
 
   function normalizeRuns(block){
@@ -76,6 +84,12 @@
         parts.push('<w:jc w:val="' + mapped + '"/>');
       }
     }
+    if(block.pageBreakBefore) parts.push('<w:pageBreakBefore/>');
+    if(block.keepNext) parts.push('<w:keepNext/>');
+    if(block.numId){
+      var level = Math.max(0, Math.min(8, Math.round(Number(block.listLevel) || 0)));
+      parts.push('<w:numPr><w:ilvl w:val="' + level + '"/><w:numId w:val="' + Math.max(1, Math.round(Number(block.numId) || 1)) + '"/></w:numPr>');
+    }
     if(block.spacing || block.lineSpacing || block.beforeSpacing || block.afterSpacing){
       var before = Math.max(0, Math.round(Number(block.beforeSpacing != null ? block.beforeSpacing : 0) || 0));
       var after = Math.max(0, Math.round(Number(block.afterSpacing != null ? block.afterSpacing : 0) || 0));
@@ -83,7 +97,7 @@
       var lineValue = line === 'single' ? 240 : line === 'onehalf' || line === '1.5' ? 360 : 480;
       parts.push('<w:spacing w:before="' + before + '" w:after="' + after + '" w:line="' + lineValue + '" w:lineRule="auto"/>');
     }
-    if(block.indent || block.firstLine || block.hanging){
+    if(block.indent || block.firstLine != null || block.hanging != null || block.leftIndent != null){
       var indent = block.indent || {};
       var firstLine = block.firstLine != null ? block.firstLine : indent.firstLine;
       var hanging = block.hanging != null ? block.hanging : indent.hanging;
@@ -114,7 +128,7 @@
 
   function buildTableCell(cell){
     var body = normalizeCellParagraphs(cell).map(function(block){
-      return buildParagraph(block || { type: 'paragraph', text: '' });
+      return buildParagraph(Object.assign({ style: 'TableText' }, block || { type: 'paragraph', text: '' }));
     }).join('');
     return '<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr>' + (body || buildParagraph({ type: 'paragraph', text: '' })) + '</w:tc>';
   }
@@ -140,6 +154,7 @@
     var body = (blocks || []).map(function(b){
       if(!b || typeof b !== 'object') return '';
       if(b.type === 'table') return buildTable(b);
+      if(b.type === 'pageBreak') return '<w:p><w:pPr><w:ind w:firstLine="0"/></w:pPr><w:r><w:br w:type="page"/></w:r></w:p>';
       return buildParagraph(b);
     }).join('');
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -265,7 +280,7 @@
     var blocks = [];
 
     function runFromText(text, marks){
-      if(!text || !String(text).trim()) return null;
+      if(text == null || String(text) === '') return null;
       return Object.assign({ text: String(text).replace(/\s+/g, ' ') }, marks || {});
     }
 
@@ -285,6 +300,10 @@
       if(tag === 'u') next.underline = true;
       if(tag === 'sup') next.super = true;
       if(tag === 'sub') next.sub = true;
+      if(tag === 'a'){
+        var href = el.getAttribute('href') || '';
+        if(/^(https?:|mailto:)/i.test(href)) next.href = href;
+      }
       if(tag === 'br') {
         out.push({ text: '\n' });
         return;
@@ -313,9 +332,15 @@
     function addBlock(el){
       var tag = String(el.tagName || '').toLowerCase();
       if(tag !== 'table' && el.closest && el.closest('table')) return;
+      if(tag !== 'li' && el.closest && el.closest('li')) return;
       if(tag === 'table'){
         var table = tableToBlock(el);
         if(table) blocks.push(table);
+        return;
+      }
+      var className = String(el.getAttribute && el.getAttribute('class') || '');
+      if(/(?:^|\s)aq-page-break(?:\s|$)/.test(className)){
+        blocks.push({ type: 'pageBreak' });
         return;
       }
       var runs = [];
@@ -324,12 +349,40 @@
       var text = runs.map(function(r){ return r.text || ''; }).join('').trim();
       if(!text) return;
       var heading = /^h([1-5])$/.exec(tag);
-      blocks.push({
+      var block = {
         type: heading ? 'heading' : 'paragraph',
         level: heading ? Number(heading[1]) : undefined,
         align: (el.style && el.style.textAlign) || undefined,
         runs: runs
-      });
+      };
+      if(/(?:^|\s)(?:refe|aq-ref-entry)(?:\s|$)/.test(className)){
+        block.style = 'ReferenceEntry';
+        block.lineSpacing = 'double';
+        block.leftIndent = 720;
+        block.hanging = 720;
+      }
+      if(/(?:^|\s)(?:aq-export-page-break-before|bib-title|appendix-title)(?:\s|$)/.test(className)){
+        block.pageBreakBefore = true;
+      }
+      if(tag === 'blockquote'){
+        block.style = 'BlockQuote';
+        block.lineSpacing = 'double';
+        block.leftIndent = 720;
+        block.firstLine = 0;
+      }
+      if(tag === 'li'){
+        var list = el.parentElement;
+        var listTag = String(list && list.tagName || '').toLowerCase();
+        block.numId = listTag === 'ol' ? 1 : 2;
+        var listLevel = 0;
+        var ancestor = list && list.parentElement;
+        while(ancestor){
+          if(/^(ol|ul)$/i.test(String(ancestor.tagName || ''))) listLevel++;
+          ancestor = ancestor.parentElement;
+        }
+        block.listLevel = listLevel;
+      }
+      blocks.push(block);
     }
 
     var selectors = 'h1,h2,h3,h4,h5,p,li,blockquote,table';
@@ -350,6 +403,7 @@
       + '<Default Extension="xml" ContentType="application/xml"/>'
       + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
       + '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'
+      + '<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>'
       + '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'
       + '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>'
       + '</Types>';
@@ -368,17 +422,40 @@
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
       + '<Relationships xmlns="' + REL_NS + '">'
       + '<Relationship Id="rId1" Type="' + OFFICE_REL + '/styles" Target="styles.xml"/>'
+      + '<Relationship Id="rId2" Type="' + OFFICE_REL + '/numbering" Target="numbering.xml"/>'
       + '</Relationships>';
   }
 
   function stylesXml(){
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
       + '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-      + '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="24"/></w:rPr></w:style>'
+      + '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:before="0" w:after="0" w:line="480" w:lineRule="auto"/><w:ind w:firstLine="720"/></w:pPr><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:style>'
       + [1,2,3,4,5].map(function(level){
-        return '<w:style w:type="paragraph" w:styleId="Heading' + level + '"><w:name w:val="heading ' + level + '"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="0" w:after="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style>';
+        var centered = level === 1 ? '<w:jc w:val="center"/>' : '';
+        var indented = level >= 4 ? '<w:ind w:left="720" w:firstLine="0"/>' : '<w:ind w:firstLine="0"/>';
+        var italic = level === 3 || level === 5 ? '<w:i/>' : '';
+        return '<w:style w:type="paragraph" w:styleId="Heading' + level + '"><w:name w:val="heading ' + level + '"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="0" w:after="0" w:line="480" w:lineRule="auto"/>' + centered + indented + '</w:pPr><w:rPr><w:b/>' + italic + '<w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:style>';
       }).join('')
+      + '<w:style w:type="paragraph" w:styleId="ReferenceEntry"><w:name w:val="Reference Entry"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="0" w:after="0" w:line="480" w:lineRule="auto"/><w:ind w:left="720" w:hanging="720" w:firstLine="0"/></w:pPr></w:style>'
+      + '<w:style w:type="paragraph" w:styleId="BlockQuote"><w:name w:val="Block Quote"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="0" w:after="0" w:line="480" w:lineRule="auto"/><w:ind w:left="720" w:firstLine="0"/></w:pPr></w:style>'
+      + '<w:style w:type="paragraph" w:styleId="TableText"><w:name w:val="Table Text"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:firstLine="0"/></w:pPr></w:style>'
       + '</w:styles>';
+  }
+
+  function numberingXml(){
+    function levels(format, text){
+      return Array.from({ length: 9 }, function(_, level){
+        var levelText = format === 'decimal' ? '%' + (level + 1) + '.' : text;
+        return '<w:lvl w:ilvl="' + level + '"><w:start w:val="1"/><w:numFmt w:val="' + format + '"/><w:lvlText w:val="' + levelText + '"/><w:lvlJc w:val="left"/><w:pPr><w:tabs><w:tab w:val="num" w:pos="' + (720 + level * 360) + '"/></w:tabs><w:ind w:left="' + (720 + level * 360) + '" w:hanging="360"/></w:pPr></w:lvl>';
+      }).join('');
+    }
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+      + '<w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="multilevel"/>' + levels('decimal', '') + '</w:abstractNum>'
+      + '<w:abstractNum w:abstractNumId="1"><w:multiLevelType w:val="multilevel"/>' + levels('bullet', '•') + '</w:abstractNum>'
+      + '<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>'
+      + '<w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num>'
+      + '</w:numbering>';
   }
 
   function coreXml(){
@@ -405,6 +482,7 @@
       { name: 'docProps/app.xml', data: appXml() },
       { name: 'word/_rels/document.xml.rels', data: docRelsXml() },
       { name: 'word/styles.xml', data: stylesXml() },
+      { name: 'word/numbering.xml', data: numberingXml() },
       { name: 'word/document.xml', data: buildDocumentXml(blocks) }
     ]);
   }

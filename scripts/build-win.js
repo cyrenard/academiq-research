@@ -1,6 +1,6 @@
 /**
- * Runs build pipeline with guaranteed restore of academiq-research.html.
- * This prevents leaving inlined sources behind when electron-builder fails.
+ * Builds the current React renderer before invoking electron-builder.
+ * The archived legacy single-file renderer is not part of current packages.
  */
 const path = require('path');
 const fs = require('fs');
@@ -24,20 +24,6 @@ function runNodeScript(scriptName) {
   run(process.execPath, [path.join(__dirname, scriptName)], 'node ' + scriptName);
 }
 
-function runNpmScript(scriptName) {
-  if (process.env.npm_execpath && fs.existsSync(process.env.npm_execpath)) {
-    run(process.execPath, [process.env.npm_execpath, 'run', scriptName], 'npm run ' + scriptName);
-    return;
-  }
-  const npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
-  if (fs.existsSync(npmCli)) {
-    run(process.execPath, [npmCli, 'run', scriptName], 'npm run ' + scriptName);
-    return;
-  }
-  const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-  run(npm, ['run', scriptName], 'npm run ' + scriptName);
-}
-
 function runBuilder(dirMode) {
   const args = ['--win', '--x64'];
   if (dirMode) args.push('--dir');
@@ -51,28 +37,11 @@ function runBuilder(dirMode) {
 }
 
 const dirMode = process.argv.includes('--dir');
-let inlined = false;
-let buildError = null;
 
 try {
   runNodeScript('build-renderer.js');
-  runNodeScript('inline-src.js');
-  inlined = true;
   runBuilder(dirMode);
 } catch (error) {
-  buildError = error;
-} finally {
-  if (inlined) {
-    try {
-      runNodeScript('restore-src.js');
-    } catch (restoreError) {
-      if (!buildError) throw restoreError;
-      console.error('[build-win] restore failed:', restoreError && restoreError.message ? restoreError.message : restoreError);
-    }
-  }
-}
-
-if (buildError) {
-  console.error('[build-win] build failed:', buildError && buildError.message ? buildError.message : buildError);
+  console.error('[build-win] build failed:', error && error.message ? error.message : error);
   process.exit(1);
 }

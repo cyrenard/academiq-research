@@ -1,10 +1,12 @@
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::env;
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
+use zip::ZipArchive;
 
 fn open_conn<P: AsRef<Path>>(path: P) -> Result<Connection, rusqlite::Error> {
     let open_fn = rusqlite::Connection::open;
@@ -25,6 +27,8 @@ const LEGACY_ALT_FILE: &str = "data.json";
 const LEGACY_ELECTRON_DIR: &str = "AcademiQ";
 const STATE_BLOB_KEY: &str = "state_blob";
 const DRAFT_BLOB_KEY: &str = "editor_draft_blob";
+const STORAGE_READ_MODE_KEY: &str = "storage_read_mode";
+const PROJECTION_PARITY_KEY: &str = "projection_parity_json";
 const MAX_DATA_JSON_BYTES: usize = 50 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
@@ -130,11 +134,168 @@ pub fn load_state(app_data_dir: &Path) -> Result<Option<String>, String> {
         .map_err(|e| e.to_string())?;
     drop(conn);
     if let Some(recovered) =
+        recover_state_blob_from_auto_backup_if_richer(app_data_dir, value.as_deref())?
+    {
+        return Ok(Some(recovered));
+    }
+    if let Some(recovered) =
         recover_state_blob_from_legacy_if_richer(app_data_dir, &db_paths.db_path, value.as_deref())?
     {
         return Ok(Some(recovered));
     }
     Ok(value)
+}
+
+fn state_document_content_len_val(value: &Value) -> usize {
+    let docs_len = value
+        .get("docs")
+        .and_then(Value::as_array)
+        .map(|docs| {
+            docs.iter()
+                .filter_map(|doc| doc.get("content").and_then(Value::as_str))
+                .map(str::len)
+                .sum::<usize>()
+        })
+        .unwrap_or(0);
+    if docs_len > 0 {
+        docs_len
+    } else {
+        value
+            .get("doc")
+            .and_then(Value::as_str)
+            .map(str::len)
+            .unwrap_or(0)
+    }
+}
+
+fn state_recovery_score(value: &Value) -> usize {
+    let refs = count_state_references_val(value);
+    let notes = count_state_array_val(value, "notes");
+    state_document_content_len_val(value)
+        .saturating_add(refs.saturating_mul(4096))
+        .saturating_add(notes.saturating_mul(512))
+}
+
+fn should_recover_startup_race(
+    current: &Value,
+    candidate: &Value,
+    current_source: &str,
+) -> bool {
+    if current_source != "autosave" {
+        return false;
+    }
+    let current_content = state_document_content_len_val(current);
+    let candidate_content = state_document_content_len_val(candidate);
+    let current_refs = count_state_references_val(current);
+    let candidate_refs = count_state_references_val(candidate);
+    let catastrophic_content_shrink = current_content <= 256
+        && candidate_content >= 1024
+        && candidate_content >= current_content.saturating_add(512);
+    let catastrophic_reference_shrink = current_refs == 0
+        && candidate_refs >= 3
+        && candidate_content.saturating_add(256) >= current_content;
+    (catastrophic_content_shrink || catastrophic_reference_shrink)
+        && state_recovery_score(candidate) > state_recovery_score(current)
+}
+
+fn read_state_blob_from_auto_backup(
+    app_data_dir: &Path,
+    backup_path: &Path,
+    probe_index: usize,
+) -> Result<Option<String>, String> {
+    const MAX_BACKUP_DB_BYTES: u64 = 128 * 1024 * 1024;
+    let file = fs::File::open(backup_path).map_err(|e| e.to_string())?;
+    let mut archive = ZipArchive::new(file).map_err(|e| e.to_string())?;
+    let mut entry = match archive.by_name("data/academiq.sqlite") {
+        Ok(entry) => entry,
+        Err(_) => return Ok(None),
+    };
+    if entry.size() > MAX_BACKUP_DB_BYTES {
+        return Ok(None);
+    }
+    let mut bytes = Vec::with_capacity(entry.size() as usize);
+    entry.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+    drop(entry);
+    drop(archive);
+
+    let probe_path = app_data_dir.join(format!(
+        ".startup-recovery-{}-{probe_index}.sqlite",
+        std::process::id()
+    ));
+    fs::write(&probe_path, bytes).map_err(|e| e.to_string())?;
+    let result = (|| {
+        let conn = Connection::open_with_flags(&probe_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|e| e.to_string())?;
+        conn.query_row(
+            "SELECT value FROM kv WHERE key = ?1",
+            params![STATE_BLOB_KEY],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())
+    })();
+    let _ = fs::remove_file(&probe_path);
+    result
+}
+
+fn recover_state_blob_from_auto_backup_if_richer(
+    app_data_dir: &Path,
+    current_raw: Option<&str>,
+) -> Result<Option<String>, String> {
+    let Some(current_raw) = current_raw else {
+        return Ok(None);
+    };
+    let current_source = kv_get_from_db(&get_db_path(app_data_dir), "state_source")?
+        .unwrap_or_default();
+    if current_source != "autosave" {
+        return Ok(None);
+    }
+    let current = parse_json(current_raw)?;
+    let backups_dir = app_data_dir.join("backups");
+    let mut backups = match fs::read_dir(&backups_dir) {
+        Ok(entries) => entries
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .map(|name| name.starts_with("autobackup_") && name.ends_with(".aqbackup"))
+                    .unwrap_or(false)
+            })
+            .collect::<Vec<_>>(),
+        Err(_) => return Ok(None),
+    };
+    backups.sort();
+    backups.reverse();
+
+    let mut best: Option<(usize, String, PathBuf)> = None;
+    for (index, backup_path) in backups.iter().take(6).enumerate() {
+        let Ok(Some(raw)) = read_state_blob_from_auto_backup(app_data_dir, backup_path, index)
+        else {
+            continue;
+        };
+        let Ok(candidate) = parse_json(&raw) else {
+            continue;
+        };
+        if !should_recover_startup_race(&current, &candidate, &current_source) {
+            continue;
+        }
+        let score = state_recovery_score(&candidate);
+        if best.as_ref().map(|item| score > item.0).unwrap_or(true) {
+            best = Some((score, raw, backup_path.clone()));
+        }
+    }
+    let Some((_score, recovered_raw, backup_path)) = best else {
+        return Ok(None);
+    };
+    save_state(app_data_dir, &recovered_raw, "startup-race-recovery")?;
+    kv_set(
+        app_data_dir,
+        "startup_race_recovery_backup",
+        &backup_path.to_string_lossy(),
+    )?;
+    kv_set(app_data_dir, "startup_race_recovery_at", &utc_stamp())?;
+    Ok(Some(recovered_raw))
 }
 
 fn recover_state_blob_from_legacy_if_richer(
@@ -308,13 +469,16 @@ pub fn save_state(app_data_dir: &Path, raw: &str, source: &str) -> Result<Value,
         );
         e.to_string()
     })?;
-    if let Err(e) = save_state_blob_tx(&tx, &guarded_raw, source) {
-        telemetry::record_event(
-            "state_save_failed",
-            json!({ "stage": "write_blob", "error": &e, "source": source }),
-        );
-        return Err(e);
-    }
+    let projection_parity = match save_state_blob_tx(&tx, &guarded_raw, source) {
+        Ok(report) => report,
+        Err(e) => {
+            telemetry::record_event(
+                "state_save_failed",
+                json!({ "stage": "write_blob", "error": &e, "source": source }),
+            );
+            return Err(e);
+        }
+    };
     tx.commit().map_err(|e| {
         telemetry::record_event(
             "state_save_failed",
@@ -322,7 +486,13 @@ pub fn save_state(app_data_dir: &Path, raw: &str, source: &str) -> Result<Value,
         );
         e.to_string()
     })?;
-    Ok(json!({ "ok": true, "savedAt": now_millis(), "storage": "sqlite" }))
+    Ok(json!({
+        "ok": true,
+        "savedAt": now_millis(),
+        "storage": "sqlite",
+        "readMode": "blob-shadow",
+        "projectionParity": projection_parity
+    }))
 }
 
 fn preserve_reference_libraries_on_save(
@@ -368,6 +538,7 @@ fn preserve_reference_libraries_on_save(
     let can_merge_reference_shrink = matches!(
         source,
         "editor-autosave"
+            | "legacy-autosave"
             | "flush-editor"
             | "word-import-commit"
             | "legacy-empty-overwrite"
@@ -466,6 +637,8 @@ fn merge_missing_state_collections_val(
     let mut next = next_val.clone();
     merge_array_by_id(&mut next, current_val, "docs")?;
     merge_array_by_id(&mut next, current_val, "wss")?;
+    merge_optional_array_by_id(&mut next, current_val, "notes")?;
+    merge_optional_array_by_id(&mut next, current_val, "notebooks")?;
     stable_json(&next)
 }
 
@@ -473,6 +646,7 @@ fn is_partial_editor_save_source(source: &str) -> bool {
     matches!(
         source,
         "editor-autosave"
+            | "legacy-autosave"
             | "flush-editor"
             | "beforeunload"
             | "pagehide"
@@ -505,6 +679,13 @@ fn merge_array_by_id(next: &mut Value, current: &Value, key: &str) -> Result<(),
         }
     }
     Ok(())
+}
+
+fn merge_optional_array_by_id(next: &mut Value, current: &Value, key: &str) -> Result<(), String> {
+    if next.get(key).is_none() && current.get(key).is_none() {
+        return Ok(());
+    }
+    merge_array_by_id(next, current, key)
 }
 
 pub fn save_draft(app_data_dir: &Path, raw: &str) -> Result<Value, String> {
@@ -1176,7 +1357,7 @@ fn save_state_blob_tx(
     tx: &rusqlite::Transaction<'_>,
     raw: &str,
     source: &str,
-) -> Result<(), String> {
+) -> Result<Value, String> {
     let parsed = parse_json(raw)?;
     tx.execute(
         "INSERT OR REPLACE INTO kv(key, value) VALUES (?1, ?2)",
@@ -1193,7 +1374,23 @@ fn save_state_blob_tx(
         params!["state_source", source],
     )
     .map_err(|e| e.to_string())?;
-    rebuild_projection(tx, &parsed, true)
+    rebuild_projection(tx, &parsed, true)?;
+    let report = projection_parity_report(tx, &parsed)?;
+    upsert_kv_tx(tx, PROJECTION_PARITY_KEY, &stable_json(&report)?)?;
+    upsert_kv_tx(
+        tx,
+        "projection_parity_status",
+        report
+            .get("status")
+            .and_then(Value::as_str)
+            .unwrap_or("mismatch"),
+    )?;
+    tx.execute(
+        "INSERT OR IGNORE INTO kv(key, value) VALUES (?1, ?2)",
+        params![STORAGE_READ_MODE_KEY, "blob-shadow"],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(report)
 }
 
 fn rebuild_projection(
@@ -1429,6 +1626,195 @@ fn insert_library_items(tx: &rusqlite::Transaction<'_>, state: &Value) -> Result
     Ok(())
 }
 
+fn projection_mismatch_ids(
+    expected: &BTreeMap<String, Value>,
+    actual: &BTreeMap<String, Value>,
+) -> Vec<String> {
+    expected
+        .keys()
+        .chain(actual.keys())
+        .cloned()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .filter(|id| expected.get(id) != actual.get(id))
+        .take(25)
+        .collect()
+}
+
+fn projection_parity_report(conn: &Connection, state: &Value) -> Result<Value, String> {
+    let expected_docs_list = state
+        .get("docs")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let expected_docs = expected_docs_list
+        .iter()
+        .enumerate()
+        .map(|(idx, doc)| {
+            let id = doc
+                .get("id")
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("doc-{}", idx + 1));
+            (id, doc.clone())
+        })
+        .collect::<BTreeMap<_, _>>();
+    let mut actual_docs = BTreeMap::new();
+    {
+        let mut stmt = conn
+            .prepare("SELECT id, body_json FROM documents ORDER BY id")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (id, raw) = row.map_err(|e| e.to_string())?;
+            actual_docs.insert(id, parse_json(&raw)?);
+        }
+    }
+
+    let cur_doc = state.get("curDoc").and_then(Value::as_str).unwrap_or("");
+    let expected_tabs = expected_docs_list
+        .iter()
+        .enumerate()
+        .map(|(idx, doc)| {
+            let id = doc
+                .get("id")
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("doc-{}", idx + 1));
+            json!({ "docId": id, "position": idx, "active": id == cur_doc })
+        })
+        .collect::<Vec<_>>();
+    let mut actual_tabs = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare("SELECT doc_id, position, active FROM tabs ORDER BY position, id")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(json!({
+                    "docId": row.get::<_, String>(0)?,
+                    "position": row.get::<_, i64>(1)?,
+                    "active": row.get::<_, i64>(2)? != 0
+                }))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            actual_tabs.push(row.map_err(|e| e.to_string())?);
+        }
+    }
+
+    let mut expected_library_count = 0usize;
+    let mut expected_library = BTreeMap::new();
+    for workspace in state
+        .get("wss")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+    {
+        let ws_id = workspace.get("id").and_then(Value::as_str).unwrap_or("");
+        for (idx, item) in workspace
+            .get("lib")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .enumerate()
+        {
+            expected_library_count += 1;
+            let id = item
+                .get("id")
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("{ws_id}:ref-{}", idx + 1));
+            let mut normalized = item;
+            if let Some(obj) = normalized.as_object_mut() {
+                obj.entry("wsId".to_string())
+                    .or_insert_with(|| Value::String(ws_id.to_string()));
+            }
+            expected_library.insert(id, normalized);
+        }
+    }
+    let mut actual_library = BTreeMap::new();
+    {
+        let mut stmt = conn
+            .prepare("SELECT id, metadata_json FROM library_items ORDER BY id")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (id, raw) = row.map_err(|e| e.to_string())?;
+            actual_library.insert(id, parse_json(&raw)?);
+        }
+    }
+
+    let docs_match =
+        expected_docs_list.len() == actual_docs.len() && expected_docs == actual_docs;
+    let tabs_match = expected_tabs == actual_tabs;
+    let library_match = expected_library_count == actual_library.len()
+        && expected_library.len() == expected_library_count
+        && expected_library == actual_library;
+    let verified = docs_match && tabs_match && library_match;
+    Ok(json!({
+        "status": if verified { "verified" } else { "mismatch" },
+        "checkedAt": now_millis(),
+        "documents": {
+            "expected": expected_docs_list.len(),
+            "actual": actual_docs.len(),
+            "matching": docs_match,
+            "mismatchIds": projection_mismatch_ids(&expected_docs, &actual_docs)
+        },
+        "tabs": {
+            "expected": expected_tabs.len(),
+            "actual": actual_tabs.len(),
+            "matching": tabs_match
+        },
+        "libraryItems": {
+            "expected": expected_library_count,
+            "actual": actual_library.len(),
+            "matching": library_match,
+            "mismatchIds": projection_mismatch_ids(&expected_library, &actual_library)
+        }
+    }))
+}
+
+pub fn projection_status(app_data_dir: &Path, raw: Option<&str>) -> Result<Value, String> {
+    let db_paths = init_or_migrate(app_data_dir)?;
+    let conn = open_conn(&db_paths.db_path).map_err(|e| e.to_string())?;
+    let read_mode = conn
+        .query_row(
+            "SELECT value FROM kv WHERE key = ?1",
+            params![STORAGE_READ_MODE_KEY],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+        .unwrap_or_else(|| "blob-shadow".to_string());
+    let parity = match raw.filter(|value| !value.trim().is_empty()) {
+        Some(value) => projection_parity_report(&conn, &parse_json(value)?)?,
+        None => conn
+            .query_row(
+                "SELECT value FROM kv WHERE key = ?1",
+                params![PROJECTION_PARITY_KEY],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?
+            .and_then(|value| parse_json(&value).ok())
+            .unwrap_or_else(|| json!({ "status": "not-initialized" })),
+    };
+    Ok(json!({ "readMode": read_mode, "projectionParity": parity }))
+}
+
 fn backup_legacy_json(path: &Path) -> Result<PathBuf, String> {
     let backup_path = path.with_file_name(format!(
         "{}.bak.{}",
@@ -1544,6 +1930,8 @@ fn now_millis() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, ZipWriter};
 
     fn temp_dir(name: &str) -> PathBuf {
         let path =
@@ -1572,6 +1960,28 @@ mod tests {
             }]
         })
         .to_string()
+    }
+
+    fn write_state_backup(app_data_dir: &Path, name: &str) -> PathBuf {
+        let db_path = get_db_path(app_data_dir);
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);").unwrap();
+        drop(conn);
+
+        let backups_dir = app_data_dir.join("backups");
+        fs::create_dir_all(&backups_dir).unwrap();
+        let backup_path = backups_dir.join(name);
+        let file = fs::File::create(&backup_path).unwrap();
+        let mut zip = ZipWriter::new(file);
+        let options =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        zip.start_file("manifest.json", options).unwrap();
+        zip.write_all(br#"{"format":"academiq-tauri-backup","formatVersion":1}"#)
+            .unwrap();
+        zip.start_file("data/academiq.sqlite", options).unwrap();
+        zip.write_all(&fs::read(db_path).unwrap()).unwrap();
+        zip.finish().unwrap();
+        backup_path
     }
 
     fn large_state(count: usize) -> String {
@@ -1669,10 +2079,61 @@ mod tests {
     fn large_fixture_roundtrips_semantically() {
         let dir = temp_dir("large");
         let state = large_state(1200);
-        save_state(&dir, &state, "large-test").unwrap();
+        let saved = save_state(&dir, &state, "large-test").unwrap();
+        assert_eq!(
+            saved
+                .get("projectionParity")
+                .and_then(|report| report.get("status"))
+                .and_then(Value::as_str),
+            Some("verified")
+        );
         let loaded = load_state(&dir).unwrap().unwrap();
         assert_eq!(parse_json(&loaded).unwrap(), parse_json(&state).unwrap());
         assert_eq!(library_search(&dir, "akademik").unwrap().len(), 50);
+    }
+
+    #[test]
+    fn projection_shadow_read_reports_verified_roundtrip() {
+        let dir = temp_dir("projection-parity");
+        let state = sample_state();
+        save_state(&dir, &state, "projection-test").unwrap();
+        let status = projection_status(&dir, Some(&state)).unwrap();
+        assert_eq!(
+            status.get("readMode").and_then(Value::as_str),
+            Some("blob-shadow")
+        );
+        assert_eq!(
+            status
+                .get("projectionParity")
+                .and_then(|report| report.get("status"))
+                .and_then(Value::as_str),
+            Some("verified")
+        );
+    }
+
+    #[test]
+    fn projection_shadow_read_detects_table_drift_without_replacing_blob() {
+        let dir = temp_dir("projection-drift");
+        let state = sample_state();
+        save_state(&dir, &state, "projection-test").unwrap();
+        let conn = open_conn(dir.join(DB_FILE)).unwrap();
+        conn.execute(
+            "UPDATE library_items SET metadata_json = '{\"id\":\"ref1\",\"title\":\"drift\"}' WHERE id = 'ref1'",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+
+        let loaded = load_state(&dir).unwrap().unwrap();
+        assert_eq!(parse_json(&loaded).unwrap(), parse_json(&state).unwrap());
+        let status = projection_status(&dir, Some(&loaded)).unwrap();
+        assert_eq!(
+            status
+                .get("projectionParity")
+                .and_then(|report| report.get("status"))
+                .and_then(Value::as_str),
+            Some("mismatch")
+        );
     }
 
     #[test]
@@ -1998,7 +2459,7 @@ mod tests {
     }
 
     #[test]
-    fn editor_autosave_merges_missing_references_instead_of_shrinking_library() {
+    fn editor_autosave_sources_merge_missing_references_instead_of_shrinking_library() {
         let dir = temp_dir("state-blob-partial-library-overwrite");
         let richer = json!({
             "schemaVersion": 3,
@@ -2033,25 +2494,27 @@ mod tests {
             "notes": []
         })
         .to_string();
-        save_state(&dir, &stale_editor_save, "editor-autosave").unwrap();
+        for source in ["editor-autosave", "legacy-autosave"] {
+            save_state(&dir, &stale_editor_save, source).unwrap();
 
-        let loaded = parse_json(&load_state(&dir).unwrap().unwrap()).unwrap();
-        let lib = loaded
-            .get("wss")
-            .and_then(Value::as_array)
-            .and_then(|workspaces| workspaces.first())
-            .and_then(|workspace| workspace.get("lib"))
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        assert_eq!(lib.len(), 2);
-        assert!(lib
-            .iter()
-            .any(|reference| reference.get("id").and_then(Value::as_str) == Some("ref2")));
-        assert_eq!(
-            loaded.get("doc").and_then(Value::as_str),
-            Some("<p>Autosaved editor content</p>")
-        );
+            let loaded = parse_json(&load_state(&dir).unwrap().unwrap()).unwrap();
+            let lib = loaded
+                .get("wss")
+                .and_then(Value::as_array)
+                .and_then(|workspaces| workspaces.first())
+                .and_then(|workspace| workspace.get("lib"))
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            assert_eq!(lib.len(), 2, "source={source}");
+            assert!(lib.iter().any(|reference| {
+                reference.get("id").and_then(Value::as_str) == Some("ref2")
+            }));
+            assert_eq!(
+                loaded.get("doc").and_then(Value::as_str),
+                Some("<p>Autosaved editor content</p>")
+            );
+        }
     }
 
     #[test]
@@ -2204,6 +2667,78 @@ mod tests {
     }
 
     #[test]
+    fn every_partial_editor_save_source_preserves_notes_and_notebooks() {
+        for source in [
+            "editor-autosave",
+            "legacy-autosave",
+            "flush-editor",
+            "beforeunload",
+            "pagehide",
+            "visibility-hidden",
+            "word-import-commit",
+            "draft-promote",
+        ] {
+            let dir = temp_dir(&format!("partial-notes-{source}"));
+            let rich = json!({
+                "schemaVersion": 3,
+                "cur": "ws2",
+                "curDoc": "doc2",
+                "doc": "<p>Original</p>",
+                "docs": [
+                    { "id": "doc1", "content": "<p>One</p>" },
+                    { "id": "doc2", "content": "<p>Original</p>" }
+                ],
+                "wss": [
+                    { "id": "ws1", "docId": "doc1", "lib": [] },
+                    { "id": "ws2", "docId": "doc2", "lib": [] }
+                ],
+                "notebooks": [
+                    { "id": "nb1", "wsId": "ws1" },
+                    { "id": "nb2", "wsId": "ws2" }
+                ],
+                "notes": [
+                    { "id": "note1", "wsId": "ws1", "txt": "One" },
+                    { "id": "note2", "wsId": "ws2", "txt": "Two" }
+                ]
+            })
+            .to_string();
+            save_state(&dir, &rich, "persistState").unwrap();
+
+            let partial = json!({
+                "schemaVersion": 3,
+                "cur": "ws2",
+                "curDoc": "doc2",
+                "doc": format!("<p>Changed by {source}</p>"),
+                "docs": [{ "id": "doc2", "content": format!("<p>Changed by {source}</p>") }],
+                "wss": [{ "id": "ws2", "docId": "doc2", "lib": [] }],
+                "notebooks": [{ "id": "nb2", "wsId": "ws2" }],
+                "notes": [{ "id": "note2", "wsId": "ws2", "txt": "Two" }]
+            })
+            .to_string();
+            save_state(&dir, &partial, source).unwrap();
+
+            let loaded = parse_json(&load_state(&dir).unwrap().unwrap()).unwrap();
+            assert_eq!(
+                loaded.get("notes").and_then(Value::as_array).map(Vec::len),
+                Some(2),
+                "source={source}"
+            );
+            assert_eq!(
+                loaded
+                    .get("notebooks")
+                    .and_then(Value::as_array)
+                    .map(Vec::len),
+                Some(2),
+                "source={source}"
+            );
+            assert_eq!(
+                loaded.get("doc").and_then(Value::as_str),
+                Some(format!("<p>Changed by {source}</p>").as_str())
+            );
+        }
+    }
+
+    #[test]
     fn explicit_persist_state_allows_document_count_shrink() {
         let dir = temp_dir("state-blob-explicit-doc-delete");
         let richer = json!({
@@ -2237,6 +2772,86 @@ mod tests {
         assert_eq!(
             loaded.get("docs").and_then(Value::as_array).map(Vec::len),
             Some(1)
+        );
+    }
+
+    #[test]
+    fn startup_race_recovery_only_accepts_catastrophic_generic_autosave_shrink() {
+        let rich = json!({
+            "doc": format!("<p>{}</p>", "restored ".repeat(180)),
+            "docs": [{ "id": "doc1", "content": format!("<p>{}</p>", "restored ".repeat(180)) }],
+            "wss": [{ "id": "ws1", "lib": [
+                { "id": "ref1" }, { "id": "ref2" }, { "id": "ref3" }
+            ] }]
+        });
+        let blank = json!({
+            "doc": "<p></p>",
+            "docs": [{ "id": "doc1", "content": "<p></p>" }],
+            "wss": [{ "id": "ws1", "lib": [] }]
+        });
+
+        assert!(should_recover_startup_race(&blank, &rich, "autosave"));
+        assert!(!should_recover_startup_race(
+            &blank,
+            &rich,
+            "editor-autosave"
+        ));
+        assert!(!should_recover_startup_race(
+            &blank,
+            &rich,
+            "persistState"
+        ));
+        assert!(!should_recover_startup_race(&rich, &blank, "autosave"));
+    }
+
+    #[test]
+    fn load_state_recovers_rich_auto_backup_after_blank_startup_autosave() {
+        let dir = temp_dir("startup-race-auto-backup");
+        let rich_content = format!("<p>{}</p>", "persisted research content ".repeat(90));
+        let rich = json!({
+            "schemaVersion": 3,
+            "cur": "ws1",
+            "curDoc": "doc1",
+            "doc": rich_content,
+            "docs": [{ "id": "doc1", "name": "Article", "content": rich_content }],
+            "wss": [{ "id": "ws1", "name": "Workspace", "docId": "doc1", "lib": [
+                { "id": "ref1", "title": "One" },
+                { "id": "ref2", "title": "Two" },
+                { "id": "ref3", "title": "Three" },
+                { "id": "ref4", "title": "Four" }
+            ] }],
+            "notes": [{ "id": "note1", "content": "kept" }]
+        })
+        .to_string();
+        save_state(&dir, &rich, "persistState").unwrap();
+        let backup = write_state_backup(&dir, "autobackup_100.aqbackup");
+
+        let blank = json!({
+            "schemaVersion": 3,
+            "cur": "ws1",
+            "curDoc": "doc1",
+            "doc": "<p></p>",
+            "docs": [{ "id": "doc1", "name": "Article", "content": "<p></p>" }],
+            "wss": [{ "id": "ws1", "name": "Workspace", "docId": "doc1", "lib": [] }],
+            "notes": []
+        })
+        .to_string();
+        save_state(&dir, &blank, "autosave").unwrap();
+
+        let loaded = parse_json(&load_state(&dir).unwrap().unwrap()).unwrap();
+        assert!(state_document_content_len_val(&loaded) > 1024);
+        assert_eq!(count_state_references_val(&loaded), 4);
+        assert_eq!(
+            kv_get_from_db(&get_db_path(&dir), "state_source")
+                .unwrap()
+                .as_deref(),
+            Some("startup-race-recovery")
+        );
+        assert_eq!(
+            kv_get_from_db(&get_db_path(&dir), "startup_race_recovery_backup")
+                .unwrap()
+                .as_deref(),
+            Some(backup.to_string_lossy().as_ref())
         );
     }
 

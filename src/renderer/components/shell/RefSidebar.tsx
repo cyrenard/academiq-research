@@ -31,6 +31,7 @@ type RefSidebarProps = {
   onSelectReference: (id: string) => void;
   onSearch: (query: string) => void;
   onOpenCollections: () => void;
+  onOpenLabels: () => void;
   onToggleFilters: () => void;
   onEditReference: (id: string) => void;
   onToggleReferenceLabel: (referenceId: string, label: SidebarLabel) => void;
@@ -89,6 +90,7 @@ export function RefSidebar({
   onSelectReference,
   onSearch,
   onOpenCollections,
+  onOpenLabels,
   onToggleFilters,
   onEditReference,
   onToggleReferenceLabel,
@@ -583,6 +585,7 @@ export function RefSidebar({
 
         <div className="aq-ref-sidebar-actions grid grid-cols-2 gap-2">
           <button type="button" onClick={onOpenCollections} className="h-8 rounded-md border border-aq-line bg-white text-[12px] font-semibold transition hover:bg-aq-panel active:translate-y-px">Klasörler</button>
+          <button type="button" onClick={onOpenLabels} className="h-8 rounded-md border border-aq-line bg-white text-[12px] font-semibold transition hover:bg-aq-panel active:translate-y-px">Etiketler</button>
           <button type="button" onClick={onToggleFilters} className={['h-8 rounded-md border border-aq-line text-[12px] font-semibold transition hover:bg-aq-panel active:translate-y-px', filtersOpen ? 'bg-aq-panel text-aq-ink' : 'bg-white'].join(' ')}>Filtrele</button>
           {menuButton('import', 'İçe Aktar', [
             ['reference-import-bib', '.bib/.ris Aktar'],
@@ -807,6 +810,9 @@ export function RefSidebar({
                     <input value={newLabelName} onChange={(event) => setNewLabelName(event.target.value)} className="h-7 min-w-0 flex-1 rounded-md border border-aq-line bg-white px-2 text-[11px] outline-none focus:border-aq-navy" placeholder="Yeni etiket..." aria-label="Yeni etiket adı" />
                     <button type="submit" className="h-7 rounded-md border border-aq-line px-2 font-semibold hover:bg-aq-panel" aria-label="Etiket ekle">+</button>
                   </form>
+                  <button type="button" className="mt-1 block w-full rounded-md px-2.5 py-2 text-left font-medium text-aq-ink hover:bg-aq-panel" onClick={() => { onOpenLabels(); closeReferenceMenu(); }}>
+                    Etiketleri Yönet
+                  </button>
                 </>
               ) : (
                 <>
@@ -889,5 +895,4 @@ export function RefSidebar({
     </aside>
   );
 }
-
 

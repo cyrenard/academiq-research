@@ -1,5 +1,83 @@
 # Changelog
 
+## 1.24.1-beta.23 - 2026-08-28
+
+Restores live citation search after the `/r` and `/t` popup opens.
+
+- Enables and focuses the citation search input on Windows as well as Linux.
+- Keeps popup typing authoritative so AQ Engine's delayed slash refresh cannot
+  erase the first characters of a search query.
+- Preserves the editor trigger range while the popup owns keyboard input, so
+  inserting a selected reference still replaces the original slash command.
+- Allows pointer focus for the search and citation-mode controls while keeping
+  citation result clicks isolated from the editor.
+- Restores editor focus when the popup is dismissed with Escape.
+- Adds Windows regression coverage and real-browser keyboard verification for
+  `/r`, `/t`, matching queries, and empty results.
+
+## 1.24.1-beta.22 - 2026-08-27
+
+Windows and Linux citation popup visibility correction confirmed with live
+keyboard input in a real browser renderer.
+
+- Clears the stale `aq-hidden` class left by asynchronous startup hydration
+  before opening the `/r` or `/t` citation picker. That utility used
+  `display: none !important`, so earlier fixes detected the command while the
+  popup remained visually hidden.
+- Makes the explicit `show` state authoritative in CSS and keeps close/open
+  transitions synchronized with the shared transient-visibility utility.
+- Recognizes AQ Engine capture, Windows writing-assist, and legacy editable
+  surfaces in the eager keyboard fallback on both Windows and Linux.
+- Adds a live regression fixture that begins with the real startup-hidden
+  state and verifies visible `/r` and `/t` results after actual key input.
+- Retains beta.21 autosave recovery, serialized persistence, and eager popup
+  ownership changes.
+
+## 1.24.1-beta.21 - 2026-08-27
+
+Packaged Windows citation popup correction based on the last live-tested
+working ownership model.
+
+- Restores the eager citation popup host from beta.15 so `/r` and `/t` do not
+  depend on the lazy compatibility tree mounting in WebView2.
+- Opens slash citations immediately from AQ Engine's authoritative document
+  and caret offsets, while retaining the delayed refresh as a fallback.
+- Rebinds the citation runtime when popup DOM mounts after early startup and
+  pins explicitly opened triggers against stale selection refreshes.
+- Keeps the extra global key fallback Windows-only; Linux retains its editable
+  popup-input and focus behavior.
+- Retains beta.20 autosave serialization, startup recovery, and storage fixes.
+
+## 1.24.1-beta.20 - 2026-08-26
+
+Windows citation slash-trigger correction after packaged-app live testing.
+
+- Restores the beta.9 direct AQ Engine-to-citation-runtime ownership path for
+  typed `/r` and `/t` commands; React command routing is fallback-only.
+- Adds a real AQ Engine input test that types `/r` while the React router is
+  mounted and asserts that the citation runtime receives the refresh.
+- Adds popup behavior coverage for both inline (`/r`) and textual (`/t`) modes,
+  plus a browser fixture used to verify that the visible picker opens.
+- Retains beta.19 startup recovery, serialized autosave, Windows input, and
+  Linux/WebKit focus behavior.
+
+## 1.24.1-beta.19 - 2026-08-25
+
+Release-candidate reliability pass following Windows live testing.
+
+- Prevents the React and legacy editor runtimes from racing during startup and
+  replacing hydrated content with a temporary blank document.
+- Preserves documents, workspaces, references, notes, and notebooks across all
+  partial editor-save sources while keeping explicit delete operations intact.
+- Recovers a clearly truncated generic-autosave state from the richest recent
+  automatic backup once, without applying recovery to explicit user saves.
+- Keeps the Windows `/r` and `/t` citation picker behavior from beta.18 and the
+  Linux/WebKit focus path covered by the platform regression suite.
+- Repairs Turkish status text, visual Turkish heading recognition, and
+  all-uppercase English bibliography navigation.
+- Removes stale current-build dependencies on the archived Electron-era HTML
+  shell from the Electron fallback and release-quality gates.
+
 ## 1.24.0-beta.9 - 2026-05-26
 
 Performance + reliability pass on top of beta.8.

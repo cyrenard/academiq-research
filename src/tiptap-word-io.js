@@ -439,10 +439,10 @@ function resolveVisualHeadingTag(node){
   var fontSize = parseFontSizePt(style);
   var bold = /font-weight\s*:\s*(bold|[6-9]00)\b/i.test(style)
     || !!(node.querySelector && node.querySelector('strong,b'));
-  var upper = text === text.toLocaleUpperCase('tr-TR') && /[A-ZÃ‡ÄÄ°Ã–ÅÃœ]/i.test(text);
+  var upper = text === text.toLocaleUpperCase('tr-TR') && /[A-ZÇĞİÖŞÜ]/i.test(text);
   if(String(align || '').toLowerCase() === 'center' && (bold || fontSize >= 13.5)) return 'h1';
   if(upper && text.split(/\s+/).length <= 8 && (bold || fontSize >= 13.5)) return 'h1';
-  if(bold && /^(abstract|Ã¶zet|ozet|giriÅŸ|giris|yÃ¶ntem|yontem|bulgular|tartÄ±ÅŸma|tartisma|sonuÃ§|sonuc|references?)$/i.test(text)) return 'h1';
+  if(bold && /^(abstract|özet|ozet|giriş|giris|yöntem|yontem|bulgular|tartışma|tartisma|sonuç|sonuc|references?)$/i.test(text)) return 'h1';
   return '';
 }
 
@@ -1176,7 +1176,7 @@ function isWordListParagraph(node){
       return '<h1>' + content + '</h1>';
     });
     out = out.replace(/<(p|div)([^>]*)>\s*(kaynak[cç]a|references?|bibliography|kaynaklar)\s*<\/\1>/gi, '<h1>$3</h1>');
-    out = out.replace(/<(p|div)([^>]*)>\s*(kaynak[cÃ§]a|kaynakca|references?|bibliography|kaynaklar)\s*[:;,.â€“â€”-]\s*<\/\1>/gi, '<h1>$3</h1>');
+    out = out.replace(/<(p|div)([^>]*)>\s*(kaynak(?:ça|ca|Ã§a)|references?|bibliography|kaynaklar)\s*[:;,.\-\u2013\u2014]\s*<\/\1>/gi, '<h1>$3</h1>');
     out = out.replace(/<(p|div)([^>]*)>\s*((?:kaynak(?:\u00e7|c)a)|kaynaklar|references?|bibliography)\s*[:;,\.\-\u2013\u2014]?\s*<\/\1>/gi, '<h1>$3</h1>');
     out = out.replace(/<(p|div)[^>]*style="[^"]*(?:page-break-before\s*:\s*always|mso-special-character\s*:\s*line-break|mso-break-type\s*:\s*page)[^"]*"[^>]*>[\s\S]*?<\/\1>/gi, '<p class="aq-page-break" data-indent-mode="none"><br></p>');
     // Word filtered HTML can encode page breaks as standalone <br> markers.

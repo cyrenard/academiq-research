@@ -411,7 +411,12 @@ fn sidecar_binary_name() -> &'static str {
     "capture-agent-x86_64-unknown-linux-gnu"
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn sidecar_binary_name() -> &'static str {
+    "capture-agent-aarch64-apple-darwin"
+}
+
+#[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
 fn sidecar_binary_name() -> &'static str {
     "capture-agent-x86_64-apple-darwin"
 }
@@ -468,7 +473,13 @@ mod tests {
             "capture-agent-x86_64-unknown-linux-gnu"
         );
 
-        #[cfg(target_os = "macos")]
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        assert_eq!(
+            sidecar_binary_name(),
+            "capture-agent-aarch64-apple-darwin"
+        );
+
+        #[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
         assert_eq!(sidecar_binary_name(), "capture-agent-x86_64-apple-darwin");
     }
 }

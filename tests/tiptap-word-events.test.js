@@ -5,6 +5,20 @@ const path = require('node:path');
 
 const events = require('../src/tiptap-word-events.js');
 
+function withNavigatorPlatform(platform, callback) {
+  const previous = Object.getOwnPropertyDescriptor(global, 'navigator');
+  Object.defineProperty(global, 'navigator', {
+    configurable: true,
+    value: { platform, userAgent: platform }
+  });
+  try {
+    return callback();
+  } finally {
+    if (previous) Object.defineProperty(global, 'navigator', previous);
+    else delete global.navigator;
+  }
+}
+
 test('tiptap word events exports init and watchSurface', () => {
   assert.equal(typeof events.init, 'function');
   assert.equal(typeof events.watchSurface, 'function');
@@ -49,7 +63,7 @@ test('buildContextMenuModel shows no-suggestion hint when grammar check is empty
   assert.equal(model[0].disabled, true);
 });
 
-test('applySurfaceAttributes disables native writing-assist rewrites', () => {
+test('Linux applySurfaceAttributes disables native writing-assist rewrites', () => {
   const attrs = {};
   const node = {
     nodeType: 1,
@@ -61,7 +75,7 @@ test('applySurfaceAttributes disables native writing-assist rewrites', () => {
     querySelector: function(){ return null; }
   };
   try{
-    const ok = events.applySurfaceAttributes(node);
+    const ok = withNavigatorPlatform('Linux x86_64', () => events.applySurfaceAttributes(node));
     assert.equal(ok, true);
     assert.equal(attrs.spellcheck, 'false');
     assert.equal(attrs.autocorrect, 'off');
@@ -69,6 +83,31 @@ test('applySurfaceAttributes disables native writing-assist rewrites', () => {
     assert.equal(attrs.autocapitalize, 'off');
     assert.equal(attrs['data-gramm'], 'false');
     assert.equal(attrs['data-gramm_editor'], 'false');
+  } finally {
+    delete global.document;
+  }
+});
+
+test('Windows applySurfaceAttributes preserves beta 9 writing and input ownership', () => {
+  const attrs = {};
+  const node = {
+    nodeType: 1,
+    setAttribute: function(key, value){ attrs[key] = value; }
+  };
+  global.document = {
+    body: node,
+    getElementById: function(){ return null; },
+    querySelector: function(){ return null; }
+  };
+  try {
+    const ok = withNavigatorPlatform('Win32', () => events.applySurfaceAttributes(node));
+    assert.equal(ok, true);
+    assert.equal(attrs.spellcheck, 'true');
+    assert.equal(attrs.autocorrect, 'on');
+    assert.equal(attrs.autocomplete, 'on');
+    assert.equal(attrs.autocapitalize, 'sentences');
+    assert.equal(attrs['data-gramm'], 'true');
+    assert.equal(attrs['data-gramm_editor'], 'true');
   } finally {
     delete global.document;
   }
@@ -96,13 +135,13 @@ test('table backspace guard is exported and installed once', () => {
   }
 });
 
-test('AQ Engine capture input disables native autocorrect rewrites at source', () => {
+test('AQ Engine capture input selects Windows beta 9 or Linux safe writing attributes', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'experiments', 'aq-engine', 'input.js'), 'utf8');
-  assert.match(source, /ta\.setAttribute\('autocorrect',\s+'off'\)/);
-  assert.match(source, /ta\.setAttribute\('spellcheck',\s+'false'\)/);
-  assert.match(source, /ta\.setAttribute\('data-gramm',\s+'false'\)/);
-  assert.match(source, /assistBridge\.setAttribute\('autocorrect',\s+'off'\)/);
-  assert.doesNotMatch(source, /ta\.setAttribute\('autocorrect',\s+'on'\)/);
+  assert.match(source, /function isWindowsRuntime\(\)/);
+  assert.match(source, /windowsInputMode \? 'on' : 'off'/);
+  assert.match(source, /windowsInputMode \? 'true' : 'false'/);
+  assert.match(source, /windowsInputMode \? 'sentences' : 'off'/);
+  assert.match(source, /assistBridge\.setAttribute\('autocorrect', windowsInputMode \? 'on' : 'off'\)/);
 });
 
 test('AQ Engine table cell editor participates in backspace guard', () => {

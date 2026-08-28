@@ -5,6 +5,16 @@
   }
   root.AQTipTapWordInit = factory();
 })(typeof window !== 'undefined' ? window : globalThis, function(){
+  function isWindowsRuntime(){
+    var nav = typeof navigator !== 'undefined'
+      ? navigator
+      : (typeof window !== 'undefined' ? window.navigator : null);
+    if(!nav) return false;
+    var uaPlatform = nav.userAgentData && nav.userAgentData.platform;
+    var platform = String(uaPlatform || nav.platform || nav.userAgent || '').toLowerCase();
+    return platform.indexOf('windows') >= 0 || platform.indexOf('win32') === 0 || platform.indexOf('win64') === 0;
+  }
+
   function ensureCitationRuntimeReady(attempt){
     var tries = parseInt(attempt, 10) || 0;
     if(typeof window === 'undefined') return;
@@ -27,10 +37,11 @@
       target.innerHTML = String(html);
     }
     target.setAttribute('contenteditable', 'true');
-    target.setAttribute('spellcheck', 'false');
-    target.setAttribute('autocorrect', 'off');
-    target.setAttribute('autocomplete', 'off');
-    target.setAttribute('autocapitalize', 'off');
+    var writingAssistEnabled = isWindowsRuntime();
+    target.setAttribute('spellcheck', writingAssistEnabled ? 'true' : 'false');
+    target.setAttribute('autocorrect', writingAssistEnabled ? 'on' : 'off');
+    target.setAttribute('autocomplete', writingAssistEnabled ? 'on' : 'off');
+    target.setAttribute('autocapitalize', writingAssistEnabled ? 'sentences' : 'off');
     target.classList.add('ProseMirror');
     window.editor = null;
     return null;

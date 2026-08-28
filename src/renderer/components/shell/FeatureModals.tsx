@@ -12,6 +12,7 @@ import { useSpellcheck } from '../../lib/useSpellcheck';
 import { L, fmt } from '../../lib/labels';
 import { confirmDialog } from '../../lib/dialog';
 import { appStore } from '../../lib/app-store';
+import { queueAppStateSave, queueEditorDraftSave } from '../../lib/save-coordinator';
 
 type FeatureModal =
   | 'settings'
@@ -146,7 +147,7 @@ export function FeatureModals({
     });
     appStore.setState({ localMatrixAssistant: next });
     const win = window as any;
-    window.electronAPI.saveData(JSON.stringify(appStore.getState()))
+    queueAppStateSave(appStore.getState(), 'matrix-settings')
       .then(() => {
         onStatus(next.enabled ? 'Yerel Matrix yardımcısı açıldı' : 'Yerel Matrix yardımcısı kapatıldı');
         if (next.enabled && win.AQLiteratureMatrix && typeof win.AQLiteratureMatrix.rerunLocalAssistantAutoFill === 'function') {
@@ -363,7 +364,7 @@ export function FeatureModals({
               <button
                 type="button"
                 className="h-9 flex-1 rounded-lg bg-aq-navy px-3 text-xs font-semibold text-white shadow-sm hover:bg-aq-navy/90"
-                onClick={() => window.electronAPI.saveEditorDraft(JSON.stringify(state)).then(() => onStatus('Draft kaydedildi')).catch(() => onStatus('Draft kaydedilemedi'))}
+                onClick={() => queueEditorDraftSave(state).then(() => onStatus('Draft kaydedildi')).catch(() => onStatus('Draft kaydedilemedi'))}
               >
                 Draft al
               </button>
@@ -464,7 +465,7 @@ export function FeatureModals({
                   <button
                     type="button"
                     className="rounded-md border border-aq-line bg-white px-3 py-2 text-left text-xs font-semibold"
-                    onClick={() => window.electronAPI.saveEditorDraft(JSON.stringify(state)).then((result) => { setInfo(result); onStatus('Draft kaydedildi'); }).catch(() => onStatus('Draft kaydedilemedi'))}
+                    onClick={() => queueEditorDraftSave(state).then((result) => { setInfo(result); onStatus('Draft kaydedildi'); }).catch(() => onStatus('Draft kaydedilemedi'))}
                   >
                     Draft kaydetmeyi test et
                   </button>

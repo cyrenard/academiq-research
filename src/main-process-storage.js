@@ -584,12 +584,15 @@ function createStorageService(options) {
       const entry = store.docs[docId] && typeof store.docs[docId] === 'object'
         ? store.docs[docId]
         : { docId, docName: String(doc.name || ''), snapshots: [], updatedAt: 0 };
-      const nextSnapshot = buildDocumentSnapshot(doc, source, now);
       const lastSnapshot = Array.isArray(entry.snapshots) && entry.snapshots.length ? entry.snapshots[0] : null;
+      const snapshotNow = lastSnapshot
+        ? Math.max(now, Number(lastSnapshot.createdAt || 0) + 1)
+        : now;
+      const nextSnapshot = buildDocumentSnapshot(doc, source, snapshotNow);
       const force = forceDocIds.indexOf(docId) >= 0;
       entry.docId = docId;
       entry.docName = String(doc.name || '').trim();
-      entry.updatedAt = now;
+      entry.updatedAt = snapshotNow;
       entry.snapshots = Array.isArray(entry.snapshots) ? entry.snapshots : [];
       if (shouldStoreDocumentSnapshot(lastSnapshot, nextSnapshot, force)) {
         entry.snapshots.unshift(nextSnapshot);

@@ -29,7 +29,7 @@ function loadTauriApi() {
         invoke(command, args) {
           calls.push({ command, args: args || {} });
           if (/^(export_|pdf_export_annotated)/.test(command)) {
-            return Promise.resolve({ ok: false, error: 'not_implemented_phase_5' });
+            return Promise.resolve({ ok: true, command, args: args || {} });
           }
           if (command === 'ocr_recognize') {
             return Promise.resolve({ ok: false, code: 'OCR_NOT_IMPLEMENTED_PHASE_4' });
@@ -78,8 +78,8 @@ const parityCases = [
   ['openBibliographyDialog', 'dialog_open_bibliography', []],
   ['wordToHtml', 'word_to_html', ['C:/tmp/a.docx']],
   ['exportPDF', 'export_pdf', [{ layoutJson: '{"pages":[{"lines":[]}]}', defaultPath: 'a.pdf' }]],
-  ['exportAnnotatedPdfNative', 'pdf_export_annotated', [{ pdfBase64: 'JVBERi0=' }], 'not_implemented_phase_5'],
-  ['exportDOCX', 'export_docx', [{ defaultPath: 'a.docx' }], 'not_implemented_phase_5'],
+  ['exportAnnotatedPdfNative', 'pdf_export_annotated', [{ pdfBase64: 'JVBERi0=' }]],
+  ['exportDOCX', 'export_docx', [{ defaultPath: 'a.docx' }]],
   ['getSyncSettings', 'sync_get_settings', []],
   ['setSyncDir', 'sync_set_sync_dir', []],
   ['clearSyncDir', 'sync_clear_sync_dir', []],
@@ -221,11 +221,12 @@ test('Rust command modules register every preload invoke target', () => {
   }
 });
 
-test('Phase-deferred handlers return explicit controlled stub messages', () => {
+test('remaining phase-deferred handlers stay explicit while export commands are implemented', () => {
   const exportSource = read('src-tauri', 'src', 'commands', 'export.rs');
-  const browserSource = read('src-tauri', 'src', 'commands', 'browser_capture.rs');
   const ocrSource = read('src-tauri', 'src', 'commands', 'ocr.rs');
-  assert.match(exportSource, /not_implemented_phase_5/);
+  assert.doesNotMatch(exportSource, /not_implemented_phase_5/);
+  assert.match(exportSource, /pdf_export_annotated\(app: AppHandle, options: Value\)/);
+  assert.match(exportSource, /export_docx\(app: AppHandle, options: Value\)/);
   assert.match(ocrSource, /ocr_recognize/);
 });
 

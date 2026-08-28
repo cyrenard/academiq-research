@@ -17,6 +17,7 @@ const {
   currentDuplicateGroups,
   reasonLabel,
   mergeReferencesIntoPrimary,
+  mergeDuplicateGroupFallback,
   findLegacyReference
 } = _internal;
 
@@ -56,6 +57,7 @@ beforeEach(() => {
 afterEach(() => {
   delete (window as any).S;
   delete (window as any).__aqDismissedDuplicateSignatures;
+  delete (window as any).__aqReactQueueSave;
   delete (window as any).AQDuplicateDetection;
   delete (window as any).AQMetadataHealth;
   delete (window as any).duplicateReviewState;
@@ -373,6 +375,7 @@ describe('runMetadataHealthAction', () => {
 
   it('normalize action applies AQMetadataHealth.applyConservativeRepairs', () => {
     setWorkspace([{ id: 'r1', title: 'Old' }]);
+    const original = appStore.getState().wss[0]!.lib[0]!;
     (window as any).AQMetadataHealth = {
       applyConservativeRepairs: (ref: any) => ({ ref: { ...ref, title: 'New', normalized: true } })
     };
@@ -380,9 +383,30 @@ describe('runMetadataHealthAction', () => {
     btn.setAttribute('data-mh-action', 'normalize');
     btn.setAttribute('data-ref-id', 'r1');
     runMetadataHealthAction(btn);
-    expect((window as any).S.wss[0].lib[0].title).toBe('New');
-    expect((window as any).S.wss[0].lib[0].normalized).toBe(true);
+    expect(appStore.getState().wss[0]!.lib[0]!.title).toBe('New');
+    expect(appStore.getState().wss[0]!.lib[0]!.normalized).toBe(true);
+    expect(original.title).toBe('Old');
     expect((window as any).setDst).toHaveBeenCalledWith('Kayıt normalize edildi.', 'ok');
+  });
+
+  it('duplicate merge updates canonical references and note links immutably', () => {
+    const primary = { id: 'r1', title: 'Primary', authors: ['A'] };
+    const secondary = { id: 'r2', title: '', year: '2024', authors: ['B'] };
+    appStore.setState({
+      cur: 'ws-1',
+      wss: [{ id: 'ws-1', name: 'Workspace', lib: [primary, secondary] }],
+      notes: [{ id: 'n1', rid: 'r2', txt: 'linked' }]
+    });
+    (window as any).duplicateReviewState = {
+      groups: [{ signature: 'merge-me', ids: ['r1', 'r2'], records: [primary, secondary] }]
+    };
+    expect(mergeDuplicateGroupFallback('merge-me')).toBe(true);
+    const next = appStore.getState();
+    expect(next.wss[0]!.lib).toHaveLength(1);
+    expect(next.wss[0]!.lib[0]).toEqual(expect.objectContaining({ id: 'r1', year: '2024', authors: ['A', 'B'] }));
+    expect(next.notes[0]!.rid).toBe('r1');
+    expect(primary).toEqual({ id: 'r1', title: 'Primary', authors: ['A'] });
+    expect(secondary).toEqual({ id: 'r2', title: '', year: '2024', authors: ['B'] });
   });
 
   it('refetch reports error when ref has no DOI', () => {

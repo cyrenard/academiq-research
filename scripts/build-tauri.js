@@ -57,7 +57,7 @@ function bundleProfile(platform = process.platform) {
       extraPlatformKeys: [],
       bundleDirs: ['appimage', 'rpm', 'deb'],
       installerPattern: /\.(appimage|rpm|deb)$/i,
-      distCleanupPattern: /\.(appimage|rpm|deb)$/i,
+      distCleanupPattern: /\.(appimage|rpm|deb)(\.sig)?$/i,
       currentVersionOnly: false,
       signed: false,
       releaseInstallerName: null
@@ -69,7 +69,7 @@ function bundleProfile(platform = process.platform) {
       extraPlatformKeys: [],
       bundleDirs: ['dmg', 'macos'],
       installerPattern: /\.(dmg|app\.tar\.gz)$/i,
-      distCleanupPattern: /\.(dmg|app\.tar\.gz)$/i,
+      distCleanupPattern: /\.(dmg|app\.tar\.gz)(\.sig)?$/i,
       currentVersionOnly: false,
       signed: false,
       releaseInstallerName: null
@@ -102,6 +102,14 @@ function sha256(filePath) {
 
 function releaseInstallerName(pkg) {
   return bundleProfile('win32').releaseInstallerName(pkg);
+}
+
+function selectPrimaryInstaller(installers, platform = process.platform) {
+  if (!Array.isArray(installers) || !installers.length) return '';
+  if (platform === 'linux') {
+    return installers.find((file) => /\.AppImage$/i.test(file)) || installers[0];
+  }
+  return installers[0];
 }
 
 function copyArtifacts(installers, pkg, platform = process.platform) {
@@ -183,16 +191,16 @@ function latestJsonFor(installerPath, platform = process.platform) {
   };
 }
 
-function signInstaller(installerPath, platform = process.platform) {
-  if (!bundleProfile(platform).signed) {
-    return;
-  }
-  if (process.env.ACADEMIQ_SKIP_SIGN === '1') {
-    console.warn('[build-tauri] ACADEMIQ_SKIP_SIGN=1, skipping Authenticode signing.');
-    return;
-  }
+function hasUpdaterSigningKey(env = process.env, signingKeyPath = '') {
+  return Boolean(
+    String(env.TAURI_SIGNING_PRIVATE_KEY || '').trim()
+    || (signingKeyPath && fs.existsSync(signingKeyPath))
+  );
+}
+
+function windowsSignCommand() {
   const script = path.join(rootDir, 'scripts', 'sign-installer.ps1');
-  run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-InstallerPath', installerPath], 'sign installer');
+  return `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${script}" -InstallerPath %1`;
 }
 
 function main() {
@@ -203,7 +211,14 @@ function main() {
     || path.join(process.env.USERPROFILE || '', '.tauri', 'academiq-updater.key');
   const env = {};
   if (signingKeyPath && fs.existsSync(signingKeyPath)) {
-    env.TAURI_SIGNING_PRIVATE_KEY_PATH = signingKeyPath;
+    // The bundler consistently accepts TAURI_SIGNING_PRIVATE_KEY as either
+    // key contents or a path; normalize the documented *_PATH convenience
+    // variable into that canonical channel.
+    env.TAURI_SIGNING_PRIVATE_KEY = signingKeyPath;
+  }
+  const updaterSigningReady = hasUpdaterSigningKey(process.env, signingKeyPath);
+  if (process.env.ACADEMIQ_REQUIRE_UPDATER_SIGNATURE === '1' && !updaterSigningReady) {
+    throw new Error('Updater signing key is required for this release build');
   }
 
   const buildArgs = ['tauri', 'build'];
@@ -211,17 +226,30 @@ function main() {
   if (bundleOverride) {
     buildArgs.push('--bundles', bundleOverride);
   }
+  const configPatch = { bundle: {} };
+  if (!updaterSigningReady) {
+    // Tauri requires a private key when createUpdaterArtifacts is enabled.
+    // PR/local smoke installers remain buildable but cannot masquerade as a
+    // signed update channel artifact.
+    configPatch.bundle.createUpdaterArtifacts = false;
+  }
+  if (process.platform === 'win32' && process.env.ACADEMIQ_SKIP_SIGN !== '1') {
+    // Run Authenticode inside Tauri's bundling phase. Tauri creates the updater
+    // .sig after this command, so the updater signature covers the final
+    // Authenticode-signed installer bytes.
+    configPatch.bundle.windows = { signCommand: windowsSignCommand() };
+  }
+  if (Object.keys(configPatch.bundle).length) {
+    buildArgs.push('--config', JSON.stringify(configPatch));
+  }
   run('cargo', buildArgs, 'cargo tauri build', { cwd: srcTauriDir, env });
 
   const installers = findInstallers(pkg);
   if (!installers.length) {
     throw new Error(`No ${process.platform} installer for ${pkg.version} found under src-tauri/target/release/bundle`);
   }
-  for (const installer of installers) {
-    signInstaller(installer);
-  }
   const copied = copyArtifacts(installers, pkg);
-  const primary = copied[0];
+  const primary = selectPrimaryInstaller(copied, process.platform);
   const manifest = latestJsonFor(primary);
   fs.writeFileSync(path.join(distDir, 'latest.json'), JSON.stringify(manifest, null, 2), 'utf8');
   fs.writeFileSync(
@@ -246,6 +274,9 @@ module.exports = {
   bundleProfile,
   copyArtifacts,
   findInstallers,
+  hasUpdaterSigningKey,
   latestJsonFor,
-  releaseInstallerName
+  releaseInstallerName,
+  selectPrimaryInstaller,
+  windowsSignCommand
 };

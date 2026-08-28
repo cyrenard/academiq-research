@@ -26,6 +26,15 @@ pub fn run() {
             telemetry::install(&app.handle())?;
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
+                // Recover a known startup-race truncation before rolling the
+                // backup window, otherwise a new blank backup can evict the
+                // last rich snapshot before the renderer calls data_load.
+                if let Ok(dir) = handle.path().app_data_dir() {
+                    let _ = tauri::async_runtime::spawn_blocking(move || {
+                        db::migrate::load_state(&dir)
+                    })
+                    .await;
+                }
                 let _ = commands::backup::backup_create_auto(handle).await;
             });
             Ok(())
@@ -62,6 +71,7 @@ pub fn run() {
             commands::data::data_save,
             commands::data::data_save_draft,
             commands::data::db_integrity_check,
+            commands::data::db_projection_status,
             commands::data::db_force_remigrate_history,
             commands::data::db_rollback_to_legacy_json,
             commands::dialog::dialog_open_bibliography,

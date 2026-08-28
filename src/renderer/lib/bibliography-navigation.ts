@@ -9,20 +9,20 @@
  * Detection is done by either:
  *   - block._isBibHeading flag (set explicitly by legacy code), or
  *   - normalized block text matching one of: kaynakca / references /
- *     bibliography (Turkish locale lowercase, NFD-decomposed, diacritic-
- *     stripped, whitespace-collapsed).
+ *     bibliography (NFD-decomposed, diacritic-stripped, Turkish I variants
+ *     folded to ASCII i, whitespace-collapsed).
  */
 import { legacyWin } from './legacy-window';
 
 /**
- * Locale-aware heading text normalization: Turkish lowercase, NFD decomp,
- * strip combining diacritics, strip whitespace.
+ * Locale-independent heading normalization for Turkish and English titles.
  */
 export function normalizeHeadingText(value: string) {
   return value
-    .toLocaleLowerCase('tr-TR')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
+    .replace(/[Iİı]/g, 'i')
+    .toLowerCase()
     .replace(/\s+/g, '')
     .trim();
 }

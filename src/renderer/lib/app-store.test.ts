@@ -12,7 +12,8 @@ import {
   selectCurrentNotebookId,
   selectCurrentDocument,
   ensureNotebooks,
-  addNote
+  addNote,
+  updateReferenceInWorkspace
 } from './app-store';
 
 describe('appStore', () => {
@@ -156,6 +157,27 @@ describe('appStore', () => {
         { id: 'note-2', txt: 'Second' },
         { id: 'note-1', txt: 'First' }
       ]);
+    });
+
+    it('updates a reference in one workspace without mutating the original', () => {
+      const original = { id: 'ref-1', title: 'Old', labels: ['a'] };
+      appStore.setState({
+        cur: 'ws-1',
+        wss: [
+          { id: 'ws-1', name: 'One', lib: [original] },
+          { id: 'ws-2', name: 'Two', lib: [{ id: 'ref-1', title: 'Other workspace' }] }
+        ]
+      });
+      const state = appStore.getState();
+      const next = updateReferenceInWorkspace(state, 'ref-1', (reference) => ({
+        ...reference,
+        title: 'New',
+        labels: [...reference.labels, 'b']
+      }));
+      expect(next).not.toBe(state);
+      expect(next.wss[0]!.lib[0]).toEqual({ id: 'ref-1', title: 'New', labels: ['a', 'b'] });
+      expect(next.wss[1]!.lib[0]!.title).toBe('Other workspace');
+      expect(original).toEqual({ id: 'ref-1', title: 'Old', labels: ['a'] });
     });
 
     it('syncs literatureMatrix through hydrateAppState and appStore', () => {

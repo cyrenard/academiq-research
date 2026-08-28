@@ -19,7 +19,9 @@ function main() {
   const runtimeJs = read('src/legacy-runtime.js');
   const bindingsJs = read('src/ui-event-bindings.js');
   const documentJs = read('src/tiptap-word-document.js');
-  const html = read('academiq-research.html');
+  const appShell = read('src/renderer/components/shell/AppShell.tsx');
+  const compatibilityHost = read('src/renderer/components/shell/LegacyCompatibilityHost.tsx');
+  const rendererShell = `${appShell}\n${compatibilityHost}`;
 
   mustMatch(mainJs, /buildExportHTML\(options\)/, 'main export path must build clean export html');
   mustMatch(mainJs, /new BrowserWindow\(/, 'main export path must print from hidden export window');
@@ -34,8 +36,8 @@ function main() {
   mustMatch(bindingsJs, /ddExpPreviewBtn/, 'export preview action must be wired');
   mustMatch(bindingsJs, /ddExpPdfBtn'.*execAndClose\('expPDF'\)/s, 'PDF action must route through expPDF');
 
-  mustMatch(html, /id="ddExpPreviewBtn"/, 'export preview button must exist in toolbar dropdown');
-  mustMatch(html, /id="exportPreviewModal"/, 'export preview modal must exist');
+  mustMatch(appShell, /runExportAction\(onExportPreview\)/, 'export preview button must exist in toolbar dropdown');
+  mustMatch(compatibilityHost, /id="exportPreviewModal"/, 'export preview modal must exist');
   mustMatch(mainJs, /filters:\s*\[\{\s*name:\s*'Word Belgesi',\s*extensions:\s*\['docx'\]\s*\}\]/s, 'DOCX export dialog must only offer .docx');
   mustMatch(mainJs, /targetPath\s*=\s*\/\\\.docx\$\/i\.test\(saveResult\.filePath\)/, 'DOCX export must force .docx extension');
   mustMatch(runtimeJs, /function getCompositeExportBodyHTML\(/, 'runtime must build a composite export document');
@@ -50,9 +52,9 @@ function main() {
   mustNotMatch(runtimeJs, /window\.print\(\);/, 'legacy runtime must not fall back to live window.print');
   mustNotMatch(bindingsJs, /root\.print\(\)/, 'toolbar export must not use root.print');
   mustNotMatch(runtimeJs, /makale\.doc['"]/, 'DOC export fallback must not emit legacy .doc files');
-  mustNotMatch(html, /makale\.doc['"]/, 'inline export fallback must not emit legacy .doc files');
+  mustNotMatch(rendererShell, /makale\.doc['"]/, 'renderer export fallback must not emit legacy .doc files');
   mustNotMatch(runtimeJs, /application\/msword/, 'DOC export fallback must not create fake Word HTML blobs');
-  mustNotMatch(html, /application\/msword/, 'inline export fallback must not create fake Word HTML blobs');
+  mustNotMatch(rendererShell, /application\/msword/, 'renderer export fallback must not create fake Word HTML blobs');
 
   console.log('[export-gate] PASS');
 }

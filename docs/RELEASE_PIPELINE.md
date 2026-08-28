@@ -27,10 +27,15 @@ npm run build
 The Tauri build script:
 
 1. Builds the React renderer.
-2. Runs `cargo tauri build`.
-3. Signs NSIS installers with `scripts/sign-installer.ps1`.
+2. Runs `cargo tauri build`, injecting `bundle.windows.signCommand` for signed Windows builds.
+3. Authenticode-signs Windows binaries during Tauri bundling, before Tauri creates the updater `.sig`.
 4. Copies artifacts to `dist/tauri`.
 5. Writes `SHA256SUMS.txt` and `latest.json`.
+
+When no updater private key is available, local/PR builds explicitly disable
+updater artifact generation. They remain valid setup files for live testing,
+but their `latest.json` signature is intentionally empty and must never be
+published as an update channel.
 
 For a temporary unsigned local build:
 
@@ -51,11 +56,22 @@ The workflow builds:
 
 Beta tags such as `v1.24.1-beta.1` are published as prereleases.
 
+Tag releases are fail-closed and require these GitHub secrets:
+
+- `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` for
+  the Tauri updater signature on both Windows and Linux.
+- `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD` for
+  Windows Authenticode signing.
+
+The workflow rebuilds the capture sidecar from the tagged commit. The bundle
+gate verifies sidecar presence, updater signature, HTTPS manifest URL, package
+version, installer signature on Windows, and every installer SHA-256.
+
 The Linux job does not change the committed Windows Tauri config. It runs:
 
 ```bash
 ACADEMIQ_TAURI_BUNDLES=rpm,appimage node scripts/configure-tauri-linux.js
-ACADEMIQ_TAURI_BUNDLES=rpm,appimage ACADEMIQ_SKIP_SIGN=1 npm run build
+ACADEMIQ_TAURI_BUNDLES=rpm,appimage ACADEMIQ_REQUIRE_UPDATER_SIGNATURE=1 npm run build
 ```
 
 That temporary CI config switches bundle targets to `rpm,appimage` and bundles `binaries/libpdfium.so`.

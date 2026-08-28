@@ -6,17 +6,16 @@
  * that the renderer pops open via #dupModal / #metaHealthModal when
  * the user hits "Duplicate Bul" or "Metadata Health" from the toolbar.
  *
- * Everything here is DOM-coupled (innerHTML / getElementById) and
- * mutates `window.S` via the legacy `save()` chain. The React side
- * just calls openQualitySurface() and renders a container; this module
- * fills the inner DOM and binds the action buttons.
+ * Rendering remains DOM-coupled for compatibility with the legacy modal IDs.
+ * Reference and note mutations are appStore-owned and persist through the
+ * hydration-aware React save bridge; `window.S` is only a write-through mirror.
  */
 import type { MouseEvent } from 'react';
 import { legacyWin } from './legacy-window';
 import {
   showLegacyModal,
   escapeHtml,
-  saveLegacyState
+  persistCanonicalState
 } from './legacy-dom-helpers';
 import { mergeRefFields, normalizeRefRecord } from './reference-format';
 import {
@@ -25,7 +24,8 @@ import {
   selectCurrentWorkspaceId,
   selectNotes,
   selectReferenceById,
-  selectWorkspaceLibrary
+  selectWorkspaceLibrary,
+  updateReferenceInWorkspace
 } from './app-store';
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -50,6 +50,50 @@ function activeWorkspace(): any | null {
 
 function activeWorkspaceRefs(): any[] {
   return selectWorkspaceLibrary(appStore.getState());
+}
+
+export function cloneQualityReference(reference: any) {
+  return {
+    ...(reference || {}),
+    authors: Array.isArray(reference?.authors) ? [...reference.authors] : reference?.authors,
+    labels: Array.isArray(reference?.labels)
+      ? reference.labels.map((label: any) => (label && typeof label === 'object' ? { ...label } : label))
+      : reference?.labels,
+    collectionIds: Array.isArray(reference?.collectionIds) ? [...reference.collectionIds] : reference?.collectionIds
+  };
+}
+
+export function commitQualityReference(reference: any, source = 'quality-reference-update') {
+  const referenceId = String(reference?.id || '');
+  if (!referenceId) return false;
+  const state = appStore.getState();
+  const next = updateReferenceInWorkspace(
+    state,
+    referenceId,
+    () => cloneQualityReference(reference),
+    activeWorkspaceId()
+  );
+  if (next === state) return false;
+  appStore.setState(next);
+  void persistCanonicalState(source);
+  return true;
+}
+
+function openReferenceEditor(reference: any) {
+  const win = legacyWin() as any;
+  if (typeof win.__aqOpenReactReferenceEditor === 'function') {
+    win.__aqOpenReactReferenceEditor(String(reference?.id || ''));
+    return true;
+  }
+  if (typeof win.editRefMetadata === 'function') {
+    win.editRefMetadata(reference);
+    return true;
+  }
+  if (typeof win.openReferenceEditor === 'function') {
+    win.openReferenceEditor(reference);
+    return true;
+  }
+  return false;
 }
 
 function currentDuplicateGroups(): any[] {
@@ -204,8 +248,7 @@ export function renderMetadataHealthFallback() {
           if (typeof w2.hideM === 'function') w2.hideM('metaHealthModal');
           window.setTimeout(() => {
             try {
-              if (typeof w2.editRefMetadata === 'function') w2.editRefMetadata(ref);
-              else if (typeof w2.openReferenceEditor === 'function') w2.openReferenceEditor(ref);
+              openReferenceEditor(ref);
             } catch (_error) {}
           }, 25);
           return false;
@@ -221,28 +264,30 @@ export function renderMetadataHealthFallback() {
               if (typeof w2.setDst === 'function') w2.setDst('DOI metadata alınamadı.', 'er');
               return;
             }
+            const nextRef = cloneQualityReference(ref);
             try {
-              mergeRefFields(ref, fetched as any);
+              mergeRefFields(nextRef, fetched as any);
             } catch (_error) {
-              if (typeof w2.mergeRefFields === 'function') w2.mergeRefFields(ref, fetched);
+              if (typeof w2.mergeRefFields === 'function') w2.mergeRefFields(nextRef, fetched);
             }
-            saveLegacyState();
+            commitQualityReference(nextRef, 'quality-metadata-refetch');
             renderMetadataHealthFallback();
             if (typeof w2.setDst === 'function') w2.setDst('Metadata güncellendi.', 'ok');
           });
           return false;
         }
         if (action === 'normalize') {
+          const nextRef = cloneQualityReference(ref);
           if (w2.AQMetadataHealth && typeof w2.AQMetadataHealth.applyConservativeRepairs === 'function') {
-            const result = w2.AQMetadataHealth.applyConservativeRepairs(ref);
-            if (result?.ref) Object.keys(result.ref).forEach((key) => { ref[key] = result.ref[key]; });
+            const result = w2.AQMetadataHealth.applyConservativeRepairs(nextRef);
+            if (result?.ref) Object.keys(result.ref).forEach((key) => { nextRef[key] = result.ref[key]; });
           }
           try {
-            normalizeRefRecord(ref);
+            normalizeRefRecord(nextRef);
           } catch (_error) {
-            if (typeof w2.normalizeRefRecord === 'function') w2.normalizeRefRecord(ref);
+            if (typeof w2.normalizeRefRecord === 'function') w2.normalizeRefRecord(nextRef);
           }
-          saveLegacyState();
+          commitQualityReference(nextRef, 'quality-metadata-normalize');
           renderMetadataHealthFallback();
           if (typeof w2.setDst === 'function') w2.setDst('Kayıt normalize edildi.', 'ok');
           return false;
@@ -296,7 +341,7 @@ export function openQualitySurface(target: 'duplicate' | 'metadata') {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Merge actions (used by duplicate action handler)
+// Canonical appStore merge actions (used by duplicate action handler)
 // ───────────────────────────────────────────────────────────────────────────
 
 function mergeReferencesIntoPrimary(primary: any, secondary: any) {
@@ -334,21 +379,31 @@ function mergeDuplicateGroupFallback(signature: string) {
     .map((id: string) => (workspace.lib || []).find((ref: any) => ref && ref.id === id))
     .filter(Boolean);
   if (records.length < 2) return false;
-  const primary = typeof w.AQDuplicateDetection?.pickPrimaryRecord === 'function'
+  const primaryRecord = typeof w.AQDuplicateDetection?.pickPrimaryRecord === 'function'
     ? w.AQDuplicateDetection.pickPrimaryRecord(records)
     : records[0];
+  const primary = cloneQualityReference(primaryRecord);
   const removeIds: Record<string, boolean> = {};
   records.forEach((ref: any) => {
     if (!ref || ref.id === primary.id) return;
     mergeReferencesIntoPrimary(primary, ref);
     removeIds[ref.id] = true;
   });
-  workspace.lib = (workspace.lib || []).filter((ref: any) => !removeIds[ref.id]);
-  selectNotes(appStore.getState()).forEach((note: any) => {
-    if (note && removeIds[note.rid]) note.rid = primary.id;
-  });
+  const state = appStore.getState();
+  const wss = (state.wss || []).map((item) => item.id === workspace.id
+    ? {
+        ...item,
+        lib: (item.lib || [])
+          .filter((ref: any) => !removeIds[ref.id])
+          .map((ref: any) => ref.id === primary.id ? primary : ref)
+      }
+    : item);
+  const notes = selectNotes(state).map((note: any) => (
+    note && removeIds[note.rid] ? { ...note, rid: primary.id } : note
+  ));
+  appStore.setState({ wss, notes });
   dismissedDuplicateMap()[signature] = true;
-  saveLegacyState();
+  void persistCanonicalState('quality-duplicate-merge');
   return true;
 }
 
@@ -369,11 +424,10 @@ export function runDuplicateAction(button: HTMLElement | null) {
   if (!signature) return;
   try {
     if (action === 'merge') {
-      let merged = false;
-      if (typeof w.__mergeDuplicateGroup === 'function') {
+      let merged = mergeDuplicateGroupFallback(signature);
+      if (!merged && typeof w.__mergeDuplicateGroup === 'function') {
         try { merged = !!w.__mergeDuplicateGroup(signature); } catch (_error) { merged = false; }
       }
-      if (!merged) merged = mergeDuplicateGroupFallback(signature);
       if (typeof w.setDst === 'function') w.setDst(merged ? 'Duplicate kayıtlar birleştirildi.' : 'Duplicate birleştirilemedi.', merged ? 'ok' : 'er');
       window.setTimeout(renderDuplicateReviewFallback, 0);
       return;
@@ -425,26 +479,24 @@ export function runMetadataHealthAction(button: HTMLElement | null) {
   }
   try {
     if (action === 'edit') {
-      if (typeof w.editRefMetadata === 'function') w.editRefMetadata(ref);
-      else if (typeof w.openReferenceEditor === 'function') w.openReferenceEditor(ref);
+      openReferenceEditor(ref);
       window.setTimeout(renderMetadataHealthFallback, 250);
       return;
     }
     if (action === 'normalize') {
+      const nextRef = cloneQualityReference(ref);
       if (typeof w.AQMetadataHealth?.applyConservativeRepairs === 'function') {
-        const result = w.AQMetadataHealth.applyConservativeRepairs(ref);
+        const result = w.AQMetadataHealth.applyConservativeRepairs(nextRef);
         if (result?.ref) {
-          Object.keys(result.ref).forEach((key) => { ref[key] = result.ref[key]; });
+          Object.keys(result.ref).forEach((key) => { nextRef[key] = result.ref[key]; });
           try {
-            normalizeRefRecord(ref);
+            normalizeRefRecord(nextRef);
           } catch (_error) {
-            if (typeof w.normalizeRefRecord === 'function') w.normalizeRefRecord(ref);
+            if (typeof w.normalizeRefRecord === 'function') w.normalizeRefRecord(nextRef);
           }
-          if (typeof w.save === 'function') w.save();
-          if (typeof w.rLib === 'function') w.rLib();
-          if (typeof w.rRefs === 'function') w.rRefs();
         }
       }
+      commitQualityReference(nextRef, 'quality-metadata-normalize');
       if (typeof w.setDst === 'function') w.setDst('Kayıt normalize edildi.', 'ok');
       renderMetadataHealthFallback();
       return;
@@ -460,15 +512,13 @@ export function runMetadataHealthAction(button: HTMLElement | null) {
           if (typeof w.setDst === 'function') w.setDst('DOI metadata alınamadı.', 'er');
           return;
         }
+        const nextRef = cloneQualityReference(ref);
         try {
-          mergeRefFields(ref, fetched as any);
+          mergeRefFields(nextRef, fetched as any);
         } catch (_error) {
-          if (typeof w.mergeRefFields === 'function') w.mergeRefFields(ref, fetched);
+          if (typeof w.mergeRefFields === 'function') w.mergeRefFields(nextRef, fetched);
         }
-        if (typeof w.save === 'function') w.save();
-        if (typeof w.rLib === 'function') w.rLib();
-        if (typeof w.rRefs === 'function') w.rRefs();
-        if (typeof w.updateRefSection === 'function') w.updateRefSection();
+        commitQualityReference(nextRef, 'quality-metadata-refetch');
         renderMetadataHealthFallback();
         if (typeof w.setDst === 'function') w.setDst('Metadata güncellendi.', 'ok');
       });
@@ -511,5 +561,6 @@ export const _internal = {
   mergeReferencesIntoPrimary,
   mergeDuplicateGroupFallback,
   runDuplicateAction,
-  findLegacyReference
+  findLegacyReference,
+  cloneReference: cloneQualityReference
 };

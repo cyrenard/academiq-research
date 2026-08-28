@@ -14,6 +14,8 @@ export type ShortcutHandler = {
   handler: (event: KeyboardEvent) => void | boolean;
   priority?: number;
   description?: string;
+  allowExtraModifiers?: boolean;
+  stopPropagation?: boolean;
 };
 
 class KeyboardRouter {
@@ -34,19 +36,32 @@ class KeyboardRouter {
   }
 
   private handleKeyDown(event: KeyboardEvent) {
+    if (event.isComposing || event.key === 'Process') return;
     const key = event.key.toLowerCase();
     for (const h of this.handlers) {
       const combos = Array.isArray(h.combo) ? h.combo : [h.combo];
       for (const combo of combos) {
         const comboKey = combo.key.toLowerCase();
         const matchesKey = event.key === combo.key || key === comboKey;
-        const matchesCtrl = !combo.ctrlKey || (event.ctrlKey || event.metaKey);
-        const matchesShift = !combo.shiftKey || event.shiftKey;
-        const matchesAlt = !combo.altKey || event.altKey;
+        const primaryPressed = event.ctrlKey || event.metaKey;
+        const expectsPrimary = combo.ctrlKey === true || combo.metaKey === true;
+        const matchesCtrl = expectsPrimary
+          ? primaryPressed
+          : (h.allowExtraModifiers ? true : !primaryPressed);
+        const matchesShift = combo.shiftKey === true
+          ? event.shiftKey
+          : (h.allowExtraModifiers ? true : !event.shiftKey);
+        const matchesAlt = combo.altKey === true
+          ? event.altKey
+          : (h.allowExtraModifiers ? true : !event.altKey);
 
         if (matchesKey && matchesCtrl && matchesShift && matchesAlt) {
           const result = h.handler(event);
           if (result !== false) {
+            if (h.stopPropagation !== false) {
+              event.stopPropagation();
+              event.stopImmediatePropagation();
+            }
             return;
           }
         }
@@ -62,7 +77,7 @@ export function useKeyboardShortcut(
   combo: KeyCombo | KeyCombo[],
   handler: (event: KeyboardEvent) => void | boolean,
   dependencies: any[] = [],
-  options?: { priority?: number; description?: string }
+  options?: { priority?: number; description?: string; allowExtraModifiers?: boolean; stopPropagation?: boolean }
 ) {
   useEffect(() => {
     const cleanup = keyboardRouter.register({
@@ -70,7 +85,9 @@ export function useKeyboardShortcut(
       combo,
       handler,
       priority: options?.priority,
-      description: options?.description
+      description: options?.description,
+      allowExtraModifiers: options?.allowExtraModifiers,
+      stopPropagation: options?.stopPropagation
     });
     return cleanup;
   }, [id, ...dependencies]);

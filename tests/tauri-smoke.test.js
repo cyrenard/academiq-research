@@ -129,7 +129,11 @@ test('Phase 0.5 aq-engine integration suite passes under the React shell contrac
     env
   });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout + result.stderr, /pass (55|56|57)|tests (55|56|57)/);
+  const output = result.stdout + result.stderr;
+  const testCount = Number(output.match(/(?:^|\n).*tests (\d+)/)?.[1] || 0);
+  const passCount = Number(output.match(/(?:^|\n).*pass (\d+)/)?.[1] || 0);
+  assert.ok(testCount >= 58, `expected broad AQ Engine coverage, got ${testCount} tests`);
+  assert.equal(passCount, testCount, output);
 });
 
 test('Turkish IME characters survive normal JS input and casing paths', () => {

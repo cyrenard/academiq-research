@@ -3,6 +3,7 @@ import { EditorContext } from './components/editor/EditorContext';
 import { EditorHost } from './components/editor/EditorHost';
 import type { AcademiqEditorApi, AcademiqEditorState } from './lib/editor-adapter';
 import { AppShell } from './components/shell/AppShell';
+import { CitationTriggerHost } from './components/shell/CitationTriggerHost';
 import { RefSidebar } from './components/shell/RefSidebar';
 import { NoteSidebar, type NoteSidebarTab } from './components/shell/NoteSidebar';
 import { StatusBar } from './components/shell/StatusBar';
@@ -69,23 +70,31 @@ import {
 } from './lib/note-insert';
 import { publishStateToLegacyWindow } from './lib/legacy-state-bridge';
 import { appStore, useAppStore } from './lib/app-store';
+import {
+  flushAppStateWrites,
+  markAppStateHydrated,
+  queueEditorDraftSave,
+  queueAppStateSave,
+  suspendAppStateWrites
+} from './lib/save-coordinator';
+import { editorCommandRouter } from './lib/editor-command-router';
+import {
+  addManagedReferenceLabel,
+  deleteManagedReferenceLabel,
+  REFERENCE_LABEL_COLORS,
+  referenceHasManagedLabel,
+  updateManagedReferenceLabel,
+  type ReferenceLabel
+} from './lib/reference-label-state';
 
 const CommandPalette = lazy(() => import('./components/shell/CommandPalette').then((module) => ({ default: module.CommandPalette })));
 const FeatureModals = lazy(() => import('./components/shell/FeatureModals').then((module) => ({ default: module.FeatureModals })));
 const CollectionManagerModal = lazy(() => import('./components/shell/CollectionManagerModal').then((module) => ({ default: module.CollectionManagerModal })));
+const LabelManagerModal = lazy(() => import('./components/shell/LabelManagerModal').then((module) => ({ default: module.LabelManagerModal })));
 const WorkspaceNameModal = lazy(() => import('./components/shell/WorkspaceNameModal').then((module) => ({ default: module.WorkspaceNameModal })));
 const LegacyCompatibilityHost = lazy(() => import('./components/shell/LegacyCompatibilityHost').then((module) => ({ default: module.LegacyCompatibilityHost })));
 
 type LegacyReferenceFetcher = (value: string, callback: (error: unknown, reference?: AcademiqReference) => void) => void;
-
-const DEFAULT_REFERENCE_LABELS = [
-  { name: 'Okudum', color: '#4caf50' },
-  { name: 'Önemli', color: '#f44336' },
-  { name: 'Metodoloji', color: '#2196f3' },
-  { name: 'Teori', color: '#9c27b0' },
-  { name: 'Sonra Oku', color: '#ff9800' },
-  { name: 'Tezde Kullan', color: '#e91e63' }
-];
 
 function labelName(label: unknown) {
   return typeof label === 'string' ? label : String((label as { name?: unknown })?.name || '');
@@ -158,10 +167,12 @@ export default function App() {
   const [refSidebarOpen, setRefSidebarOpen] = useState(true);
   const [statusMessage, setStatusMessage] = useState('kaydedildi');
   const [loadMeta, setLoadMeta] = useState<Record<string, unknown> | null>(null);
+  const [loadError, setLoadError] = useState('');
   const [pdfProgress, setPdfProgress] = useState<{ total: number; attempted: number; downloaded: number; failed: number; active: boolean } | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [activeCollectionId, setActiveCollectionId] = useState('all');
   const [collectionManagerOpen, setCollectionManagerOpen] = useState(false);
+  const [labelManagerOpen, setLabelManagerOpen] = useState(false);
   const [workspaceNameModal, setWorkspaceNameModal] = useState<{ mode: 'create' | 'rename'; workspaceId?: string } | null>(null);
   const [commandOpen, setCommandOpen] = useState(false);
   const [featureModal, setFeatureModal] = useState<FeatureModal>(null);
@@ -285,6 +296,18 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const win = window as LegacyWindow;
+    win.__aqOpenReactReferenceEditor = (referenceId: string) => {
+      const id = String(referenceId || '');
+      if (!getActiveWorkspace(appStateRef.current).lib.some((reference) => reference.id === id)) return false;
+      setActiveReferenceId(id);
+      setFeatureModal('referenceEdit');
+      return true;
+    };
+    return () => { delete win.__aqOpenReactReferenceEditor; };
+  }, []);
+
+  useEffect(() => {
     const intercept = () => {
       const win = window as any;
       if (win.AQFootnotes) {
@@ -397,28 +420,48 @@ export default function App() {
   };
 
   const saveDataChecked = useCallback(async (nextState: AcademiqAppState, source = 'save') => {
-    const payload = JSON.stringify(nextState);
-    const result = await window.electronAPI?.saveData?.(payload) as { ok?: boolean; error?: string } | undefined;
-    if (!result || result.ok !== true) {
-      const error = result?.error || `${source}_failed`;
-      try {
-        localStorage.setItem('aq.lastSaveError', JSON.stringify({
-          at: new Date().toISOString(),
-          source,
-          error,
-          bytes: payload.length
-        }));
-      } catch (_error) {}
-      throw new Error(error);
-    }
-    try {
-      localStorage.setItem('aq.lastSaveOk', JSON.stringify({
-        at: new Date().toISOString(),
-        source,
-        bytes: payload.length
-      }));
-    } catch (_error) {}
-    return result;
+    return queueAppStateSave(nextState, source);
+  }, []);
+
+  useEffect(() => {
+    const win = window as any;
+    win.__aqReactQueueSave = (state: unknown, source = 'legacy-save') => queueAppStateSave(state, source);
+    win.__aqReactQueueDraftSave = (state: unknown) => queueEditorDraftSave(state);
+    return () => {
+      delete win.__aqReactQueueSave;
+      delete win.__aqReactQueueDraftSave;
+    };
+  }, []);
+
+  useEffect(() => {
+    const win = window as any;
+    const removeRefresh = editorCommandRouter.register('citation.refresh', () => {
+      const runtime = win.AQCitationRuntime;
+      if (runtime && typeof runtime.refreshFromEditor === 'function') {
+        runtime.refreshFromEditor();
+        return true;
+      }
+      if (typeof win.checkTrig === 'function') {
+        win.checkTrig();
+        return true;
+      }
+      return false;
+    }, 100);
+    const removeOpen = editorCommandRouter.register('citation.open', (payload) => {
+      const runtime = win.AQCitationRuntime;
+      if (!runtime || typeof runtime.openFromSlash !== 'function') return false;
+      const mode = payload?.mode === 'textual' ? 'textual' : 'inline';
+      runtime.openFromSlash(String(payload?.query || ''), mode);
+      return true;
+    }, 100);
+    win.__aqDispatchEditorCommand = (command: string, payload?: Record<string, unknown>) => (
+      editorCommandRouter.dispatch(command, payload)
+    );
+    return () => {
+      removeRefresh();
+      removeOpen();
+      delete win.__aqDispatchEditorCommand;
+    };
   }, []);
 
   useEffect(() => {
@@ -436,12 +479,12 @@ export default function App() {
     return () => window.removeEventListener('aq:word-import-committed', onWordImportCommitted as EventListener);
   }, [saveDataChecked]);
 
-  const scheduleFullAutosave = useCallback((nextState: AcademiqAppState, delay = 900) => {
+  const scheduleFullAutosave = useCallback((nextState: AcademiqAppState, delay = 900, source = 'editor-autosave') => {
     if ((window as any).__aqBackupRestoreInProgress) return;
     if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = window.setTimeout(() => {
       autosaveTimerRef.current = null;
-      autosaveInFlightRef.current = saveDataChecked(appStateRef.current, 'editor-autosave')
+      autosaveInFlightRef.current = saveDataChecked(appStateRef.current, source)
         .then(() => {
           flashStatus('otomatik kaydedildi');
         })
@@ -452,6 +495,20 @@ export default function App() {
     appStateRef.current = nextState;
   }, [saveDataChecked]);
 
+  useEffect(() => {
+    const win = window as any;
+    win.__aqReactPersistLegacyState = (legacyState: unknown) => {
+      if (typeof win.__aqReactSyncFromLegacy === 'function') {
+        win.__aqReactSyncFromLegacy(legacyState);
+      }
+      scheduleFullAutosave(appStateRef.current, 0, 'legacy-autosave');
+      return true;
+    };
+    return () => {
+      delete win.__aqReactPersistLegacyState;
+    };
+  }, [scheduleFullAutosave]);
+
   const persistState = useCallback(async (nextState: AcademiqAppState, draft = false) => {
     if ((window as any).__aqBackupRestoreInProgress) return;
     appStateRef.current = nextState;
@@ -461,7 +518,7 @@ export default function App() {
       autosaveTimerRef.current = null;
     }
     const payload = JSON.stringify(nextState);
-    if (draft) await window.electronAPI?.saveEditorDraft?.(payload);
+    if (draft) await queueEditorDraftSave(payload);
     await saveDataChecked(nextState, draft ? 'draft-promote' : 'persistState');
   }, [saveDataChecked]);
 
@@ -474,7 +531,7 @@ export default function App() {
     await new Promise<void>((resolve) => {
       const run = async () => {
         try {
-          await window.electronAPI?.saveEditorDraft?.(JSON.stringify(nextState));
+          await queueEditorDraftSave(nextState);
         } finally {
           resolve();
         }
@@ -488,16 +545,22 @@ export default function App() {
   }, [scheduleFullAutosave]);
 
   const reloadStateFromDisk = useCallback(async (focus?: { workspaceId?: string; refId?: string }) => {
+    await flushAppStateWrites();
     const result = await window.electronAPI?.loadData?.();
+    if (!result || result.ok !== true) {
+      throw new Error(result?.error || 'data_load_failed');
+    }
     const hydrated = normalizeReferenceState(
-      result?.ok && result.data ? hydrateAppState(JSON.parse(String(result.data))) : createBlankState()
+      result.data ? hydrateAppState(JSON.parse(String(result.data))) : createBlankState()
     );
     const next = focus?.workspaceId && hydrated.wss.some((workspace) => workspace.id === focus.workspaceId)
       ? switchWorkspace(hydrated, focus.workspaceId)
       : hydrated;
     setLoadMeta(result && typeof result === 'object' ? result as Record<string, unknown> : null);
+    setLoadError('');
     setAppState(next);
     appStateRef.current = next;
+    markAppStateHydrated();
     const workspace = getActiveWorkspace(next);
     setActiveReferenceId((current) => (
       focus?.refId && workspace.lib.some((ref) => ref.id === focus.refId)
@@ -568,6 +631,7 @@ export default function App() {
 
   useEffect(() => {
     let alive = true;
+    suspendAppStateWrites();
     reloadStateFromDisk()
       .then(() => {
         if (!alive) return;
@@ -578,6 +642,7 @@ export default function App() {
         const fallback = createBlankState();
         setAppState(fallback);
         appStateRef.current = fallback;
+        setLoadError('Kayıtlı veriler yüklenemedi. Veri güvenliği için düzenleme ve otomatik kayıt durduruldu.');
         setLoading(false);
         flashStatus('Veri yüklenemedi');
       });
@@ -608,7 +673,7 @@ export default function App() {
         const next = { ...current, spellcheck: { ...(current?.spellcheck || {}), enabled: s.enabled } };
         appStateRef.current = next;
         setAppState(next);
-        window.electronAPI?.saveData?.(JSON.stringify(next)).catch(() => {});
+        queueAppStateSave(next, 'spellcheck-settings').catch(() => {});
       });
       // Wait up to 30s for the legacy editor to mount, then subscribe
       // to its 'update' event so each keystroke nudges the spell pass.
@@ -647,7 +712,11 @@ export default function App() {
   // somewhere else (e.g. a future workspace import). The controller is
   // idempotent: setSpellcheckEnabled(true) when it's already true is a
   // no-op.
-  const persistedSpellEnabled = false;
+  const runtimePlatform = typeof navigator === 'undefined'
+    ? ''
+    : String((navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform || navigator.platform || navigator.userAgent || '').toLowerCase();
+  const persistedSpellEnabled = (runtimePlatform.includes('windows') || runtimePlatform.startsWith('win32') || runtimePlatform.startsWith('win64'))
+    && appState.spellcheck?.enabled === true;
   useEffect(() => {
     if (loading) return;
     (async () => {
@@ -732,14 +801,17 @@ export default function App() {
     'global-shortcut-help',
     [
       { key: 'F1' },
-      { key: '/', ctrlKey: true }
+      { key: '/', ctrlKey: true },
+      { key: '/', ctrlKey: true, shiftKey: true }
     ],
     (event) => {
       const shell = (window as any).AQLeanUIShell;
       if (shell && typeof shell.openShortcutHelp === 'function') {
         event.preventDefault();
         shell.openShortcutHelp();
+        return true;
       }
+      return false;
     },
     []
   );
@@ -1552,40 +1624,40 @@ export default function App() {
       .catch(() => flashStatus('Etiket kaydedilemedi'));
   };
 
-  const handleCreateLabel = (name: string) => {
+  const handleCreateLabel = (name: string, color?: string) => {
     const label = name.trim();
     if (!label) return;
     const customLabels = Array.isArray(appStateRef.current.customLabels) ? appStateRef.current.customLabels : [];
-    if (referenceLabels.some((item) => item.name.toLowerCase() === label.toLowerCase())) {
+    if (referenceHasManagedLabel(appStateRef.current, label)) {
       flashStatus('Etiket zaten var');
       return;
     }
-    const colors = ['#4caf50', '#f44336', '#2196f3', '#9c27b0', '#ff9800', '#e91e63', '#00bcd4', '#795548'];
-    const next = {
-      ...appStateRef.current,
-      customLabels: [...customLabels, { name: label, color: colors[customLabels.length % colors.length] }]
-    };
+    const next = addManagedReferenceLabel(appStateRef.current, {
+      name: label,
+      color: color || REFERENCE_LABEL_COLORS[customLabels.length % REFERENCE_LABEL_COLORS.length]
+    });
     persistState(next)
       .then(() => flashStatus('Etiket oluşturuldu'))
       .catch(() => flashStatus('Etiket kaydedilemedi'));
+  };
+
+  const handleUpdateLabel = (currentName: string, label: ReferenceLabel) => {
+    if (referenceHasManagedLabel(appStateRef.current, label.name, currentName)) {
+      flashStatus('Etiket adı zaten kullanılıyor');
+      return;
+    }
+    const next = updateManagedReferenceLabel(appStateRef.current, currentName, label);
+    if (next === appStateRef.current) return;
+    persistState(next)
+      .then(() => flashStatus('Etiket güncellendi'))
+      .catch(() => flashStatus('Etiket güncellenemedi'));
   };
 
   const handleDeleteLabel = async (name: string, options?: { skipConfirm?: boolean }) => {
     const label = name.trim();
     if (!label) return;
     if (!options?.skipConfirm && !(await confirmDialog(`${label} etiketi silinsin mi?`))) return;
-    const customLabels = Array.isArray(appStateRef.current.customLabels) ? appStateRef.current.customLabels : [];
-    const next = {
-      ...appStateRef.current,
-      customLabels: customLabels.filter((item) => labelName(item) !== label),
-      wss: appStateRef.current.wss.map((workspace) => ({
-        ...workspace,
-        lib: (workspace.lib || []).map((ref) => ({
-          ...ref,
-          labels: Array.isArray(ref.labels) ? ref.labels.filter((item) => labelName(item) !== label) : []
-        }))
-      }))
-    };
+    const next = deleteManagedReferenceLabel(appStateRef.current, label);
     persistState(next)
       .then(() => flashStatus('Etiket silindi'))
       .catch(() => flashStatus('Etiket silinemedi'));
@@ -2125,6 +2197,16 @@ export default function App() {
         toolbar={<TopToolbar selectedReferenceId={activeReferenceId} onOpenFeatureModal={setFeatureModal} />}
         editor={loading ? (
           <div className="flex h-full items-center justify-center text-sm text-aq-muted">Yükleniyor...</div>
+        ) : loadError ? (
+          <div className="flex h-full items-center justify-center p-8">
+            <div className="max-w-lg rounded-lg border border-red-300 bg-red-50 p-6 text-center text-red-950 dark:border-red-900 dark:bg-red-950/30 dark:text-red-100">
+              <h2 className="mb-2 text-base font-semibold">Veri yükleme durduruldu</h2>
+              <p className="mb-4 text-sm">{loadError}</p>
+              <button className="rounded bg-red-700 px-4 py-2 text-sm font-medium text-white" onClick={() => setFeatureModal('recovery')}>
+                Backup ve kurtarma seçeneklerini aç
+              </button>
+            </div>
+          </div>
         ) : (
           <EditorHost
             docId={activeDocument.id}
@@ -2144,6 +2226,7 @@ export default function App() {
             onSelectCollection={setActiveCollectionId}
             onSearch={handleReferenceSearch}
             onOpenCollections={() => setCollectionManagerOpen(true)}
+            onOpenLabels={() => setLabelManagerOpen(true)}
             onToggleFilters={() => setFiltersOpen((value) => !value)}
             onEditReference={(refId) => {
               setActiveReferenceId(refId);
@@ -2186,6 +2269,7 @@ export default function App() {
           />
         )}
       />
+      <CitationTriggerHost />
       <Suspense fallback={null}>
         {commandOpen ? <CommandPalette open={commandOpen} commands={commands} onClose={() => setCommandOpen(false)} /> : null}
         {featureModal ? (
@@ -2201,12 +2285,10 @@ export default function App() {
             onDeleteReference={handleDeleteReference}
             onRestoreState={() => {
               setLoading(true);
-              window.electronAPI.loadData().then((result) => {
-                const hydrated = result?.ok && result.data ? hydrateAppState(JSON.parse(String(result.data))) : appStateRef.current;
-                setAppState(hydrated);
-                appStateRef.current = hydrated;
-                setLoading(false);
-              });
+              suspendAppStateWrites();
+              reloadStateFromDisk()
+                .catch(() => setLoadError('Backup geri yüklendi ancak veri yeniden açılamadı.'))
+                .finally(() => setLoading(false));
             }}
           />
         ) : null}
@@ -2227,6 +2309,17 @@ export default function App() {
               setActiveCollectionId(collectionId);
               setCollectionManagerOpen(false);
             }}
+          />
+        ) : null}
+        {labelManagerOpen ? (
+          <LabelManagerModal
+            open={labelManagerOpen}
+            labels={referenceLabels}
+            references={appState.wss.flatMap((workspace) => workspace.lib || [])}
+            onClose={() => setLabelManagerOpen(false)}
+            onCreate={handleCreateLabel}
+            onUpdate={handleUpdateLabel}
+            onDelete={handleDeleteLabel}
           />
         ) : null}
         {workspaceNameModal ? (

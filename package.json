@@ -1,12 +1,12 @@
 {
   "name": "academiq-research",
-  "version": "1.24.1-beta.12",
+  "version": "1.24.1-beta.23",
   "description": "AcademiQ Research - Akademik Yazim ve Kaynak Yonetim Uygulamasi",
   "main": "main.js",
   "author": "AcademiQ",
   "license": "MIT",
   "scripts": {
-    "start": "electron .",
+    "start": "npm run build:renderer && electron .",
     "dev:renderer": "vite --host 127.0.0.1",
     "build:renderer": "node scripts/build-renderer.js",
     "tauri:dev": "cargo tauri dev",
@@ -68,7 +68,6 @@
       "preload.js",
       "index.html",
       "dist/renderer/**/*",
-      "academiq-research.html",
       "tiptap-bundle.js",
       "vendor/**/*",
       "experiments/aq-engine/**/*",

@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, master, experiment/**]
+    branches: [main, master, experiment/**, agent/**]
   pull_request:
     branches: [main, master]
 
@@ -17,8 +17,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        node-version: ['20.x']
+        os: [ubuntu-latest, windows-latest]
+        node-version: ['24.x']
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,8 +29,43 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
 
+      - name: Install Linux Tauri test dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev
+
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+
+      - name: Install platform sidecar dependencies
+        run: npm ci --no-audit --no-fund
+        working-directory: src-sidecar/capture-agent
+
+      - name: Build platform capture sidecar
+        run: node scripts/build-sidecar.js
+
+      - name: Prepare platform Tauri icon
+        if: runner.os == 'Linux'
+        run: cp icon.png src-tauri/icons/icon.png
+
+      - name: Install platform PDFium runtime
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          archive="pdfium-linux-x64.tgz"
+          library="libpdfium.so"
+          curl -L --retry 3 -o "/tmp/$archive" \
+            "https://github.com/bblanchon/pdfium-binaries/releases/latest/download/$archive"
+          mkdir -p /tmp/academiq-pdfium
+          tar -xzf "/tmp/$archive" -C /tmp/academiq-pdfium
+          cp "$(find /tmp/academiq-pdfium -name "$library" -print -quit)" \
+            "src-tauri/binaries/$library"
 
       - name: TypeScript typecheck
         run: npm run typecheck
@@ -57,7 +92,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '24.x'
           cache: 'npm'
 
       - name: Install dependencies
@@ -73,35 +108,3 @@ jobs:
           path: dist/renderer/
           retention-days: 7
           if-no-files-found: error
-
-  build-tauri-macos:
-    name: Build macOS Tauri App
-    runs-on: macos-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20.x'
-          cache: 'npm'
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Vite build
-        run: npm run build:renderer
-
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2.0.0"
-
-      - name: Build Tauri app
-        run: cargo tauri build
-        working-directory: src-tauri
-        env:
-          TAURI_SIGNING_PRIVATE_KEY_PATH: ""
-          ACADEMIQ_SKIP_SIGN: "1"

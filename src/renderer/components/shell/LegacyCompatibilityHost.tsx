@@ -3,9 +3,10 @@ import type { AcademiqReference } from '../../lib/app-state';
 import {
   openQualitySurface,
   renderDuplicateReviewFallback,
-  handleDuplicateReviewClick,
   runDuplicateAction,
-  runMetadataHealthAction
+  runMetadataHealthAction,
+  cloneQualityReference,
+  commitQualityReference
 } from '../../lib/quality-surface';
 import {
   insertImageFile,
@@ -14,6 +15,7 @@ import {
   importBibliographyFile
 } from '../../lib/file-import';
 import { handleDroppedFiles, handleTauriDroppedPaths } from '../../lib/drop-router';
+import { editorCommandRouter } from '../../lib/editor-command-router';
 import {
   runExternalReferenceTextImport,
   runExternalReferenceBibliographyTextImport,
@@ -27,8 +29,7 @@ import {
   currentWorkspaceRefs,
   currentWorkspace,
   syncReactFromLegacy,
-  scheduleReactSyncFromLegacy,
-  saveLegacyState
+  persistCanonicalState
 } from '../../lib/legacy-dom-helpers';
 import {
   type MetadataLookupCandidate,
@@ -59,27 +60,26 @@ import {
 } from '../../lib/metadata-lookup';
 import { mergeRefFields, normalizeRefRecord } from '../../lib/reference-format';
 import { useKeyboardShortcut, keyboardRouter } from '../../lib/keyboard-router';
-import { appStore, ensureNotebooks, addNote, selectCurrentWorkspace, selectWorkspaceLibrary, selectNotes } from '../../lib/app-store';
+import {
+  appStore,
+  ensureNotebooks,
+  addNote,
+  selectCurrentWorkspace,
+  selectWorkspaceLibrary,
+  selectNotes,
+  updateReferenceInWorkspace
+} from '../../lib/app-store';
+import { PdfViewerPanel } from './PdfViewerPanel';
+import {
+  QualityReviewSurfaces,
+  type MetadataHealthRow,
+  type MetadataHealthSummary
+} from './QualityReviewSurfaces';
 
 type LegacyCompatibilityHostProps = {
   onStatus: (message: string) => void;
   onImportReferences: (references: AcademiqReference[], sourceLabel: string, options?: { includeInBibliography?: boolean; revealBibliography?: boolean }) => void;
 };
-
-type MetadataHealthRow = {
-  ref: any;
-  report: any;
-};
-
-type MetadataHealthSummary = {
-  total: number;
-  complete: number;
-  incomplete: number;
-  suspicious: number;
-  issueText: string;
-};
-
-
 
 function readLegacyInputValue(id: string, fallback = '') {
   return String((document.getElementById(id) as HTMLInputElement | null)?.value || fallback);
@@ -219,6 +219,16 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
   useEffect(() => {
     let unlistenDragDrop: (() => void) | null = null;
     let cancelled = false;
+    const removePathDrop = editorCommandRouter.register('files.drop.paths', (payload) => {
+      const paths = Array.isArray(payload?.paths) ? payload.paths.map(String) : [];
+      if (!paths.length) return false;
+      return handleTauriDroppedPaths(paths, onStatus);
+    }, 100);
+    const removeFileDrop = editorCommandRouter.register('files.drop', (payload) => {
+      const files = Array.isArray(payload?.files) ? payload.files.filter((file): file is File => file instanceof File) : [];
+      if (!files.length) return false;
+      return handleDroppedFiles(files, onStatus);
+    }, 100);
     const isTauri = typeof window !== 'undefined' && (window as any).__TAURI__;
     if (isTauri) {
       const listen = (window as any).__TAURI__.event.listen;
@@ -226,7 +236,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         listen('tauri://drag-drop', (event: any) => {
           const paths = event?.payload?.paths;
           if (Array.isArray(paths)) {
-            void handleTauriDroppedPaths(paths, onStatus);
+            void editorCommandRouter.dispatch('files.drop.paths', { paths, source: 'tauri' });
           }
         }).then((unsub: any) => {
           if (cancelled) {
@@ -265,7 +275,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       dragDepthRef.current = 0;
       setDropActive(false);
       const files = Array.from(event.dataTransfer?.files || []);
-      void handleDroppedFiles(files, onStatus);
+      void editorCommandRouter.dispatch('files.drop', { files, source: 'webview' });
     };
     window.addEventListener('dragenter', onDragEnter, true);
     window.addEventListener('dragover', onDragOver, true);
@@ -273,6 +283,8 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     window.addEventListener('drop', onDrop, true);
     return () => {
       cancelled = true;
+      removePathDrop();
+      removeFileDrop();
       if (unlistenDragDrop) unlistenDragDrop();
       window.removeEventListener('dragenter', onDragEnter, true);
       window.removeEventListener('dragover', onDragOver, true);
@@ -282,6 +294,14 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
   }, [onStatus]);
 
   useEffect(() => {
+    const removePasteImages = editorCommandRouter.register('files.paste.images', (payload) => {
+      const files = Array.isArray(payload?.files) ? payload.files.filter((file): file is File => file instanceof File) : [];
+      if (!files.length) return false;
+      files.forEach((file) => {
+        void insertImageFileObject(file, onStatus);
+      });
+      return true;
+    }, 100);
     const isEditorPasteTarget = (target: EventTarget | null) => {
       const el = target as HTMLElement | null;
       return !!el?.closest?.('[data-aq-engine-editor], #apaed, .ProseMirror, [contenteditable="true"]');
@@ -292,12 +312,13 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       const images = files.filter((file) => String(file.type || '').toLowerCase().startsWith('image/'));
       if (!images.length) return;
       event.preventDefault();
-      images.forEach((file) => {
-        void insertImageFileObject(file, onStatus);
-      });
+      void editorCommandRouter.dispatch('files.paste.images', { files: images, source: 'clipboard' });
     };
     document.addEventListener('paste', onPaste, true);
-    return () => document.removeEventListener('paste', onPaste, true);
+    return () => {
+      removePasteImages();
+      document.removeEventListener('paste', onPaste, true);
+    };
   }, [onStatus]);
 
   const refreshMetadataHealth = () => {
@@ -336,6 +357,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     const candidate = metadataLookupCandidate;
     if (!candidate?.ref || !candidate.fetched) return;
     const busyId = String(candidate.ref.id || candidate.ref.title || 'ref');
+    const nextRef = cloneQualityReference(candidate.ref);
     try {
       let fetched = { ...candidate.fetched };
       if (mode === 'merge' && fetched.doi) {
@@ -345,27 +367,27 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       if (mode === 'doi-only') {
         const doi = normalizeDoiForMetadata(fetched.doi);
         if (doi) {
-          candidate.ref.doi = doi;
-          if (!candidate.ref.url) candidate.ref.url = `https://doi.org/${doi}`;
+          nextRef.doi = doi;
+          if (!nextRef.url) nextRef.url = `https://doi.org/${doi}`;
         }
       } else {
         try {
-          mergeRefFields(candidate.ref, fetched);
+          mergeRefFields(nextRef, fetched);
         } catch (_error) {
-          if (typeof win.mergeRefFields === 'function') win.mergeRefFields(candidate.ref, fetched);
+          if (typeof win.mergeRefFields === 'function') win.mergeRefFields(nextRef, fetched);
         }
       }
-      const changedFields = mode === 'doi-only' ? [] : applyFetchedMetadataToRef(candidate.ref, fetched);
+      const changedFields = mode === 'doi-only' ? [] : applyFetchedMetadataToRef(nextRef, fetched);
       try {
-        normalizeRefRecord(candidate.ref);
+        normalizeRefRecord(nextRef);
       } catch (_error) {
-        if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(candidate.ref);
+        if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(nextRef);
       }
-      saveLegacyState();
+      commitQualityReference(nextRef, 'quality-metadata-candidate');
       refreshMetadataHealth();
       setMetadataLookupCandidate(null);
       const report = typeof win.AQMetadataHealth?.analyzeReference === 'function'
-        ? win.AQMetadataHealth.analyzeReference(candidate.ref)
+        ? win.AQMetadataHealth.analyzeReference(nextRef)
         : null;
       const remaining = Array.isArray(report?.issues) ? report.issues.length : 0;
       onStatus(mode === 'doi-only'
@@ -388,7 +410,8 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
     try {
       if (action === 'edit') {
         hideLegacyModal('metaHealthModal');
-        if (typeof win.editRefMetadata === 'function') win.editRefMetadata(ref);
+        if (typeof win.__aqOpenReactReferenceEditor === 'function') win.__aqOpenReactReferenceEditor(String(ref.id || ''));
+        else if (typeof win.editRefMetadata === 'function') win.editRefMetadata(ref);
         else if (typeof win.openReferenceEditor === 'function') win.openReferenceEditor(ref);
         window.setTimeout(refreshMetadataHealth, 350);
         return;
@@ -406,24 +429,25 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
               onStatus('DOI metadata alınamadı');
               return;
             }
+            const nextRef = cloneQualityReference(ref);
             try {
-              mergeRefFields(ref, fetched);
+              mergeRefFields(nextRef, fetched);
             } catch (_error) {
-              if (typeof win.mergeRefFields === 'function') win.mergeRefFields(ref, fetched);
+              if (typeof win.mergeRefFields === 'function') win.mergeRefFields(nextRef, fetched);
               else Object.entries(fetched).forEach(([key, value]) => {
-                if (key !== 'id' && value != null && value !== '' && (!ref[key] || key === 'doi' || key === 'url' || key === 'pdfUrl')) ref[key] = value;
+                if (key !== 'id' && value != null && value !== '' && (!nextRef[key] || key === 'doi' || key === 'url' || key === 'pdfUrl')) nextRef[key] = value;
               });
             }
-            const changedFields = applyFetchedMetadataToRef(ref, fetched);
+            const changedFields = applyFetchedMetadataToRef(nextRef, fetched);
             try {
-              normalizeRefRecord(ref);
+              normalizeRefRecord(nextRef);
             } catch (_error) {
-              if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(ref);
+              if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(nextRef);
             }
-            saveLegacyState();
+            commitQualityReference(nextRef, 'quality-metadata-refetch');
             refreshMetadataHealth();
             const report = typeof win.AQMetadataHealth?.analyzeReference === 'function'
-              ? win.AQMetadataHealth.analyzeReference(ref)
+              ? win.AQMetadataHealth.analyzeReference(nextRef)
               : null;
             const remaining = Array.isArray(report?.issues) ? report.issues.length : 0;
             onStatus(`Metadata güncellendi${changedFields.length ? `: ${changedFields.join(', ')}` : ''}${remaining ? ` · ${remaining} sorun kaldı` : ''}`);
@@ -443,16 +467,17 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         return;
       }
       if (action === 'normalize') {
+        const nextRef = cloneQualityReference(ref);
         if (typeof win.AQMetadataHealth?.applyConservativeRepairs === 'function') {
-          const result = win.AQMetadataHealth.applyConservativeRepairs(ref);
-          if (result?.ref) Object.keys(result.ref).forEach((key) => { ref[key] = result.ref[key]; });
+          const result = win.AQMetadataHealth.applyConservativeRepairs(nextRef);
+          if (result?.ref) Object.keys(result.ref).forEach((key) => { nextRef[key] = result.ref[key]; });
         }
         try {
-          normalizeRefRecord(ref);
+          normalizeRefRecord(nextRef);
         } catch (_error) {
-          if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(ref);
+          if (typeof win.normalizeRefRecord === 'function') win.normalizeRefRecord(nextRef);
         }
-        saveLegacyState();
+        commitQualityReference(nextRef, 'quality-metadata-normalize');
         refreshMetadataHealth();
         onStatus('Kayıt normalize edildi');
       }
@@ -901,9 +926,6 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
             return (doiA && doiA === doiB) || String(ref?.title || '').trim().toLowerCase() === String(reference?.title || '').trim().toLowerCase();
           });
           if (!exists) {
-            if (!Array.isArray(ws.lib)) ws.lib = [];
-            ws.lib.unshift(reference);
-            saveLegacyState();
             onImportReferences([reference], 'Web related');
             onStatus('Web sonucu workspace kütüphanesine eklendi');
           } else {
@@ -1061,9 +1083,10 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       { key: 'Home' },
       { key: 'End' },
       { key: '+' },
+      { key: '+', shiftKey: true },
       { key: '=' },
       { key: '-' },
-      { key: '_' },
+      { key: '_', shiftKey: true },
       { key: '0', ctrlKey: true },
       { key: 'f', ctrlKey: true }
     ],
@@ -1265,16 +1288,15 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       win.hlData = normalized.slice();
       const ref = win.__aqCurrentPdfReference || null;
       if (ref) {
-        ref._hlData = normalized.slice();
-        try {
-          const workspace = selectCurrentWorkspace(appStore.getState());
-          const linkedRef = Array.isArray(workspace?.lib)
-            ? workspace.lib.find((item: any) => item && item.id === ref.id)
-            : null;
-          if (linkedRef && linkedRef !== ref) linkedRef._hlData = normalized.slice();
-        } catch (_error) {}
+        win.__aqCurrentPdfReference = { ...ref, _hlData: normalized.slice() };
+        const state = appStore.getState();
+        const next = updateReferenceInWorkspace(state, String(ref.id || ''), (linkedRef) => ({
+          ...linkedRef,
+          _hlData: normalized.slice()
+        }));
+        if (next !== state) appStore.setState(next);
       }
-      saveLegacyState();
+      void persistCanonicalState('pdf-highlight-update');
       return normalized;
     };
 
@@ -1515,7 +1537,7 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       appStore.setState((s) => addNote(s, note));
       try { if (typeof win.rNotes === 'function') win.rNotes(); } catch (_error) {}
       try { if (typeof win.swR === 'function') win.swR('notes', document.querySelectorAll('.rtab')[0]); } catch (_error) {}
-      saveLegacyState();
+      void persistCanonicalState('pdf-highlight-note');
       onStatus('Highlight notlara eklendi');
       return note;
     };
@@ -1540,11 +1562,15 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         onStatus('Matrise göndermek için önce PDF metni seçin');
         return false;
       }
-      if (!ref?.id || !win.S?.cur || !matrixApi?.ensureRowForReference) {
+      const currentState = appStore.getState();
+      if (!ref?.id || !currentState.cur || !matrixApi?.ensureRowForReference) {
         onStatus('Matrise aktarım için seçili kaynak gerekli');
         return false;
       }
-      const ensured = matrixApi.ensureRowForReference(win.S, win.S.cur, ref, {
+      const matrixState = typeof structuredClone === 'function'
+        ? structuredClone(currentState)
+        : JSON.parse(JSON.stringify(currentState));
+      const ensured = matrixApi.ensureRowForReference(matrixState, matrixState.cur, ref, {
         uid: () => `mxr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
       });
       const row = ensured?.row;
@@ -1561,13 +1587,13 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         updatedAt: Date.now()
       };
       if (typeof matrixApi.appendTextToCell === 'function') {
-        matrixApi.appendTextToCell(win.S, win.S.cur, row.id, column, selectedText, {
+        matrixApi.appendTextToCell(matrixState, matrixState.cur, row.id, column, selectedText, {
           source,
           status: 'user_confirmed',
           mode: 'append'
         });
       } else if (typeof matrixApi.appendNoteToCell === 'function') {
-        matrixApi.appendNoteToCell(win.S, win.S.cur, row.id, column, '', selectedText, {
+        matrixApi.appendNoteToCell(matrixState, matrixState.cur, row.id, column, '', selectedText, {
           sourcePage: source.page,
           sourceSnippet: source.snippet,
           extractionType: source.extractionType,
@@ -1579,12 +1605,10 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         onStatus('Matrix hücre güncelleme API bulunamadı');
         return false;
       }
+      appStore.setState(matrixState);
+      void persistCanonicalState('pdf-selection-matrix');
       try { win.AQLiteratureMatrix?.render?.(); } catch (_error) {}
       try { win.openLiteratureMatrix?.(); } catch (_error) {}
-      if (typeof win.__aqReactSyncFromLegacy === 'function') {
-        try { win.__aqReactSyncFromLegacy(win.S || {}); } catch (_error) {}
-      }
-      saveLegacyState();
       onStatus(`Seçili metin ${label} hücresine gönderildi`);
       return true;
     };
@@ -1616,16 +1640,15 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
       const annots = collectFallbackAnnots();
       const ref = win.__aqCurrentPdfReference || null;
       if (ref) {
-        ref._annots = annots;
-        try {
-          const workspace = selectCurrentWorkspace(appStore.getState());
-          const linkedRef = Array.isArray(workspace?.lib)
-            ? workspace.lib.find((item: any) => item && item.id === ref.id)
-            : null;
-          if (linkedRef && linkedRef !== ref) linkedRef._annots = annots.slice();
-        } catch (_error) {}
+        win.__aqCurrentPdfReference = { ...ref, _annots: annots.slice() };
+        const state = appStore.getState();
+        const next = updateReferenceInWorkspace(state, String(ref.id || ''), (linkedRef) => ({
+          ...linkedRef,
+          _annots: annots.slice()
+        }));
+        if (next !== state) appStore.setState(next);
       }
-      saveLegacyState();
+      void persistCanonicalState('pdf-annotation-update');
       updateFallbackStats();
       renderFallbackAnnotationPanel();
       return annots;
@@ -2095,9 +2118,18 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         const ref = win.__aqCurrentPdfReference || null;
         const page = String(drawSession.wrap.dataset.page || '1');
         if (ref) {
-          if (!ref._drawings) ref._drawings = {};
-          ref._drawings[page] = drawSession.canvas.toDataURL('image/png');
-          saveLegacyState();
+          const drawingDataUrl = drawSession.canvas.toDataURL('image/png');
+          win.__aqCurrentPdfReference = {
+            ...ref,
+            _drawings: { ...(ref._drawings || {}), [page]: drawingDataUrl }
+          };
+          const state = appStore.getState();
+          const next = updateReferenceInWorkspace(state, String(ref.id || ''), (linkedRef) => ({
+            ...linkedRef,
+            _drawings: { ...(linkedRef._drawings || {}), [page]: drawingDataUrl }
+          }));
+          if (next !== state) appStore.setState(next);
+          void persistCanonicalState('pdf-drawing-update');
         }
         drawSession = null;
         event.preventDefault();
@@ -2299,109 +2331,14 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         </div>
       ) : null}
 
-      <section id="pdfpanel" className={['aq-legacy-pdf-panel', pdfIsOpen ? 'open' : '', pdfIsFullscreen ? 'fullscreen' : ''].filter(Boolean).join(' ')} data-tool-mode={pdfToolMode || undefined} aria-label="PDF viewer">
-        <div id="pdfresize" className="aq-legacy-pdf-resize" title="Genislik ayarla" />
-        <div id="pdftb" className="aq-legacy-pdf-toolbar">
-          <div className="pdf-brand">
-            <span className="pdf-kicker">PDF Reader</span>
-            <span id="pdftitle" className="aq-legacy-pdf-title">{pdfTitle}</span>
-          </div>
-          <div className="pdf-toolbar-group compact" aria-label="Sayfa gezinme">
-            <button className="ppb" id="pdfPrevBtn" type="button" title="Önceki sayfa" aria-label="Önceki sayfa" onClick={() => (window as any).pPrev?.()}>◀</button>
-            <span id="pdfpg" role="button" tabIndex={0} title="Sayfaya git" aria-label="Sayfa numarasına git" onClick={() => (window as any).goToPage?.()}>{pdfPageText}</span>
-            <button className="ppb" id="pdfNextBtn" type="button" title="Sonraki sayfa" aria-label="Sonraki sayfa" onClick={() => (window as any).pNext?.()}>▶</button>
-          </div>
-          <div className="pdf-toolbar-group compact" aria-label="Yakınlaştırma">
-            <button className="ppb" id="pdfZoomOutBtn" type="button" title="Uzaklaştır" aria-label="Uzaklaştır" onClick={() => (window as any).pZO?.()}>-</button>
-            <span id="pdfzoom" role="button" tabIndex={0} title="Genişliğe sığdır" aria-label="Genişliğe sığdır" onClick={() => (window as any).pZFit?.()}>{pdfZoomText}</span>
-            <button className="ppb" id="pdfZoomInBtn" type="button" title="Yakınlaştır" aria-label="Yakınlaştır" onClick={() => (window as any).pZI?.()}>+</button>
-          </div>
-          <div className="pdf-toolbar-spacer" />
-          <div className="pdf-toolbar-window" aria-label="Pencere">
-            <button
-              className="ppb"
-              id="pdffullbtn"
-              type="button"
-              title={pdfIsFullscreen ? "Küçült" : "Tam ekran"}
-              aria-label={pdfIsFullscreen ? "PDF okuyucuyu küçült" : "Tam ekran aç/kapat"}
-              onClick={() => (window as any).togglePdfFullscreen?.()}
-            >
-              {pdfIsFullscreen ? '✖' : '⛶'}
-            </button>
-            <button className="ppb pdf-close-btn" id="pdfclosebtn" type="button" title="Kapat" aria-label="PDF okuyucuyu kapat" onClick={() => (window as any).togglePDF?.()}>×</button>
-          </div>
-        </div>
-        <div id="pdftabs" className="aq-legacy-pdf-tabs" />
-        <div id="pdfsearchbar" className="aq-legacy-pdf-search">
-          <input id="pdfsearchinp" placeholder="PDF içinde ara..." onKeyDown={(event) => {
-            if (event.key === 'Enter') (window as any).pdfSearchNext?.();
-            if (event.key === 'Escape') (window as any).togglePdfSearch?.();
-          }} />
-          <span id="pdfsearchcount">--</span>
-          <button id="pdfSearchPrevBtn" type="button" onClick={() => (window as any).pdfSearchPrev?.()}>Önceki</button>
-          <button id="pdfSearchNextBtn" type="button" onClick={() => (window as any).pdfSearchNext?.()}>Sonraki</button>
-          <button id="pdfSearchCloseBtn" type="button" onClick={() => (window as any).togglePdfSearch?.()}>Kapat</button>
-        </div>
-        <div id="hlbar" className="aq-legacy-pdf-tools">
-          <div className="pdf-tools-group" aria-label="Görünüm">
-            <button className="ppb" id="pdfSearchToggleBtn" type="button" title="PDF içinde ara" onClick={() => (window as any).togglePdfSearch?.()}>🔍</button>
-            <button className="ppb" id="pdfThumbsToggleBtn" type="button" title="Küçük resimler" onClick={() => (window as any).toggleThumbs?.()}>☷</button>
-            <button className="ppb" id="pdfOutlineToggleBtn" type="button" title="İçerik tablosu" onClick={() => (window as any).toggleOutline?.()}>≡</button>
-            <button className="ppb" id="pdfAnnotsToggleBtn" type="button" title="Notlar ve highlightlar" onClick={() => (window as any).togglePdfAnnotations?.()}>✍</button>
-            <button className="ppb pdf-pill" id="pdfRelatedToggleBtn" type="button" title="Benzer makaleler" onClick={() => (window as any).togglePdfRelated?.()}>🔗 Benzer</button>
-          </div>
-          <div className="pdf-tools-divider" />
-          <div className="pdf-tools-group" aria-label="Highlight">
-            {['#fef08a', '#86efac', '#93c5fd', '#fca5a5'].map((color, index) => (
-              <button
-                key={color}
-                type="button"
-                className={`hlc${index === 0 ? ' on' : ''}`}
-                data-c={color}
-                style={{ background: color }}
-                title="Highlight rengi"
-                onClick={(event) => (window as any).setHLC?.(event.currentTarget)}
-              />
-            ))}
-          </div>
-          <div className="pdf-tools-divider" />
-          <div className="pdf-tools-group" aria-label="Not ve kalem">
-            <button className={`ppb${pdfToolMode === 'annot' ? ' on' : ''}`} id="annotbtn" type="button" title="Metin notu ekle" onClick={() => (window as any).toggleAnnotMode?.()}>✎</button>
-            <button className={`ppb${pdfToolMode === 'draw' ? ' on' : ''}`} id="drawbtn" type="button" title="Serbest çizim" onClick={() => (window as any).toggleDrawMode?.()}>✏</button>
-            <input id="pdfDrawColor" className="pdf-draw-color" type="color" defaultValue="#c9453e" title="Çizim rengi" onChange={(event) => (window as any).setPdfDrawColor?.(event.target.value)} />
-            <button className={`ppb${pdfToolMode === 'region' ? ' on' : ''}`} id="pdfRegionBtn" type="button" title="PDF bölgesi seç" onClick={() => (window as any).togglePdfRegionCaptureMode?.()}>▢</button>
-            <select id="pdfDrawWidth" className="pdf-draw-width" title="Çizim kalınlığı" defaultValue="2.5" onChange={(event) => (window as any).setPdfDrawWidth?.(event.target.value)}>
-              <option value="1.5">İnce</option>
-              <option value="2.5">Orta</option>
-              <option value="4">Kalın</option>
-              <option value="7">Marker</option>
-            </select>
-            <button className="ppb" id="pdfDrawClearBtn" type="button" title="Bu sayfadaki çizimi temizle" onClick={() => (window as any).clearPdfDrawingPage?.()}>🗑</button>
-          </div>
-          <div className="pdf-tools-spacer" />
-          <button className="ppb" id="pdfUploadBtn" type="button" title="PDF yükle" onClick={() => document.getElementById('lfinp')?.click()}>+</button>
-        </div>
-        <div id="pdfreaderbar" className="aq-legacy-pdf-status">
-          <div className="pdf-reader-line">
-            <span id="pdfreadmeta">PDF bekleniyor</span>
-            <span id="pdfreadstats">0 vurgu · 0 not</span>
-            <span id="pdfReaderStatus" />
-          </div>
-          <span id="pdfprogress"><i id="pdfprogressbar" /></span>
-        </div>
-        <div id="pdfbody" className="aq-legacy-pdf-body">
-          <aside id="pdfthumbs" className="aq-legacy-pdf-side" style={{ display: 'none' }} />
-          <aside id="pdfoutline" className="aq-legacy-pdf-side" style={{ display: 'none' }} />
-          <aside id="pdfannots" className="aq-legacy-pdf-annots" style={{ display: 'none' }} />
-          <aside id="pdfrelated" className="aq-legacy-pdf-side" style={{ display: 'none' }} />
-          <div id="pdfscroll" className="aq-legacy-pdf-scroll">
-            <div id="pdfempty" className="aq-legacy-pdf-empty">
-              <div>PDF yükle veya kütüphaneden seç</div>
-              <button id="pdfEmptyUploadBtn" type="button" onClick={() => document.getElementById('lfinp')?.click()}>PDF Yükle</button>
-            </div>
-          </div>
-        </div>
-      </section>
+      <PdfViewerPanel
+        title={pdfTitle}
+        pageText={pdfPageText}
+        zoomText={pdfZoomText}
+        toolMode={pdfToolMode}
+        open={pdfIsOpen}
+        fullscreen={pdfIsFullscreen}
+      />
 
       <div id="hltip" role="menu">
         <button className="htb htb-primary" id="hlToNoteBtn" type="button" onClick={() => call('doHL', true)}>Nota kaydet</button>
@@ -2431,17 +2368,6 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         <button type="button" className="danger" data-pdf-context-action="delete">Seçili highlight'ı sil</button>
         <button type="button" data-pdf-context-action="annots">Highlight / not paneli</button>
         <button type="button" data-pdf-context-action="close">Kapat</button>
-      </div>
-
-      <div id="trig">
-        <div className="tgh"><span className="tgtag">Kaynak Seç</span><span id="tgq" /><span id="tgsel" /></div>
-        <div className="tgmodes">
-          <button className="tgm on" id="citationInlineModeBtn" type="button" onClick={(event) => call('setCM', 'inline', event.currentTarget)}>(Yazar, Yıl)</button>
-          <button className="tgm" id="citationFootnoteModeBtn" type="button" onClick={(event) => call('setCM', 'footnote', event.currentTarget)}>Dipnot*</button>
-        </div>
-        <input id="tgs" type="text" placeholder="Yazar, başlık, yıl..." />
-        <div id="tgl" />
-        <div className="tghint">Oklarla gez, Enter metne ekle, Esc kapat</div>
       </div>
 
       <div id="ctxmenu" />
@@ -2609,122 +2535,18 @@ export function LegacyCompatibilityHost({ onStatus, onImportReferences }: Legacy
         </div>
       </div>
 
-      <div className="modal-bg" id="dupModal" onMouseDown={(event) => {
-        if (event.target === event.currentTarget) hideLegacyModal('dupModal');
-      }}>
-        <div className="modal aq-legacy-modal-lg">
-          <div className="mt">Duplicate Review</div>
-          <div id="dupSummary" />
-          <div className="mb">
-            <button className="mbtn p" id="dupMergeAllBtn" type="button" onClick={() => {
-              const win = window as any;
-              if (typeof win.__mergeAllDuplicateGroups === 'function') win.__mergeAllDuplicateGroups();
-              window.setTimeout(renderDuplicateReviewFallback, 0);
-            }}>Tümünü Birleştir</button>
-            <button className="mbtn s" id="dupDismissAllBtn" type="button" onClick={() => {
-              const win = window as any;
-              if (typeof win.__dismissAllDuplicateGroups === 'function') win.__dismissAllDuplicateGroups();
-              window.setTimeout(renderDuplicateReviewFallback, 0);
-            }}>Tümünü Yoksay</button>
-          </div>
-          <div id="dupGroups" onClick={handleDuplicateReviewClick} />
-          <div className="mb"><button className="mbtn s" id="dupCloseBtn" type="button" onClick={() => hideLegacyModal('dupModal')}>Kapat</button></div>
-        </div>
-      </div>
-
-      <div className="modal-bg" id="metaHealthModal" onMouseDown={(event) => {
-        if (event.target === event.currentTarget) hideLegacyModal('metaHealthModal');
-      }}>
-        <div className="modal aq-legacy-modal-lg">
-          <div className="mt">Metadata Health</div>
-          <div id="metaHealthSummary">
-            Toplam {metadataSummary.total} · Tam {metadataSummary.complete} · Eksik {metadataSummary.incomplete} · Şüpheli {metadataSummary.suspicious}
-            {metadataSummary.issueText ? ` · ${metadataSummary.issueText}` : ''}
-          </div>
-          <div className="mh-sortbar" id="metaHealthSortBar">
-            {[
-              ['all', metadataSummary.total],
-              ['incomplete', metadataSummary.incomplete],
-              ['suspicious', metadataSummary.suspicious],
-              ['complete', metadataSummary.complete]
-            ].map(([sort, count]) => (
-              <button
-                key={String(sort)}
-                type="button"
-                className={`mh-sortbtn ${metadataFilter === sort ? 'on' : ''}`}
-                data-mh-sort={String(sort)}
-                onClick={() => setMetadataFilter(String(sort))}
-              >
-                {String(sort)}<span className="mh-sortcount">{String(count)}</span>
-              </button>
-            ))}
-          </div>
-          <div id="metaHealthList">
-            {visibleMetadataRows.length ? visibleMetadataRows.map((row, index) => {
-              const ref = row.ref || {};
-              const report = row.report || { status: 'complete', issues: [] };
-              const status = String(report.status || 'complete');
-              const busy = metadataLookupBusyId && metadataLookupBusyId === String(ref.id || ref.title || 'ref');
-              const statusLabel = status === 'complete' ? 'Tam' : (status === 'incomplete' ? 'Eksik' : 'Şüpheli');
-              const authors = (Array.isArray(ref.authors) ? ref.authors : []).slice(0, 2).join('; ');
-              const issues = Array.isArray(report.issues) ? report.issues : [];
-              return (
-                <div className="mh-card" data-ref-id={ref.id || ''} key={`${ref.id || 'ref'}-${index}`}>
-                  <div className="mh-card-head">
-                    <span className={`mh-status mh-${status}`}>{statusLabel}</span>
-                    <span className="mh-title">{ref.title || 'Başlıksız'}</span>
-                  </div>
-                  <div className="mh-meta">{authors || 'Yazar yok'} · {ref.year || 'yıl yok'} · {ref.journal || 'dergi yok'}</div>
-                  <div className="mh-issues">
-                    {issues.length ? issues.map((issue: any, issueIndex: number) => (
-                      <span className="mh-issue" key={issueIndex}>{issue.message || issue.code}</span>
-                    )) : <span className="mh-issue">Sorun yok</span>}
-                  </div>
-                  <div className="mb">
-                    <button className="mbtn s" type="button" onClick={() => handleMetadataAction('edit', ref)}>Manuel Düzenle</button>
-                    <button className="mbtn s" type="button" onClick={() => handleMetadataAction('refetch', ref)}>DOI Yeniden Çek</button>
-                    <button className="mbtn p" type="button" onClick={() => handleMetadataAction('normalize', ref)}>Normalize Et</button>
-                  </div>
-                </div>
-              );
-            }) : <div className="aq-empty-note">Kaynak bulunamadı.</div>}
-          </div>
-          {metadataLookupCandidate ? (
-            <div className="mh-card mh-candidate-card">
-              <div className="mh-card-head">
-                <span className="mh-status mh-complete">{Math.round(metadataLookupCandidate.score * 100)}%</span>
-                <span className="mh-title">Metadata eşleşmesi bulundu</span>
-              </div>
-              <div className="mh-meta">
-                {metadataLookupCandidate.source} · {metadataLookupCandidate.evidence.join(' · ') || 'web araması'}
-              </div>
-              <div className="mh-compare-grid">
-                <div>
-                  <div className="mh-compare-label">Mevcut</div>
-                  <b>{metadataLookupCandidate.ref.title || 'Başlıksız'}</b>
-                  <span>{(Array.isArray(metadataLookupCandidate.ref.authors) ? metadataLookupCandidate.ref.authors : []).slice(0, 3).join('; ') || 'Yazar yok'}</span>
-                  <span>{metadataLookupCandidate.ref.year || 'Yıl yok'} · {metadataLookupCandidate.ref.doi || 'DOI yok'}</span>
-                </div>
-                <div>
-                  <div className="mh-compare-label">Bulunan</div>
-                  <b>{metadataLookupCandidate.fetched.title || 'Başlıksız'}</b>
-                  <span>{(Array.isArray(metadataLookupCandidate.fetched.authors) ? metadataLookupCandidate.fetched.authors : []).slice(0, 3).join('; ') || 'Yazar yok'}</span>
-                  <span>{metadataLookupCandidate.fetched.year || 'Yıl yok'} · {metadataLookupCandidate.fetched.doi || 'DOI yok'}</span>
-                </div>
-              </div>
-              <div className="mb">
-                <button className="mbtn p" type="button" disabled={Boolean(metadataLookupBusyId)} onClick={() => { void applyMetadataCandidate('merge'); }}>{metadataLookupBusyId ? 'İşleniyor...' : 'Birleştir'}</button>
-                <button className="mbtn s" type="button" disabled={Boolean(metadataLookupBusyId) || !metadataLookupCandidate.fetched.doi} onClick={() => { void applyMetadataCandidate('doi-only'); }}>Sadece DOI Ekle</button>
-                <button className="mbtn s" type="button" onClick={() => setMetadataLookupCandidate(null)}>Yoksay</button>
-              </div>
-            </div>
-          ) : null}
-          <div className="mb">
-            <button className="mbtn s" id="metaHealthRefreshBtn" type="button" onClick={() => openReactMetadataHealth()}>Yenile</button>
-            <button className="mbtn s" id="metaHealthCloseBtn" type="button" onClick={() => hideLegacyModal('metaHealthModal')}>Kapat</button>
-          </div>
-        </div>
-      </div>
+      <QualityReviewSurfaces
+        rows={visibleMetadataRows}
+        summary={metadataSummary}
+        filter={metadataFilter}
+        candidate={metadataLookupCandidate}
+        busyId={metadataLookupBusyId}
+        onFilterChange={setMetadataFilter}
+        onMetadataAction={(action, ref) => { void handleMetadataAction(action, ref); }}
+        onApplyCandidate={(mode) => { void applyMetadataCandidate(mode); }}
+        onDismissCandidate={() => setMetadataLookupCandidate(null)}
+        onRefreshMetadata={openReactMetadataHealth}
+      />
 
       <div id="matrixView">
         <div id="matrixToolbar">

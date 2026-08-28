@@ -64,6 +64,7 @@ declare global {
         librarySearch?: (query: string) => IpcResult<unknown>;
         libraryGet?: (id: string) => IpcResult<unknown>;
         integrityCheck?: () => IpcResult<unknown>;
+        projectionStatus?: () => IpcResult<unknown>;
         forceRemigrateHistory?: () => IpcResult<unknown>;
         rollbackToLegacyJson?: () => IpcResult<unknown>;
       };

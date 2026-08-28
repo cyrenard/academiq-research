@@ -76,3 +76,29 @@ export function saveLegacyState() {
   scheduleReactSyncFromLegacy();
   window.setTimeout(() => scheduleReactSyncFromLegacy(0), 450);
 }
+
+/**
+ * Persist the appStore snapshot without reading state back from `window.S`.
+ * React installs `__aqReactQueueSave` behind the hydration-aware serialized
+ * save coordinator. The legacy save path is retained only for the archived
+ * non-React shell where that bridge does not exist.
+ */
+export async function persistCanonicalState(source = 'canonical-mutation') {
+  const win = legacyWin();
+  const snapshot = appStore.getState();
+  try {
+    if (typeof win.__aqReactQueueSave === 'function') {
+      await win.__aqReactQueueSave(snapshot, source);
+    } else if (typeof win.save === 'function') {
+      win.save();
+    }
+    window.setTimeout(() => {
+      try { if (typeof win.rRefs === 'function') win.rRefs(); } catch (_error) {}
+      try { if (typeof win.updateRefSection === 'function') win.updateRefSection(); } catch (_error) {}
+    }, 80);
+    return true;
+  } catch (error) {
+    console.error('[canonical-state-persist]', source, error);
+    return false;
+  }
+}

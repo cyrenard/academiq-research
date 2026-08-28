@@ -17,6 +17,31 @@
   root.AQEngineInput = factory();
 })(typeof window !== 'undefined' ? window : globalThis, function(){
 
+  function isWindowsRuntime(){
+    var nav = typeof navigator !== 'undefined'
+      ? navigator
+      : (typeof window !== 'undefined' ? window.navigator : null);
+    if(!nav) return false;
+    var uaPlatform = nav.userAgentData && nav.userAgentData.platform;
+    var platform = String(uaPlatform || nav.platform || nav.userAgent || '').toLowerCase();
+    return platform.indexOf('windows') >= 0 || platform.indexOf('win32') === 0 || platform.indexOf('win64') === 0;
+  }
+
+  function detectCitationTrigger(text, caret){
+    var source = String(text || '');
+    var pos = Math.max(0, Math.min(source.length, Number.isFinite(Number(caret)) ? Number(caret) : source.length));
+    var before = source.slice(Math.max(0, pos - 128), pos);
+    var match = before.match(/\/([rt])(?:\s*([^\n\r]*))?$/i);
+    if(!match) return null;
+    return {
+      query: String(match[2] || '').trim(),
+      mode: String(match[1] || 'r').toLowerCase() === 't' ? 'textual' : 'inline',
+      triggerMode: String(match[1] || 'r').toLowerCase(),
+      from: Math.max(0, pos - match[0].length),
+      to: pos
+    };
+  }
+
   function blockTextLength(b){
     var n = 0;
     var runs = (b && b.runs) || [];
@@ -31,6 +56,7 @@
     // (legacy) or a getter (preferred). We always read latest via getSel().
     var getSel = opts.selectionRef || function(){ return opts.selection; };
     var onChanged = opts.onChanged || function(){};
+    var windowsInputMode = isWindowsRuntime();
 
     if(!container || !doc || !getSel()) throw new Error('AQEngineInput: container, doc, selection(Ref) required');
 
@@ -48,13 +74,13 @@
     // ── Hidden capture textarea ────────────────────────────────────────────
     var ta = document.createElement('textarea');
     ta.className = 'aq-input-capture';
-    ta.setAttribute('autocapitalize', 'off');
-    ta.setAttribute('autocomplete',   'off');
-    ta.setAttribute('autocorrect',    'off');
-    ta.setAttribute('spellcheck',     'false');
+    ta.setAttribute('autocapitalize', windowsInputMode ? 'sentences' : 'off');
+    ta.setAttribute('autocomplete',   windowsInputMode ? 'on' : 'off');
+    ta.setAttribute('autocorrect',    windowsInputMode ? 'on' : 'off');
+    ta.setAttribute('spellcheck',     windowsInputMode ? 'true' : 'false');
     ta.setAttribute('aria-label',     'AcademiQ editor input');
-    ta.setAttribute('data-gramm',     'false');
-    ta.setAttribute('data-gramm_editor', 'false');
+    ta.setAttribute('data-gramm',     windowsInputMode ? 'true' : 'false');
+    ta.setAttribute('data-gramm_editor', windowsInputMode ? 'true' : 'false');
     ta.style.cssText = [
       'position:fixed',
       'top:0', 'left:0',
@@ -310,6 +336,16 @@
       if(manualBibliographyEdit) markManualBibliographyEditSoon();
       getSel().setRange(newOff, newOff);
 
+      // The AQ document and selection are authoritative here. Open the picker
+      // before WebView2 can run a stale selection/reflow callback that loses
+      // the just-typed /r or /t sequence.
+      try{
+        var immediateTrigger = detectCitationTrigger(
+          typeof doc.getPlainText === 'function' ? doc.getPlainText() : '',
+          newOff
+        );
+        if(immediateTrigger) refreshTrigNow(immediateTrigger);
+      }catch(_triggerErr){}
       scheduleTrigRefresh();
     }
 
@@ -364,6 +400,28 @@
       return String(payload || '').length > 1;
     }
 
+    function refreshTrigNow(explicitTrigger){
+      if(isCitationTransactionBlocked()) return false;
+      var range = r();
+      var plainText = typeof doc.getPlainText === 'function' ? doc.getPlainText() : '';
+      var trigger = explicitTrigger || detectCitationTrigger(
+        plainText,
+        range && typeof range.from === 'number' ? range.from : plainText.length
+      );
+      if(trigger && window.AQCitationRuntime && typeof window.AQCitationRuntime.openFromEditorTrigger === 'function'){
+        if(typeof window.AQCitationRuntime.init === 'function'){
+          try{ window.AQCitationRuntime.init(); }catch(_initErr){}
+        }
+        return window.AQCitationRuntime.openFromEditorTrigger(trigger) !== false;
+      }
+      if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
+        window.AQCitationRuntime.refreshFromEditor();
+      } else if(typeof window.checkTrig === 'function'){
+        window.checkTrig();
+      }
+      return false;
+    }
+
     function scheduleTrigRefresh(){
       if(isCitationTransactionBlocked()) return;
       if(trigRefreshTimer) clearTimeout(trigRefreshTimer);
@@ -371,10 +429,16 @@
         trigRefreshTimer = 0;
         if(isCitationTransactionBlocked()) return;
         try {
+          // Typed slash commands are latency-sensitive and must not depend on
+          // the React command router being mounted. Keep the beta 9 ownership
+          // path: AQ Engine updates the document, then refreshes the citation
+          // runtime directly from that same editor state.
           if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
             window.AQCitationRuntime.refreshFromEditor();
           } else if(typeof window.checkTrig === 'function'){
             window.checkTrig();
+          } else if(typeof window.__aqDispatchEditorCommand === 'function'){
+            window.__aqDispatchEditorCommand('citation.refresh', { source:'aq-engine-input-fallback' });
           }
         } catch(_e){}
       }, 350);
@@ -495,12 +559,12 @@
     // ── Event wiring ───────────────────────────────────────────────────────
     function markWritingAssistReady(){
       if(!ta) return;
-      ta.setAttribute('spellcheck', 'false');
-      ta.setAttribute('autocorrect', 'off');
-      ta.setAttribute('autocomplete', 'off');
-      ta.setAttribute('autocapitalize', 'off');
-      ta.setAttribute('data-gramm', 'false');
-      ta.setAttribute('data-gramm_editor', 'false');
+      ta.setAttribute('spellcheck', windowsInputMode ? 'true' : 'false');
+      ta.setAttribute('autocorrect', windowsInputMode ? 'on' : 'off');
+      ta.setAttribute('autocomplete', windowsInputMode ? 'on' : 'off');
+      ta.setAttribute('autocapitalize', windowsInputMode ? 'sentences' : 'off');
+      ta.setAttribute('data-gramm', windowsInputMode ? 'true' : 'false');
+      ta.setAttribute('data-gramm_editor', windowsInputMode ? 'true' : 'false');
       ta.removeAttribute('aria-hidden');
       ta.setAttribute('aria-label', 'AcademiQ editor input');
     }
@@ -892,12 +956,12 @@
       assistBridge = document.createElement('div');
       assistBridge.className = 'aq-writing-assist-bridge';
       assistBridge.setAttribute('contenteditable', 'true');
-      assistBridge.setAttribute('spellcheck', 'false');
-      assistBridge.setAttribute('autocapitalize', 'off');
-      assistBridge.setAttribute('autocorrect', 'off');
-      assistBridge.setAttribute('autocomplete', 'off');
-      assistBridge.setAttribute('data-gramm', 'false');
-      assistBridge.setAttribute('data-gramm_editor', 'false');
+      assistBridge.setAttribute('spellcheck', windowsInputMode ? 'true' : 'false');
+      assistBridge.setAttribute('autocapitalize', windowsInputMode ? 'sentences' : 'off');
+      assistBridge.setAttribute('autocorrect', windowsInputMode ? 'on' : 'off');
+      assistBridge.setAttribute('autocomplete', windowsInputMode ? 'on' : 'off');
+      assistBridge.setAttribute('data-gramm', windowsInputMode ? 'true' : 'false');
+      assistBridge.setAttribute('data-gramm_editor', windowsInputMode ? 'true' : 'false');
       assistBridge.setAttribute('aria-label', 'AcademiQ writing assist bridge');
       assistBridge.style.cssText = [
         'position:absolute',
@@ -1100,5 +1164,5 @@
     };
   }
 
-  return { create: createInput };
+  return { create: createInput, detectCitationTrigger: detectCitationTrigger };
 });

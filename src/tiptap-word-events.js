@@ -5,6 +5,16 @@
   }
   root.AQTipTapWordEvents = factory();
 })(typeof window !== 'undefined' ? window : globalThis, function(){
+  function isWindowsRuntime(){
+    var nav = typeof navigator !== 'undefined'
+      ? navigator
+      : (typeof window !== 'undefined' ? window.navigator : null);
+    if(!nav) return false;
+    var uaPlatform = nav.userAgentData && nav.userAgentData.platform;
+    var platform = String(uaPlatform || nav.platform || nav.userAgent || '').toLowerCase();
+    return platform.indexOf('windows') >= 0 || platform.indexOf('win32') === 0 || platform.indexOf('win64') === 0;
+  }
+
   var state = {
     initialized: false,
     observer: null,
@@ -39,6 +49,7 @@
 
   function applySurfaceAttributes(root){
     if(typeof document === 'undefined') return false;
+    var writingAssistEnabled = isWindowsRuntime();
     root = root || document;
     var targets = [
       document.body,
@@ -49,12 +60,12 @@
       root && root.nodeType === 1 ? root : null
     ].filter(Boolean);
     targets.forEach(function(node){
-      node.setAttribute('spellcheck','false');
-      node.setAttribute('autocorrect','off');
-      node.setAttribute('autocomplete','off');
-      node.setAttribute('autocapitalize','off');
-      node.setAttribute('data-gramm','false');
-      node.setAttribute('data-gramm_editor','false');
+      node.setAttribute('spellcheck', writingAssistEnabled ? 'true' : 'false');
+      node.setAttribute('autocorrect', writingAssistEnabled ? 'on' : 'off');
+      node.setAttribute('autocomplete', writingAssistEnabled ? 'on' : 'off');
+      node.setAttribute('autocapitalize', writingAssistEnabled ? 'sentences' : 'off');
+      node.setAttribute('data-gramm', writingAssistEnabled ? 'true' : 'false');
+      node.setAttribute('data-gramm_editor', writingAssistEnabled ? 'true' : 'false');
       if(node.id === 'apaed' || (node.classList && node.classList.contains('ProseMirror'))){
         node.setAttribute('role','textbox');
         node.setAttribute('aria-multiline','true');
@@ -64,12 +75,12 @@
       ? document.querySelectorAll('.aq-input-capture')
       : [];
     Array.prototype.forEach.call(captures, function(node){
-      node.setAttribute('spellcheck','false');
-      node.setAttribute('autocorrect','off');
-      node.setAttribute('autocomplete','off');
-      node.setAttribute('autocapitalize','off');
-      node.setAttribute('data-gramm','false');
-      node.setAttribute('data-gramm_editor','false');
+      node.setAttribute('spellcheck', writingAssistEnabled ? 'true' : 'false');
+      node.setAttribute('autocorrect', writingAssistEnabled ? 'on' : 'off');
+      node.setAttribute('autocomplete', writingAssistEnabled ? 'on' : 'off');
+      node.setAttribute('autocapitalize', writingAssistEnabled ? 'sentences' : 'off');
+      node.setAttribute('data-gramm', writingAssistEnabled ? 'true' : 'false');
+      node.setAttribute('data-gramm_editor', writingAssistEnabled ? 'true' : 'false');
       node.removeAttribute('aria-hidden');
       node.setAttribute('aria-label','AcademiQ editor input');
     });

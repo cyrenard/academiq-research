@@ -106,3 +106,17 @@ dynamic #reflist), `showSidebarRefMenu` (#ctxmenu is React-rendered), `setSL`
 **Conclusion:** the safe, high-value modularization (dead-render removal) is done.
 Further "splitting" of the core is either Category-C code that should remain, the
 frozen aq-engine, or the multi-week S-retirement — all tracked in TECH_DEBT.md.
+
+## Canonical-state follow-up — 2026-08-26
+
+The next strangler slice is complete without rewriting the Category-C renderer:
+
+- `LegacyCompatibilityHost.tsx` has no direct `window.S` read or `saveLegacyState()` call.
+- Duplicate merge and metadata repair/refetch replace appStore records immutably.
+- PDF fallback highlights, notes, drawings, and PDF-to-matrix actions update appStore
+  and persist through the hydration-aware serialized save bridge.
+- The `window.S` object still receives appStore write-through for AQ Engine/pdf.js
+  compatibility; it is no longer the source of truth for these migrated actions.
+
+Remaining state retirement should continue domain-by-domain inside the durable
+legacy core. AQ Engine and pdf.js rendering contracts remain intentionally imperative.
