@@ -491,8 +491,21 @@
     }
   }
 
+  function isCitationPopupInteractiveTarget(target){
+    if(!target) return false;
+    try{
+      return !!(target.closest && target.closest('#tgs,.tgm,button,input,[role="button"]'));
+    }catch(e){
+      return false;
+    }
+  }
+
   function stopCitationPopupPointerEvent(event){
     if(!event || !targetInsideCitationPopup(event.target)) return false;
+    // Search and mode controls must receive their native pointer events so the
+    // search field can regain focus after the popup opens. The document-level
+    // outside-click guard already ignores every target inside #trig.
+    if(isCitationPopupInteractiveTarget(event.target)) return false;
     if(typeof event.preventDefault === 'function') event.preventDefault();
     if(typeof event.stopPropagation === 'function') event.stopPropagation();
     if(typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
@@ -519,45 +532,43 @@
         box.style.pointerEvents = 'none';
       }
       box.addEventListener('pointerdown', function(e){
+        if(isCitationPopupInteractiveTarget(e.target)) return;
         e.preventDefault();
         e.stopPropagation();
         if(typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
       }, true);
-      box.addEventListener('mousedown', function(e){ e.stopPropagation(); }, true);
-      box.addEventListener('click', function(e){ e.stopPropagation(); }, true);
+      box.addEventListener('mousedown', function(e){
+        if(isCitationPopupInteractiveTarget(e.target)) return;
+        e.stopPropagation();
+      }, true);
+      box.addEventListener('click', function(e){
+        if(isCitationPopupInteractiveTarget(e.target)) return;
+        e.stopPropagation();
+      }, true);
     }
     const inp = getTriggerInput();
     if(inp){
-      const editorOwnsKeyboard = isWindowsRuntime();
-      inp.readOnly = editorOwnsKeyboard;
-      inp.disabled = editorOwnsKeyboard;
-      inp.tabIndex = editorOwnsKeyboard ? -1 : 0;
-      inp.style.pointerEvents = editorOwnsKeyboard ? 'none' : 'auto';
+      inp.readOnly = false;
+      inp.disabled = false;
+      inp.tabIndex = 0;
+      inp.style.pointerEvents = 'auto';
       if(!inp.__aqCitationRuntimeBound){
         inp.__aqCitationRuntimeBound = true;
-        if(editorOwnsKeyboard){
-          ['keydown','keyup','input','mousedown','click'].forEach(function(type){
-            inp.addEventListener(type, function(e){
-              e.stopPropagation();
-              if(typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
-            }, true);
-          });
-        }else{
-          inp.addEventListener('keydown', function(e){
-            if(runtime.handleKeydown(e)) return;
-            e.stopPropagation();
-          }, true);
-          inp.addEventListener('input', function(e){
-            runtime.state.query = inp.value || '';
-            runtime.state.activeIndex = 0;
-            runtime.state.keyboardMode = 'query';
-            runtime.renderList();
-            e.stopPropagation();
-          });
-          ['keyup','mousedown','click'].forEach(function(type){
-            inp.addEventListener(type, function(e){ e.stopPropagation(); }, true);
-          });
-        }
+        inp.addEventListener('keydown', function(e){
+          if(runtime.handleKeydown(e)) return;
+          e.stopPropagation();
+        }, true);
+        inp.addEventListener('input', function(e){
+          runtime.state.searchInputOwned = true;
+          runtime.state.query = inp.value || '';
+          runtime.state.activeIndex = 0;
+          runtime.state.keyboardMode = 'query';
+          runtime.renderList();
+          e.stopPropagation();
+        });
+        ['keyup','mousedown','click'].forEach(function(type){
+          inp.addEventListener(type, function(e){ e.stopPropagation(); }, true);
+        });
       }
     }
     const sc = getScrollEl();
@@ -919,6 +930,7 @@
       initialized: false,
       open: false,
       query: '',
+      searchInputOwned: false,
       triggerMode: 'inline',
       selectedIds: [],
       retainedSelectedIds: [],
@@ -1094,11 +1106,10 @@
       if(hint) hint.textContent = runtime.state.query ? '"' + runtime.state.query + '"' : 'tüm kaynaklar';
       if(inp){
         inp.value = runtime.state.query;
-        const editorOwnsKeyboard = isWindowsRuntime();
-        inp.readOnly = editorOwnsKeyboard;
-        inp.disabled = editorOwnsKeyboard;
-        inp.tabIndex = editorOwnsKeyboard ? -1 : 0;
-        inp.style.pointerEvents = editorOwnsKeyboard ? 'none' : 'auto';
+        inp.readOnly = false;
+        inp.disabled = false;
+        inp.tabIndex = 0;
+        inp.style.pointerEvents = 'auto';
       }
       if(!list) return;
       runtime.state.results = getResults(runtime.state.query);
@@ -1152,6 +1163,7 @@
       }
       runtime.saveScroll();
       runtime.state.open = true;
+      runtime.state.searchInputOwned = false;
       runtime.state.query = query || '';
       runtime.state.triggerMode = mode || 'inline';
       window.__aqCitationTriggerMode = runtime.state.triggerMode;
@@ -1179,17 +1191,13 @@
       }
       runtime.renderList();
       syncLegacyState();
-      if(isWindowsRuntime()){
-        focusEditorWithoutScroll();
-      }else{
-        window.setTimeout(function(){
-          const input = getTriggerInput();
-          if(input && runtime.state.open){
-            try{ input.focus({ preventScroll:true }); }catch(_e){ input.focus(); }
-            try{ input.setSelectionRange(input.value.length, input.value.length); }catch(_e){}
-          }
-        },0);
-      }
+      window.setTimeout(function(){
+        const input = getTriggerInput();
+        if(input && runtime.state.open){
+          try{ input.focus({ preventScroll:true }); }catch(_e){ input.focus(); }
+          try{ input.setSelectionRange(input.value.length, input.value.length); }catch(_e){}
+        }
+      },0);
       runtime.restoreScroll();
     },
 
@@ -1237,6 +1245,7 @@
       }
       runtime.state.open = false;
       runtime.state.query = '';
+      runtime.state.searchInputOwned = false;
       runtime.state.selectedIds = [];
       runtime.state.activeIndex = 0;
       runtime.state.keyboardMode = 'query';
@@ -1260,6 +1269,13 @@
 
     refreshFromEditor: function(){
       if(window.__aqCitationTransactionActive || Date.now() < (window.__aqCitationInputBlockedUntil || 0) || Date.now() < (runtime.state.suppressTriggerUntil || 0)){
+        return;
+      }
+      // AQ Engine schedules a delayed refresh after recognizing /r or /t.
+      // Once the popup input receives text, that stale editor refresh must not
+      // replace the user's live search query with the original empty trigger.
+      if(runtime.state.open && runtime.state.searchInputOwned){
+        runtime.repositionPopup();
         return;
       }
       const found = currentQuery();
@@ -1740,7 +1756,7 @@
       const isSpace = key === ' ' || event.code === 'Space' || key === 'Spacebar' || event.keyCode === 32 || event.which === 32;
       if(!isWindowsRuntime() && !runtime.hasSelectableResults()){
         if(key === 'Escape'){
-          runtime.close(true);
+          runtime.close(false);
           event.preventDefault();
           event.stopPropagation();
           if(typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
@@ -1763,7 +1779,7 @@
       }else if(key === 'Enter'){
         runtime.insertSelection();
       }else if(key === 'Escape'){
-        runtime.close(true);
+        runtime.close(false);
       }else{
         return false;
       }
@@ -1871,6 +1887,7 @@
       window.addEventListener('input', function(event){
         var target = event && event.target && event.target.nodeType === 3 ? event.target.parentNode : (event ? event.target : null);
         if(!targetInsideEditor(target)) return;
+        runtime.state.searchInputOwned = false;
         setTimeout(function(){
           if(window.AQCitationRuntime && typeof window.AQCitationRuntime.refreshFromEditor === 'function'){
             try{ window.AQCitationRuntime.refreshFromEditor(); }catch(_e){}

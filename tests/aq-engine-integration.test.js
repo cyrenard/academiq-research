@@ -367,17 +367,20 @@ test('citation runtime binds popup DOM that mounts after early initialization', 
 
   assert.equal(elements.trig.__aqCitationRuntimeBound, true);
   assert.equal(elements.tgs.__aqCitationRuntimeBound, true);
-  assert.equal(elements.tgs.disabled, true);
-  assert.equal(elements.tgs.readOnly, true);
+  assert.equal(elements.tgs.disabled, false);
+  assert.equal(elements.tgs.readOnly, false);
+  assert.equal(elements.tgs.tabIndex, 0);
   assert.ok(listeners.includes('pointerdown'));
 });
 
-test('beta 9 citation slash trigger keeps keyboard ownership in the editor', () => {
+test('Windows citation slash popup accepts typed search queries', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'citation-runtime.js'), 'utf8');
   const makeElement = () => ({
     style: {},
-    classList: { add(){}, remove(){} },
-    addEventListener(){},
+    listeners: {},
+    classList: { add(){}, remove(){}, contains(){ return false; } },
+    dataset: {},
+    addEventListener(type, handler){ this.listeners[type] = handler; },
     removeEventListener(){},
     querySelector(){ return null; },
     contains(){ return false; },
@@ -410,54 +413,50 @@ test('beta 9 citation slash trigger keeps keyboard ownership in the editor', () 
     addEventListener(){},
     removeEventListener(){}
   };
+  let lastQuery = null;
   const window = {
     document,
     navigator: { platform: 'Win32', userAgent: 'Windows NT 10.0' },
     console,
     Date,
-    setTimeout,
+    setTimeout(fn){ fn(); },
     clearTimeout,
     innerHeight: 800,
     innerWidth: 1200,
     addEventListener(){},
     removeEventListener(){},
     getSelection(){ return null; },
-    cLib(){ return []; },
-    filterRefsForQuery(){ return []; }
+    editor: {
+      state: {
+        selection: { from: 2, to: 2 },
+        doc: { textBetween(){ return '/r'; } }
+      }
+    },
+    cLib(){ return [{ id: 'doe', title: 'Doe' }, { id: 'smith', title: 'Smith' }]; },
+    filterRefsForQuery(refs, query){
+      lastQuery = query;
+      return refs.filter((ref) => !query || ref.title.toLowerCase().includes(String(query).toLowerCase()));
+    }
   };
   window.window = window;
-  vm.runInNewContext(source, { window, document, console, Date, setTimeout, clearTimeout });
+  vm.runInNewContext(source, { window, document, console, Date, setTimeout: window.setTimeout, clearTimeout });
+  window.AQCitationRuntime.init();
   window.AQCitationRuntime.openFromSlash('', 'inline');
-  assert.equal(elements.tgs.disabled, true);
-  assert.equal(elements.tgs.readOnly, true);
-  assert.equal(elements.tgs.tabIndex, -1);
+  assert.equal(elements.tgs.disabled, false);
+  assert.equal(elements.tgs.readOnly, false);
+  assert.equal(elements.tgs.tabIndex, 0);
+  assert.equal(elements.tgs.focused, true);
 
-  const enterEvent = {
-    key: 'Enter',
-    ctrlKey: false,
-    metaKey: false,
-    altKey: false,
-    preventDefault(){ this.prevented = true; },
-    stopPropagation(){ this.stopped = true; },
-    stopImmediatePropagation(){ this.immediateStopped = true; }
-  };
-  assert.equal(window.AQCitationRuntime.handleKeydown(enterEvent), true);
-  assert.equal(enterEvent.prevented, true);
+  elements.tgs.value = 'doe';
+  elements.tgs.listeners.input({ stopPropagation(){} });
+  assert.equal(lastQuery, 'doe');
 
-  const escapeEvent = {
-    key: 'Escape',
-    ctrlKey: false,
-    metaKey: false,
-    altKey: false,
-    preventDefault(){ this.prevented = true; },
-    stopPropagation(){ this.stopped = true; },
-    stopImmediatePropagation(){ this.immediateStopped = true; }
-  };
-  assert.equal(window.AQCitationRuntime.handleKeydown(escapeEvent), true);
-  assert.equal(escapeEvent.prevented, true);
+  window.AQCitationRuntime.refreshFromEditor();
+  assert.equal(elements.tgs.value, 'doe');
+  assert.equal(lastQuery, 'doe');
 });
 
-test('beta 9 textual slash trigger keeps focus in the editor', () => {
+test('Windows textual slash trigger focuses the popup search input', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'citation-runtime.js'), 'utf8');
   const makeElement = () => ({
     style: {},
@@ -514,9 +513,10 @@ test('beta 9 textual slash trigger keeps focus in the editor', () => {
   vm.runInNewContext(source, { window, document, console, Date, setTimeout: window.setTimeout, clearTimeout });
   window.AQCitationRuntime.openFromSlash('', 'textual');
   assert.equal(window.__aqCitationTriggerMode, 'textual');
-  assert.equal(elements.tgs.disabled, true);
-  assert.equal(elements.tgs.readOnly, true);
-  assert.equal(elements.tgs.tabIndex, -1);
+  assert.equal(elements.tgs.disabled, false);
+  assert.equal(elements.tgs.readOnly, false);
+  assert.equal(elements.tgs.tabIndex, 0);
+  assert.equal(elements.tgs.focused, true);
 });
 
 test('Linux citation slash trigger gives keyboard ownership to the popup search input', () => {

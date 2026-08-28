@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.24.1-beta.23 - 2026-08-28
+
+Restores live citation search after the `/r` and `/t` popup opens.
+
+- Enables and focuses the citation search input on Windows as well as Linux.
+- Keeps popup typing authoritative so AQ Engine's delayed slash refresh cannot
+  erase the first characters of a search query.
+- Preserves the editor trigger range while the popup owns keyboard input, so
+  inserting a selected reference still replaces the original slash command.
+- Allows pointer focus for the search and citation-mode controls while keeping
+  citation result clicks isolated from the editor.
+- Restores editor focus when the popup is dismissed with Escape.
+- Adds Windows regression coverage and real-browser keyboard verification for
+  `/r`, `/t`, matching queries, and empty results.
+
 ## 1.24.1-beta.22 - 2026-08-27
 
 Windows and Linux citation popup visibility correction confirmed with live
