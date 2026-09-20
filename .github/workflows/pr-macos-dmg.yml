@@ -83,6 +83,16 @@ jobs:
           file src-tauri/binaries/vision-ocr
           src-tauri/binaries/vision-ocr icon.png eng | node -e "let text='';process.stdin.on('data',chunk=>text+=chunk);process.stdin.on('end',()=>{if(typeof JSON.parse(text).text!=='string')process.exit(1)})"
 
+      - name: Typecheck and feature regression tests
+        shell: bash
+        run: |
+          npm run typecheck
+          npm test
+          npm run test:renderer
+          npm run gate:editor
+        env:
+          NODE_NO_WARNINGS: '1'
+
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0.0" --locked
 
@@ -93,16 +103,6 @@ jobs:
           cargo tauri icon ../icon.png --output icons
           cd ..
           node scripts/configure-tauri-macos.js
-
-      - name: Typecheck and feature regression tests
-        shell: bash
-        run: |
-          npm run typecheck
-          npm test
-          npm run test:renderer
-          npm run gate:editor
-        env:
-          NODE_NO_WARNINGS: '1'
 
       - name: Build ad-hoc signed DMG
         run: npm run build
