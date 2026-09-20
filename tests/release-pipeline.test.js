@@ -7,6 +7,7 @@ const rootDir = path.join(__dirname, '..');
 const buildTauri = require('../scripts/build-tauri.js');
 const bundleGate = require('../scripts/tauri-bundle-gate.js');
 const linuxConfig = require('../scripts/configure-tauri-linux.js');
+const macosConfig = require('../scripts/configure-tauri-macos.js');
 
 function read(...parts) {
   return fs.readFileSync(path.join(rootDir, ...parts), 'utf8');
@@ -151,6 +152,44 @@ test('bundle gate validates Windows and Fedora beta platform expectations', () =
   assert.equal(bundleGate.sidecarBinaryName('win32'), 'capture-agent-x86_64-pc-windows-msvc.exe');
   assert.equal(bundleGate.sidecarBinaryName('linux'), 'capture-agent-x86_64-unknown-linux-gnu');
   assert.equal(bundleGate.installerPattern('linux').test('AcademiQ-Research-1.24.1-beta.1.x86_64.rpm'), true);
+});
+
+test('macOS DMG helper preserves the beta 23 application resources on both architectures', () => {
+  const conf = json('src-tauri', 'tauri.conf.json');
+  const macosBundle = macosConfig.configureMacosBundle(conf);
+
+  assert.deepEqual(conf.bundle.targets, ['nsis']);
+  assert.ok(conf.bundle.resources.includes('binaries/pdfium.dll'));
+  assert.deepEqual(macosBundle.bundle.targets, ['dmg']);
+  assert.deepEqual(macosBundle.bundle.icon, ['icons/icon.icns']);
+  assert.equal(macosBundle.bundle.macOS.signingIdentity, '-');
+  assert.equal(macosBundle.bundle.resources.includes('binaries/pdfium.dll'), false);
+  assert.equal(macosBundle.bundle.resources.includes('binaries/libpdfium.so'), false);
+  assert.ok(macosBundle.bundle.resources.includes('binaries/libpdfium.dylib'));
+  assert.ok(macosBundle.bundle.resources.includes('binaries/vision-ocr'));
+  assert.ok(macosBundle.bundle.externalBin.includes('binaries/capture-agent'));
+  assert.equal(bundleGate.verifyTauriConfig('darwin', macosBundle), true);
+  assert.equal(bundleGate.platformKey('darwin', 'arm64'), 'darwin-aarch64');
+  assert.equal(bundleGate.platformKey('darwin', 'x64'), 'darwin-x86_64');
+  assert.equal(bundleGate.sidecarBinaryName('darwin', 'arm64'), 'capture-agent-aarch64-apple-darwin');
+  assert.equal(bundleGate.sidecarBinaryName('darwin', 'x64'), 'capture-agent-x86_64-apple-darwin');
+  assert.equal(bundleGate.installerPattern('darwin').test('AcademiQ Research_1.24.1-beta.23_aarch64.dmg'), true);
+  assert.equal(buildTauri.bundleProfile('darwin', 'arm64').platformKey, 'darwin-aarch64');
+  assert.equal(buildTauri.bundleProfile('darwin', 'x64').platformKey, 'darwin-x86_64');
+  assert.match(buildTauri.selectPrimaryInstaller(['x.app.tar.gz', 'x.dmg'], 'darwin'), /\.dmg$/);
+});
+
+test('macOS PR workflow builds and tests Apple Silicon and Intel without changing Windows/Linux release jobs', () => {
+  const workflow = read('.github', 'workflows', 'pr-macos-dmg.yml');
+  assert.match(workflow, /macos-15-intel/);
+  assert.match(workflow, /runner: macos-15/);
+  assert.match(workflow, /npm run gate:editor/);
+  assert.match(workflow, /pdfium-mac-arm64\.tgz/);
+  assert.match(workflow, /pdfium-mac-x64\.tgz/);
+  assert.match(workflow, /configure-tauri-macos\.js/);
+  assert.match(workflow, /macos-vision-ocr\.swift/);
+  assert.match(workflow, /codesign --verify/);
+  assert.match(workflow, /dist\/tauri\/\*\.dmg/);
 });
 
 test('build helper emits platform-specific updater manifests', () => {

@@ -38,7 +38,7 @@ function runNpmScript(scriptName) {
   run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', scriptName], `npm run ${scriptName}`);
 }
 
-function bundleProfile(platform = process.platform) {
+function bundleProfile(platform = process.platform, arch = process.arch) {
   if (platform === 'win32') {
     return {
       platformKey: 'windows-x86_64',
@@ -65,12 +65,12 @@ function bundleProfile(platform = process.platform) {
   }
   if (platform === 'darwin') {
     return {
-      platformKey: 'darwin-x86_64',
+      platformKey: arch === 'arm64' ? 'darwin-aarch64' : 'darwin-x86_64',
       extraPlatformKeys: [],
-      bundleDirs: ['dmg', 'macos'],
-      installerPattern: /\.(dmg|app\.tar\.gz)$/i,
-      distCleanupPattern: /\.(dmg|app\.tar\.gz)(\.sig)?$/i,
-      currentVersionOnly: false,
+      bundleDirs: ['dmg'],
+      installerPattern: /\.dmg$/i,
+      distCleanupPattern: /\.dmg(\.sig)?$/i,
+      currentVersionOnly: true,
       signed: false,
       releaseInstallerName: null
     };
@@ -108,6 +108,9 @@ function selectPrimaryInstaller(installers, platform = process.platform) {
   if (!Array.isArray(installers) || !installers.length) return '';
   if (platform === 'linux') {
     return installers.find((file) => /\.AppImage$/i.test(file)) || installers[0];
+  }
+  if (platform === 'darwin') {
+    return installers.find((file) => /\.dmg$/i.test(file)) || installers[0];
   }
   return installers[0];
 }

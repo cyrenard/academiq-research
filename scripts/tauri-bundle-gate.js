@@ -17,17 +17,17 @@ function parseBundleTargets(value) {
     .filter(Boolean);
 }
 
-function platformKey(platform = process.platform) {
+function platformKey(platform = process.platform, arch = process.arch) {
   if (platform === 'win32') return 'windows-x86_64';
   if (platform === 'linux') return 'linux-x86_64';
-  if (platform === 'darwin') return 'darwin-x86_64';
+  if (platform === 'darwin') return arch === 'arm64' ? 'darwin-aarch64' : 'darwin-x86_64';
   return `${platform}-x86_64`;
 }
 
 function installerPattern(platform = process.platform) {
   if (platform === 'win32') return /\.exe$/i;
   if (platform === 'linux') return /\.(rpm|deb|appimage)$/i;
-  if (platform === 'darwin') return /\.(dmg|app\.tar\.gz)$/i;
+  if (platform === 'darwin') return /\.dmg$/i;
   return /\.(exe|rpm|deb|appimage|dmg|app\.tar\.gz)$/i;
 }
 
@@ -45,11 +45,11 @@ function shouldRequireUpdaterSignature(env = process.env) {
   return env.ACADEMIQ_REQUIRE_UPDATER_SIGNATURE === '1';
 }
 
-function sidecarBinaryName(platform = process.platform) {
+function sidecarBinaryName(platform = process.platform, arch = process.arch) {
   if (platform === 'win32') return 'capture-agent-x86_64-pc-windows-msvc.exe';
   if (platform === 'linux') return 'capture-agent-x86_64-unknown-linux-gnu';
   if (platform === 'darwin') {
-    return process.arch === 'arm64'
+    return arch === 'arm64'
       ? 'capture-agent-aarch64-apple-darwin'
       : 'capture-agent-x86_64-apple-darwin';
   }
@@ -71,10 +71,16 @@ function verifyTauriConfig(
   if (platform === 'linux' && !targets.some((target) => ['rpm', 'deb', 'appimage'].includes(String(target).toLowerCase()))) {
     fail('Linux release builds must target rpm, deb, or appimage');
   }
+  if (platform === 'darwin' && !targets.some((target) => String(target).toLowerCase() === 'dmg')) {
+    fail('macOS test builds must target dmg');
+  }
   const resources = (conf.bundle && conf.bundle.resources) || [];
   const expected = expectedPdfiumResource(platform);
   if (!resources.includes(expected)) {
     fail(`tauri.conf.json must bundle ${expected}`);
+  }
+  if (platform === 'darwin' && !resources.includes('binaries/vision-ocr')) {
+    fail('macOS builds must bundle the native Vision OCR helper');
   }
   if (conf.bundle.createUpdaterArtifacts !== true) {
     fail('tauri.conf.json must enable bundle.createUpdaterArtifacts for signed releases');
