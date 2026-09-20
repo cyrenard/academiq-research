@@ -1,6 +1,8 @@
 name: PR macOS DMG
 
 on:
+  push:
+    branches: [agent/macos-beta23-parity]
   pull_request:
     branches: [main, master, agent/fix-citation-slash-triggers]
   workflow_dispatch:
