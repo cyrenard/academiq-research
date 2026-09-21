@@ -117,7 +117,17 @@ jobs:
         shell: bash
         run: |
           node scripts/tauri-bundle-gate.js
-          app="src-tauri/target/release/bundle/macos/AcademiQ Research.app"
+          dmg="$(find dist/tauri -maxdepth 1 -type f -name '*.dmg' -print -quit)"
+          test -n "$dmg"
+          mount_dir="$(mktemp -d)"
+          cleanup() {
+            hdiutil detach "$mount_dir" -quiet || true
+            rmdir "$mount_dir" || true
+          }
+          trap cleanup EXIT
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount_dir" -quiet
+          app="$(find "$mount_dir" -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$app"
           test -d "$app"
           test -f "$app/Contents/Resources/binaries/libpdfium.dylib"
           test -x "$app/Contents/Resources/binaries/vision-ocr"
