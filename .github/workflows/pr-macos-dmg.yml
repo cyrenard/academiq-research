@@ -1,8 +1,6 @@
 name: PR macOS DMG
 
 on:
-  push:
-    branches: [agent/macos-beta23-parity]
   pull_request:
     branches: [main, master, agent/fix-citation-slash-triggers]
   workflow_dispatch:
@@ -91,6 +89,9 @@ jobs:
           codesign --force --sign - --timestamp=none src-tauri/binaries/vision-ocr
           file src-tauri/binaries/vision-ocr
           src-tauri/binaries/vision-ocr icon.png eng | node -e "let text='';process.stdin.on('data',chunk=>text+=chunk);process.stdin.on('end',()=>{if(typeof JSON.parse(text).text!=='string')process.exit(1)})"
+
+      - name: Precompile release-mode Rust tests
+        run: cargo test --release --no-run --manifest-path src-tauri/Cargo.toml
 
       - name: Typecheck and feature regression tests
         shell: bash

@@ -188,6 +188,8 @@ test('macOS PR workflow builds and tests Apple Silicon and Intel without changin
   assert.match(workflow, /pdfium-mac-x64\.tgz/);
   assert.match(workflow, /configure-tauri-macos\.js/);
   assert.match(workflow, /macos-vision-ocr\.swift/);
+  assert.match(workflow, /cargo test --release --no-run/);
+  assert.doesNotMatch(workflow, /^\s*push:/m);
   assert.match(workflow, /codesign --verify/);
   assert.match(workflow, /dist\/tauri\/\*\.dmg/);
 });
@@ -239,3 +241,4 @@ test('CI and PR setup rebuild the platform capture sidecar instead of trusting a
   assert.match(sidecarBuild, /node_modules/);
   assert.doesNotMatch(sidecarBuild, /spawnSync\('npx'/);
 });
+
