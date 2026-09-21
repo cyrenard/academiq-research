@@ -519,7 +519,11 @@ test('Windows textual slash trigger focuses the popup search input', () => {
   assert.equal(elements.tgs.focused, true);
 });
 
-test('Linux citation slash trigger gives keyboard ownership to the popup search input', () => {
+for (const [platformName, navigatorPlatform] of [
+  ['Linux', 'Linux x86_64'],
+  ['macOS', 'MacIntel']
+]) {
+test(`${platformName} citation slash trigger gives keyboard ownership to the popup search input`, () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'citation-runtime.js'), 'utf8');
   const makeElement = () => ({
     style: {},
@@ -562,7 +566,7 @@ test('Linux citation slash trigger gives keyboard ownership to the popup search 
   let lastQuery = null;
   const window = {
     document,
-    navigator: { platform: 'Linux x86_64', userAgent: 'Linux' },
+    navigator: { platform: navigatorPlatform, userAgent: platformName },
     console,
     Date,
     setTimeout(fn){ fn(); },
@@ -588,6 +592,8 @@ test('Linux citation slash trigger gives keyboard ownership to the popup search 
   elements.tgs.value = 'doe';
   elements.tgs.listeners.input({ stopPropagation(){} });
   assert.equal(lastQuery, 'doe');
+  window.AQCitationRuntime.refreshFromEditor();
+  assert.equal(elements.tgs.value, 'doe');
 
   window.AQCitationRuntime.close(true);
   window.AQCitationRuntime.openFromSlash('', 'textual');
@@ -595,6 +601,7 @@ test('Linux citation slash trigger gives keyboard ownership to the popup search 
   assert.equal(elements.tgs.disabled, false);
   assert.equal(elements.tgs.focused, true);
 });
+}
 
 test('AQ Engine adapters use canonical APA formatter for citation text', () => {
   const runtime = fs.readFileSync(path.join(__dirname, '..', 'src', 'citation-runtime.js'), 'utf8');

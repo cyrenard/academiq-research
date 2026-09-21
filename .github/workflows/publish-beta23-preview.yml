@@ -1,0 +1,244 @@
+name: Publish Beta 23 Cross-Platform Preview
+
+on:
+  push:
+    branches: [agent/macos-beta23-parity]
+    paths:
+      - .github/workflows/publish-beta23-preview.yml
+
+permissions:
+  actions: read
+  contents: write
+
+env:
+  BINARY_COMMIT: "5b826352df478fa1d84bf8e3b056ed5e2537474f"
+  RELEASE_TAG: "v1.24.1-beta.23-preview.1"
+
+jobs:
+  build-windows:
+    name: Build Windows x64 preview
+    runs-on: windows-latest
+    steps:
+      - name: Checkout verified source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BINARY_COMMIT }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.x"
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install capture sidecar dependencies
+        run: npm ci --no-audit --no-fund
+        working-directory: src-sidecar/capture-agent
+
+      - name: Build Windows capture sidecar
+        run: node scripts/build-sidecar.js
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0.0" --locked
+
+      - name: Build unsigned Windows installer
+        run: npm run build
+        env:
+          ACADEMIQ_SKIP_SIGN: "1"
+
+      - name: Validate Windows bundle
+        run: node scripts/tauri-bundle-gate.js
+        env:
+          ACADEMIQ_SKIP_SIGN: "1"
+
+      - name: Prepare Windows assets
+        shell: pwsh
+        run: |
+          Copy-Item -LiteralPath dist/tauri/SHA256SUMS.txt -Destination dist/tauri/SHA256SUMS-windows.txt
+
+      - name: Upload Windows preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta23-windows-x64
+          path: |
+            dist/tauri/*.exe
+            dist/tauri/SHA256SUMS-windows.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  build-linux:
+    name: Build Linux x64 preview
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout verified source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BINARY_COMMIT }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.x"
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Linux bundle dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libfuse2 \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            rpm \
+            wget
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install capture sidecar dependencies
+        run: npm ci --no-audit --no-fund
+        working-directory: src-sidecar/capture-agent
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0.0" --locked
+
+      - name: Fetch Linux PDFium runtime
+        run: |
+          curl -fL --retry 3 -o /tmp/pdfium-linux-x64.tgz \
+            https://github.com/bblanchon/pdfium-binaries/releases/latest/download/pdfium-linux-x64.tgz
+          mkdir -p /tmp/academiq-pdfium
+          tar -xzf /tmp/pdfium-linux-x64.tgz -C /tmp/academiq-pdfium
+          cp "$(find /tmp/academiq-pdfium -name libpdfium.so -print -quit)" src-tauri/binaries/libpdfium.so
+
+      - name: Build Linux capture sidecar
+        run: |
+          node scripts/build-sidecar.js
+          chmod +x src-tauri/binaries/capture-agent-x86_64-unknown-linux-gnu
+
+      - name: Configure Linux bundles
+        run: node scripts/configure-tauri-linux.js
+        env:
+          ACADEMIQ_TAURI_BUNDLES: rpm,appimage
+
+      - name: Build Linux RPM and AppImage
+        run: npm run build
+        env:
+          ACADEMIQ_SKIP_SIGN: "1"
+          ACADEMIQ_TAURI_BUNDLES: rpm,appimage
+
+      - name: Validate Linux bundle
+        run: node scripts/tauri-bundle-gate.js
+        env:
+          ACADEMIQ_SKIP_SIGN: "1"
+          ACADEMIQ_TAURI_BUNDLES: rpm,appimage
+
+      - name: Prepare Linux assets
+        run: cp dist/tauri/SHA256SUMS.txt dist/tauri/SHA256SUMS-linux.txt
+
+      - name: Upload Linux preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta23-linux-x64
+          path: |
+            dist/tauri/*.rpm
+            dist/tauri/*.AppImage
+            dist/tauri/SHA256SUMS-linux.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish unified GitHub prerelease
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-linux]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_MAC_RUN_ID: "35615898603"
+      RELEASE_TITLE: "AcademiQ Research 1.24.1 Beta 23 - Cross-Platform Preview 1"
+      RELEASE_NOTES: |-
+        Feature-parity preview built from the verified Beta 23 baseline.
+
+        Choose the file for your system:
+        - Windows x64: `AcademiQ-Setup-1.24.1-beta.23.exe`
+        - macOS Apple Silicon (M1/M2/M3/M4): `AcademiQ Research_1.24.1-beta.23_aarch64.dmg`
+        - macOS Intel: `AcademiQ Research_1.24.1-beta.23_x64.dmg`
+        - Linux x86_64 (portable): `.AppImage`
+        - Fedora/RHEL x86_64: `.rpm`
+
+        Automated regression suites passed on both native macOS architectures. They cover TypeScript, Node and renderer behavior, editor stability, `/r` and `/t` citation popup/search ownership, autosave persistence and recovery, PDF, DOCX, spellcheck, references/bibliography, storage migration, browser-capture integration, and packaging dependencies.
+
+        Preview limitations: the macOS apps are ad-hoc signed and not notarized; the Windows installer is unsigned; Linux is beta material. On macOS first launch may require right-click > Open. Complete the live per-platform checklist before promoting this build to stable.
+    steps:
+      - name: Download Windows and Linux artifacts from this run
+        uses: actions/download-artifact@v4
+        with:
+          path: assets
+
+      - name: Download verified macOS arm64 artifact
+        run: gh run download "$SOURCE_MAC_RUN_ID" --repo "$GITHUB_REPOSITORY" --name AcademiQ-macOS-arm64-5 --dir assets/macos-arm64
+
+      - name: Download verified macOS x64 artifact
+        run: gh run download "$SOURCE_MAC_RUN_ID" --repo "$GITHUB_REPOSITORY" --name AcademiQ-macOS-x64-5 --dir assets/macos-x64
+
+      - name: Verify and normalize release assets
+        shell: bash
+        run: |
+          (cd assets/macos-arm64 && sha256sum --check SHA256SUMS.txt)
+          (cd assets/macos-x64 && sha256sum --check SHA256SUMS.txt)
+          mv assets/macos-arm64/SHA256SUMS.txt assets/SHA256SUMS-macos-arm64.txt
+          mv assets/macos-x64/SHA256SUMS.txt assets/SHA256SUMS-macos-x64.txt
+          rm -f assets/macos-arm64/latest.json assets/macos-x64/latest.json
+          find assets -type f -maxdepth 3 -print
+
+      - name: Create or refresh cross-platform prerelease
+        shell: bash
+        run: |
+          mapfile -d '' files < <(find assets -type f \( \
+            -name '*.exe' -o \
+            -name '*.dmg' -o \
+            -name '*.AppImage' -o \
+            -name '*.rpm' -o \
+            -name 'SHA256SUMS-*.txt' \
+          \) -print0)
+          test "${#files[@]}" -ge 9
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$RELEASE_TITLE" \
+              --notes "$RELEASE_NOTES" \
+              --prerelease
+            gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber "${files[@]}"
+          else
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$BINARY_COMMIT" \
+              --title "$RELEASE_TITLE" \
+              --notes "$RELEASE_NOTES" \
+              --prerelease \
+              "${files[@]}"
+          fi
+

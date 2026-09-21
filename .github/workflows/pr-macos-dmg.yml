@@ -1,0 +1,153 @@
+name: PR macOS DMG
+
+on:
+  pull_request:
+    branches: [main, master, agent/fix-citation-slash-triggers]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-macos-dmg-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-macos-dmg:
+    name: Test and build macOS DMG (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+            pdfium: pdfium-mac-arm64.tgz
+          - runner: macos-15-intel
+            arch: x64
+            pdfium: pdfium-mac-x64.tgz
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Verify runner architecture
+        shell: bash
+        run: |
+          test "$(uname -m)" = "${{ matrix.arch == 'arm64' && 'arm64' || 'x86_64' }}"
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install capture sidecar dependencies
+        run: npm ci --no-audit --no-fund
+        working-directory: src-sidecar/capture-agent
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0.0" --locked
+
+      - name: Generate Tauri icons required by Rust tests
+        shell: bash
+        run: |
+          cd src-tauri
+          cargo tauri icon ../icon.png --output icons
+
+      - name: Build native capture sidecar
+        run: node scripts/build-sidecar.js
+
+      - name: Fetch native PDFium runtime
+        shell: bash
+        run: |
+          curl -fL --retry 3 -o "$RUNNER_TEMP/${{ matrix.pdfium }}" \
+            "https://github.com/bblanchon/pdfium-binaries/releases/latest/download/${{ matrix.pdfium }}"
+          mkdir -p "$RUNNER_TEMP/academiq-pdfium"
+          tar -xzf "$RUNNER_TEMP/${{ matrix.pdfium }}" -C "$RUNNER_TEMP/academiq-pdfium"
+          cp "$RUNNER_TEMP/academiq-pdfium/lib/libpdfium.dylib" src-tauri/binaries/libpdfium.dylib
+          sidecar="src-tauri/binaries/capture-agent-${{ matrix.arch == 'arm64' && 'aarch64-apple-darwin' || 'x86_64-apple-darwin' }}"
+          file src-tauri/binaries/libpdfium.dylib "$sidecar"
+          lipo -archs src-tauri/binaries/libpdfium.dylib | grep -qw "$(uname -m)"
+          lipo -archs "$sidecar" | grep -qw "$(uname -m)"
+          codesign --force --sign - --timestamp=none src-tauri/binaries/libpdfium.dylib "$sidecar"
+
+      - name: Build native Vision OCR helper
+        shell: bash
+        run: |
+          swiftc -O scripts/macos-vision-ocr.swift -o src-tauri/binaries/vision-ocr
+          codesign --force --sign - --timestamp=none src-tauri/binaries/vision-ocr
+          file src-tauri/binaries/vision-ocr
+          src-tauri/binaries/vision-ocr icon.png eng | node -e "let text='';process.stdin.on('data',chunk=>text+=chunk);process.stdin.on('end',()=>{if(typeof JSON.parse(text).text!=='string')process.exit(1)})"
+
+      - name: Precompile release-mode Rust tests
+        run: cargo test --release --no-run --manifest-path src-tauri/Cargo.toml
+
+      - name: Typecheck and feature regression tests
+        shell: bash
+        run: |
+          npm run typecheck
+          npm test
+          npm run test:renderer
+          npm run gate:editor
+        env:
+          NODE_NO_WARNINGS: '1'
+
+      - name: Prepare macOS bundle config
+        shell: bash
+        run: node scripts/configure-tauri-macos.js
+
+      - name: Build ad-hoc signed DMG
+        run: npm run build
+        env:
+          ACADEMIQ_SKIP_SIGN: '1'
+          ACADEMIQ_TAURI_BUNDLES: dmg
+          APPLE_SIGNING_IDENTITY: '-'
+
+      - name: Validate DMG and bundled feature dependencies
+        shell: bash
+        run: |
+          node scripts/tauri-bundle-gate.js
+          dmg="$(find dist/tauri -maxdepth 1 -type f -name '*.dmg' -print -quit)"
+          test -n "$dmg"
+          mount_dir="$(mktemp -d)"
+          cleanup() {
+            hdiutil detach "$mount_dir" -quiet || true
+            rmdir "$mount_dir" || true
+          }
+          trap cleanup EXIT
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount_dir" -quiet
+          app="$(find "$mount_dir" -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$app"
+          test -d "$app"
+          test -f "$app/Contents/Resources/binaries/libpdfium.dylib"
+          test -x "$app/Contents/Resources/binaries/vision-ocr"
+          sidecar="$(find "$app/Contents" -type f -name 'capture-agent*' -print -quit)"
+          test -n "$sidecar"
+          test -x "$sidecar"
+          codesign --verify --deep --strict --verbose=2 "$app"
+        env:
+          ACADEMIQ_SKIP_SIGN: '1'
+          ACADEMIQ_TAURI_BUNDLES: dmg
+
+      - name: Upload macOS test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AcademiQ-macOS-${{ matrix.arch }}-${{ github.event.pull_request.number || github.run_number }}
+          path: |
+            dist/tauri/*.dmg
+            dist/tauri/SHA256SUMS.txt
+            dist/tauri/latest.json
+          if-no-files-found: error
+          retention-days: 7
+
