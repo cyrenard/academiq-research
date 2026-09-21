@@ -58,6 +58,15 @@ jobs:
         run: npm ci --no-audit --no-fund
         working-directory: src-sidecar/capture-agent
 
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0.0" --locked
+
+      - name: Generate Tauri icons required by Rust tests
+        shell: bash
+        run: |
+          cd src-tauri
+          cargo tauri icon ../icon.png --output icons
+
       - name: Build native capture sidecar
         run: node scripts/build-sidecar.js
 
@@ -93,16 +102,9 @@ jobs:
         env:
           NODE_NO_WARNINGS: '1'
 
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2.0.0" --locked
-
-      - name: Prepare macOS icon and bundle config
+      - name: Prepare macOS bundle config
         shell: bash
-        run: |
-          cd src-tauri
-          cargo tauri icon ../icon.png --output icons
-          cd ..
-          node scripts/configure-tauri-macos.js
+        run: node scripts/configure-tauri-macos.js
 
       - name: Build ad-hoc signed DMG
         run: npm run build
@@ -137,3 +139,4 @@ jobs:
             dist/tauri/latest.json
           if-no-files-found: error
           retention-days: 7
+
